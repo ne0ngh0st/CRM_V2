@@ -24,10 +24,16 @@ Fora de escopo: SAC e Licitação (sistemas separados).
 ## O que já existe
 
 - Login (sem registro público; usuário precisa estar `is_active`)
+- **Perfil** — dados, senha e foto de perfil
 - **Home / Dashboard** — metas, faturamento, ligações, observações, sugestões, widgets de carteira/orçamentos/pedidos
-- **Carteira** — leitura + anotações (contato, motivo de inatividade, ocultar)
+- **Carteira** — leitura, motivo de inatividade, ligação, agendamento, observações e detalhes do cliente
+- **Leads** — prospecção com ligação/agendamento
 - **Orçamentos** — listagem, formulário, aprovação/rejeição, PDF
-- **Pedidos** — pedidos em aberto / emitidos
+- **Pedidos** — em aberto e emitidos
+- **Tabela de preços** — consulta de produtos
+- **Cadastros** — solicitações de bobina/etiqueta, cliente e lead manual
+- **Metas** — visualização/edição conforme perfil
+- **Visão do gestor** — painel gerencial
 - **Equipe** — usuários, organograma, segmentos, ações administrativas
 
 ## Regras de ouro

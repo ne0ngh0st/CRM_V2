@@ -38,14 +38,4 @@ class Cliente extends Model
     {
         return $this->hasMany(CarteiraMotivoInatividade::class);
     }
-
-    public function contatos(): HasMany
-    {
-        return $this->hasMany(ClienteContatado::class);
-    }
-
-    public function ocultacoes(): HasMany
-    {
-        return $this->hasMany(CarteiraClienteOculto::class);
-    }
 }

@@ -31,6 +31,8 @@ class DatabaseSeeder extends Seeder
                 ObservacaoSeeder::class,
                 SegmentoVendedorSeeder::class,
                 ClienteSeeder::class,
+                LeadSeeder::class,
+                ProdutoSeeder::class,
                 OrcamentoSeeder::class,
                 PedidoSeeder::class,
             ]);

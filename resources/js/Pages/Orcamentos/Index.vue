@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -63,16 +63,38 @@ const modalForm = ref(false);
 const modalRejeitar = ref(false);
 const modalExcluir = ref(false);
 const orcamentoAtivo = ref(null);
+const prefillCliente = ref(null);
 
 function abrirNovo() {
     orcamentoAtivo.value = null;
+    prefillCliente.value = null;
     modalForm.value = true;
 }
 
 function abrirEditar(orcamento) {
     orcamentoAtivo.value = orcamento;
+    prefillCliente.value = null;
     modalForm.value = true;
 }
+
+// Vem do botão "Criar orçamento" da Carteira — mesma ideia do legado
+// (orcamentos.js::verificarParametrosNovoOrcamento): lê a query string, abre o
+// modal já preenchido, e limpa a URL pra não reabrir num F5/voltar.
+onMounted(() => {
+    const params = new URLSearchParams(window.location.search);
+    const nome = params.get('novo_cliente_nome');
+
+    if (!nome) return;
+
+    prefillCliente.value = {
+        nome,
+        cnpj: params.get('novo_cliente_cnpj') || '',
+        contato: params.get('novo_cliente_contato') || '',
+    };
+    orcamentoAtivo.value = null;
+    modalForm.value = true;
+    window.history.replaceState(null, '', route('orcamentos.index'));
+});
 
 function abrirRejeitar(orcamento) {
     orcamentoAtivo.value = orcamento;
@@ -205,7 +227,7 @@ function aprovar(orcamento) {
             </div>
         </div>
 
-        <OrcamentoFormModal :show="modalForm" :orcamento="orcamentoAtivo" @close="modalForm = false" />
+        <OrcamentoFormModal :show="modalForm" :orcamento="orcamentoAtivo" :prefill-cliente="prefillCliente" @close="modalForm = false" />
         <RejeitarOrcamentoModal :show="modalRejeitar" :orcamento="orcamentoAtivo" @close="modalRejeitar = false" />
         <ExcluirOrcamentoModal :show="modalExcluir" :orcamento="orcamentoAtivo" @close="modalExcluir = false" />
     </AuthenticatedLayout>

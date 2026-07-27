@@ -24,7 +24,8 @@ watch(
     () => props.show,
     (mostrando) => {
         if (mostrando) {
-            form.reset();
+            form.motivo = props.cliente?.motivoInatividade?.motivo ?? '';
+            form.observacao = props.cliente?.motivoInatividade?.observacao ?? '';
             form.clearErrors();
         }
     },
@@ -48,6 +49,9 @@ function salvar() {
         <form v-if="cliente" class="p-6" @submit.prevent="salvar">
             <h2 class="text-lg font-semibold text-gray-800">Motivo de inatividade</h2>
             <p class="mt-1 text-sm text-gray-500">{{ cliente.razaoSocial }}</p>
+            <p v-if="cliente.motivoInatividade" class="mt-1 text-xs text-gray-400">
+                Último registro em {{ cliente.motivoInatividade.criadoEm }} — salvar cria um novo registro no histórico.
+            </p>
 
             <div class="mt-4">
                 <InputLabel for="motivo" value="Motivo *" />

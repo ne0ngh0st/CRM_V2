@@ -12,6 +12,7 @@ import { OPCOES_FORMA_PAGAMENTO } from '@/constants/orcamentos.js';
 const props = defineProps({
     show: { type: Boolean, default: false },
     orcamento: { type: Object, default: null },
+    prefillCliente: { type: Object, default: null },
 });
 
 const emit = defineEmits(['close']);
@@ -50,6 +51,14 @@ watch(
                     preco_tabela: i.precoTabela !== null ? String(i.precoTabela) : '',
                 }))
                 : [itemVazio()];
+        } else if (props.prefillCliente) {
+            // Só a identidade do cliente vem pré-preenchida (igual ao legado) — itens
+            // e demais campos o vendedor preenche na hora.
+            form.reset();
+            form.cliente_nome = props.prefillCliente.nome ?? '';
+            form.cliente_cnpj = props.prefillCliente.cnpj ?? '';
+            form.cliente_contato = props.prefillCliente.contato ?? '';
+            form.itens = [itemVazio()];
         } else {
             form.reset();
             form.itens = [itemVazio()];

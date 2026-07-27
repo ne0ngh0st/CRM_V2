@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -35,9 +36,34 @@ class User extends Authenticatable
         'navbar_template',
     ];
 
+    /**
+     * @var list<string>
+     */
+    protected $appends = [
+        'foto_url',
+    ];
+
     public function vendedorPerfil(): HasOne
     {
         return $this->hasOne(VendedorPerfil::class);
+    }
+
+    /**
+     * URL pública da foto (só uploads do v2 em storage/public/perfis).
+     * Paths do legado (assets/img/perfis/...) não existem neste app.
+     */
+    public function getFotoUrlAttribute(): ?string
+    {
+        if (! $this->foto_perfil) {
+            return null;
+        }
+
+        if (str_starts_with($this->foto_perfil, 'perfis/')
+            && Storage::disk('public')->exists($this->foto_perfil)) {
+            return Storage::disk('public')->url($this->foto_perfil);
+        }
+
+        return null;
     }
 
     /**

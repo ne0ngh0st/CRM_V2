@@ -6,12 +6,12 @@ use App\Models\Cliente;
 use App\Models\DataSyncStatus;
 use App\Models\Faturamento;
 use App\Models\Ligacao;
-use App\Models\MetaMensal;
 use App\Models\Observacao;
 use App\Models\Orcamento;
 use App\Models\Pedido;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Dashboard\DashboardScopeResolver;
+use App\Services\Metas\MetaRankingResolver;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,6 +21,7 @@ class DashboardController extends Controller
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly CarteiraAderenciaResolver $aderenciaResolver,
+        private readonly MetaRankingResolver $metaRanking,
     ) {
     }
 
@@ -84,8 +85,8 @@ class DashboardController extends Controller
 
         return [
             'isRepresentante' => $role === 'representante',
-            'mes' => $this->metaVsFaturamento($codVendedores, $ano, $mes, $mes),
-            'ano' => $this->metaVsFaturamento($codVendedores, $ano, 1, $mes),
+            'mes' => $this->metaRanking->metaVsFaturamento($codVendedores, $ano, $mes, $mes),
+            'ano' => $this->metaRanking->metaVsFaturamento($codVendedores, $ano, 1, $mes),
             'pedidosEmitidos' => $this->pedidosEmitidos($codVendedores, $ano, $mes),
         ];
     }
@@ -93,41 +94,21 @@ class DashboardController extends Controller
     /** Volume de pedidos emitidos (toda a tabela, aberto ou faturado) no mês e no ano corrente. */
     private function pedidosEmitidos(?array $codVendedores, int $ano, int $mes): array
     {
-        $doAno = Pedido::query()->whereYear('data_pedido', $ano);
+        [$inicioMes, $fimMes] = $this->metaRanking->intervaloDatas($ano, $mes, $mes);
+        [$inicioAno, $fimAno] = $this->metaRanking->intervaloDatas($ano, 1, $mes);
+
+        $base = Pedido::query();
         if ($codVendedores !== null) {
-            $doAno->whereIn('cod_vendedor', $codVendedores);
+            $base->whereIn('cod_vendedor', $codVendedores);
         }
 
-        $doMes = (clone $doAno)->whereMonth('data_pedido', $mes);
+        $doMes = (clone $base)->whereBetween('data_pedido', [$inicioMes, $fimMes]);
+        $doAno = (clone $base)->whereBetween('data_pedido', [$inicioAno, $fimAno]);
 
         return [
             'mes' => ['pedidos' => (clone $doMes)->count(), 'valor' => (float) (clone $doMes)->sum('valor_total')],
             'ano' => ['pedidos' => (clone $doAno)->count(), 'valor' => (float) (clone $doAno)->sum('valor_total')],
         ];
-    }
-
-    /** Meta acumulada (soma de metas mensais de $mesInicio a $mesFim) vs. faturamento no mesmo período. */
-    private function metaVsFaturamento(?array $codVendedores, int $ano, int $mesInicio, int $mesFim): array
-    {
-        $metaQuery = MetaMensal::query()
-            ->where('ano', $ano)
-            ->whereBetween('mes', [$mesInicio, $mesFim])
-            ->where('tipo', 'faturamento');
-
-        $faturamentoQuery = Faturamento::query()
-            ->whereYear('data_emissao', $ano)
-            ->whereRaw('MONTH(data_emissao) BETWEEN ? AND ?', [$mesInicio, $mesFim]);
-
-        if ($codVendedores !== null) {
-            $metaQuery->whereIn('cod_vendedor', $codVendedores);
-            $faturamentoQuery->whereIn('cod_vendedor', $codVendedores);
-        }
-
-        $meta = (float) $metaQuery->sum('valor_meta');
-        $faturamento = (float) $faturamentoQuery->sum('valor_total');
-        $percentual = $meta > 0 ? round(($faturamento / $meta) * 100, 1) : 0;
-
-        return ['meta' => $meta, 'faturamento' => $faturamento, 'percentual' => $percentual];
     }
 
     /** @param array<int> $usuarioIds */
@@ -208,7 +189,9 @@ class DashboardController extends Controller
     {
         $query = Cliente::query();
         if ($codVendedores !== null) {
-            $query->whereIn('cod_vendedor', $codVendedores);
+            // Qualificado: CarteiraAderenciaResolver faz LEFT JOIN em segmentos_vendedor,
+            // que também tem cod_vendedor — sem o prefixo a query vira ambígua.
+            $query->whereIn('clientes.cod_vendedor', $codVendedores);
         }
 
         return $this->aderenciaResolver->resolver($query);

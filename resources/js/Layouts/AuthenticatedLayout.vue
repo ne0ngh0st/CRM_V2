@@ -1,12 +1,25 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 
 const showingNavigationDropdown = ref(false);
+
+const page = usePage();
+const isGestor = computed(() =>
+    (page.props.auth?.roles ?? []).some((r) => ['admin', 'diretor', 'supervisor'].includes(r)),
+);
+const isAssistente = computed(() => (page.props.auth?.roles ?? []).includes('assistente'));
+const visaoGestorAtiva = computed(() =>
+    route().current('equipe.*')
+    || route().current('visao-gestor.*')
+    || route().current('metas.*'),
+);
+const pedidosAtivo = computed(() => route().current('pedidos.*'));
+const carteiraAtiva = computed(() => route().current('carteira.*') || route().current('leads.*'));
 </script>
 
 <template>
@@ -16,7 +29,7 @@ const showingNavigationDropdown = ref(false);
                 <!-- Primary Navigation Menu -->
                 <div class="mx-auto max-w-[1800px] px-3 sm:px-4 lg:px-6">
                     <div class="flex h-16 justify-between">
-                        <div class="flex">
+                        <div class="flex min-w-0">
                             <!-- Logo -->
                             <div class="flex shrink-0 items-center">
                                 <Link :href="route('dashboard')">
@@ -29,37 +42,125 @@ const showingNavigationDropdown = ref(false);
                             </div>
 
                             <!-- Navigation Links -->
-                            <div
-                                class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex"
-                            >
+                            <div class="hidden sm:-my-px sm:ms-8 sm:flex sm:items-stretch sm:gap-x-6">
                                 <NavLink
                                     :href="route('dashboard')"
                                     :active="route().current('dashboard')"
                                     class="!text-white/80 hover:!text-white"
                                     :class="route().current('dashboard') ? '!border-cyan !text-white' : '!border-transparent'"
                                 >
-                                    Dashboard
+                                    Início
                                 </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth.roles.some((r) => ['admin', 'diretor', 'supervisor'].includes(r))"
-                                    :href="route('equipe.index')"
-                                    :active="route().current('equipe.index')"
-                                    class="!text-white/80 hover:!text-white"
-                                    :class="route().current('equipe.index') ? '!border-cyan !text-white' : '!border-transparent'"
+
+                                <!-- Bloco gestor -->
+                                <div
+                                    v-if="isGestor"
+                                    class="relative inline-flex items-center"
                                 >
-                                    Equipe
-                                </NavLink>
-                                <NavLink
-                                    v-if="!$page.props.auth.roles.includes('assistente')"
-                                    :href="route('pedidos.index')"
-                                    :active="route().current('pedidos.index')"
-                                    class="!text-white/80 hover:!text-white"
-                                    :class="route().current('pedidos.index') ? '!border-cyan !text-white' : '!border-transparent'"
+                                    <Dropdown align="left" width="56">
+                                        <template #trigger>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none"
+                                                :class="visaoGestorAtiva
+                                                    ? 'border-cyan text-white'
+                                                    : 'border-transparent text-white/80 hover:text-white'"
+                                            >
+                                                Visão Gestor
+                                                <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path
+                                                        fill-rule="evenodd"
+                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                        clip-rule="evenodd"
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </template>
+                                        <template #content>
+                                            <DropdownLink :href="route('equipe.index')">
+                                                Equipe
+                                            </DropdownLink>
+                                            <DropdownLink :href="route('visao-gestor.index')">
+                                                Observações e ligações
+                                            </DropdownLink>
+                                            <DropdownLink :href="route('metas.index')">
+                                                Metas
+                                            </DropdownLink>
+                                        </template>
+                                    </Dropdown>
+                                </div>
+
+                                <!-- Bloco comercial: Início → Carteira → Pedidos → Orçamentos → Cadastros → Tabela -->
+                                <div
+                                    v-if="!isAssistente"
+                                    class="relative inline-flex items-center"
                                 >
-                                    Pedidos
-                                </NavLink>
+                                    <Dropdown align="left" width="48">
+                                        <template #trigger>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none"
+                                                :class="carteiraAtiva
+                                                    ? 'border-cyan text-white'
+                                                    : 'border-transparent text-white/80 hover:text-white'"
+                                            >
+                                                Carteira
+                                                <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path
+                                                        fill-rule="evenodd"
+                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                        clip-rule="evenodd"
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </template>
+                                        <template #content>
+                                            <DropdownLink :href="route('carteira.index')">
+                                                Clientes
+                                            </DropdownLink>
+                                            <DropdownLink :href="route('leads.index')">
+                                                Leads
+                                            </DropdownLink>
+                                        </template>
+                                    </Dropdown>
+                                </div>
+
+                                <div
+                                    v-if="!isAssistente"
+                                    class="relative inline-flex items-center"
+                                >
+                                    <Dropdown align="left" width="48">
+                                        <template #trigger>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none"
+                                                :class="pedidosAtivo
+                                                    ? 'border-cyan text-white'
+                                                    : 'border-transparent text-white/80 hover:text-white'"
+                                            >
+                                                Pedidos
+                                                <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path
+                                                        fill-rule="evenodd"
+                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                        clip-rule="evenodd"
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </template>
+                                        <template #content>
+                                            <DropdownLink :href="route('pedidos.index')">
+                                                Pedidos em aberto
+                                            </DropdownLink>
+                                            <DropdownLink :href="route('pedidos.emitidos')">
+                                                Pedidos emitidos
+                                            </DropdownLink>
+                                        </template>
+                                    </Dropdown>
+                                </div>
+
                                 <NavLink
-                                    v-if="!$page.props.auth.roles.includes('assistente')"
+                                    v-if="!isAssistente"
                                     :href="route('orcamentos.index')"
                                     :active="route().current('orcamentos.index')"
                                     class="!text-white/80 hover:!text-white"
@@ -68,27 +169,55 @@ const showingNavigationDropdown = ref(false);
                                     Orçamentos
                                 </NavLink>
                                 <NavLink
-                                    v-if="!$page.props.auth.roles.includes('assistente')"
-                                    :href="route('carteira.index')"
-                                    :active="route().current('carteira.index')"
+                                    :href="route('cadastros.index')"
+                                    :active="route().current('cadastros.*')"
                                     class="!text-white/80 hover:!text-white"
-                                    :class="route().current('carteira.index') ? '!border-cyan !text-white' : '!border-transparent'"
+                                    :class="route().current('cadastros.*') ? '!border-cyan !text-white' : '!border-transparent'"
                                 >
-                                    Carteira
+                                    Cadastros
+                                </NavLink>
+                                <NavLink
+                                    v-if="!isAssistente"
+                                    :href="route('tabela-precos.index')"
+                                    :active="route().current('tabela-precos.*')"
+                                    class="!text-white/80 hover:!text-white"
+                                    :class="route().current('tabela-precos.*') ? '!border-cyan !text-white' : '!border-transparent'"
+                                >
+                                    Tabela de Preços
                                 </NavLink>
                             </div>
                         </div>
 
                         <div class="hidden sm:ms-6 sm:flex sm:items-center">
-                            <!-- Settings Dropdown -->
                             <div class="relative ms-3">
                                 <Dropdown align="right" width="48">
                                     <template #trigger>
                                         <span class="inline-flex rounded-md">
                                             <button
                                                 type="button"
-                                                class="inline-flex items-center rounded-md border border-transparent px-3 py-2 text-sm font-medium leading-4 text-white/80 transition duration-150 ease-in-out hover:text-white focus:outline-none"
+                                                class="inline-flex items-center gap-2 rounded-md border border-transparent px-3 py-2 text-sm font-medium leading-4 text-white/80 transition duration-150 ease-in-out hover:text-white focus:outline-none"
                                             >
+                                                <span
+                                                    class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10"
+                                                >
+                                                    <img
+                                                        v-if="$page.props.auth.user.foto_url"
+                                                        :src="$page.props.auth.user.foto_url"
+                                                        alt=""
+                                                        class="h-full w-full object-cover"
+                                                    />
+                                                    <svg
+                                                        v-else
+                                                        class="h-3.5 w-3.5 text-white/70"
+                                                        fill="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                        aria-hidden="true"
+                                                    >
+                                                        <path
+                                                            d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v1.2h19.2v-1.2c0-3.2-6.4-4.8-9.6-4.8z"
+                                                        />
+                                                    </svg>
+                                                </span>
                                                 {{ $page.props.auth.user.display_name || $page.props.auth.user.name }}
 
                                                 <svg
@@ -108,9 +237,7 @@ const showingNavigationDropdown = ref(false);
                                     </template>
 
                                     <template #content>
-                                        <DropdownLink
-                                            :href="route('profile.edit')"
-                                        >
+                                        <DropdownLink :href="route('profile.edit')">
                                             Perfil
                                         </DropdownLink>
                                         <DropdownLink
@@ -128,23 +255,14 @@ const showingNavigationDropdown = ref(false);
                         <!-- Hamburger -->
                         <div class="-me-2 flex items-center sm:hidden">
                             <button
-                                @click="
-                                    showingNavigationDropdown =
-                                        !showingNavigationDropdown
-                                "
+                                @click="showingNavigationDropdown = !showingNavigationDropdown"
                                 class="inline-flex items-center justify-center rounded-md p-2 text-white/70 transition duration-150 ease-in-out hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white focus:outline-none"
                             >
-                                <svg
-                                    class="h-6 w-6"
-                                    stroke="currentColor"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                >
+                                <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
                                     <path
                                         :class="{
                                             hidden: showingNavigationDropdown,
-                                            'inline-flex':
-                                                !showingNavigationDropdown,
+                                            'inline-flex': !showingNavigationDropdown,
                                         }"
                                         stroke-linecap="round"
                                         stroke-linejoin="round"
@@ -154,8 +272,7 @@ const showingNavigationDropdown = ref(false);
                                     <path
                                         :class="{
                                             hidden: !showingNavigationDropdown,
-                                            'inline-flex':
-                                                showingNavigationDropdown,
+                                            'inline-flex': showingNavigationDropdown,
                                         }"
                                         stroke-linecap="round"
                                         stroke-linejoin="round"
@@ -181,46 +298,117 @@ const showingNavigationDropdown = ref(false);
                             :href="route('dashboard')"
                             :active="route().current('dashboard')"
                         >
-                            Dashboard
+                            Início
                         </ResponsiveNavLink>
+
+                        <template v-if="isGestor">
+                            <div class="px-4 pb-1 pt-3 text-[0.65rem] font-semibold uppercase tracking-wide text-white/40">
+                                Visão Gestor
+                            </div>
+                            <ResponsiveNavLink
+                                :href="route('equipe.index')"
+                                :active="route().current('equipe.*')"
+                            >
+                                Equipe
+                            </ResponsiveNavLink>
+                            <ResponsiveNavLink
+                                :href="route('visao-gestor.index')"
+                                :active="route().current('visao-gestor.*')"
+                            >
+                                Observações e ligações
+                            </ResponsiveNavLink>
+                            <ResponsiveNavLink
+                                :href="route('metas.index')"
+                                :active="route().current('metas.*')"
+                            >
+                                Metas
+                            </ResponsiveNavLink>
+                        </template>
+
+                        <template v-if="!isAssistente">
+                            <div class="px-4 pb-1 pt-3 text-[0.65rem] font-semibold uppercase tracking-wide text-white/40">
+                                Carteira
+                            </div>
+                            <ResponsiveNavLink
+                                :href="route('carteira.index')"
+                                :active="route().current('carteira.*')"
+                            >
+                                Clientes
+                            </ResponsiveNavLink>
+                            <ResponsiveNavLink
+                                :href="route('leads.index')"
+                                :active="route().current('leads.*')"
+                            >
+                                Leads
+                            </ResponsiveNavLink>
+                            <div class="px-4 pb-1 pt-3 text-[0.65rem] font-semibold uppercase tracking-wide text-white/40">
+                                Pedidos
+                            </div>
+                            <ResponsiveNavLink
+                                :href="route('pedidos.index')"
+                                :active="route().current('pedidos.index')"
+                            >
+                                Pedidos em aberto
+                            </ResponsiveNavLink>
+                            <ResponsiveNavLink
+                                :href="route('pedidos.emitidos')"
+                                :active="route().current('pedidos.emitidos')"
+                            >
+                                Pedidos emitidos
+                            </ResponsiveNavLink>
+                        </template>
                         <ResponsiveNavLink
-                            v-if="$page.props.auth.roles.some((r) => ['admin', 'diretor', 'supervisor'].includes(r))"
-                            :href="route('equipe.index')"
-                            :active="route().current('equipe.index')"
-                        >
-                            Equipe
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            v-if="!$page.props.auth.roles.includes('assistente')"
-                            :href="route('pedidos.index')"
-                            :active="route().current('pedidos.index')"
-                        >
-                            Pedidos
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            v-if="!$page.props.auth.roles.includes('assistente')"
+                            v-if="!isAssistente"
                             :href="route('orcamentos.index')"
                             :active="route().current('orcamentos.index')"
                         >
                             Orçamentos
                         </ResponsiveNavLink>
                         <ResponsiveNavLink
-                            v-if="!$page.props.auth.roles.includes('assistente')"
-                            :href="route('carteira.index')"
-                            :active="route().current('carteira.index')"
+                            :href="route('cadastros.index')"
+                            :active="route().current('cadastros.*')"
                         >
-                            Carteira
+                            Cadastros
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            v-if="!isAssistente"
+                            :href="route('tabela-precos.index')"
+                            :active="route().current('tabela-precos.*')"
+                        >
+                            Tabela de Preços
                         </ResponsiveNavLink>
                     </div>
 
-                    <!-- Responsive Settings Options -->
                     <div class="border-t border-white/10 pb-1 pt-4">
-                        <div class="px-4">
-                            <div class="text-base font-medium text-white">
-                                {{ $page.props.auth.user.display_name || $page.props.auth.user.name }}
-                            </div>
-                            <div class="text-sm font-medium text-white/60">
-                                {{ $page.props.auth.user.email }}
+                        <div class="flex items-center gap-3 px-4">
+                            <span
+                                class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10"
+                            >
+                                <img
+                                    v-if="$page.props.auth.user.foto_url"
+                                    :src="$page.props.auth.user.foto_url"
+                                    alt=""
+                                    class="h-full w-full object-cover"
+                                />
+                                <svg
+                                    v-else
+                                    class="h-4 w-4 text-white/70"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v1.2h19.2v-1.2c0-3.2-6.4-4.8-9.6-4.8z"
+                                    />
+                                </svg>
+                            </span>
+                            <div class="min-w-0">
+                                <div class="truncate text-base font-medium text-white">
+                                    {{ $page.props.auth.user.display_name || $page.props.auth.user.name }}
+                                </div>
+                                <div class="truncate text-sm font-medium text-white/60">
+                                    {{ $page.props.auth.user.email }}
+                                </div>
                             </div>
                         </div>
 
@@ -240,17 +428,15 @@ const showingNavigationDropdown = ref(false);
                 </div>
             </nav>
 
-            <!-- Page Heading -->
             <header
-                class="bg-white shadow-sm"
                 v-if="$slots.header"
+                class="bg-white shadow-sm"
             >
                 <div class="mx-auto max-w-[1800px] px-3 py-6 sm:px-4 lg:px-6">
                     <slot name="header" />
                 </div>
             </header>
 
-            <!-- Page Content -->
             <main>
                 <slot />
             </main>

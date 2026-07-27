@@ -1,13 +1,18 @@
 <?php
 
+use App\Http\Controllers\CadastroController;
 use App\Http\Controllers\CarteiraController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipeController;
+use App\Http\Controllers\LeadController;
+use App\Http\Controllers\MetaController;
 use App\Http\Controllers\ObservacaoController;
 use App\Http\Controllers\OrcamentoController;
 use App\Http\Controllers\PedidoController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SugestaoController;
+use App\Http\Controllers\TabelaPrecoController;
+use App\Http\Controllers\VisaoGestorController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -21,7 +26,8 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::post('/profile/foto', [ProfileController::class, 'updateFoto'])->name('profile.foto.update');
+    Route::delete('/profile/foto', [ProfileController::class, 'destroyFoto'])->name('profile.foto.destroy');
 
     Route::get('/sugestoes', [SugestaoController::class, 'index'])->name('sugestoes.index');
     Route::post('/sugestoes', [SugestaoController::class, 'store'])->name('sugestoes.store');
@@ -30,11 +36,34 @@ Route::middleware('auth')->group(function () {
     Route::delete('/sugestoes/{sugestao}', [SugestaoController::class, 'destroy'])->name('sugestoes.destroy');
 
     Route::get('/pedidos-abertos', [PedidoController::class, 'index'])->name('pedidos.index');
+    Route::get('/pedidos-emitidos', [PedidoController::class, 'emitidos'])->name('pedidos.emitidos');
 
     Route::get('/carteira', [CarteiraController::class, 'index'])->name('carteira.index');
-    Route::patch('/carteira/{cliente}/ocultar', [CarteiraController::class, 'ocultar'])->name('carteira.ocultar');
-    Route::post('/carteira/{cliente}/contatado', [CarteiraController::class, 'marcarContatado'])->name('carteira.contatado');
+    Route::get('/carteira/{cliente}/detalhes', [CarteiraController::class, 'detalhes'])->name('carteira.detalhes');
     Route::post('/carteira/{cliente}/motivo-inatividade', [CarteiraController::class, 'registrarMotivoInatividade'])->name('carteira.motivoInatividade');
+    Route::post('/carteira/{cliente}/ligacao', [CarteiraController::class, 'registrarLigacao'])->name('carteira.ligacao');
+    Route::post('/carteira/{cliente}/agendamento', [CarteiraController::class, 'registrarAgendamento'])->name('carteira.agendamento');
+    Route::patch('/carteira/agendamentos/{agendamento}', [CarteiraController::class, 'atualizarAgendamento'])->name('carteira.agendamentoStatus');
+
+    Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
+    Route::post('/leads/{lead}/ligacao', [LeadController::class, 'registrarLigacao'])->name('leads.ligacao');
+    Route::post('/leads/{lead}/agendamento', [LeadController::class, 'registrarAgendamento'])->name('leads.agendamento');
+    Route::patch('/leads/agendamentos/{agendamento}', [LeadController::class, 'atualizarAgendamento'])->name('leads.agendamentoStatus');
+    Route::delete('/leads/{lead}', [LeadController::class, 'excluir'])->name('leads.destroy');
+
+    Route::get('/tabela-precos', [TabelaPrecoController::class, 'index'])->name('tabela-precos.index');
+
+    Route::get('/cadastros', [CadastroController::class, 'index'])->name('cadastros.index');
+    Route::post('/cadastros/bobinas', [CadastroController::class, 'storeBobina'])->name('cadastros.bobinas.store');
+    Route::post('/cadastros/bobinas/{bobina}/enviar', [CadastroController::class, 'enviarBobina'])->name('cadastros.bobinas.enviar');
+    Route::delete('/cadastros/bobinas/{bobina}', [CadastroController::class, 'destroyBobina'])->name('cadastros.bobinas.destroy');
+    Route::post('/cadastros/etiquetas', [CadastroController::class, 'storeEtiqueta'])->name('cadastros.etiquetas.store');
+    Route::post('/cadastros/etiquetas/{etiqueta}/enviar', [CadastroController::class, 'enviarEtiqueta'])->name('cadastros.etiquetas.enviar');
+    Route::delete('/cadastros/etiquetas/{etiqueta}', [CadastroController::class, 'destroyEtiqueta'])->name('cadastros.etiquetas.destroy');
+    Route::post('/cadastros/clientes', [CadastroController::class, 'storeCliente'])->name('cadastros.clientes.store');
+    Route::delete('/cadastros/clientes/{cliente}', [CadastroController::class, 'destroyCliente'])->name('cadastros.clientes.destroy');
+    Route::post('/cadastros/leads', [CadastroController::class, 'storeLead'])->name('cadastros.leads.store');
+    Route::delete('/cadastros/leads/{lead}', [CadastroController::class, 'destroyLead'])->name('cadastros.leads.destroy');
 
     Route::get('/orcamentos', [OrcamentoController::class, 'index'])->name('orcamentos.index');
     Route::post('/orcamentos', [OrcamentoController::class, 'store'])->name('orcamentos.store');
@@ -45,6 +74,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/orcamentos/{orcamento}/pdf', [OrcamentoController::class, 'pdf'])->name('orcamentos.pdf');
 
     Route::get('/observacoes', [ObservacaoController::class, 'index'])->name('observacoes.index');
+    Route::get('/observacoes/cliente/{cliente}', [ObservacaoController::class, 'porCliente'])->name('observacoes.porCliente');
+    Route::get('/observacoes/lead/{lead}', [ObservacaoController::class, 'porLead'])->name('observacoes.porLead');
     Route::post('/observacoes', [ObservacaoController::class, 'store'])->name('observacoes.store');
     Route::patch('/observacoes/{observacao}/fixar', [ObservacaoController::class, 'togglePin'])->name('observacoes.fixar');
 
@@ -55,6 +86,10 @@ Route::middleware('auth')->group(function () {
     Route::patch('/equipe/{usuario}/senha', [EquipeController::class, 'atualizarSenha'])->name('equipe.senha');
     Route::patch('/equipe/{usuario}/status', [EquipeController::class, 'toggleStatus'])->name('equipe.status');
     Route::delete('/equipe/{usuario}', [EquipeController::class, 'destroy'])->name('equipe.destroy');
+
+    Route::get('/visao-gestor', [VisaoGestorController::class, 'index'])->name('visao-gestor.index');
+    Route::get('/metas', [MetaController::class, 'index'])->name('metas.index');
+    Route::patch('/metas', [MetaController::class, 'update'])->name('metas.update');
 });
 
 require __DIR__.'/auth.php';

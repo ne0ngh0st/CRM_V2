@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CarteiraClienteOculto;
+use App\Models\AgendamentoLigacao;
 use App\Models\CarteiraMotivoInatividade;
 use App\Models\Cliente;
-use App\Models\ClienteContatado;
+use App\Models\Ligacao;
+use App\Models\Pedido;
 use App\Models\SegmentoVendedor;
 use App\Models\VendedorPerfil;
 use App\Services\Carteira\CarteiraAderenciaResolver;
@@ -44,11 +45,9 @@ class CarteiraController extends Controller
         $segmento = (string) $request->string('segmento');
         $status = (string) $request->string('status');
         $aderencia = (string) $request->string('aderencia');
-        $mostrarOcultos = $request->boolean('mostrar_ocultos');
         $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
+        $aba = (string) $request->string('aba') ?: 'clientes';
 
-        // Escopo puro (sem os filtros dinâmicos) — usado pras opções de estado/segmento,
-        // pra não fazer o dropdown "sumir" opções assim que o usuário escolhe uma.
         $scopeQuery = function () use ($codVendedores) {
             $query = Cliente::query();
             if ($codVendedores !== null) {
@@ -58,16 +57,8 @@ class CarteiraController extends Controller
             return $query;
         };
 
-        // $baseQuery nunca faz JOIN em segmentos_vendedor — o CarteiraAderenciaResolver
-        // já adiciona o dele próprio; se essa query também tivesse, dava join duplicado.
-        $baseQuery = function () use ($scopeQuery, $user, $busca, $estado, $segmento, $status, $mostrarOcultos, $limiteAtivo, $limiteInativando) {
-            $query = $scopeQuery()
-                ->select('clientes.*')
-                ->selectRaw('carteira_clientes_ocultos.id as oculto_id')
-                ->leftJoin('carteira_clientes_ocultos', function ($join) use ($user) {
-                    $join->on('carteira_clientes_ocultos.cliente_id', '=', 'clientes.id')
-                        ->where('carteira_clientes_ocultos.user_id', '=', $user->id);
-                });
+        $baseQuery = function () use ($scopeQuery, $busca, $estado, $segmento, $status, $limiteAtivo, $limiteInativando) {
+            $query = $scopeQuery()->select('clientes.*');
 
             if ($busca !== '') {
                 $query->where(function ($q) use ($busca) {
@@ -93,10 +84,6 @@ class CarteiraController extends Controller
                 'inativo' => $query->where(fn ($q) => $q->whereNull('clientes.data_ultima_compra')->orWhere('clientes.data_ultima_compra', '<', $limiteInativando)),
                 default => null,
             };
-
-            if (! $mostrarOcultos) {
-                $query->whereNull('carteira_clientes_ocultos.id');
-            }
 
             return $query;
         };
@@ -140,13 +127,6 @@ class CarteiraController extends Controller
             ->groupBy('cliente_id')
             ->map(fn ($grupo) => $grupo->first());
 
-        $contatosPorCliente = ClienteContatado::query()
-            ->whereIn('cliente_id', $clienteIdsNaPagina)
-            ->latest('contatado_em')
-            ->get()
-            ->groupBy('cliente_id')
-            ->map(fn ($grupo) => $grupo->first());
-
         $hoje = now();
 
         $segmentosPorVendedor = SegmentoVendedor::query()
@@ -155,9 +135,8 @@ class CarteiraController extends Controller
             ->groupBy('cod_vendedor')
             ->map(fn ($grupo) => $grupo->pluck('segmento')->all());
 
-        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $contatosPorCliente, $segmentosPorVendedor, $hoje) {
+        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $segmentosPorVendedor, $hoje) {
             $motivo = $motivosPorCliente->get($cliente->id);
-            $contato = $contatosPorCliente->get($cliente->id);
             $segmentosVendedor = $segmentosPorVendedor[$cliente->cod_vendedor] ?? [];
             $estaDentro = $cliente->cod_segmento && in_array($cliente->cod_segmento, $segmentosVendedor, true);
 
@@ -167,6 +146,7 @@ class CarteiraController extends Controller
                 'razaoSocial' => $cliente->razao_social,
                 'nomeFantasia' => $cliente->nome_fantasia,
                 'cnpj' => $cliente->cnpj,
+                'telefone' => $cliente->telefone,
                 'estado' => $cliente->estado,
                 'segmento' => $cliente->cod_segmento,
                 'codVendedor' => $cliente->cod_vendedor,
@@ -174,27 +154,26 @@ class CarteiraController extends Controller
                 'status' => $this->statusResolver->statusPara($cliente->data_ultima_compra, $hoje),
                 'dataUltimaCompra' => optional($cliente->data_ultima_compra)->format('d/m/Y'),
                 'aderencia' => $estaDentro ? 'dentro' : 'fora',
-                'oculto' => $cliente->oculto_id !== null,
                 'motivoInatividade' => $motivo ? [
                     'motivo' => $motivo->motivo,
                     'observacao' => $motivo->observacao,
                     'criadoEm' => $motivo->created_at->format('d/m/Y'),
                 ] : null,
-                'contatadoEm' => $contato ? $contato->contatado_em->format('d/m/Y H:i') : null,
             ];
         });
 
         return Inertia::render('Carteira/Index', [
             'role' => $role,
+            'aba' => in_array($aba, ['clientes', 'calendario'], true) ? $aba : 'clientes',
             'clientes' => $clientes,
             'kpis' => $kpis,
+            'agendamentos' => $this->agendamentosDoEscopo($codVendedores),
             'filtros' => [
                 'busca' => $busca,
                 'estado' => $estado,
                 'segmento' => $segmento,
                 'status' => $status,
                 'aderencia' => $aderencia,
-                'mostrar_ocultos' => $mostrarOcultos,
                 'ordenar' => $ordenar,
             ],
             'opcoes' => [
@@ -213,33 +192,73 @@ class CarteiraController extends Controller
         ]);
     }
 
-    public function ocultar(Request $request, Cliente $cliente): RedirectResponse
+    public function detalhes(Request $request, Cliente $cliente): Response
     {
-        $userId = $request->user()->id;
+        $user = $request->user();
+        $scope = $this->scopeResolver->resolve($user, null, null);
 
-        $existente = CarteiraClienteOculto::query()
-            ->where('cliente_id', $cliente->id)
-            ->where('user_id', $userId)
-            ->first();
-
-        if ($existente) {
-            $existente->delete();
-        } else {
-            CarteiraClienteOculto::create(['cliente_id' => $cliente->id, 'user_id' => $userId]);
+        if ($scope['codVendedores'] !== null && ! in_array($cliente->cod_vendedor, $scope['codVendedores'], true)) {
+            abort(403);
         }
 
-        return back();
-    }
+        $pedidosBase = Pedido::query()->where('cliente_id', $cliente->id);
 
-    public function marcarContatado(Request $request, Cliente $cliente): RedirectResponse
-    {
-        ClienteContatado::create([
-            'cliente_id' => $cliente->id,
-            'user_id' => $request->user()->id,
-            'contatado_em' => now(),
+        $qtdPedidos = (clone $pedidosBase)->count();
+        $volumeTotal = (float) (clone $pedidosBase)->sum('valor_total');
+        $ticketMedio = $qtdPedidos > 0 ? round($volumeTotal / $qtdPedidos, 2) : 0.0;
+
+        $ultimaFaturamento = (clone $pedidosBase)->whereNotNull('data_faturamento')->max('data_faturamento');
+        $ultimaCompraFormatada = optional($cliente->data_ultima_compra)->format('d/m/Y')
+            ?? ($ultimaFaturamento ? \Illuminate\Support\Carbon::parse($ultimaFaturamento)->format('d/m/Y') : null);
+
+        $pedidos = Pedido::query()
+            ->where('cliente_id', $cliente->id)
+            ->withCount('itens')
+            ->orderByDesc('data_pedido')
+            ->paginate(20)
+            ->withQueryString()
+            ->through(fn (Pedido $p) => [
+                'id' => $p->id,
+                'numeroPedido' => $p->numero_pedido,
+                'dataPedido' => optional($p->data_pedido)->format('d/m/Y'),
+                'dataFaturamento' => optional($p->data_faturamento)->format('d/m/Y'),
+                'status' => $p->status,
+                'valorTotal' => (float) $p->valor_total,
+                'itensCount' => $p->itens_count,
+                'emAberto' => $p->data_faturamento === null,
+            ]);
+
+        $vendedorNome = VendedorPerfil::query()
+            ->where('cod_vendedor', $cliente->cod_vendedor)
+            ->with('user:id,name,display_name')
+            ->first();
+
+        return Inertia::render('Carteira/Detalhes', [
+            'cliente' => [
+                'id' => $cliente->id,
+                'codCliente' => $cliente->cod_cliente,
+                'loja' => $cliente->loja,
+                'razaoSocial' => $cliente->razao_social,
+                'nomeFantasia' => $cliente->nome_fantasia,
+                'cnpj' => $cliente->cnpj,
+                'estado' => $cliente->estado,
+                'cep' => $cliente->cep,
+                'telefone' => $cliente->telefone,
+                'email' => $cliente->email,
+                'segmento' => $cliente->cod_segmento,
+                'codVendedor' => $cliente->cod_vendedor,
+                'vendedorNome' => $vendedorNome?->user?->display_name ?: $vendedorNome?->user?->name ?: $cliente->cod_vendedor,
+                'status' => $this->statusResolver->statusPara($cliente->data_ultima_compra, now()),
+                'dataUltimaCompra' => $ultimaCompraFormatada,
+            ],
+            'kpis' => [
+                'pedidos' => $qtdPedidos,
+                'volumeTotal' => $volumeTotal,
+                'ticketMedio' => $ticketMedio,
+                'ultimaCompra' => $ultimaCompraFormatada ?? 'Nunca',
+            ],
+            'pedidos' => $pedidos,
         ]);
-
-        return back();
     }
 
     public function registrarMotivoInatividade(Request $request, Cliente $cliente): RedirectResponse
@@ -257,5 +276,86 @@ class CarteiraController extends Controller
         ]);
 
         return back();
+    }
+
+    public function registrarLigacao(Request $request, Cliente $cliente): RedirectResponse
+    {
+        Ligacao::create([
+            'usuario_id' => $request->user()->id,
+            'cliente_id' => $cliente->id,
+            'cliente_nome' => $cliente->razao_social,
+            'tipo_contato' => 'telefonica',
+            'status' => 'finalizada',
+            'data_ligacao' => now(),
+        ]);
+
+        return back();
+    }
+
+    public function registrarAgendamento(Request $request, Cliente $cliente): RedirectResponse
+    {
+        $data = $request->validate([
+            'data_agendamento' => ['required', 'date'],
+            'observacao' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        AgendamentoLigacao::create([
+            'cliente_id' => $cliente->id,
+            'user_id' => $request->user()->id,
+            'data_agendamento' => $data['data_agendamento'],
+            'observacao' => $data['observacao'] ?? null,
+            'status' => 'agendado',
+        ]);
+
+        return back();
+    }
+
+    public function atualizarAgendamento(Request $request, AgendamentoLigacao $agendamento): RedirectResponse
+    {
+        $user = $request->user();
+        $scope = $this->scopeResolver->resolve($user, null, null);
+
+        $agendamento->load('cliente');
+        if ($scope['codVendedores'] !== null && ! in_array($agendamento->cliente?->cod_vendedor, $scope['codVendedores'], true)) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'status' => ['required', 'in:agendado,realizado,cancelado'],
+        ]);
+
+        $agendamento->update(['status' => $data['status']]);
+
+        return back();
+    }
+
+    /**
+     * @param  array<string>|null  $codVendedores
+     * @return array<int, array<string, mixed>>
+     */
+    private function agendamentosDoEscopo(?array $codVendedores): array
+    {
+        $query = AgendamentoLigacao::query()
+            ->with(['cliente:id,razao_social,cnpj,telefone,cod_vendedor', 'user:id,name,display_name'])
+            ->whereBetween('data_agendamento', [now()->subMonths(3)->startOfMonth(), now()->addMonths(6)->endOfMonth()])
+            ->orderBy('data_agendamento');
+
+        if ($codVendedores !== null) {
+            $query->whereHas('cliente', fn ($q) => $q->whereIn('cod_vendedor', $codVendedores));
+        }
+
+        return $query->get()->map(fn (AgendamentoLigacao $a) => [
+            'id' => $a->id,
+            'dataAgendamento' => $a->data_agendamento->toIso8601String(),
+            'dataLabel' => $a->data_agendamento->format('d/m/Y H:i'),
+            'dia' => $a->data_agendamento->format('Y-m-d'),
+            'hora' => $a->data_agendamento->format('H:i'),
+            'observacao' => $a->observacao,
+            'status' => $a->status,
+            'clienteId' => $a->cliente_id,
+            'clienteNome' => $a->cliente?->razao_social ?? '—',
+            'clienteCnpj' => $a->cliente?->cnpj,
+            'autor' => $a->user?->display_name ?: $a->user?->name,
+        ])->values()->all();
     }
 }

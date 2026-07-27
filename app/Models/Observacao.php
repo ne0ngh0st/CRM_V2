@@ -11,6 +11,8 @@ class Observacao extends Model
 
     protected $fillable = [
         'user_id',
+        'cliente_id',
+        'lead_id',
         'cnpj',
         'mensagem',
         'fixada',
@@ -26,5 +28,15 @@ class Observacao extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function cliente(): BelongsTo
+    {
+        return $this->belongsTo(Cliente::class);
+    }
+
+    public function lead(): BelongsTo
+    {
+        return $this->belongsTo(Lead::class);
     }
 }

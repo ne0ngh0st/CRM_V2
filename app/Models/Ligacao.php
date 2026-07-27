@@ -11,6 +11,8 @@ class Ligacao extends Model
 
     protected $fillable = [
         'usuario_id',
+        'cliente_id',
+        'lead_id',
         'cliente_nome',
         'tipo_contato',
         'status',
@@ -29,5 +31,15 @@ class Ligacao extends Model
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(User::class, 'usuario_id');
+    }
+
+    public function cliente(): BelongsTo
+    {
+        return $this->belongsTo(Cliente::class);
+    }
+
+    public function lead(): BelongsTo
+    {
+        return $this->belongsTo(Lead::class);
     }
 }

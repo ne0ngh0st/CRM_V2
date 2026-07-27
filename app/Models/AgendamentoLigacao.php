@@ -5,26 +5,34 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class ClienteContatado extends Model
+class AgendamentoLigacao extends Model
 {
-    protected $table = 'clientes_contatados';
+    protected $table = 'agendamentos_ligacoes';
 
     protected $fillable = [
         'cliente_id',
+        'lead_id',
         'user_id',
-        'contatado_em',
+        'data_agendamento',
+        'observacao',
+        'status',
     ];
 
     protected function casts(): array
     {
         return [
-            'contatado_em' => 'datetime',
+            'data_agendamento' => 'datetime',
         ];
     }
 
     public function cliente(): BelongsTo
     {
         return $this->belongsTo(Cliente::class);
+    }
+
+    public function lead(): BelongsTo
+    {
+        return $this->belongsTo(Lead::class);
     }
 
     public function user(): BelongsTo

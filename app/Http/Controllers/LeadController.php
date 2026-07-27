@@ -1,0 +1,267 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\AgendamentoLigacao;
+use App\Models\Lead;
+use App\Models\Ligacao;
+use App\Models\VendedorPerfil;
+use App\Services\Dashboard\DashboardScopeResolver;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class LeadController extends Controller
+{
+    public function __construct(
+        private readonly DashboardScopeResolver $scopeResolver,
+    ) {
+    }
+
+    public function index(Request $request): Response
+    {
+        $user = $request->user();
+        $role = $user->getRoleNames()->first();
+
+        $visaoSupervisor = $request->string('visao_supervisor')->value() ?: null;
+        $visaoVendedor = $request->string('visao_vendedor')->value() ?: null;
+        $scope = $this->scopeResolver->resolve($user, $visaoSupervisor, $visaoVendedor);
+        $codVendedores = $scope['codVendedores'];
+
+        $busca = trim((string) $request->string('busca'));
+        $estado = (string) $request->string('estado');
+        $segmento = (string) $request->string('segmento');
+        $status = (string) $request->string('status');
+        $origem = (string) $request->string('origem');
+        $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
+        $aba = (string) $request->string('aba') ?: 'leads';
+
+        if (! in_array($origem, ['sistema', 'manual'], true)) {
+            $origem = '';
+        }
+        if (! in_array($status, ['ativo', 'inativo', 'convertido'], true)) {
+            $status = '';
+        }
+        if (! in_array($aba, ['leads', 'calendario'], true)) {
+            $aba = 'leads';
+        }
+
+        $scopeQuery = function () use ($codVendedores) {
+            $query = Lead::query()->visivel();
+            if ($codVendedores !== null) {
+                $query->whereIn('cod_vendedor', $codVendedores);
+            }
+
+            return $query;
+        };
+
+        $baseQuery = function () use ($scopeQuery, $busca, $estado, $segmento, $status, $origem) {
+            $query = $scopeQuery();
+
+            if ($busca !== '') {
+                $query->where(function ($q) use ($busca) {
+                    $q->where('nome', 'like', "%{$busca}%")
+                        ->orWhere('razao_social', 'like', "%{$busca}%")
+                        ->orWhere('nome_fantasia', 'like', "%{$busca}%")
+                        ->orWhere('cnpj', 'like', "%{$busca}%")
+                        ->orWhere('email', 'like', "%{$busca}%")
+                        ->orWhere('telefone', 'like', "%{$busca}%");
+                });
+            }
+
+            if ($estado !== '') {
+                $query->where('estado', $estado);
+            }
+            if ($segmento !== '') {
+                $query->where('segmento', $segmento);
+            }
+            if ($status !== '') {
+                $query->where('status', $status);
+            }
+            if ($origem !== '') {
+                $query->where('origem', $origem);
+            }
+
+            return $query;
+        };
+
+        $kpis = [
+            'total' => (clone $baseQuery())->count(),
+            'sistema' => (clone $baseQuery())->where('origem', 'sistema')->count(),
+            'manual' => (clone $baseQuery())->where('origem', 'manual')->count(),
+            'ativos' => (clone $baseQuery())->where('status', 'ativo')->count(),
+        ];
+
+        $listaQuery = $baseQuery();
+        match ($ordenar) {
+            'valor_desc' => $listaQuery->orderByRaw('valor_estimado IS NULL, valor_estimado DESC'),
+            'recentes' => $listaQuery->orderByDesc('updated_at'),
+            default => $listaQuery->orderBy('razao_social'),
+        };
+
+        $leads = $listaQuery->paginate(30)->withQueryString();
+
+        $codigos = $leads->getCollection()->pluck('cod_vendedor')->filter()->unique()->values();
+        $nomesPorCod = VendedorPerfil::query()
+            ->whereIn('cod_vendedor', $codigos)
+            ->with('user:id,name,display_name')
+            ->get()
+            ->mapWithKeys(fn (VendedorPerfil $vp) => [$vp->cod_vendedor => $vp->user?->display_name ?: $vp->user?->name]);
+
+        $leads->through(fn (Lead $lead) => [
+            'id' => $lead->id,
+            'origem' => $lead->origem,
+            'nome' => $lead->nome,
+            'razaoSocial' => $lead->razao_social,
+            'nomeFantasia' => $lead->nome_fantasia,
+            'cnpj' => $lead->cnpj,
+            'email' => $lead->email,
+            'telefone' => $lead->telefone,
+            'endereco' => $lead->endereco,
+            'cidade' => $lead->cidade,
+            'estado' => $lead->estado,
+            'segmento' => $lead->segmento,
+            'valorEstimado' => $lead->valor_estimado !== null ? (float) $lead->valor_estimado : null,
+            'status' => $lead->status,
+            'codVendedor' => $lead->cod_vendedor,
+            'vendedorNome' => $nomesPorCod[$lead->cod_vendedor] ?? $lead->cod_vendedor,
+            'atualizadoEm' => $lead->updated_at?->format('d/m/Y'),
+        ]);
+
+        return Inertia::render('Leads/Index', [
+            'role' => $role,
+            'aba' => $aba,
+            'leads' => $leads,
+            'kpis' => $kpis,
+            'agendamentos' => $this->agendamentosDoEscopo($codVendedores),
+            'filtros' => [
+                'busca' => $busca,
+                'estado' => $estado,
+                'segmento' => $segmento,
+                'status' => $status,
+                'origem' => $origem,
+                'ordenar' => $ordenar,
+            ],
+            'opcoes' => [
+                'estados' => $scopeQuery()->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
+                'segmentos' => $scopeQuery()->whereNotNull('segmento')->where('segmento', '!=', '')->distinct()->orderBy('segmento')->pluck('segmento'),
+            ],
+            'visao' => [
+                'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
+                'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
+                'vendedores' => in_array($role, ['supervisor', 'admin', 'diretor'], true)
+                    ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
+                    : [],
+                'visaoSupervisor' => $scope['visaoSupervisor'],
+                'visaoVendedor' => $scope['visaoVendedor'],
+            ],
+        ]);
+    }
+
+    public function registrarLigacao(Request $request, Lead $lead): RedirectResponse
+    {
+        $this->autorizarLead($request, $lead);
+
+        Ligacao::create([
+            'usuario_id' => $request->user()->id,
+            'lead_id' => $lead->id,
+            'cliente_nome' => $lead->razao_social ?: $lead->nome,
+            'tipo_contato' => 'telefonica',
+            'status' => 'finalizada',
+            'data_ligacao' => now(),
+        ]);
+
+        return back();
+    }
+
+    public function registrarAgendamento(Request $request, Lead $lead): RedirectResponse
+    {
+        $this->autorizarLead($request, $lead);
+
+        $data = $request->validate([
+            'data_agendamento' => ['required', 'date'],
+            'observacao' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        AgendamentoLigacao::create([
+            'lead_id' => $lead->id,
+            'user_id' => $request->user()->id,
+            'data_agendamento' => $data['data_agendamento'],
+            'observacao' => $data['observacao'] ?? null,
+            'status' => 'agendado',
+        ]);
+
+        return back();
+    }
+
+    public function atualizarAgendamento(Request $request, AgendamentoLigacao $agendamento): RedirectResponse
+    {
+        $user = $request->user();
+        $scope = $this->scopeResolver->resolve($user, null, null);
+
+        $agendamento->load('lead');
+        if ($scope['codVendedores'] !== null
+            && ! in_array($agendamento->lead?->cod_vendedor, $scope['codVendedores'], true)) {
+            abort(403);
+        }
+
+        abort_unless($agendamento->lead_id, 404);
+
+        $data = $request->validate([
+            'status' => ['required', 'in:agendado,realizado,cancelado'],
+        ]);
+
+        $agendamento->update(['status' => $data['status']]);
+
+        return back();
+    }
+
+    public function excluir(Request $request, Lead $lead): RedirectResponse
+    {
+        $this->autorizarLead($request, $lead);
+
+        $lead->update(['status' => 'excluido']);
+
+        return back();
+    }
+
+    private function autorizarLead(Request $request, Lead $lead): void
+    {
+        $scope = $this->scopeResolver->resolve($request->user(), null, null);
+        if ($scope['codVendedores'] !== null && ! in_array($lead->cod_vendedor, $scope['codVendedores'], true)) {
+            abort(403);
+        }
+    }
+
+    /**
+     * @param  array<string>|null  $codVendedores
+     * @return array<int, array<string, mixed>>
+     */
+    private function agendamentosDoEscopo(?array $codVendedores): array
+    {
+        $query = AgendamentoLigacao::query()
+            ->with(['lead:id,razao_social,nome,cnpj,telefone,cod_vendedor', 'user:id,name,display_name'])
+            ->whereNotNull('lead_id')
+            ->whereBetween('data_agendamento', [now()->subMonths(3)->startOfMonth(), now()->addMonths(6)->endOfMonth()])
+            ->orderBy('data_agendamento');
+
+        if ($codVendedores !== null) {
+            $query->whereHas('lead', fn ($q) => $q->whereIn('cod_vendedor', $codVendedores));
+        }
+
+        return $query->get()->map(fn (AgendamentoLigacao $a) => [
+            'id' => $a->id,
+            'dataAgendamento' => $a->data_agendamento->toIso8601String(),
+            'dataLabel' => $a->data_agendamento->format('d/m/Y H:i'),
+            'dia' => $a->data_agendamento->format('Y-m-d'),
+            'hora' => $a->data_agendamento->format('H:i'),
+            'observacao' => $a->observacao,
+            'status' => $a->status,
+            'clienteId' => null,
+            'clienteNome' => $a->lead?->razao_social ?: ($a->lead?->nome ?? '—'),
+            'clienteCnpj' => $a->lead?->cnpj,
+            'autor' => $a->user?->display_name ?: $a->user?->name,
+        ])->values()->all();
+    }
+}
