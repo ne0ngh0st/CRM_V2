@@ -16,8 +16,12 @@ Homestead.yaml
 npm-debug.log
 yarn-error.log
 /auth.json
+/.claude
 /.fleet
 /.idea
 /.nova
 /.vscode
 /.zed
+.DS_Store
+Thumbs.db
+Desktop.ini
