@@ -7,13 +7,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class VendedorPerfil extends Model
 {
+    protected $table = 'vendedor_perfis';
+
     protected $fillable = [
         'user_id',
         'cod_vendedor',
         'cod_super',
         'cod_gerente',
-        'meta_venda',
-        'meta_faturamento',
         'segmento',
         'equipe_rep',
     ];

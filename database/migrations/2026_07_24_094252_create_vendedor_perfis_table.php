@@ -17,8 +17,6 @@ return new class extends Migration
             $table->string('cod_vendedor')->index();
             $table->string('cod_super')->nullable();
             $table->string('cod_gerente')->nullable();
-            $table->decimal('meta_venda', 12, 2)->nullable();
-            $table->decimal('meta_faturamento', 12, 2)->nullable();
             $table->string('segmento')->nullable();
             $table->string('equipe_rep')->nullable();
             $table->timestamps();

@@ -2,22 +2,38 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
     /**
      * Seed the application's database.
+     *
+     * Os 202 usuários reais (comercial) não vêm daqui — depois de rodar isto,
+     * rode `php artisan legado:import-usuarios` (precisa das credenciais
+     * LEGADO_DB_* em .env, ver App\Console\Commands\ImportUsuariosLegado).
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        $this->call([
+            RoleSeeder::class,
         ]);
+
+        // Os seeders abaixo dependem dos usuários reais já estarem importados
+        // (php artisan legado:import-usuarios) — pulados se não houver vendedores.
+        if (\App\Models\User::role(['vendedor', 'representante'])->exists()) {
+            $this->call([
+                MetaMensalSeeder::class,
+                FaturamentoSeeder::class,
+                LigacaoSeeder::class,
+                SugestaoSeeder::class,
+                DataSyncStatusSeeder::class,
+                ObservacaoSeeder::class,
+                SegmentoVendedorSeeder::class,
+                ClienteSeeder::class,
+                OrcamentoSeeder::class,
+                PedidoSeeder::class,
+            ]);
+        }
     }
 }
