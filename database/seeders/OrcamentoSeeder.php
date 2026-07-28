@@ -11,11 +11,18 @@ use Illuminate\Database\Seeder;
 class OrcamentoSeeder extends Seeder
 {
     private const PRODUTOS = [
-        ['cod' => 'BOB001', 'desc' => 'Bobina Térmica 80x40'],
-        ['cod' => 'ETQ010', 'desc' => 'Etiqueta Adesiva 100x50'],
-        ['cod' => 'TCK005', 'desc' => 'Termoticket 57mm'],
-        ['cod' => 'A4-075', 'desc' => 'Papel A4 75g'],
-        ['cod' => 'RFID02', 'desc' => 'Tag RFID UHF'],
+        ['cod' => 'BOB001', 'desc' => 'Bobina Térmica 80x40', 'tipo' => 'bobina'],
+        ['cod' => 'ETQ010', 'desc' => 'Etiqueta Adesiva 100x50', 'tipo' => 'etiqueta'],
+        ['cod' => 'TCK005', 'desc' => 'Termoticket 57mm', 'tipo' => 'bobina'],
+        ['cod' => 'A4-075', 'desc' => 'Papel A4 75g', 'tipo' => 'outro'],
+        ['cod' => 'RFID02', 'desc' => 'Tag RFID UHF', 'tipo' => 'outro'],
+    ];
+
+    private const OUTRAS_INFORMACOES_PADRAO = [
+        'variacao_producao_personalizado' => '(+ ou - 10% da quantidade produzida)',
+        'prazo_producao' => '10 dias após a aprovação do LAYOUT',
+        'garantia_imagem' => '5 anos',
+        'texto_importante' => 'Os preços deste orçamento têm validade de 5 dias a partir da data de emissão.',
     ];
 
     public function run(): void
@@ -39,12 +46,15 @@ class OrcamentoSeeder extends Seeder
                     $desfecho = $nivel === 'nenhum' ? 'aprovado' : fake()->randomElement(['pendente', 'pendente', 'pendente', 'aprovado', 'aprovado', 'rejeitado']);
                     $aprovadoPor = $desfecho === 'aprovado' && $nivel !== 'nenhum' ? $gestores->random() : null;
 
+                    $tipoProdutoServico = fake()->randomElement(['produto', 'produto', 'produto', 'servico']);
+
                     $orcamento = Orcamento::create([
                         'user_id' => $user->id,
                         'cliente_nome' => $clienteDaCarteira->razao_social ?? fake()->company(),
                         'cliente_cnpj' => $clienteDaCarteira->cnpj ?? fake()->numerify('##.###.###/####-##'),
                         'cliente_contato' => fake()->name(),
                         'forma_pagamento' => fake()->randomElement(['Boleto 28 dias', 'Boleto 30/45/60', 'Pix à vista', 'Cartão de crédito']),
+                        'tipo_produto_servico' => $tipoProdutoServico,
                         'valor_total' => 0,
                         'data_validade' => now()->addDays(fake()->numberBetween(7, 30)),
                         'desconto_pct_max' => $descontoMax,
@@ -53,6 +63,8 @@ class OrcamentoSeeder extends Seeder
                         'aprovado_por_id' => $aprovadoPor?->id,
                         'aprovado_em' => $aprovadoPor ? now()->subDays(fake()->numberBetween(0, 5)) : null,
                         'motivo_rejeicao' => $desfecho === 'rejeitado' ? fake()->sentence(8) : null,
+                        'observacoes' => fake()->optional(0.4)->sentence(10),
+                        ...self::OUTRAS_INFORMACOES_PADRAO,
                     ]);
 
                     $valorTotal = 0;
@@ -67,13 +79,14 @@ class OrcamentoSeeder extends Seeder
 
                         OrcamentoItem::create([
                             'orcamento_id' => $orcamento->id,
-                            'tipo_item' => $produto['desc'],
+                            'tipo_item' => $produto['tipo'],
                             'cod_produto' => $produto['cod'],
                             'descricao' => $produto['desc'],
                             'quantidade' => $quantidade,
                             'valor_unitario' => $valorUnitario,
                             'valor_total' => $valorItem,
                             'preco_tabela' => $precoTabela,
+                            'calcula_ipi' => $produto['tipo'] !== 'etiqueta',
                         ]);
                     }
 

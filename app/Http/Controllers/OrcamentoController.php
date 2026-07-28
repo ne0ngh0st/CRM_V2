@@ -2,16 +2,24 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Cliente;
+use App\Models\EtiquetaMateriaPrima;
+use App\Models\Lead;
 use App\Models\Orcamento;
 use App\Models\OrcamentoItem;
+use App\Models\Produto;
 use App\Models\User;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Orcamento\NivelAprovacaoCalculator;
+use App\Services\Orcamento\OrcamentoCalculoService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
@@ -20,9 +28,17 @@ class OrcamentoController extends Controller
 {
     private const ORDEM_NIVEL = ['nenhum' => 0, 'supervisor' => 1, 'diretor' => 2];
 
+    private const OUTRAS_INFORMACOES_PADRAO = [
+        'variacao_producao_personalizado' => '(+ ou - 10% da quantidade produzida)',
+        'prazo_producao' => '10 dias após a aprovação do LAYOUT',
+        'garantia_imagem' => '5 anos',
+        'texto_importante' => 'Os preços deste orçamento têm validade de 5 dias a partir da data de emissão.',
+    ];
+
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly NivelAprovacaoCalculator $calculator,
+        private readonly OrcamentoCalculoService $calculoService,
     ) {
     }
 
@@ -104,6 +120,7 @@ class OrcamentoController extends Controller
             'clienteContato' => $o->cliente_contato,
             'vendedorNome' => $o->user->display_name ?: $o->user->name,
             'formaPagamento' => $o->forma_pagamento,
+            'tipoProdutoServico' => $o->tipo_produto_servico,
             'valorTotal' => (float) $o->valor_total,
             'dataValidade' => optional($o->data_validade)->format('Y-m-d'),
             'dataValidadeFormatada' => optional($o->data_validade)->format('d/m/Y'),
@@ -117,16 +134,6 @@ class OrcamentoController extends Controller
             'criadoEm' => $o->created_at->format('d/m/Y'),
             'podeDecidir' => $o->status_gestor === 'pendente' && $this->podeDecidir($user, $o->nivel_aprovacao),
             'podeEditar' => $o->user_id === $user->id || in_array($role, ['admin', 'diretor'], true),
-            'itens' => $o->itens->map(fn (OrcamentoItem $i) => [
-                'id' => $i->id,
-                'tipoItem' => $i->tipo_item,
-                'codProduto' => $i->cod_produto,
-                'descricao' => $i->descricao,
-                'quantidade' => (float) $i->quantidade,
-                'valorUnitario' => (float) $i->valor_unitario,
-                'valorTotal' => (float) $i->valor_total,
-                'precoTabela' => $i->preco_tabela !== null ? (float) $i->preco_tabela : null,
-            ])->values(),
         ]);
 
         return Inertia::render('Orcamentos/Index', [
@@ -153,8 +160,79 @@ class OrcamentoController extends Controller
         ]);
     }
 
+    public function novo(Request $request): Response
+    {
+        $user = $request->user();
+        $role = $user->getRoleNames()->first();
+        $isAdmin = $role === 'admin';
+
+        $prefillCliente = null;
+        if ($request->filled('cliente_nome')) {
+            $prefillCliente = [
+                'nome' => (string) $request->string('cliente_nome'),
+                'cnpj' => (string) $request->string('cliente_cnpj'),
+                'contato' => (string) $request->string('cliente_contato'),
+            ];
+        }
+
+        return Inertia::render('Orcamentos/Form', [
+            'role' => $role,
+            'isAdmin' => $isAdmin,
+            'orcamento' => null,
+            'prefillCliente' => $prefillCliente,
+            'materiasPrimas' => $isAdmin ? $this->materiasPrimasParaSelect() : [],
+            'outrasInformacoesPadrao' => self::OUTRAS_INFORMACOES_PADRAO,
+        ]);
+    }
+
+    public function editar(Request $request, Orcamento $orcamento): Response
+    {
+        $user = $request->user();
+        $role = $user->getRoleNames()->first();
+        $isAdmin = $role === 'admin';
+
+        abort_unless($orcamento->user_id === $user->id || in_array($role, ['admin', 'diretor'], true), 403);
+
+        $orcamento->load('itens');
+
+        return Inertia::render('Orcamentos/Form', [
+            'role' => $role,
+            'isAdmin' => $isAdmin,
+            'orcamento' => [
+                'id' => $orcamento->id,
+                'clienteNome' => $orcamento->cliente_nome,
+                'clienteCnpj' => $orcamento->cliente_cnpj,
+                'clienteContato' => $orcamento->cliente_contato,
+                'formaPagamento' => $orcamento->forma_pagamento,
+                'tipoProdutoServico' => $orcamento->tipo_produto_servico,
+                'dataValidade' => optional($orcamento->data_validade)->format('Y-m-d'),
+                'observacoes' => $orcamento->observacoes,
+                'variacaoProducaoPersonalizado' => $orcamento->variacao_producao_personalizado,
+                'prazoProducao' => $orcamento->prazo_producao,
+                'garantiaImagem' => $orcamento->garantia_imagem,
+                'textoImportante' => $orcamento->texto_importante,
+                'itens' => $orcamento->itens->map(fn (OrcamentoItem $i) => Arr::except([
+                    'id' => $i->id,
+                    'tipoItem' => $i->tipo_item,
+                    'codProduto' => $i->cod_produto,
+                    'descricao' => $i->descricao,
+                    'quantidade' => (float) $i->quantidade,
+                    'valorUnitario' => (float) $i->valor_unitario,
+                    'precoTabela' => $i->preco_tabela !== null ? (float) $i->preco_tabela : null,
+                    'calculaIpi' => (bool) $i->calcula_ipi,
+                    'etiquetaCalc' => $i->etiqueta_calc,
+                    'materiaPrimaId' => $i->materia_prima_id,
+                ], $isAdmin ? [] : ['etiquetaCalc', 'materiaPrimaId']))->values(),
+            ],
+            'prefillCliente' => null,
+            'materiasPrimas' => $isAdmin ? $this->materiasPrimasParaSelect() : [],
+            'outrasInformacoesPadrao' => self::OUTRAS_INFORMACOES_PADRAO,
+        ]);
+    }
+
     public function store(Request $request): RedirectResponse
     {
+        $this->sanitizarEtiquetaCalcParaNaoAdmin($request);
         $data = $this->validarOrcamento($request);
 
         DB::transaction(function () use ($request, $data) {
@@ -164,18 +242,24 @@ class OrcamentoController extends Controller
                 'cliente_cnpj' => $data['cliente_cnpj'] ?? null,
                 'cliente_contato' => $data['cliente_contato'] ?? null,
                 'forma_pagamento' => $data['forma_pagamento'] ?? null,
+                'tipo_produto_servico' => $data['tipo_produto_servico'],
                 'valor_total' => 0,
                 'data_validade' => $data['data_validade'] ?? null,
                 'desconto_pct_max' => 0,
                 'nivel_aprovacao' => 'nenhum',
                 'status_gestor' => 'pendente',
+                'observacoes' => $data['observacoes'] ?? null,
+                'variacao_producao_personalizado' => $data['variacao_producao_personalizado'] ?? null,
+                'prazo_producao' => $data['prazo_producao'] ?? null,
+                'garantia_imagem' => $data['garantia_imagem'] ?? null,
+                'texto_importante' => $data['texto_importante'] ?? null,
             ]);
 
             $this->salvarItens($orcamento, $data['itens']);
             $this->recalcularAprovacao($orcamento, novo: true);
         });
 
-        return back();
+        return redirect()->route('orcamentos.index');
     }
 
     public function update(Request $request, Orcamento $orcamento): RedirectResponse
@@ -183,6 +267,7 @@ class OrcamentoController extends Controller
         $user = $request->user();
         abort_unless($orcamento->user_id === $user->id || in_array($user->getRoleNames()->first(), ['admin', 'diretor'], true), 403);
 
+        $this->sanitizarEtiquetaCalcParaNaoAdmin($request);
         $data = $this->validarOrcamento($request);
 
         DB::transaction(function () use ($orcamento, $data) {
@@ -191,14 +276,20 @@ class OrcamentoController extends Controller
                 'cliente_cnpj' => $data['cliente_cnpj'] ?? null,
                 'cliente_contato' => $data['cliente_contato'] ?? null,
                 'forma_pagamento' => $data['forma_pagamento'] ?? null,
+                'tipo_produto_servico' => $data['tipo_produto_servico'],
                 'data_validade' => $data['data_validade'] ?? null,
+                'observacoes' => $data['observacoes'] ?? null,
+                'variacao_producao_personalizado' => $data['variacao_producao_personalizado'] ?? null,
+                'prazo_producao' => $data['prazo_producao'] ?? null,
+                'garantia_imagem' => $data['garantia_imagem'] ?? null,
+                'texto_importante' => $data['texto_importante'] ?? null,
             ]);
 
             $this->salvarItens($orcamento, $data['itens']);
             $this->recalcularAprovacao($orcamento, novo: false);
         });
 
-        return back();
+        return redirect()->route('orcamentos.index');
     }
 
     public function aprovar(Request $request, Orcamento $orcamento): RedirectResponse
@@ -252,7 +343,26 @@ class OrcamentoController extends Controller
 
         $orcamento->load(['itens', 'user', 'aprovadoPor']);
 
-        $pdf = Pdf::loadView('orcamentos.pdf', ['orcamento' => $orcamento]);
+        $itensCalculados = $orcamento->itens
+            ->map(fn (OrcamentoItem $i) => $this->calculoService->calcularItem([
+                'tipo_item' => $i->tipo_item,
+                'valor_unitario' => (float) $i->valor_unitario,
+                'valor_total' => (float) $i->valor_total,
+                'calcula_ipi' => $i->calcula_ipi,
+            ], $orcamento->tipo_produto_servico) + [
+                'descricao' => $i->descricao,
+                'codProduto' => $i->cod_produto,
+                'quantidade' => (float) $i->quantidade,
+            ])
+            ->values();
+
+        $resumo = $this->calculoService->resumo($itensCalculados);
+
+        $pdf = Pdf::loadView('orcamentos.pdf', [
+            'orcamento' => $orcamento,
+            'itensCalculados' => $itensCalculados,
+            'resumo' => $resumo,
+        ]);
         $nomeArquivo = "orcamento-{$orcamento->id}.pdf";
 
         return $request->boolean('download')
@@ -260,7 +370,80 @@ class OrcamentoController extends Controller
             : $pdf->stream($nomeArquivo);
     }
 
-    /** @return array{cliente_nome: string, cliente_cnpj: ?string, cliente_contato: ?string, forma_pagamento: ?string, data_validade: ?string, itens: array} */
+    public function buscarClientes(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->string('q'));
+
+        if (mb_strlen($q) < 2) {
+            return response()->json([]);
+        }
+
+        $clientes = Cliente::query()
+            ->where(function ($query) use ($q) {
+                $query->where('cnpj', 'like', "%{$q}%")
+                    ->orWhere('razao_social', 'like', "%{$q}%")
+                    ->orWhere('nome_fantasia', 'like', "%{$q}%");
+            })
+            ->limit(10)
+            ->get()
+            ->map(fn (Cliente $c) => [
+                'origem' => 'cliente',
+                'nome' => $c->razao_social,
+                'cnpj' => $c->cnpj,
+                'telefone' => $c->telefone,
+                'email' => $c->email,
+                'estado' => $c->estado,
+                'cep' => $c->cep,
+            ]);
+
+        $leads = Lead::query()
+            ->visivel()
+            ->where(function ($query) use ($q) {
+                $query->where('cnpj', 'like', "%{$q}%")
+                    ->orWhere('razao_social', 'like', "%{$q}%")
+                    ->orWhere('nome_fantasia', 'like', "%{$q}%");
+            })
+            ->limit(10)
+            ->get()
+            ->map(fn (Lead $l) => [
+                'origem' => 'lead',
+                'nome' => $l->razao_social ?: $l->nome,
+                'cnpj' => $l->cnpj,
+                'telefone' => $l->telefone,
+                'email' => $l->email,
+                'estado' => $l->estado,
+                'cep' => null,
+            ]);
+
+        return response()->json($clientes->concat($leads)->take(10)->values());
+    }
+
+    public function buscarProdutos(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->string('q'));
+
+        if (mb_strlen($q) < 2) {
+            return response()->json([]);
+        }
+
+        $produtos = Produto::query()
+            ->where(function ($query) use ($q) {
+                $query->where('cod_produto', 'like', "%{$q}%")
+                    ->orWhere('descricao', 'like', "%{$q}%");
+            })
+            ->limit(15)
+            ->get(['cod_produto', 'descricao', 'categoria', 'preco_tabela'])
+            ->map(fn (Produto $p) => [
+                'codProduto' => $p->cod_produto,
+                'descricao' => $p->descricao,
+                'categoria' => $p->categoria,
+                'precoTabela' => $p->preco_tabela !== null ? (float) $p->preco_tabela : null,
+            ]);
+
+        return response()->json($produtos);
+    }
+
+    /** @return array{cliente_nome: string, cliente_cnpj: ?string, cliente_contato: ?string, forma_pagamento: ?string, tipo_produto_servico: string, data_validade: ?string, observacoes: ?string, variacao_producao_personalizado: ?string, prazo_producao: ?string, garantia_imagem: ?string, texto_importante: ?string, itens: array} */
     private function validarOrcamento(Request $request): array
     {
         return $request->validate([
@@ -268,18 +451,45 @@ class OrcamentoController extends Controller
             'cliente_cnpj' => ['nullable', 'string', 'max:18'],
             'cliente_contato' => ['nullable', 'string', 'max:255'],
             'forma_pagamento' => ['nullable', 'string', 'max:50'],
+            'tipo_produto_servico' => ['required', Rule::in(['produto', 'servico'])],
             'data_validade' => ['nullable', 'date'],
+            'observacoes' => ['nullable', 'string'],
+            'variacao_producao_personalizado' => ['nullable', 'string', 'max:2000'],
+            'prazo_producao' => ['nullable', 'string', 'max:255'],
+            'garantia_imagem' => ['nullable', 'string', 'max:255'],
+            'texto_importante' => ['nullable', 'string'],
             'itens' => ['required', 'array', 'min:1'],
-            'itens.*.tipo_item' => ['nullable', 'string', 'max:255'],
+            'itens.*.tipo_item' => ['required', Rule::in(['bobina', 'etiqueta', 'outro'])],
             'itens.*.cod_produto' => ['nullable', 'string', 'max:100'],
             'itens.*.descricao' => ['required', 'string', 'max:255'],
             'itens.*.quantidade' => ['required', 'numeric', 'min:0.01'],
             'itens.*.valor_unitario' => ['required', 'numeric', 'min:0'],
             'itens.*.preco_tabela' => ['nullable', 'numeric', 'min:0'],
+            'itens.*.calcula_ipi' => ['nullable', 'boolean'],
+            'itens.*.materia_prima_id' => ['nullable', 'integer', 'exists:etiquetas_materia_prima,id'],
+            'itens.*.etiqueta_calc' => ['nullable', 'array'],
         ]);
     }
 
-    /** @param array<int, array{tipo_item: ?string, cod_produto: ?string, descricao: string, quantidade: float|string, valor_unitario: float|string, preco_tabela: float|string|null}> $itens */
+    /**
+     * Remove itens.*.etiqueta_calc do payload antes de validar/persistir quando quem
+     * está enviando não é admin — os dados de custo/margem da calculadora de etiqueta
+     * nunca devem ser aceitos de um perfil que não tem acesso à calculadora.
+     */
+    private function sanitizarEtiquetaCalcParaNaoAdmin(Request $request): void
+    {
+        if ($request->user()->getRoleNames()->first() === 'admin') {
+            return;
+        }
+
+        $itens = collect($request->input('itens', []))
+            ->map(fn ($item) => Arr::except($item, 'etiqueta_calc'))
+            ->all();
+
+        $request->merge(['itens' => $itens]);
+    }
+
+    /** @param array<int, array{tipo_item: string, cod_produto: ?string, descricao: string, quantidade: float|string, valor_unitario: float|string, preco_tabela: float|string|null, calcula_ipi?: bool|int|null, materia_prima_id?: ?int, etiqueta_calc?: ?array}> $itens */
     private function salvarItens(Orcamento $orcamento, array $itens): void
     {
         $orcamento->itens()->delete();
@@ -291,15 +501,22 @@ class OrcamentoController extends Controller
             $valorItemTotal = round($quantidade * $valorUnitario, 2);
             $valorTotal += $valorItemTotal;
 
+            $tipoItem = $item['tipo_item'];
+            // Etiqueta nunca incide IPI, independente do que foi enviado.
+            $calculaIpi = $tipoItem === 'etiqueta' ? false : (bool) ($item['calcula_ipi'] ?? true);
+
             OrcamentoItem::create([
                 'orcamento_id' => $orcamento->id,
-                'tipo_item' => $item['tipo_item'] ?? null,
+                'tipo_item' => $tipoItem,
                 'cod_produto' => $item['cod_produto'] ?? null,
                 'descricao' => $item['descricao'],
                 'quantidade' => $quantidade,
                 'valor_unitario' => $valorUnitario,
                 'valor_total' => $valorItemTotal,
                 'preco_tabela' => $item['preco_tabela'] ?? null,
+                'calcula_ipi' => $calculaIpi,
+                'etiqueta_calc' => $item['etiqueta_calc'] ?? null,
+                'materia_prima_id' => $item['materia_prima_id'] ?? null,
             ]);
         }
 
@@ -308,8 +525,17 @@ class OrcamentoController extends Controller
 
     private function recalcularAprovacao(Orcamento $orcamento, bool $novo): void
     {
-        $itens = $orcamento->itens()->get(['valor_unitario', 'preco_tabela'])
-            ->map(fn (OrcamentoItem $i) => ['valor_unitario' => $i->valor_unitario, 'preco_tabela' => $i->preco_tabela]);
+        $tipoProdutoServico = $orcamento->tipo_produto_servico;
+
+        $itens = $orcamento->itens()->get(['tipo_item', 'valor_unitario', 'preco_tabela', 'calcula_ipi'])
+            ->map(fn (OrcamentoItem $i) => [
+                'valor_unitario' => $this->calculoService->baseParaDesconto($tipoProdutoServico, [
+                    'valor_unitario' => (float) $i->valor_unitario,
+                    'tipo_item' => $i->tipo_item,
+                    'calcula_ipi' => $i->calcula_ipi,
+                ]),
+                'preco_tabela' => $i->preco_tabela,
+            ]);
 
         $nivelAntigo = $orcamento->nivel_aprovacao;
         $statusAntigo = $orcamento->status_gestor;
@@ -378,5 +604,23 @@ class OrcamentoController extends Controller
             $data <= $em7Dias => 'proximo',
             default => 'no_prazo',
         };
+    }
+
+    /** @return array<int, array{id: int, descMp: string, categoria: ?string, fabricante: ?string, precoM2: float}> */
+    private function materiasPrimasParaSelect(): array
+    {
+        return EtiquetaMateriaPrima::query()
+            ->ativa()
+            ->orderBy('desc_mp')
+            ->get()
+            ->map(fn ($mp) => [
+                'id' => $mp->id,
+                'descMp' => $mp->desc_mp,
+                'categoria' => $mp->categoria,
+                'fabricante' => $mp->fabricante,
+                'precoM2' => (float) $mp->preco_m2,
+            ])
+            ->values()
+            ->all();
     }
 }

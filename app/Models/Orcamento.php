@@ -14,6 +14,7 @@ class Orcamento extends Model
         'cliente_cnpj',
         'cliente_contato',
         'forma_pagamento',
+        'tipo_produto_servico',
         'valor_total',
         'data_validade',
         'desconto_pct_max',
@@ -22,6 +23,11 @@ class Orcamento extends Model
         'aprovado_por_id',
         'aprovado_em',
         'motivo_rejeicao',
+        'observacoes',
+        'variacao_producao_personalizado',
+        'prazo_producao',
+        'garantia_imagem',
+        'texto_importante',
     ];
 
     protected function casts(): array
@@ -47,5 +53,10 @@ class Orcamento extends Model
     public function itens(): HasMany
     {
         return $this->hasMany(OrcamentoItem::class);
+    }
+
+    public function usaIpi(): bool
+    {
+        return $this->tipo_produto_servico === 'produto';
     }
 }

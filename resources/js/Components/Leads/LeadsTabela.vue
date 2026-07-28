@@ -36,10 +36,10 @@ function ligar(lead) {
 }
 
 function criarOrcamento(lead) {
-    router.get(route('orcamentos.index'), {
-        novo_cliente_nome: lead.razaoSocial || lead.nome,
-        novo_cliente_cnpj: lead.cnpj ?? '',
-        novo_cliente_contato: lead.telefone ?? '',
+    router.get(route('orcamentos.novo'), {
+        cliente_nome: lead.razaoSocial || lead.nome,
+        cliente_cnpj: lead.cnpj ?? '',
+        cliente_contato: lead.telefone ?? '',
     });
 }
 

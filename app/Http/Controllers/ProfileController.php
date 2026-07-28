@@ -56,11 +56,15 @@ class ProfileController extends Controller
         $user = $request->user();
         $this->apagarFotoAntiga($user->foto_perfil);
 
-        $ext = $request->file('foto_perfil')->getClientOriginalExtension()
-            ?: $request->file('foto_perfil')->extension();
+        $mimeParaExtensao = [
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+        ];
+        $ext = $mimeParaExtensao[$request->file('foto_perfil')->getMimeType()] ?? 'jpg';
         $path = $request->file('foto_perfil')->storeAs(
             'perfis',
-            'perfil_'.$user->id.'_'.time().'.'.strtolower($ext),
+            'perfil_'.$user->id.'_'.time().'.'.$ext,
             'public',
         );
 

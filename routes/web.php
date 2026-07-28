@@ -4,6 +4,7 @@ use App\Http\Controllers\CadastroController;
 use App\Http\Controllers\CarteiraController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipeController;
+use App\Http\Controllers\EtiquetaMateriaPrimaController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\ObservacaoController;
@@ -66,7 +67,18 @@ Route::middleware('auth')->group(function () {
     Route::delete('/cadastros/leads/{lead}', [CadastroController::class, 'destroyLead'])->name('cadastros.leads.destroy');
 
     Route::get('/orcamentos', [OrcamentoController::class, 'index'])->name('orcamentos.index');
+    Route::get('/orcamentos/novo', [OrcamentoController::class, 'novo'])->name('orcamentos.novo');
+    Route::get('/orcamentos/busca-clientes', [OrcamentoController::class, 'buscarClientes'])->name('orcamentos.buscaClientes');
+    Route::get('/orcamentos/busca-produtos', [OrcamentoController::class, 'buscarProdutos'])->name('orcamentos.buscaProdutos');
+
+    Route::get('/orcamentos/materia-prima', [EtiquetaMateriaPrimaController::class, 'index'])->name('etiquetas.materiaPrima.index');
+    Route::post('/orcamentos/materia-prima', [EtiquetaMateriaPrimaController::class, 'store'])->name('etiquetas.materiaPrima.store');
+    Route::patch('/orcamentos/materia-prima/{materiaPrima}', [EtiquetaMateriaPrimaController::class, 'update'])->name('etiquetas.materiaPrima.update');
+    Route::delete('/orcamentos/materia-prima/{materiaPrima}', [EtiquetaMateriaPrimaController::class, 'destroy'])->name('etiquetas.materiaPrima.destroy');
+    Route::post('/orcamentos/etiquetas/calcular', [EtiquetaMateriaPrimaController::class, 'calcular'])->name('etiquetas.calcular');
+
     Route::post('/orcamentos', [OrcamentoController::class, 'store'])->name('orcamentos.store');
+    Route::get('/orcamentos/{orcamento}/editar', [OrcamentoController::class, 'editar'])->name('orcamentos.editar');
     Route::patch('/orcamentos/{orcamento}', [OrcamentoController::class, 'update'])->name('orcamentos.update');
     Route::patch('/orcamentos/{orcamento}/aprovar', [OrcamentoController::class, 'aprovar'])->name('orcamentos.aprovar');
     Route::patch('/orcamentos/{orcamento}/rejeitar', [OrcamentoController::class, 'rejeitar'])->name('orcamentos.rejeitar');

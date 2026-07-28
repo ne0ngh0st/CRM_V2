@@ -1,6 +1,6 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { reactive, ref } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
@@ -8,7 +8,6 @@ import FilterField from '@/Components/FilterField.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import OrcamentosTabela from '@/Components/Orcamentos/OrcamentosTabela.vue';
-import OrcamentoFormModal from '@/Components/Orcamentos/OrcamentoFormModal.vue';
 import RejeitarOrcamentoModal from '@/Components/Orcamentos/RejeitarOrcamentoModal.vue';
 import ExcluirOrcamentoModal from '@/Components/Orcamentos/ExcluirOrcamentoModal.vue';
 import { ROTULOS_STATUS_ORCAMENTO, ROTULOS_NIVEL_APROVACAO } from '@/constants/orcamentos.js';
@@ -59,42 +58,9 @@ function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
 }
 
-const modalForm = ref(false);
 const modalRejeitar = ref(false);
 const modalExcluir = ref(false);
 const orcamentoAtivo = ref(null);
-const prefillCliente = ref(null);
-
-function abrirNovo() {
-    orcamentoAtivo.value = null;
-    prefillCliente.value = null;
-    modalForm.value = true;
-}
-
-function abrirEditar(orcamento) {
-    orcamentoAtivo.value = orcamento;
-    prefillCliente.value = null;
-    modalForm.value = true;
-}
-
-// Vem do botão "Criar orçamento" da Carteira — mesma ideia do legado
-// (orcamentos.js::verificarParametrosNovoOrcamento): lê a query string, abre o
-// modal já preenchido, e limpa a URL pra não reabrir num F5/voltar.
-onMounted(() => {
-    const params = new URLSearchParams(window.location.search);
-    const nome = params.get('novo_cliente_nome');
-
-    if (!nome) return;
-
-    prefillCliente.value = {
-        nome,
-        cnpj: params.get('novo_cliente_cnpj') || '',
-        contato: params.get('novo_cliente_contato') || '',
-    };
-    orcamentoAtivo.value = null;
-    modalForm.value = true;
-    window.history.replaceState(null, '', route('orcamentos.index'));
-});
 
 function abrirRejeitar(orcamento) {
     orcamentoAtivo.value = orcamento;
@@ -204,16 +170,23 @@ function aprovar(orcamento) {
                         </svg>
                     </template>
                     <template #actions>
-                        <button type="button" class="rounded bg-teal px-3 py-1 text-xs font-medium text-white hover:bg-teal/90" @click="abrirNovo">
+                        <Link
+                            v-if="role === 'admin'"
+                            :href="route('etiquetas.materiaPrima.index')"
+                            class="rounded border border-gray-300 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
+                        >
+                            Matéria-prima de etiqueta
+                        </Link>
+                        <Link :href="route('orcamentos.novo')" class="rounded bg-teal px-3 py-1 text-xs font-medium text-white hover:bg-teal/90">
                             + Novo Orçamento
-                        </button>
+                        </Link>
                     </template>
 
                     <OrcamentosTabela
                         v-if="orcamentos.data.length"
                         :orcamentos="orcamentos.data"
                         :pode-excluir="podeExcluir"
-                        @editar="abrirEditar"
+                        @editar="(o) => router.visit(route('orcamentos.editar', o.id))"
                         @aprovar="aprovar"
                         @rejeitar="abrirRejeitar"
                         @excluir="abrirExcluir"
@@ -227,7 +200,6 @@ function aprovar(orcamento) {
             </div>
         </div>
 
-        <OrcamentoFormModal :show="modalForm" :orcamento="orcamentoAtivo" :prefill-cliente="prefillCliente" @close="modalForm = false" />
         <RejeitarOrcamentoModal :show="modalRejeitar" :orcamento="orcamentoAtivo" @close="modalRejeitar = false" />
         <ExcluirOrcamentoModal :show="modalExcluir" :orcamento="orcamentoAtivo" @close="modalExcluir = false" />
     </AuthenticatedLayout>

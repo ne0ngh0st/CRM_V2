@@ -6,6 +6,11 @@ namespace App\Services\Orcamento;
  * Nível de aprovação é sempre derivado do maior desconto percentual entre os itens
  * do orçamento (valor_unitario vs. preco_tabela) — nunca confiado do cliente.
  * Regra de negócio real do legado: <10% auto-aprova, 10-15% supervisor, >15% diretor.
+ *
+ * IMPORTANTE: o "valor_unitario" que este calculator recebe já deve vir normalizado
+ * (sem IPI, quando o item participa de IPI) pelo caller via
+ * OrcamentoCalculoService::baseParaDesconto() — comparar preco_tabela direto contra
+ * um valor com IPI embutido infla o desconto aparente artificialmente.
  */
 class NivelAprovacaoCalculator
 {

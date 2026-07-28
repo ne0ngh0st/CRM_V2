@@ -194,12 +194,7 @@ class CarteiraController extends Controller
 
     public function detalhes(Request $request, Cliente $cliente): Response
     {
-        $user = $request->user();
-        $scope = $this->scopeResolver->resolve($user, null, null);
-
-        if ($scope['codVendedores'] !== null && ! in_array($cliente->cod_vendedor, $scope['codVendedores'], true)) {
-            abort(403);
-        }
+        $this->autorizarCliente($request, $cliente);
 
         $pedidosBase = Pedido::query()->where('cliente_id', $cliente->id);
 
@@ -263,6 +258,8 @@ class CarteiraController extends Controller
 
     public function registrarMotivoInatividade(Request $request, Cliente $cliente): RedirectResponse
     {
+        $this->autorizarCliente($request, $cliente);
+
         $data = $request->validate([
             'motivo' => ['required', 'string', 'max:255'],
             'observacao' => ['nullable', 'string', 'max:2000'],
@@ -280,6 +277,8 @@ class CarteiraController extends Controller
 
     public function registrarLigacao(Request $request, Cliente $cliente): RedirectResponse
     {
+        $this->autorizarCliente($request, $cliente);
+
         Ligacao::create([
             'usuario_id' => $request->user()->id,
             'cliente_id' => $cliente->id,
@@ -294,6 +293,8 @@ class CarteiraController extends Controller
 
     public function registrarAgendamento(Request $request, Cliente $cliente): RedirectResponse
     {
+        $this->autorizarCliente($request, $cliente);
+
         $data = $request->validate([
             'data_agendamento' => ['required', 'date'],
             'observacao' => ['nullable', 'string', 'max:2000'],
@@ -312,12 +313,9 @@ class CarteiraController extends Controller
 
     public function atualizarAgendamento(Request $request, AgendamentoLigacao $agendamento): RedirectResponse
     {
-        $user = $request->user();
-        $scope = $this->scopeResolver->resolve($user, null, null);
-
         $agendamento->load('cliente');
-        if ($scope['codVendedores'] !== null && ! in_array($agendamento->cliente?->cod_vendedor, $scope['codVendedores'], true)) {
-            abort(403);
+        if ($agendamento->cliente) {
+            $this->autorizarCliente($request, $agendamento->cliente);
         }
 
         $data = $request->validate([
@@ -327,6 +325,15 @@ class CarteiraController extends Controller
         $agendamento->update(['status' => $data['status']]);
 
         return back();
+    }
+
+    private function autorizarCliente(Request $request, Cliente $cliente): void
+    {
+        $scope = $this->scopeResolver->resolve($request->user(), null, null);
+
+        if ($scope['codVendedores'] !== null && ! in_array($cliente->cod_vendedor, $scope['codVendedores'], true)) {
+            abort(403);
+        }
     }
 
     /**

@@ -34,10 +34,10 @@ function ligar(cliente) {
 }
 
 function criarOrcamento(cliente) {
-    router.get(route('orcamentos.index'), {
-        novo_cliente_nome: cliente.razaoSocial,
-        novo_cliente_cnpj: cliente.cnpj ?? '',
-        novo_cliente_contato: cliente.telefone ?? '',
+    router.get(route('orcamentos.novo'), {
+        cliente_nome: cliente.razaoSocial,
+        cliente_cnpj: cliente.cnpj ?? '',
+        cliente_contato: cliente.telefone ?? '',
     });
 }
 </script>

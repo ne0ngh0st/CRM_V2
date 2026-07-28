@@ -41,3 +41,8 @@ export const TONS_VALIDADE_ORCAMENTO = {
     no_prazo: 'ok',
     sem_validade: 'neutral',
 };
+
+export const ROTULOS_TIPO_PRODUTO_SERVICO = {
+    produto: 'Produto (IPI 3,25%)',
+    servico: 'Serviço (sem IPI)',
+};
