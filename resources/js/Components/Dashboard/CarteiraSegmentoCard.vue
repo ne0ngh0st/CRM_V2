@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import { Link } from '@inertiajs/vue3';
 import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 
@@ -8,7 +9,21 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    // Filtros já ativos a preservar ao navegar (na Home só visão; na própria
+    // Carteira, o objeto `filtros` inteiro da página — busca/estado/segmento/etc).
+    baseFiltros: { type: Object, default: () => ({}) },
+    visaoSupervisor: { type: String, default: null },
+    visaoVendedor: { type: String, default: null },
 });
+
+function carteiraHref(params) {
+    return route('carteira.index', {
+        visao_supervisor: props.visaoSupervisor || undefined,
+        visao_vendedor: props.visaoVendedor || undefined,
+        ...props.baseFiltros,
+        ...params,
+    });
+}
 
 const totalAtivos = computed(() => props.carteiraSegmento.dentroSegmento.ativos + props.carteiraSegmento.foraSegmento.ativos);
 const totalInativando = computed(() => props.carteiraSegmento.dentroSegmento.inativando + props.carteiraSegmento.foraSegmento.inativando);
@@ -19,10 +34,10 @@ const grupos = computed(() => [
     { chave: 'fora', titulo: 'Fora do segmento', dados: props.carteiraSegmento.foraSegmento, corBarra: 'text-red-500' },
 ]);
 
-const linhasStatus = (dados) => [
-    { label: 'Ativos', valor: dados.ativos, pct: dados.pctAtivos, dot: 'bg-emerald-500' },
-    { label: 'Inativando', valor: dados.inativando, pct: dados.pctInativando, dot: 'bg-amber-500' },
-    { label: 'Inativos', valor: dados.inativos, pct: dados.pctInativos, dot: 'bg-red-500' },
+const linhasStatus = (dados, aderenciaChave) => [
+    { label: 'Ativos', valor: dados.ativos, pct: dados.pctAtivos, dot: 'bg-emerald-500', href: carteiraHref({ status: 'ativo', aderencia: aderenciaChave }) },
+    { label: 'Inativando', valor: dados.inativando, pct: dados.pctInativando, dot: 'bg-amber-500', href: carteiraHref({ status: 'inativando', aderencia: aderenciaChave }) },
+    { label: 'Inativos', valor: dados.inativos, pct: dados.pctInativos, dot: 'bg-red-500', href: carteiraHref({ status: 'inativo', aderencia: aderenciaChave }) },
 ];
 </script>
 
@@ -41,19 +56,19 @@ const linhasStatus = (dados) => [
 
         <div v-if="carteiraSegmento.total > 0" class="flex flex-col gap-4">
             <div class="flex flex-wrap gap-2">
-                <KpiTile :value="totalAtivos" label="Ativos" tone="ok" />
-                <KpiTile :value="totalInativando" label="Inativando" tone="warn" />
-                <KpiTile :value="totalInativos" label="Inativos" tone="danger" />
+                <KpiTile :value="totalAtivos" label="Ativos" tone="ok" :href="carteiraHref({ status: 'ativo' })" />
+                <KpiTile :value="totalInativando" label="Inativando" tone="warn" :href="carteiraHref({ status: 'inativando' })" />
+                <KpiTile :value="totalInativos" label="Inativos" tone="danger" :href="carteiraHref({ status: 'inativo' })" />
                 <KpiTile :value="`${carteiraSegmento.pctDentro}%`" label="No segmento" tone="info" />
             </div>
 
             <div class="flex items-center gap-3 sm:gap-4">
                 <div class="shrink-0">
                     <p class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">No segmento</p>
-                    <p class="text-lg font-bold text-emerald-600">
+                    <Link :href="carteiraHref({ aderencia: 'dentro' })" class="text-lg font-bold text-emerald-600 hover:underline">
                         {{ carteiraSegmento.dentroSegmento.total }}
                         <span class="text-xs font-medium text-gray-400">({{ carteiraSegmento.pctDentro }}%)</span>
-                    </p>
+                    </Link>
                 </div>
                 <div class="flex h-2.5 flex-1 overflow-hidden rounded-full bg-gray-100">
                     <div class="bg-emerald-500" :style="{ width: carteiraSegmento.pctDentro + '%' }" />
@@ -61,10 +76,10 @@ const linhasStatus = (dados) => [
                 </div>
                 <div class="shrink-0 text-right">
                     <p class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Fora do segmento</p>
-                    <p class="text-lg font-bold text-red-500">
+                    <Link :href="carteiraHref({ aderencia: 'fora' })" class="text-lg font-bold text-red-500 hover:underline">
                         {{ carteiraSegmento.foraSegmento.total }}
                         <span class="text-xs font-medium text-gray-400">({{ carteiraSegmento.pctFora }}%)</span>
-                    </p>
+                    </Link>
                 </div>
             </div>
 
@@ -96,7 +111,13 @@ const linhasStatus = (dados) => [
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="linha in linhasStatus(grupo.dados)" :key="linha.label" class="border-t border-gray-100">
+                            <Link
+                                v-for="linha in linhasStatus(grupo.dados, grupo.chave)"
+                                :key="linha.label"
+                                :href="linha.href"
+                                as="tr"
+                                class="cursor-pointer border-t border-gray-100 transition hover:bg-gray-100"
+                            >
                                 <td class="py-1.5">
                                     <span class="inline-flex items-center gap-1.5 text-gray-700">
                                         <span class="h-1.5 w-1.5 rounded-full" :class="linha.dot" />
@@ -105,7 +126,7 @@ const linhasStatus = (dados) => [
                                 </td>
                                 <td class="py-1.5 text-right font-semibold text-gray-800">{{ linha.valor }}</td>
                                 <td class="py-1.5 text-right text-gray-500">{{ linha.pct }}%</td>
-                            </tr>
+                            </Link>
                         </tbody>
                     </table>
                 </div>

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
+import NotificationBell from '@/Components/NotificationBell.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 
@@ -188,8 +189,10 @@ const carteiraAtiva = computed(() => route().current('carteira.*') || route().cu
                             </div>
                         </div>
 
-                        <div class="hidden sm:ms-6 sm:flex sm:items-center">
-                            <div class="relative ms-3">
+                        <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-1">
+                            <NotificationBell />
+
+                            <div class="relative ms-2">
                                 <Dropdown align="right" width="48">
                                     <template #trigger>
                                         <span class="inline-flex rounded-md">
@@ -380,36 +383,40 @@ const carteiraAtiva = computed(() => route().current('carteira.*') || route().cu
                     </div>
 
                     <div class="border-t border-white/10 pb-1 pt-4">
-                        <div class="flex items-center gap-3 px-4">
-                            <span
-                                class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10"
-                            >
-                                <img
-                                    v-if="$page.props.auth.user.foto_url"
-                                    :src="$page.props.auth.user.foto_url"
-                                    alt=""
-                                    class="h-full w-full object-cover"
-                                />
-                                <svg
-                                    v-else
-                                    class="h-4 w-4 text-white/70"
-                                    fill="currentColor"
-                                    viewBox="0 0 24 24"
-                                    aria-hidden="true"
+                        <div class="flex items-center justify-between px-4">
+                            <div class="flex items-center gap-3">
+                                <span
+                                    class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10"
                                 >
-                                    <path
-                                        d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v1.2h19.2v-1.2c0-3.2-6.4-4.8-9.6-4.8z"
+                                    <img
+                                        v-if="$page.props.auth.user.foto_url"
+                                        :src="$page.props.auth.user.foto_url"
+                                        alt=""
+                                        class="h-full w-full object-cover"
                                     />
-                                </svg>
-                            </span>
-                            <div class="min-w-0">
-                                <div class="truncate text-base font-medium text-white">
-                                    {{ $page.props.auth.user.display_name || $page.props.auth.user.name }}
-                                </div>
-                                <div class="truncate text-sm font-medium text-white/60">
-                                    {{ $page.props.auth.user.email }}
+                                    <svg
+                                        v-else
+                                        class="h-4 w-4 text-white/70"
+                                        fill="currentColor"
+                                        viewBox="0 0 24 24"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v1.2h19.2v-1.2c0-3.2-6.4-4.8-9.6-4.8z"
+                                        />
+                                    </svg>
+                                </span>
+                                <div class="min-w-0">
+                                    <div class="truncate text-base font-medium text-white">
+                                        {{ $page.props.auth.user.display_name || $page.props.auth.user.name }}
+                                    </div>
+                                    <div class="truncate text-sm font-medium text-white/60">
+                                        {{ $page.props.auth.user.email }}
+                                    </div>
                                 </div>
                             </div>
+
+                            <NotificationBell />
                         </div>
 
                         <div class="mt-3 space-y-1">

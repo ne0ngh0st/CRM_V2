@@ -34,6 +34,9 @@ Rodar localmente:
 - MySQL do XAMPP precisa estar ligado (`C:\xampp\mysql_start.bat` — não sobe sozinho).
 - Servidor: `php artisan serve --port=8000` na raiz do projeto.
 - Assets: `npm run build` (ou `npm run dev`).
+- **⚠️ Reverb (notificações em tempo real) — processo à parte, também não sobe sozinho:** `php artisan reverb:start --debug`. Sem ele rodando, o sino de notificação no navbar simplesmente fica mudo (não dá erro visível, só não atualiza em tempo real) — ver seção "Sistema de Notificações" abaixo.
+- **Atalho que sobe tudo de uma vez** (server + queue:listen + vite + reverb): `composer run dev` — um único comando, um único terminal. Recomendado em vez de subir cada processo manualmente agora que são 4.
+- **`laravel/pail`** (visualizador de log em tempo real) fica no `composer.json` mas **removido do script `dev`**: precisa da extensão `pcntl`, que não existe nos builds de PHP pra Windows — sempre quebrava com `RuntimeException` nesse ambiente. Não afeta nada do sistema (é só conveniência de dev); pra ver log, `storage/logs/laravel.log` direto ou `Get-Content -Wait` no PowerShell.
 - Usuário de teste (senha só existe local, resetada manualmente): `antonio.barbosa@autopel.com` / `homolog123`.
 
 ### Redesenho da tabela de usuários (feito)
@@ -141,6 +144,20 @@ Mudou bastante coisa:
 - **Aprovação do cliente** (separada da aprovação interna gestor/diretor) — decisão do Tony: **fora de escopo**, não construído.
 - Campos novos em `orcamentos`: `observacoes`, `variacao_producao_personalizado`, `prazo_producao`, `garantia_imagem`, `texto_importante` (os 3 últimos vêm pré-preenchidos com o texto padrão do legado, editáveis).
 
+### Sistema de Notificações — construído em 2026-07-28
+Investigação no legado (`PLANO-DE-ESCAPE\includes\management\notificacoes_interno.php`) mostrou que o sino de lá era um dos maiores causadores de problemas de performance: cada poll (60s originalmente, depois 5min como remendo) recomputava 6-15 queries do zero — incluindo `STR_TO_DATE()` não indexável em coluna TEXT, DDL (`ALTER TABLE`/`SHOW INDEX`) rodando dentro do endpoint de leitura a cada request, e 2 sistemas de sino paralelos, um deles morto. Nenhuma dessas queries nem esses padrões foram portados.
+
+**Princípio do redesenho**: notificação é **escrita no momento do evento**, nunca recomputada na leitura. Ler é sempre um `SELECT ... WHERE user_id = ? AND lida_em IS NULL` na tabela `notificacoes`, indexada em `(user_id, lida_em)` — O(1), independente de quantas notificações existam.
+
+**Entrega**: Tony escolheu **Laravel Reverb** (WebSocket self-hosted, first-party desde o Laravel 11) em vez de polling, mesmo sabendo que isso significa mais um processo local pra lembrar de subir — ver aviso na seção "Rodar localmente" acima e em `composer.json` (script `dev` já inclui `reverb:start`). Canal privado padrão do Laravel (`App.Models.User.{id}`, autorizado em `routes/channels.php`), evento `App\Events\NotificacaoCriada` (`ShouldBroadcast`, nome customizado `notificacao.criada`). Front: `resources/js/Components/NotificationBell.vue`, usa `window.Echo` (`resources/js/echo.js`, configurado por `install:broadcasting`/`reverb:install`) — carrega o histórico não lido via `GET /notificacoes` ao montar, escuta o canal em tempo real, e recarrega no `visibilitychange` (rede reconectando) como rede de segurança.
+
+**Peças**:
+- **`notificacoes`** (migration) — `user_id`, `tipo`, `titulo`, `mensagem`, `link`, `referencia_tipo`/`referencia_id` (chave de idempotência dos jobs agendados), `lida_em`. Unique em `(user_id, tipo, referencia_tipo, referencia_id)`.
+- **`App\Services\Notificacao\NotificacaoService`** — único ponto de criação; dispara o evento de broadcast junto.
+- **Gatilhos event-driven** (direto no controller que já muda o estado, sem observer/listener separado): `OrcamentoController::recalcularAprovacao` notifica o(s) aprovador(es) quando o orçamento entra em `pendente` (resolvido via `cod_super` do vendedor → supervisor certo; nível `diretor` notifica todos admin+diretor; sem supervisor mapeado cai pra admin+diretor também, pra não ficar órfão); `aprovar()`/`rejeitar()` notificam quem criou o orçamento. `ObservacaoController::store` notifica o dono da carteira do cliente (via `cliente.cod_vendedor`) ou o dono do lead (`lead.user_id`), quando o autor é outra pessoa.
+- **Jobs diários** (`app/Jobs/`, agendados em `routes/console.php` via `Schedule::job()`): `NotificarAgendamentosDoDiaJob` (agendamentos de ligação de hoje) e `NotificarPedidosAtencaoJob` (pedidos atrasados/vencendo, mesmo critério do `DashboardController::pedidosAtencao`) — ambos idempotentes via `referencia_tipo`/`referencia_id`, não duplicam se rodarem 2x. `ExpurgarNotificacoesLidasJob` (semanal) apaga lidas há 30+ dias — o legado nunca tinha expurgo de verdade e as tabelas só cresciam.
+- **Nota**: o scheduler do Laravel (`Schedule::job()`) só dispara sozinho com um cron real rodando `php artisan schedule:run` a cada minuto — em produção isso é o toggle "Scheduler" do Forge; localmente não roda em background automaticamente (não é bloqueante pro dia a dia, só afeta os 2 jobs diários — pra testar na mão, `php artisan schedule:run` ou disparar o Job direto via `php artisan tinker`).
+
 ## Pendências
 - Popular `etiquetas_materia_prima` com dados reais de custo (Tony faz pela tela `/orcamentos/materia-prima`).
 - Revisitar a fórmula de "margem bruta %" da calculadora de etiqueta se o quirk herdado do legado (unidade por-etiqueta vs. custo-do-rolo) incomodar no uso real.
@@ -150,3 +167,4 @@ Mudou bastante coisa:
 - `APP_DEBUG=false` antes de qualquer deploy real.
 - Revisitar `GrpVendas` no redesenho de banco.
 - E-mail transacional (planejado, não feito): AWS SES + PHPMailer via `antonio.barbosa@autopel.com`, notificando Cadastros e PCP.
+- **Importação de dado real (planejamento em andamento, nada implementado ainda)**: hoje `clientes`/`pedidos`/`leads`/`produtos` são só seeder mockado — plano completo (fontes, mapeamento de coluna por domínio, regra de status de pedido descoberta no `HISTORICO` do TOTVS, pendências) documentado em `docs/importacao-dados-legado.md`.

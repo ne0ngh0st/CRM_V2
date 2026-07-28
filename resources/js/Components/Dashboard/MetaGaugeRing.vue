@@ -1,11 +1,13 @@
 <script setup>
 import { computed } from 'vue';
+import { Link } from '@inertiajs/vue3';
 
 const props = defineProps({
     label: { type: String, required: true },
     legenda: { type: String, required: true },
     dados: { type: Object, required: true },
     termo: { type: String, required: true },
+    href: { type: String, default: null },
 });
 
 const raio = 62;
@@ -28,7 +30,7 @@ function formatBRL(valor) {
 </script>
 
 <template>
-    <div class="flex flex-col items-center">
+    <component :is="href ? Link : 'div'" :href="href ?? undefined" class="flex flex-col items-center" :class="href ? 'cursor-pointer transition hover:opacity-80' : ''">
         <svg viewBox="0 0 160 160" class="h-32 w-32">
             <circle cx="80" cy="80" :r="raio" fill="none" stroke="#e5e7eb" stroke-width="13" />
             <circle
@@ -70,5 +72,5 @@ function formatBRL(valor) {
                 </template>
             </p>
         </div>
-    </div>
+    </component>
 </template>

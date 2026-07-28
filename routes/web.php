@@ -7,6 +7,7 @@ use App\Http\Controllers\EquipeController;
 use App\Http\Controllers\EtiquetaMateriaPrimaController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\MetaController;
+use App\Http\Controllers\NotificacaoController;
 use App\Http\Controllers\ObservacaoController;
 use App\Http\Controllers\OrcamentoController;
 use App\Http\Controllers\PedidoController;
@@ -29,6 +30,10 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::post('/profile/foto', [ProfileController::class, 'updateFoto'])->name('profile.foto.update');
     Route::delete('/profile/foto', [ProfileController::class, 'destroyFoto'])->name('profile.foto.destroy');
+
+    Route::get('/notificacoes', [NotificacaoController::class, 'index'])->name('notificacoes.index');
+    Route::post('/notificacoes/marcar-todas', [NotificacaoController::class, 'marcarTodas'])->name('notificacoes.marcarTodas');
+    Route::post('/notificacoes/{notificacao}/marcar-lida', [NotificacaoController::class, 'marcarLida'])->name('notificacoes.marcarLida');
 
     Route::get('/sugestoes', [SugestaoController::class, 'index'])->name('sugestoes.index');
     Route::post('/sugestoes', [SugestaoController::class, 'store'])->name('sugestoes.store');

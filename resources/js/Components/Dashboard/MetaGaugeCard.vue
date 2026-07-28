@@ -9,10 +9,25 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    role: { type: String, default: null },
+    visaoSupervisor: { type: String, default: null },
+    visaoVendedor: { type: String, default: null },
 });
 
 const termo = computed(() => (props.metaGauge.isRepresentante ? 'Objetivo' : 'Meta'));
 const anoAtual = new Date().getFullYear();
+
+const podeVerMetas = computed(() => ['admin', 'diretor', 'supervisor'].includes(props.role));
+const hrefMetaMes = computed(() => (podeVerMetas.value
+    ? route('metas.index', { visao_supervisor: props.visaoSupervisor || undefined, modo: 'mensal' })
+    : null));
+const hrefMetaAno = computed(() => (podeVerMetas.value
+    ? route('metas.index', { visao_supervisor: props.visaoSupervisor || undefined, modo: 'acumulado' })
+    : null));
+const hrefPedidosMes = computed(() => route('pedidos.emitidos', {
+    visao_supervisor: props.visaoSupervisor || undefined,
+    visao_vendedor: props.visaoVendedor || undefined,
+}));
 
 function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
@@ -30,15 +45,15 @@ function formatBRL(valor) {
         </template>
 
         <div class="flex flex-col items-start justify-center gap-6 sm:flex-row sm:items-start sm:justify-around">
-            <MetaGaugeRing label="Mês" :legenda="`${termo} do mês`" :dados="metaGauge.mes" :termo="termo" />
-            <MetaGaugeRing label="Ano" :legenda="`Acumulado ${anoAtual}`" :dados="metaGauge.ano" :termo="termo" />
+            <MetaGaugeRing label="Mês" :legenda="`${termo} do mês`" :dados="metaGauge.mes" :termo="termo" :href="hrefMetaMes" />
+            <MetaGaugeRing label="Ano" :legenda="`Acumulado ${anoAtual}`" :dados="metaGauge.ano" :termo="termo" :href="hrefMetaAno" />
         </div>
 
         <div v-if="metaGauge.pedidosEmitidos" class="mt-5 border-t border-gray-100 pt-4">
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Pedidos emitidos</p>
             <div class="mt-2 flex flex-wrap gap-2">
-                <KpiTile :value="metaGauge.pedidosEmitidos.mes.pedidos" label="Pedidos no mês" />
-                <KpiTile :value="formatBRL(metaGauge.pedidosEmitidos.mes.valor)" label="Valor no mês" tone="info" compact />
+                <KpiTile :value="metaGauge.pedidosEmitidos.mes.pedidos" label="Pedidos no mês" :href="hrefPedidosMes" />
+                <KpiTile :value="formatBRL(metaGauge.pedidosEmitidos.mes.valor)" label="Valor no mês" tone="info" compact :href="hrefPedidosMes" />
                 <KpiTile :value="metaGauge.pedidosEmitidos.ano.pedidos" label="Pedidos no ano" />
                 <KpiTile :value="formatBRL(metaGauge.pedidosEmitidos.ano.valor)" label="Valor no ano" tone="info" compact />
             </div>

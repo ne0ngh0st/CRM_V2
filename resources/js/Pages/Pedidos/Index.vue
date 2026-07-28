@@ -96,6 +96,7 @@ function formatBRL(valor) {
                             <option value="todos">Todos</option>
                             <option value="atrasado">Atrasado</option>
                             <option value="vencendo">Vencendo em 7 dias</option>
+                            <option value="risco">Em risco (atrasado + vencendo)</option>
                             <option value="no_prazo">No prazo</option>
                         </FilterField>
 

@@ -168,7 +168,7 @@ function abrirAgendamento(cliente) {
                     </template>
                 </PageHero>
 
-                <CarteiraSegmentoCard :carteira-segmento="kpis" />
+                <CarteiraSegmentoCard :carteira-segmento="kpis" :base-filtros="filtros" />
 
                 <div class="flex gap-2">
                     <button

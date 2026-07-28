@@ -4,7 +4,8 @@ CRM comercial da **Autopel Soluções** — refatoração do PALMA legado (PHP p
 
 Objetivo: manter só o núcleo comercial (~16 páginas), com performance bem melhor que o sistema atual em produção (`gestao-comercial.autopel.com`).
 
-> Contexto detalhado pra agentes/IA e decisões de produto: ver [`CLAUDE.md`](./CLAUDE.md).
+> Contexto detalhado pra agentes/IA e decisões de produto: ver [`CLAUDE.md`](./CLAUDE.md).  
+> Planejamento de importação TOTVS: ver [`docs/importacao-dados-legado.md`](./docs/importacao-dados-legado.md).
 
 ## Stack
 
@@ -14,6 +15,7 @@ Objetivo: manter só o núcleo comercial (~16 páginas), com performance bem mel
 | Frontend | Inertia.js + Vue 3 (Breeze) |
 | Estilo | Tailwind CSS |
 | Auth / roles | Laravel Breeze + spatie/laravel-permission |
+| Tempo real | Laravel Reverb + Laravel Echo (sino de notificações) |
 | PDF | barryvdh/laravel-dompdf |
 | Banco local | MySQL (`palma_v2` no XAMPP) |
 
@@ -25,10 +27,11 @@ Fora de escopo: SAC e Licitação (sistemas separados).
 
 - Login (sem registro público; usuário precisa estar `is_active`)
 - **Perfil** — dados, senha e foto de perfil
+- **Notificações** — sino em tempo real (Reverb); orçamentos, observações, agendamentos e pedidos em atenção
 - **Home / Dashboard** — metas, faturamento, ligações, observações, sugestões, widgets de carteira/orçamentos/pedidos
 - **Carteira** — leitura, motivo de inatividade, ligação, agendamento, observações e detalhes do cliente
 - **Leads** — prospecção com ligação/agendamento
-- **Orçamentos** — listagem, formulário, aprovação/rejeição, PDF
+- **Orçamentos** — formulário completo (IPI/etiqueta), aprovação/rejeição, PDF, copiar
 - **Pedidos** — em aberto e emitidos
 - **Tabela de preços** — consulta de produtos
 - **Cadastros** — solicitações de bobina/etiqueta, cliente e lead manual
@@ -59,23 +62,24 @@ cp .env.example .env   # se ainda não tiver .env
 php artisan key:generate
 
 # Ajuste DB_* no .env para o MySQL local (banco palma_v2)
+# Confira também BROADCAST_CONNECTION=reverb e as vars REVERB_* / VITE_REVERB_*
 php artisan migrate --seed
 
 npm install
 npm run build
 ```
 
-### Rodar
+### Rodar (recomendado)
+
+Sobe API, fila, Vite e Reverb num terminal só:
 
 ```bash
-# terminal 1 — API / Inertia
-php artisan serve --port=8000
-
-# terminal 2 — assets com hot reload (opcional)
-npm run dev
+composer run dev
 ```
 
 App: [http://localhost:8000](http://localhost:8000)
+
+Sem o Reverb, o app funciona; o sino de notificação só não atualiza em tempo real.
 
 **Usuário de homologação (local):** `antonio.barbosa@autopel.com` / `homolog123`
 
@@ -83,12 +87,15 @@ App: [http://localhost:8000](http://localhost:8000)
 
 ```
 app/
-  Http/Controllers/   # Dashboard, Carteira, Orçamentos, Pedidos, Equipe…
-  Services/           # regras de negócio (escopo, aderência, aprovação…)
+  Events/             # broadcast (ex.: NotificacaoCriada)
+  Http/Controllers/
+  Jobs/               # notificações agendadas / expurgo
+  Services/           # regras de negócio
   Models/
+docs/                 # planejamento (import TOTVS etc.)
 resources/js/
   Pages/              # uma página Inertia por tela core
-  Components/         # design system + componentes por domínio
+  Components/         # design system + domínio (NotificationBell…)
 database/
   migrations/
   seeders/
@@ -96,14 +103,15 @@ database/
 
 ## Banco
 
-O CRM-V2 **não conecta no banco de produção** (KingHost). Roda só no MySQL local `palma_v2`.
+O CRM-V2 **não conecta no banco de produção** (KingHost) no dia a dia da app. Roda no MySQL local `palma_v2`.
 
-Usuários comerciais vieram de um dump pontual do legado (snapshot, sem sync ao vivo). Dados de carteira/orçamentos/pedidos/etc. hoje vêm dos seeders de desenvolvimento.
+Usuários comerciais vieram de dump/import pontual do legado. Demais domínios hoje usam seeders de desenvolvimento (plano de import real em `docs/`).
 
 ## Deploy (planejado)
 
 - Hospedagem: **AWS via Laravel Forge**
 - Antes de qualquer deploy real: **`APP_DEBUG=false`**
+- Em produção: processos de **queue** e **Reverb** (ou equivalente) além do PHP-FPM/web
 
 ## Licença
 

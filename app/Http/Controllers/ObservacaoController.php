@@ -5,13 +5,18 @@ namespace App\Http\Controllers;
 use App\Models\Cliente;
 use App\Models\Lead;
 use App\Models\Observacao;
+use App\Models\User;
 use App\Services\Dashboard\DashboardScopeResolver;
+use App\Services\Notificacao\NotificacaoService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class ObservacaoController extends Controller
 {
-    public function __construct(private readonly DashboardScopeResolver $scopeResolver)
-    {
+    public function __construct(
+        private readonly DashboardScopeResolver $scopeResolver,
+        private readonly NotificacaoService $notificacaoService,
+    ) {
     }
 
     public function index(Request $request)
@@ -130,6 +135,8 @@ class ObservacaoController extends Controller
 
         $observacao->load('user:id,name,display_name');
 
+        $this->notificarDonoCarteira($observacao, $cliente, $lead, $user);
+
         return response()->json([
             'id' => $observacao->id,
             'autor' => $observacao->user->display_name ?: $observacao->user->name,
@@ -139,6 +146,38 @@ class ObservacaoController extends Controller
             'podeEditar' => true,
             'criadoEm' => $observacao->created_at->format('d/m/Y H:i'),
         ], 201);
+    }
+
+    /**
+     * Notifica quem é dono da carteira do cliente/lead — só quando o autor
+     * da observação é outra pessoa (ex.: gestor comentando no cliente do vendedor).
+     */
+    private function notificarDonoCarteira(Observacao $observacao, ?Cliente $cliente, ?Lead $lead, User $autor): void
+    {
+        $donos = match (true) {
+            $cliente?->cod_vendedor !== null => User::whereHas(
+                'vendedorPerfil',
+                fn ($q) => $q->where('cod_vendedor', $cliente->cod_vendedor),
+            )->get(),
+            $lead?->user_id !== null => User::where('id', $lead->user_id)->get(),
+            default => collect(),
+        };
+
+        $nomeAlvo = $cliente?->razao_social ?? $lead?->razao_social ?? $observacao->cnpj;
+
+        foreach ($donos as $dono) {
+            if ($dono->id === $autor->id) {
+                continue;
+            }
+
+            $this->notificacaoService->notificar(
+                destinatario: $dono,
+                tipo: 'observacao_nova',
+                titulo: "Nova observação em {$nomeAlvo}",
+                mensagem: Str::limit($observacao->mensagem, 140),
+                link: $cliente ? route('carteira.index') : ($lead ? route('leads.index') : null),
+            );
+        }
     }
 
     public function togglePin(Request $request, Observacao $observacao)

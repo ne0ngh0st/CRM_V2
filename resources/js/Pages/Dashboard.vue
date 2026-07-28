@@ -92,8 +92,19 @@ const mesAno = computed(() => {
                 <FaturamentoComparisonChart v-if="faturamentoComparacao" :faturamento-comparacao="faturamentoComparacao" />
 
                 <div v-if="carteiraSegmento || metaGauge" class="grid gap-4 lg:grid-cols-2 lg:items-stretch">
-                    <CarteiraSegmentoCard v-if="carteiraSegmento" :carteira-segmento="carteiraSegmento" />
-                    <MetaGaugeCard v-if="metaGauge" :meta-gauge="metaGauge" />
+                    <CarteiraSegmentoCard
+                        v-if="carteiraSegmento"
+                        :carteira-segmento="carteiraSegmento"
+                        :visao-supervisor="visao.visaoSupervisor"
+                        :visao-vendedor="visao.visaoVendedor"
+                    />
+                    <MetaGaugeCard
+                        v-if="metaGauge"
+                        :meta-gauge="metaGauge"
+                        :role="role"
+                        :visao-supervisor="visao.visaoSupervisor"
+                        :visao-vendedor="visao.visaoVendedor"
+                    />
                 </div>
 
                 <div v-if="ligacoesStats || orcamentosStats || pedidosAtencao" class="grid gap-4 lg:grid-cols-3 lg:items-stretch">
@@ -105,8 +116,18 @@ const mesAno = computed(() => {
                         :visao-supervisor="visao.visaoSupervisor"
                         :visao-vendedor="visao.visaoVendedor"
                     />
-                    <OrcamentosStatsCard v-if="orcamentosStats" :orcamentos-stats="orcamentosStats" />
-                    <PedidosAtencaoCard v-if="pedidosAtencao" :pedidos-atencao="pedidosAtencao" />
+                    <OrcamentosStatsCard
+                        v-if="orcamentosStats"
+                        :orcamentos-stats="orcamentosStats"
+                        :visao-supervisor="visao.visaoSupervisor"
+                        :visao-vendedor="visao.visaoVendedor"
+                    />
+                    <PedidosAtencaoCard
+                        v-if="pedidosAtencao"
+                        :pedidos-atencao="pedidosAtencao"
+                        :visao-supervisor="visao.visaoSupervisor"
+                        :visao-vendedor="visao.visaoVendedor"
+                    />
                 </div>
 
                 <SugestoesBoard :role="role" />

@@ -10,6 +10,7 @@ use App\Models\OrcamentoItem;
 use App\Models\Produto;
 use App\Models\User;
 use App\Services\Dashboard\DashboardScopeResolver;
+use App\Services\Notificacao\NotificacaoService;
 use App\Services\Orcamento\NivelAprovacaoCalculator;
 use App\Services\Orcamento\OrcamentoCalculoService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -39,6 +40,7 @@ class OrcamentoController extends Controller
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly NivelAprovacaoCalculator $calculator,
         private readonly OrcamentoCalculoService $calculoService,
+        private readonly NotificacaoService $notificacaoService,
     ) {
     }
 
@@ -303,6 +305,8 @@ class OrcamentoController extends Controller
             'motivo_rejeicao' => null,
         ]);
 
+        $this->notificarDecisao($orcamento, aprovado: true);
+
         return back();
     }
 
@@ -322,6 +326,8 @@ class OrcamentoController extends Controller
             'aprovado_em' => now(),
             'motivo_rejeicao' => $data['motivo_rejeicao'],
         ]);
+
+        $this->notificarDecisao($orcamento, aprovado: false);
 
         return back();
     }
@@ -560,6 +566,68 @@ class OrcamentoController extends Controller
         }
 
         $orcamento->update($update);
+
+        $entrouPendenteAgora = ($update['status_gestor'] ?? null) === 'pendente';
+        $trocouDeNivelAindaPendente = $statusAntigo === 'pendente' && $novoNivel !== $nivelAntigo;
+
+        if ($novoNivel !== 'nenhum' && ($entrouPendenteAgora || $trocouDeNivelAindaPendente)) {
+            $this->notificarAprovadores($orcamento);
+        }
+    }
+
+    private function notificarAprovadores(Orcamento $orcamento): void
+    {
+        $orcamento->loadMissing('user.vendedorPerfil');
+
+        foreach ($this->resolverAprovadores($orcamento) as $aprovador) {
+            $this->notificacaoService->notificar(
+                destinatario: $aprovador,
+                tipo: 'orcamento_aprovacao_pendente',
+                titulo: "Orçamento #{$orcamento->id} aguardando aprovação",
+                mensagem: "{$orcamento->cliente_nome} — desconto de até {$orcamento->desconto_pct_max}%",
+                link: route('orcamentos.index'),
+            );
+        }
+    }
+
+    /** @return \Illuminate\Support\Collection<int, User> */
+    private function resolverAprovadores(Orcamento $orcamento): \Illuminate\Support\Collection
+    {
+        if ($orcamento->nivel_aprovacao === 'diretor') {
+            return User::role(['diretor', 'admin'])->get();
+        }
+
+        $codSuper = $orcamento->user?->vendedorPerfil?->cod_super;
+
+        if ($codSuper) {
+            $supervisores = User::role('supervisor')
+                ->whereHas('vendedorPerfil', fn ($q) => $q->where('cod_vendedor', $codSuper))
+                ->get();
+
+            if ($supervisores->isNotEmpty()) {
+                return $supervisores;
+            }
+        }
+
+        // Sem supervisor mapeado pro vendedor: cai pra admin/diretor, pra não deixar a aprovação órfã.
+        return User::role(['diretor', 'admin'])->get();
+    }
+
+    private function notificarDecisao(Orcamento $orcamento, bool $aprovado): void
+    {
+        $orcamento->loadMissing('user');
+
+        if ($orcamento->user_id === $orcamento->aprovado_por_id) {
+            return;
+        }
+
+        $this->notificacaoService->notificar(
+            destinatario: $orcamento->user,
+            tipo: 'orcamento_decidido',
+            titulo: $aprovado ? "Orçamento #{$orcamento->id} aprovado" : "Orçamento #{$orcamento->id} rejeitado",
+            mensagem: $aprovado ? $orcamento->cliente_nome : ($orcamento->motivo_rejeicao ?? $orcamento->cliente_nome),
+            link: route('orcamentos.editar', $orcamento),
+        );
     }
 
     private function podeDecidir(User $user, string $nivel): bool

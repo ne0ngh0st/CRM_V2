@@ -9,12 +9,14 @@
 .env
 .env.backup
 .env.production
+.env.local
 .phpactor.json
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml
 npm-debug.log
 yarn-error.log
+pnpm-debug.log
 /auth.json
 /.claude
 /.fleet
@@ -25,3 +27,6 @@ yarn-error.log
 .DS_Store
 Thumbs.db
 Desktop.ini
+*.log
+/database/*.sqlite
+/database/*.sqlite-journal

@@ -88,6 +88,8 @@ class PedidoController extends Controller
         match ($situacao) {
             'atrasado' => $listaQuery->whereDate('data_previsao_faturamento', '<', $hoje),
             'vencendo' => $listaQuery->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias]),
+            'risco' => $listaQuery->where(fn ($q) => $q->whereDate('data_previsao_faturamento', '<', $hoje)
+                ->orWhereBetween('data_previsao_faturamento', [$hoje, $em7Dias])),
             'no_prazo' => $listaQuery->where(fn ($q) => $q->whereDate('data_previsao_faturamento', '>', $em7Dias)->orWhereNull('data_previsao_faturamento')),
             default => null,
         };
