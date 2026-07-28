@@ -134,6 +134,16 @@ class OrcamentoController extends Controller
             'criadoEm' => $o->created_at->format('d/m/Y'),
             'podeDecidir' => $o->status_gestor === 'pendente' && $this->podeDecidir($user, $o->nivel_aprovacao),
             'podeEditar' => $o->user_id === $user->id || in_array($role, ['admin', 'diretor'], true),
+            'itens' => $o->itens->map(fn (OrcamentoItem $i) => [
+                'id' => $i->id,
+                'tipoItem' => $i->tipo_item,
+                'codProduto' => $i->cod_produto,
+                'descricao' => $i->descricao,
+                'quantidade' => (float) $i->quantidade,
+                'valorUnitario' => (float) $i->valor_unitario,
+                'valorTotal' => (float) $i->valor_total,
+                'precoTabela' => $i->preco_tabela !== null ? (float) $i->preco_tabela : null,
+            ])->values(),
         ]);
 
         return Inertia::render('Orcamentos/Index', [
@@ -175,11 +185,23 @@ class OrcamentoController extends Controller
             ];
         }
 
+        $copiaDe = null;
+        if ($request->filled('copiar_de')) {
+            $origem = Orcamento::query()->with('itens')->findOrFail($request->integer('copiar_de'));
+            abort_unless($this->podeVisualizar($user, $origem), 403);
+
+            $copiaDe = $this->mapOrcamentoParaForm($origem, $isAdmin);
+            // Cópia é sempre um documento novo: sem id, e validade recalculada a partir de hoje.
+            unset($copiaDe['id']);
+            $copiaDe['dataValidade'] = now()->addDays(5)->toDateString();
+        }
+
         return Inertia::render('Orcamentos/Form', [
             'role' => $role,
             'isAdmin' => $isAdmin,
             'orcamento' => null,
             'prefillCliente' => $prefillCliente,
+            'copiaDe' => $copiaDe,
             'materiasPrimas' => $isAdmin ? $this->materiasPrimasParaSelect() : [],
             'outrasInformacoesPadrao' => self::OUTRAS_INFORMACOES_PADRAO,
         ]);
@@ -198,33 +220,9 @@ class OrcamentoController extends Controller
         return Inertia::render('Orcamentos/Form', [
             'role' => $role,
             'isAdmin' => $isAdmin,
-            'orcamento' => [
-                'id' => $orcamento->id,
-                'clienteNome' => $orcamento->cliente_nome,
-                'clienteCnpj' => $orcamento->cliente_cnpj,
-                'clienteContato' => $orcamento->cliente_contato,
-                'formaPagamento' => $orcamento->forma_pagamento,
-                'tipoProdutoServico' => $orcamento->tipo_produto_servico,
-                'dataValidade' => optional($orcamento->data_validade)->format('Y-m-d'),
-                'observacoes' => $orcamento->observacoes,
-                'variacaoProducaoPersonalizado' => $orcamento->variacao_producao_personalizado,
-                'prazoProducao' => $orcamento->prazo_producao,
-                'garantiaImagem' => $orcamento->garantia_imagem,
-                'textoImportante' => $orcamento->texto_importante,
-                'itens' => $orcamento->itens->map(fn (OrcamentoItem $i) => Arr::except([
-                    'id' => $i->id,
-                    'tipoItem' => $i->tipo_item,
-                    'codProduto' => $i->cod_produto,
-                    'descricao' => $i->descricao,
-                    'quantidade' => (float) $i->quantidade,
-                    'valorUnitario' => (float) $i->valor_unitario,
-                    'precoTabela' => $i->preco_tabela !== null ? (float) $i->preco_tabela : null,
-                    'calculaIpi' => (bool) $i->calcula_ipi,
-                    'etiquetaCalc' => $i->etiqueta_calc,
-                    'materiaPrimaId' => $i->materia_prima_id,
-                ], $isAdmin ? [] : ['etiquetaCalc', 'materiaPrimaId']))->values(),
-            ],
+            'orcamento' => $this->mapOrcamentoParaForm($orcamento, $isAdmin),
             'prefillCliente' => null,
+            'copiaDe' => null,
             'materiasPrimas' => $isAdmin ? $this->materiasPrimasParaSelect() : [],
             'outrasInformacoesPadrao' => self::OUTRAS_INFORMACOES_PADRAO,
         ]);
@@ -604,6 +602,38 @@ class OrcamentoController extends Controller
             $data <= $em7Dias => 'proximo',
             default => 'no_prazo',
         };
+    }
+
+    /** @return array{id: int, statusGestor: string, clienteNome: string, clienteCnpj: ?string, clienteContato: ?string, formaPagamento: ?string, tipoProdutoServico: string, dataValidade: ?string, observacoes: ?string, variacaoProducaoPersonalizado: ?string, prazoProducao: ?string, garantiaImagem: ?string, textoImportante: ?string, itens: array} */
+    private function mapOrcamentoParaForm(Orcamento $orcamento, bool $isAdmin): array
+    {
+        return [
+            'id' => $orcamento->id,
+            'statusGestor' => $orcamento->status_gestor,
+            'clienteNome' => $orcamento->cliente_nome,
+            'clienteCnpj' => $orcamento->cliente_cnpj,
+            'clienteContato' => $orcamento->cliente_contato,
+            'formaPagamento' => $orcamento->forma_pagamento,
+            'tipoProdutoServico' => $orcamento->tipo_produto_servico,
+            'dataValidade' => optional($orcamento->data_validade)->format('Y-m-d'),
+            'observacoes' => $orcamento->observacoes,
+            'variacaoProducaoPersonalizado' => $orcamento->variacao_producao_personalizado,
+            'prazoProducao' => $orcamento->prazo_producao,
+            'garantiaImagem' => $orcamento->garantia_imagem,
+            'textoImportante' => $orcamento->texto_importante,
+            'itens' => $orcamento->itens->map(fn (OrcamentoItem $i) => Arr::except([
+                'id' => $i->id,
+                'tipoItem' => $i->tipo_item,
+                'codProduto' => $i->cod_produto,
+                'descricao' => $i->descricao,
+                'quantidade' => (float) $i->quantidade,
+                'valorUnitario' => (float) $i->valor_unitario,
+                'precoTabela' => $i->preco_tabela !== null ? (float) $i->preco_tabela : null,
+                'calculaIpi' => (bool) $i->calcula_ipi,
+                'etiquetaCalc' => $i->etiqueta_calc,
+                'materiaPrimaId' => $i->materia_prima_id,
+            ], $isAdmin ? [] : ['etiquetaCalc', 'materiaPrimaId']))->values(),
+        ];
     }
 
     /** @return array<int, array{id: int, descMp: string, categoria: ?string, fabricante: ?string, precoM2: float}> */

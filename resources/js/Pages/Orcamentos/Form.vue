@@ -21,9 +21,14 @@ const props = defineProps({
     isAdmin: Boolean,
     orcamento: { type: Object, default: null },
     prefillCliente: { type: Object, default: null },
+    copiaDe: { type: Object, default: null },
     materiasPrimas: { type: Array, default: () => [] },
     outrasInformacoesPadrao: Object,
 });
+
+// Editar usa props.orcamento (PATCH); copiar usa props.copiaDe (POST, documento novo).
+// Ambos têm a mesma estrutura de campos, só o modo de submissão muda.
+const fonte = props.orcamento ?? props.copiaDe;
 
 function itemVazio() {
     return {
@@ -40,19 +45,19 @@ function itemVazio() {
 }
 
 const form = useForm({
-    cliente_nome: props.orcamento?.clienteNome ?? props.prefillCliente?.nome ?? '',
-    cliente_cnpj: props.orcamento?.clienteCnpj ?? props.prefillCliente?.cnpj ?? '',
-    cliente_contato: props.orcamento?.clienteContato ?? props.prefillCliente?.contato ?? '',
-    forma_pagamento: props.orcamento?.formaPagamento ?? '',
-    tipo_produto_servico: props.orcamento?.tipoProdutoServico ?? 'produto',
-    data_validade: props.orcamento?.dataValidade ?? new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
-    observacoes: props.orcamento?.observacoes ?? '',
-    variacao_producao_personalizado: props.orcamento?.variacaoProducaoPersonalizado ?? props.outrasInformacoesPadrao.variacao_producao_personalizado,
-    prazo_producao: props.orcamento?.prazoProducao ?? props.outrasInformacoesPadrao.prazo_producao,
-    garantia_imagem: props.orcamento?.garantiaImagem ?? props.outrasInformacoesPadrao.garantia_imagem,
-    texto_importante: props.orcamento?.textoImportante ?? props.outrasInformacoesPadrao.texto_importante,
-    itens: props.orcamento?.itens?.length
-        ? props.orcamento.itens.map((i) => ({
+    cliente_nome: fonte?.clienteNome ?? props.prefillCliente?.nome ?? '',
+    cliente_cnpj: fonte?.clienteCnpj ?? props.prefillCliente?.cnpj ?? '',
+    cliente_contato: fonte?.clienteContato ?? props.prefillCliente?.contato ?? '',
+    forma_pagamento: fonte?.formaPagamento ?? '',
+    tipo_produto_servico: fonte?.tipoProdutoServico ?? 'produto',
+    data_validade: fonte?.dataValidade ?? new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
+    observacoes: fonte?.observacoes ?? '',
+    variacao_producao_personalizado: fonte?.variacaoProducaoPersonalizado ?? props.outrasInformacoesPadrao.variacao_producao_personalizado,
+    prazo_producao: fonte?.prazoProducao ?? props.outrasInformacoesPadrao.prazo_producao,
+    garantia_imagem: fonte?.garantiaImagem ?? props.outrasInformacoesPadrao.garantia_imagem,
+    texto_importante: fonte?.textoImportante ?? props.outrasInformacoesPadrao.texto_importante,
+    itens: fonte?.itens?.length
+        ? fonte.itens.map((i) => ({
             tipo_item: i.tipoItem,
             cod_produto: i.codProduto ?? '',
             descricao: i.descricao,
@@ -154,6 +159,14 @@ function salvar() {
                         <StatusPill v-if="orcamento" :tone="TONS_STATUS_ORCAMENTO[orcamento.statusGestor] ?? 'neutral'">
                             {{ ROTULOS_STATUS_ORCAMENTO[orcamento.statusGestor] ?? orcamento.statusGestor }}
                         </StatusPill>
+                        <SecondaryButton
+                            v-if="orcamento"
+                            type="button"
+                            title="Cria um orçamento novo com os mesmos dados, pronto pra editar"
+                            @click="router.visit(route('orcamentos.novo', { copiar_de: orcamento.id }))"
+                        >
+                            Copiar
+                        </SecondaryButton>
                         <SecondaryButton type="button" @click="router.visit(route('orcamentos.index'))">Cancelar</SecondaryButton>
                         <PrimaryButton type="submit" form="form-orcamento" :disabled="form.processing" class="!bg-teal hover:!bg-teal/90">
                             {{ orcamento ? 'Salvar Alterações' : 'Criar Orçamento' }}

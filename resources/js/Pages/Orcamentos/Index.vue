@@ -187,6 +187,7 @@ function aprovar(orcamento) {
                         :orcamentos="orcamentos.data"
                         :pode-excluir="podeExcluir"
                         @editar="(o) => router.visit(route('orcamentos.editar', o.id))"
+                        @copiar="(o) => router.visit(route('orcamentos.novo', { copiar_de: o.id }))"
                         @aprovar="aprovar"
                         @rejeitar="abrirRejeitar"
                         @excluir="abrirExcluir"

@@ -14,7 +14,7 @@ const props = defineProps({
     podeExcluir: { type: Boolean, default: false },
 });
 
-defineEmits(['editar', 'aprovar', 'rejeitar', 'excluir']);
+defineEmits(['editar', 'copiar', 'aprovar', 'rejeitar', 'excluir']);
 
 const expandido = ref(null);
 
@@ -118,6 +118,17 @@ function pdfUrl(orcamento, download) {
                                 >
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-4 w-4">
                                         <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
+                                </button>
+                                <button
+                                    type="button"
+                                    title="Copiar orçamento"
+                                    class="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-500 transition hover:border-cyan hover:bg-cyan/10 hover:text-cyan"
+                                    @click="$emit('copiar', orcamento)"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-4 w-4">
+                                        <rect x="9" y="9" width="11" height="11" rx="1" />
+                                        <path d="M5 15V5a1 1 0 0 1 1-1h10" stroke-linecap="round" stroke-linejoin="round" />
                                     </svg>
                                 </button>
                                 <a
