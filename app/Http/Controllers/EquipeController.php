@@ -8,12 +8,15 @@ use App\Models\User;
 use App\Models\VendedorPerfil;
 use App\Services\Equipe\EquipeScopeResolver;
 use App\Services\Equipe\OrganogramaBuilder;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EquipeController extends Controller
 {
@@ -35,19 +38,8 @@ class EquipeController extends Controller
         }
 
         $podeGerenciar = $this->scope->podeGerenciar($user);
-        $codigosEquipe = $this->scope->codigosEquipe($user);
 
-        $query = User::query()->with(['vendedorPerfil', 'roles']);
-
-        if ($codigosEquipe !== null) {
-            if ($codigosEquipe === []) {
-                $query->whereRaw('1 = 0');
-            } else {
-                $query->whereHas('vendedorPerfil', fn ($q) => $q->whereIn('cod_vendedor', $codigosEquipe));
-            }
-        }
-
-        $estadosDisponiveis = (clone $query)
+        $estadosDisponiveis = $this->queryFiltrada($request, $user, apenasEscopo: true)
             ->whereNotNull('estado')->where('estado', '!=', '')
             ->distinct()->orderBy('estado')->pluck('estado');
 
@@ -59,48 +51,7 @@ class EquipeController extends Controller
             ->sortBy('nome')
             ->values();
 
-        $busca = trim((string) $request->string('busca'));
-        if ($busca !== '') {
-            $query->where(function ($q) use ($busca) {
-                $q->where('name', 'like', "%{$busca}%")
-                    ->orWhere('email', 'like', "%{$busca}%")
-                    ->orWhereHas('vendedorPerfil', fn ($q2) => $q2->where('cod_vendedor', 'like', "%{$busca}%"));
-            });
-        }
-
-        if ($perfil = (string) $request->string('perfil')) {
-            $query->role($perfil);
-        }
-
-        if ($podeGerenciar && ($supervisorFiltro = (string) $request->string('supervisor'))) {
-            $query->whereHas('vendedorPerfil', fn ($q) => $q->where('cod_super', $supervisorFiltro));
-        }
-
-        if ($estado = (string) $request->string('estado')) {
-            $query->where('estado', $estado);
-        }
-
-        if ($tipo = (string) $request->string('tipo')) {
-            $query->where('tipo_usuario', $tipo);
-        }
-
-        if ($status = (string) $request->string('status')) {
-            $query->where('is_active', $status === 'ativo');
-        }
-
-        if ((string) $request->string('online') === 'sim') {
-            $query->where('last_activity_at', '>=', now()->subMinutes(self::MINUTOS_ONLINE));
-        }
-
-        match ((string) $request->string('login')) {
-            'hoje' => $query->whereDate('last_login_at', today()),
-            'semana' => $query->where('last_login_at', '>=', now()->subDays(7)),
-            'mes' => $query->where('last_login_at', '>=', now()->subDays(30)),
-            'nunca' => $query->whereNull('last_login_at'),
-            default => null,
-        };
-
-        $usuarios = $query->get();
+        $usuarios = $this->queryFiltrada($request, $user)->get();
 
         $codVendedoresPresentes = $usuarios->pluck('vendedorPerfil.cod_vendedor')->filter()->values();
         $segmentosPorCodVendedor = SegmentoVendedor::query()
@@ -188,6 +139,87 @@ class EquipeController extends Controller
             ],
             'organograma' => $organograma,
         ]);
+    }
+
+    public function exportar(Request $request): BinaryFileResponse
+    {
+        $user = $request->user();
+        abort_unless($this->scope->podeAcessar($user), 403);
+
+        $query = $this->queryFiltrada($request, $user);
+
+        return Excel::download(
+            new \App\Exports\EquipeExport($query),
+            'equipe-'.now()->format('Y-m-d-His').'.xlsx',
+        );
+    }
+
+    /**
+     * Escopo (codigosEquipe) + filtros de busca/perfil/supervisor/estado/tipo/status/online/login.
+     * Usado por index() (lista e opções de filtro) e exportar().
+     */
+    protected function queryFiltrada(Request $request, User $user, bool $apenasEscopo = false): Builder
+    {
+        $codigosEquipe = $this->scope->codigosEquipe($user);
+
+        $query = User::query()->with(['vendedorPerfil', 'roles']);
+
+        if ($codigosEquipe !== null) {
+            if ($codigosEquipe === []) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereHas('vendedorPerfil', fn ($q) => $q->whereIn('cod_vendedor', $codigosEquipe));
+            }
+        }
+
+        if ($apenasEscopo) {
+            return $query;
+        }
+
+        $podeGerenciar = $this->scope->podeGerenciar($user);
+
+        $busca = trim((string) $request->string('busca'));
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->where('name', 'like', "%{$busca}%")
+                    ->orWhere('email', 'like', "%{$busca}%")
+                    ->orWhereHas('vendedorPerfil', fn ($q2) => $q2->where('cod_vendedor', 'like', "%{$busca}%"));
+            });
+        }
+
+        if ($perfil = (string) $request->string('perfil')) {
+            $query->role($perfil);
+        }
+
+        if ($podeGerenciar && ($supervisorFiltro = (string) $request->string('supervisor'))) {
+            $query->whereHas('vendedorPerfil', fn ($q) => $q->where('cod_super', $supervisorFiltro));
+        }
+
+        if ($estado = (string) $request->string('estado')) {
+            $query->where('estado', $estado);
+        }
+
+        if ($tipo = (string) $request->string('tipo')) {
+            $query->where('tipo_usuario', $tipo);
+        }
+
+        if ($status = (string) $request->string('status')) {
+            $query->where('is_active', $status === 'ativo');
+        }
+
+        if ((string) $request->string('online') === 'sim') {
+            $query->where('last_activity_at', '>=', now()->subMinutes(self::MINUTOS_ONLINE));
+        }
+
+        match ((string) $request->string('login')) {
+            'hoje' => $query->whereDate('last_login_at', today()),
+            'semana' => $query->where('last_login_at', '>=', now()->subDays(7)),
+            'mes' => $query->where('last_login_at', '>=', now()->subDays(30)),
+            'nunca' => $query->whereNull('last_login_at'),
+            default => null,
+        };
+
+        return $query;
     }
 
     public function store(Request $request): RedirectResponse

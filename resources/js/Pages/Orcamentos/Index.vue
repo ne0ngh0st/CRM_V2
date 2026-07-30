@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -10,6 +10,7 @@ import Pagination from '@/Components/Pagination.vue';
 import OrcamentosTabela from '@/Components/Orcamentos/OrcamentosTabela.vue';
 import RejeitarOrcamentoModal from '@/Components/Orcamentos/RejeitarOrcamentoModal.vue';
 import ExcluirOrcamentoModal from '@/Components/Orcamentos/ExcluirOrcamentoModal.vue';
+import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import { ROTULOS_STATUS_ORCAMENTO, ROTULOS_NIVEL_APROVACAO } from '@/constants/orcamentos.js';
 
 const props = defineProps({
@@ -53,6 +54,12 @@ function limparFiltros() {
     });
     aplicarFiltros();
 }
+
+const temFiltrosAtivos = computed(() =>
+    ['busca', 'status', 'nivel', 'data_inicio', 'data_fim'].some((k) => filtros[k] !== '')
+    || !!filtros.visao_supervisor
+    || !!filtros.visao_vendedor,
+);
 
 function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
@@ -170,10 +177,15 @@ function aprovar(orcamento) {
                         </svg>
                     </template>
                     <template #actions>
+                        <ExportarExcelButton
+                            rota="orcamentos.exportar"
+                            :filtros="filtros"
+                            :tem-filtros-ativos="temFiltrosAtivos"
+                        />
                         <Link
                             v-if="role === 'admin'"
                             :href="route('etiquetas.materiaPrima.index')"
-                            class="rounded border border-gray-300 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
+                            class="rounded border border-gray-600 px-3 py-1 text-xs font-medium text-gray-200 transition hover:bg-white/10"
                         >
                             Matéria-prima de etiqueta
                         </Link>

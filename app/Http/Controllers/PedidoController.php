@@ -6,10 +6,13 @@ use App\Models\Pedido;
 use App\Models\VendedorPerfil;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Metas\MetaRankingResolver;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PedidoController extends Controller
 {
@@ -25,11 +28,11 @@ class PedidoController extends Controller
         $user = $request->user();
         $role = $user->getRoleNames()->first();
 
-        $visaoSupervisor = $request->string('visao_supervisor')->value() ?: null;
-        $visaoVendedor = $request->string('visao_vendedor')->value() ?: null;
-
-        $scope = $this->scopeResolver->resolve($user, $visaoSupervisor, $visaoVendedor);
-        $codVendedores = $scope['codVendedores'];
+        $scope = $this->scopeResolver->resolve(
+            $user,
+            $request->string('visao_supervisor')->value() ?: null,
+            $request->string('visao_vendedor')->value() ?: null,
+        );
 
         $hoje = now()->toDateString();
         $em7Dias = now()->addDays(7)->toDateString();
@@ -41,41 +44,11 @@ class PedidoController extends Controller
         $situacao = (string) $request->string('situacao') ?: 'todos';
         $ordenar = (string) $request->string('ordenar') ?: 'previsao_asc';
 
-        $baseQuery = function () use ($codVendedores, $busca, $status, $dataInicio, $dataFim) {
-            $query = Pedido::query()->whereNull('data_faturamento');
-
-            if ($codVendedores !== null) {
-                $query->whereIn('cod_vendedor', $codVendedores);
-            }
-
-            if ($busca !== '') {
-                $query->where(function ($q) use ($busca) {
-                    $q->where('numero_pedido', 'like', "%{$busca}%")
-                        ->orWhereHas('cliente', fn ($c) => $c->where('razao_social', 'like', "%{$busca}%")->orWhere('cnpj', 'like', "%{$busca}%"))
-                        ->orWhereHas('itens', fn ($i) => $i->where('descricao', 'like', "%{$busca}%")->orWhere('cod_produto', 'like', "%{$busca}%"));
-                });
-            }
-
-            if ($status !== '') {
-                $query->where('status', $status);
-            }
-
-            if ($dataInicio !== '') {
-                $query->whereDate('data_pedido', '>=', $dataInicio);
-            }
-
-            if ($dataFim !== '') {
-                $query->whereDate('data_pedido', '<=', $dataFim);
-            }
-
-            return $query;
-        };
-
         $kpis = [
-            'totalAberto' => (clone $baseQuery())->count(),
-            'atrasados' => (clone $baseQuery())->whereDate('data_previsao_faturamento', '<', $hoje)->count(),
-            'vencendo' => (clone $baseQuery())->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias])->count(),
-            'valorEmRisco' => (float) (clone $baseQuery())
+            'totalAberto' => $this->baseQueryAbertos($request)->count(),
+            'atrasados' => $this->baseQueryAbertos($request)->whereDate('data_previsao_faturamento', '<', $hoje)->count(),
+            'vencendo' => $this->baseQueryAbertos($request)->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias])->count(),
+            'valorEmRisco' => (float) $this->baseQueryAbertos($request)
                 ->where(function ($q) use ($hoje, $em7Dias) {
                     $q->whereDate('data_previsao_faturamento', '<', $hoje)
                         ->orWhereBetween('data_previsao_faturamento', [$hoje, $em7Dias]);
@@ -83,27 +56,7 @@ class PedidoController extends Controller
                 ->sum('valor_total'),
         ];
 
-        $listaQuery = $baseQuery();
-
-        match ($situacao) {
-            'atrasado' => $listaQuery->whereDate('data_previsao_faturamento', '<', $hoje),
-            'vencendo' => $listaQuery->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias]),
-            'risco' => $listaQuery->where(fn ($q) => $q->whereDate('data_previsao_faturamento', '<', $hoje)
-                ->orWhereBetween('data_previsao_faturamento', [$hoje, $em7Dias])),
-            'no_prazo' => $listaQuery->where(fn ($q) => $q->whereDate('data_previsao_faturamento', '>', $em7Dias)->orWhereNull('data_previsao_faturamento')),
-            default => null,
-        };
-
-        match ($ordenar) {
-            'previsao_desc' => $listaQuery->orderByRaw('data_previsao_faturamento IS NULL, data_previsao_faturamento DESC'),
-            'valor_desc' => $listaQuery->orderByDesc('valor_total'),
-            'valor_asc' => $listaQuery->orderBy('valor_total'),
-            'data_pedido_desc' => $listaQuery->orderByDesc('data_pedido'),
-            'data_pedido_asc' => $listaQuery->orderBy('data_pedido'),
-            default => $listaQuery->orderByRaw('data_previsao_faturamento IS NULL, data_previsao_faturamento ASC'),
-        };
-
-        $pedidos = $listaQuery
+        $pedidos = $this->listaQueryAbertos($request)
             ->with(['cliente:id,razao_social,cnpj,telefone,email', 'itens'])
             ->paginate(20)
             ->withQueryString();
@@ -176,6 +129,96 @@ class PedidoController extends Controller
         ]);
     }
 
+    public function exportarAbertos(Request $request): BinaryFileResponse
+    {
+        // Tabelas de pedidos podem crescer bastante sem filtro (ver Carteira, medido em ~90k linhas
+        // = ~540MB/100s) — margem de segurança só nesta request.
+        ini_set('memory_limit', '1024M');
+        set_time_limit(300);
+
+        $query = $this->listaQueryAbertos($request)
+            ->with('cliente:id,razao_social,cnpj')
+            ->withCount('itens');
+
+        return Excel::download(
+            new \App\Exports\PedidoAbertoExport($query),
+            'pedidos-abertos-'.now()->format('Y-m-d-His').'.xlsx',
+        );
+    }
+
+    /** Escopo (cod_vendedor) + busca/status/data. Pedidos em aberto (data_faturamento nula). Usado por index() (KPIs e lista) e exportarAbertos(). */
+    protected function baseQueryAbertos(Request $request): Builder
+    {
+        $scope = $this->scopeResolver->resolve(
+            $request->user(),
+            $request->string('visao_supervisor')->value() ?: null,
+            $request->string('visao_vendedor')->value() ?: null,
+        );
+
+        $busca = trim((string) $request->string('busca'));
+        $status = (string) $request->string('status');
+        $dataInicio = (string) $request->string('data_inicio');
+        $dataFim = (string) $request->string('data_fim');
+
+        $query = Pedido::query()->whereNull('data_faturamento');
+
+        if ($scope['codVendedores'] !== null) {
+            $query->whereIn('cod_vendedor', $scope['codVendedores']);
+        }
+
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->where('numero_pedido', 'like', "%{$busca}%")
+                    ->orWhereHas('cliente', fn ($c) => $c->where('razao_social', 'like', "%{$busca}%")->orWhere('cnpj', 'like', "%{$busca}%"))
+                    ->orWhereHas('itens', fn ($i) => $i->where('descricao', 'like', "%{$busca}%")->orWhere('cod_produto', 'like', "%{$busca}%"));
+            });
+        }
+
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        if ($dataInicio !== '') {
+            $query->whereDate('data_pedido', '>=', $dataInicio);
+        }
+
+        if ($dataFim !== '') {
+            $query->whereDate('data_pedido', '<=', $dataFim);
+        }
+
+        return $query;
+    }
+
+    /** baseQueryAbertos() + situação + ordenação. Usado por index() (lista) e exportarAbertos(). */
+    protected function listaQueryAbertos(Request $request): Builder
+    {
+        $query = $this->baseQueryAbertos($request);
+        $hoje = now()->toDateString();
+        $em7Dias = now()->addDays(7)->toDateString();
+        $situacao = (string) $request->string('situacao') ?: 'todos';
+        $ordenar = (string) $request->string('ordenar') ?: 'previsao_asc';
+
+        match ($situacao) {
+            'atrasado' => $query->whereDate('data_previsao_faturamento', '<', $hoje),
+            'vencendo' => $query->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias]),
+            'risco' => $query->where(fn ($q) => $q->whereDate('data_previsao_faturamento', '<', $hoje)
+                ->orWhereBetween('data_previsao_faturamento', [$hoje, $em7Dias])),
+            'no_prazo' => $query->where(fn ($q) => $q->whereDate('data_previsao_faturamento', '>', $em7Dias)->orWhereNull('data_previsao_faturamento')),
+            default => null,
+        };
+
+        match ($ordenar) {
+            'previsao_desc' => $query->orderByRaw('data_previsao_faturamento IS NULL, data_previsao_faturamento DESC'),
+            'valor_desc' => $query->orderByDesc('valor_total'),
+            'valor_asc' => $query->orderBy('valor_total'),
+            'data_pedido_desc' => $query->orderByDesc('data_pedido'),
+            'data_pedido_asc' => $query->orderBy('data_pedido'),
+            default => $query->orderByRaw('data_previsao_faturamento IS NULL, data_previsao_faturamento ASC'),
+        };
+
+        return $query;
+    }
+
     /**
      * Pedidos emitidos = toda a tabela `pedidos` (ex-META_VENDA do legado).
      * Período mensal com a mesma janela D-1 da Home / Metas.
@@ -185,9 +228,11 @@ class PedidoController extends Controller
         $user = $request->user();
         $role = $user->getRoleNames()->first();
 
-        $visaoSupervisor = $request->string('visao_supervisor')->value() ?: null;
-        $visaoVendedor = $request->string('visao_vendedor')->value() ?: null;
-        $scope = $this->scopeResolver->resolve($user, $visaoSupervisor, $visaoVendedor);
+        $scope = $this->scopeResolver->resolve(
+            $user,
+            $request->string('visao_supervisor')->value() ?: null,
+            $request->string('visao_vendedor')->value() ?: null,
+        );
         $codVendedores = $scope['codVendedores'];
 
         $ano = (int) ($request->integer('ano') ?: now()->year);
@@ -201,30 +246,6 @@ class PedidoController extends Controller
         $ordenar = (string) $request->string('ordenar') ?: 'data_pedido_desc';
 
         [$inicio, $fim] = $this->metaRanking->intervaloDatas($ano, $mes, $mes);
-
-        $baseQuery = function () use ($codVendedores, $busca, $faturamento, $inicio, $fim) {
-            $query = Pedido::query()->whereBetween('data_pedido', [$inicio, $fim]);
-
-            if ($codVendedores !== null) {
-                $query->whereIn('cod_vendedor', $codVendedores);
-            }
-
-            if ($busca !== '') {
-                $query->where(function ($q) use ($busca) {
-                    $q->where('numero_pedido', 'like', "%{$busca}%")
-                        ->orWhereHas('cliente', fn ($c) => $c->where('razao_social', 'like', "%{$busca}%")->orWhere('cnpj', 'like', "%{$busca}%"))
-                        ->orWhereHas('itens', fn ($i) => $i->where('descricao', 'like', "%{$busca}%")->orWhere('cod_produto', 'like', "%{$busca}%"));
-                });
-            }
-
-            match ($faturamento) {
-                'faturado' => $query->whereNotNull('data_faturamento'),
-                'aberto' => $query->whereNull('data_faturamento'),
-                default => null,
-            };
-
-            return $query;
-        };
 
         // KPIs no período (sem filtro faturamento da listagem — chips continuam corretos).
         $kpiBase = Pedido::query()->whereBetween('data_pedido', [$inicio, $fim]);
@@ -245,18 +266,7 @@ class PedidoController extends Controller
             'emAberto' => (clone $kpiBase)->whereNull('data_faturamento')->count(),
         ];
 
-        $listaQuery = $baseQuery();
-
-        match ($ordenar) {
-            'valor_desc' => $listaQuery->orderByDesc('valor_total'),
-            'valor_asc' => $listaQuery->orderBy('valor_total'),
-            'data_pedido_asc' => $listaQuery->orderBy('data_pedido'),
-            'faturamento_desc' => $listaQuery->orderByRaw('data_faturamento IS NULL, data_faturamento DESC'),
-            'faturamento_asc' => $listaQuery->orderByRaw('data_faturamento IS NULL, data_faturamento ASC'),
-            default => $listaQuery->orderByDesc('data_pedido'),
-        };
-
-        $pedidos = $listaQuery
+        $pedidos = $this->listaQueryEmitidos($request)
             ->with(['cliente:id,razao_social,cnpj,telefone,email', 'itens'])
             ->paginate(25)
             ->withQueryString();
@@ -329,6 +339,85 @@ class PedidoController extends Controller
                 'visaoVendedor' => $scope['visaoVendedor'],
             ],
         ]);
+    }
+
+    public function exportarEmitidos(Request $request): BinaryFileResponse
+    {
+        // Ver exportarAbertos() — mesma margem de segurança pra tabela `pedidos`.
+        ini_set('memory_limit', '1024M');
+        set_time_limit(300);
+
+        $ano = (int) ($request->integer('ano') ?: now()->year);
+        $mes = max(1, min(12, (int) ($request->integer('mes') ?: now()->month)));
+
+        $query = $this->listaQueryEmitidos($request)
+            ->with('cliente:id,razao_social,cnpj')
+            ->withCount('itens');
+
+        return Excel::download(
+            new \App\Exports\PedidoEmitidoExport($query),
+            "pedidos-emitidos-{$ano}-{$mes}-".now()->format('Y-m-d-His').'.xlsx',
+        );
+    }
+
+    /** Escopo (cod_vendedor) + período (ano/mes) + busca/faturamento. Usado por emitidos() (lista) e exportarEmitidos(). */
+    protected function baseQueryEmitidos(Request $request): Builder
+    {
+        $scope = $this->scopeResolver->resolve(
+            $request->user(),
+            $request->string('visao_supervisor')->value() ?: null,
+            $request->string('visao_vendedor')->value() ?: null,
+        );
+
+        $ano = (int) ($request->integer('ano') ?: now()->year);
+        $mes = max(1, min(12, (int) ($request->integer('mes') ?: now()->month)));
+        $busca = trim((string) $request->string('busca'));
+        $faturamento = (string) $request->string('faturamento');
+        if (! in_array($faturamento, ['faturado', 'aberto'], true)) {
+            $faturamento = '';
+        }
+
+        [$inicio, $fim] = $this->metaRanking->intervaloDatas($ano, $mes, $mes);
+
+        $query = Pedido::query()->whereBetween('data_pedido', [$inicio, $fim]);
+
+        if ($scope['codVendedores'] !== null) {
+            $query->whereIn('cod_vendedor', $scope['codVendedores']);
+        }
+
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->where('numero_pedido', 'like', "%{$busca}%")
+                    ->orWhereHas('cliente', fn ($c) => $c->where('razao_social', 'like', "%{$busca}%")->orWhere('cnpj', 'like', "%{$busca}%"))
+                    ->orWhereHas('itens', fn ($i) => $i->where('descricao', 'like', "%{$busca}%")->orWhere('cod_produto', 'like', "%{$busca}%"));
+            });
+        }
+
+        match ($faturamento) {
+            'faturado' => $query->whereNotNull('data_faturamento'),
+            'aberto' => $query->whereNull('data_faturamento'),
+            default => null,
+        };
+
+        return $query;
+    }
+
+    /** baseQueryEmitidos() + ordenação. Usado por emitidos() (lista) e exportarEmitidos(). */
+    protected function listaQueryEmitidos(Request $request): Builder
+    {
+        $query = $this->baseQueryEmitidos($request);
+        $ordenar = (string) $request->string('ordenar') ?: 'data_pedido_desc';
+
+        match ($ordenar) {
+            'valor_desc' => $query->orderByDesc('valor_total'),
+            'valor_asc' => $query->orderBy('valor_total'),
+            'data_pedido_asc' => $query->orderBy('data_pedido'),
+            'faturamento_desc' => $query->orderByRaw('data_faturamento IS NULL, data_faturamento DESC'),
+            'faturamento_asc' => $query->orderByRaw('data_faturamento IS NULL, data_faturamento ASC'),
+            default => $query->orderByDesc('data_pedido'),
+        };
+
+        return $query;
     }
 
     private function classificarSituacao(?Carbon $previsao, string $hoje, string $em7Dias): string

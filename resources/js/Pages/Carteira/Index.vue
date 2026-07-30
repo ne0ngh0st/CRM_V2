@@ -12,6 +12,7 @@ import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos
 import MotivoInatividadeModal from '@/Components/Carteira/MotivoInatividadeModal.vue';
 import ObservacaoModal from '@/Components/Carteira/ObservacaoModal.vue';
 import AgendarLigacaoModal from '@/Components/Carteira/AgendarLigacaoModal.vue';
+import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 
 const props = defineProps({
     role: String,
@@ -93,6 +94,12 @@ function abrirAgendamento(cliente) {
     clienteAtivo.value = cliente;
     modalAgendamento.value = true;
 }
+
+const temFiltrosAtivos = computed(() =>
+    ['busca', 'estado', 'segmento', 'status', 'aderencia'].some((k) => filtros[k] !== '')
+    || !!filtros.visao_supervisor
+    || !!filtros.visao_vendedor,
+);
 </script>
 
 <template>
@@ -198,6 +205,13 @@ function abrirAgendamento(cliente) {
                                 <line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round" />
                                 <line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round" />
                             </svg>
+                        </template>
+                        <template #actions>
+                            <ExportarExcelButton
+                                rota="carteira.exportar"
+                                :filtros="filtros"
+                                :tem-filtros-ativos="temFiltrosAtivos"
+                            />
                         </template>
 
                         <CarteiraTabela

@@ -1,5 +1,5 @@
 <script setup>
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -8,6 +8,7 @@ import FilterField from '@/Components/FilterField.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import ProdutosTabela from '@/Components/TabelaPrecos/ProdutosTabela.vue';
+import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 
 const props = defineProps({
     role: String,
@@ -48,6 +49,10 @@ function limparFiltros() {
     });
     aplicarFiltros();
 }
+
+const temFiltrosAtivos = computed(() =>
+    filtros.busca !== '' || filtros.categoria !== '' || filtros.preco !== 'todos',
+);
 </script>
 
 <template>
@@ -142,6 +147,13 @@ function limparFiltros() {
                             <path d="M4 7h16M4 12h16M4 17h10" stroke-linecap="round" />
                             <circle cx="18" cy="17" r="2.5" />
                         </svg>
+                    </template>
+                    <template #actions>
+                        <ExportarExcelButton
+                            rota="tabela-precos.exportar"
+                            :filtros="filtros"
+                            :tem-filtros-ativos="temFiltrosAtivos"
+                        />
                     </template>
 
                     <ProdutosTabela v-if="produtos.data.length" :produtos="produtos.data" />

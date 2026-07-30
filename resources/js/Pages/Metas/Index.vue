@@ -13,6 +13,7 @@ import TextInput from '@/Components/TextInput.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 
 const props = defineProps({
     role: String,
@@ -82,6 +83,8 @@ function formatPct(v) {
     if (v === null || v === undefined) return '—';
     return `${Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 }
+
+const temFiltrosAtivos = computed(() => filtros.busca !== '' || filtros.faixa !== '' || !!filtros.visao_supervisor);
 
 function tonePct(v) {
     if (v === null || v === undefined) return 'neutral';
@@ -223,6 +226,13 @@ function salvarMeta() {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-4 w-4">
                         <path d="M4 19h16M7 16V9M12 16V5M17 16v-4" stroke-linecap="round" />
                     </svg>
+                </template>
+                <template #actions>
+                    <ExportarExcelButton
+                        rota="metas.exportar"
+                        :filtros="filtros"
+                        :tem-filtros-ativos="temFiltrosAtivos"
+                    />
                 </template>
 
                 <div class="overflow-x-auto">

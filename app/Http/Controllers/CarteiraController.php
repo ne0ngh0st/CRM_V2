@@ -13,10 +13,13 @@ use App\Models\VendedorPerfil;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Dashboard\DashboardScopeResolver;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class CarteiraController extends Controller
 {
@@ -32,14 +35,12 @@ class CarteiraController extends Controller
         $user = $request->user();
         $role = $user->getRoleNames()->first();
 
-        $visaoSupervisor = $request->string('visao_supervisor')->value() ?: null;
-        $visaoVendedor = $request->string('visao_vendedor')->value() ?: null;
-
-        $scope = $this->scopeResolver->resolve($user, $visaoSupervisor, $visaoVendedor);
+        $scope = $this->scopeResolver->resolve(
+            $user,
+            $request->string('visao_supervisor')->value() ?: null,
+            $request->string('visao_vendedor')->value() ?: null,
+        );
         $codVendedores = $scope['codVendedores'];
-
-        $limiteAtivo = $this->statusResolver->limiteAtivo()->toDateString();
-        $limiteInativando = $this->statusResolver->limiteInativando()->toDateString();
 
         $busca = trim((string) $request->string('busca'));
         $estado = (string) $request->string('estado');
@@ -49,76 +50,9 @@ class CarteiraController extends Controller
         $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
         $aba = (string) $request->string('aba') ?: 'clientes';
 
-        $scopeQuery = function () use ($codVendedores) {
-            $query = Cliente::query();
-            if ($codVendedores !== null) {
-                $query->whereIn('clientes.cod_vendedor', $codVendedores);
-            }
+        $kpis = $this->aderenciaResolver->resolver($this->baseQuery($request));
 
-            return $query;
-        };
-
-        $baseQuery = function () use ($scopeQuery, $busca, $estado, $segmento, $status, $limiteAtivo, $limiteInativando) {
-            $query = $scopeQuery()->select('clientes.*');
-
-            if ($busca !== '') {
-                $query->where(function ($q) use ($busca) {
-                    $q->where('clientes.razao_social', 'like', "%{$busca}%")
-                        ->orWhere('clientes.nome_fantasia', 'like', "%{$busca}%")
-                        ->orWhere('clientes.cnpj', 'like', "%{$busca}%")
-                        ->orWhere('clientes.cod_cliente', 'like', "%{$busca}%");
-                });
-            }
-
-            if ($estado !== '') {
-                $query->where('clientes.estado', $estado);
-            }
-
-            if ($segmento !== '') {
-                $query->where('clientes.cod_segmento', $segmento);
-            }
-
-            match ($status) {
-                'ativo' => $query->where('clientes.data_ultima_compra', '>=', $limiteAtivo),
-                'inativando' => $query->where('clientes.data_ultima_compra', '<', $limiteAtivo)
-                    ->where('clientes.data_ultima_compra', '>=', $limiteInativando),
-                'inativo' => $query->where(fn ($q) => $q->whereNull('clientes.data_ultima_compra')->orWhere('clientes.data_ultima_compra', '<', $limiteInativando)),
-                default => null,
-            };
-
-            return $query;
-        };
-
-        $kpis = $this->aderenciaResolver->resolver($baseQuery());
-
-        $listaQuery = $baseQuery();
-
-        if ($aderencia !== '') {
-            $temSegmentoDefinido = fn ($q) => $q->selectRaw(1)
-                ->from('segmentos_vendedor as sv2')
-                ->whereColumn('sv2.cod_vendedor', 'clientes.cod_vendedor');
-
-            if ($aderencia === 'sem_segmento') {
-                $listaQuery->whereNotExists($temSegmentoDefinido);
-            } else {
-                $listaQuery->whereExists($temSegmentoDefinido)
-                    ->leftJoin('segmentos', 'segmentos.codigo', '=', 'clientes.cod_segmento')
-                    ->leftJoin('segmentos_vendedor', function ($join) {
-                        $join->on('segmentos_vendedor.cod_vendedor', '=', 'clientes.cod_vendedor')
-                            ->on('segmentos_vendedor.segmento_id', '=', 'segmentos.id');
-                    });
-
-                $aderencia === 'dentro'
-                    ? $listaQuery->whereNotNull('segmentos_vendedor.id')
-                    : $listaQuery->whereNull('segmentos_vendedor.id');
-            }
-        }
-
-        match ($ordenar) {
-            'ultima_compra_desc' => $listaQuery->orderByRaw('clientes.data_ultima_compra IS NULL, clientes.data_ultima_compra DESC'),
-            'ultima_compra_asc' => $listaQuery->orderByRaw('clientes.data_ultima_compra IS NULL, clientes.data_ultima_compra ASC'),
-            default => $listaQuery->orderBy('clientes.razao_social'),
-        };
+        $listaQuery = $this->listaQuery($request);
 
         $clientes = $listaQuery->paginate(30)->withQueryString();
 
@@ -195,9 +129,9 @@ class CarteiraController extends Controller
                 'ordenar' => $ordenar,
             ],
             'opcoes' => [
-                'estados' => $scopeQuery()->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
+                'estados' => $this->scopeQuery($request)->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
                 'segmentos' => Segmento::query()
-                    ->whereIn('codigo', $scopeQuery()->whereNotNull('cod_segmento')->where('cod_segmento', '!=', '')->distinct()->pluck('cod_segmento'))
+                    ->whereIn('codigo', $this->scopeQuery($request)->whereNotNull('cod_segmento')->where('cod_segmento', '!=', '')->distinct()->pluck('cod_segmento'))
                     ->orderBy('nome')
                     ->get(['codigo', 'nome']),
             ],
@@ -211,6 +145,114 @@ class CarteiraController extends Controller
                 'visaoVendedor' => $scope['visaoVendedor'],
             ],
         ]);
+    }
+
+    public function exportar(Request $request): BinaryFileResponse
+    {
+        // Medido com os ~89.800 clientes sem filtro (escopo admin): ~540MB de pico e ~100s —
+        // acima do memory_limit/max_execution_time padrão do PHP-FPM. Ajuste só desta request.
+        ini_set('memory_limit', '1024M');
+        set_time_limit(300);
+
+        return Excel::download(
+            new \App\Exports\CarteiraExport($this->listaQuery($request), $this->statusResolver),
+            'carteira-'.now()->format('Y-m-d-His').'.xlsx',
+        );
+    }
+
+    /** Escopo (cod_vendedor) puro, sem filtros de busca/estado/segmento/status. */
+    protected function scopeQuery(Request $request): Builder
+    {
+        $scope = $this->scopeResolver->resolve(
+            $request->user(),
+            $request->string('visao_supervisor')->value() ?: null,
+            $request->string('visao_vendedor')->value() ?: null,
+        );
+
+        $query = Cliente::query();
+        if ($scope['codVendedores'] !== null) {
+            $query->whereIn('clientes.cod_vendedor', $scope['codVendedores']);
+        }
+
+        return $query;
+    }
+
+    /** scopeQuery() + busca/estado/segmento/status. Sem aderência/ordenação. Usado por index() (lista e KPIs) e exportar(). */
+    protected function baseQuery(Request $request): Builder
+    {
+        $limiteAtivo = $this->statusResolver->limiteAtivo()->toDateString();
+        $limiteInativando = $this->statusResolver->limiteInativando()->toDateString();
+
+        $busca = trim((string) $request->string('busca'));
+        $estado = (string) $request->string('estado');
+        $segmento = (string) $request->string('segmento');
+        $status = (string) $request->string('status');
+
+        $query = $this->scopeQuery($request)->select('clientes.*');
+
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->where('clientes.razao_social', 'like', "%{$busca}%")
+                    ->orWhere('clientes.nome_fantasia', 'like', "%{$busca}%")
+                    ->orWhere('clientes.cnpj', 'like', "%{$busca}%")
+                    ->orWhere('clientes.cod_cliente', 'like', "%{$busca}%");
+            });
+        }
+
+        if ($estado !== '') {
+            $query->where('clientes.estado', $estado);
+        }
+
+        if ($segmento !== '') {
+            $query->where('clientes.cod_segmento', $segmento);
+        }
+
+        match ($status) {
+            'ativo' => $query->where('clientes.data_ultima_compra', '>=', $limiteAtivo),
+            'inativando' => $query->where('clientes.data_ultima_compra', '<', $limiteAtivo)
+                ->where('clientes.data_ultima_compra', '>=', $limiteInativando),
+            'inativo' => $query->where(fn ($q) => $q->whereNull('clientes.data_ultima_compra')->orWhere('clientes.data_ultima_compra', '<', $limiteInativando)),
+            default => null,
+        };
+
+        return $query;
+    }
+
+    /** baseQuery() + aderência + ordenação. Usado por index() (lista) e exportar(). */
+    protected function listaQuery(Request $request): Builder
+    {
+        $query = $this->baseQuery($request);
+        $aderencia = (string) $request->string('aderencia');
+        $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
+
+        if ($aderencia !== '') {
+            $temSegmentoDefinido = fn ($q) => $q->selectRaw(1)
+                ->from('segmentos_vendedor as sv2')
+                ->whereColumn('sv2.cod_vendedor', 'clientes.cod_vendedor');
+
+            if ($aderencia === 'sem_segmento') {
+                $query->whereNotExists($temSegmentoDefinido);
+            } else {
+                $query->whereExists($temSegmentoDefinido)
+                    ->leftJoin('segmentos', 'segmentos.codigo', '=', 'clientes.cod_segmento')
+                    ->leftJoin('segmentos_vendedor', function ($join) {
+                        $join->on('segmentos_vendedor.cod_vendedor', '=', 'clientes.cod_vendedor')
+                            ->on('segmentos_vendedor.segmento_id', '=', 'segmentos.id');
+                    });
+
+                $aderencia === 'dentro'
+                    ? $query->whereNotNull('segmentos_vendedor.id')
+                    : $query->whereNull('segmentos_vendedor.id');
+            }
+        }
+
+        match ($ordenar) {
+            'ultima_compra_desc' => $query->orderByRaw('clientes.data_ultima_compra IS NULL, clientes.data_ultima_compra DESC'),
+            'ultima_compra_asc' => $query->orderByRaw('clientes.data_ultima_compra IS NULL, clientes.data_ultima_compra ASC'),
+            default => $query->orderBy('clientes.razao_social'),
+        };
+
+        return $query;
     }
 
     public function detalhes(Request $request, Cliente $cliente): Response

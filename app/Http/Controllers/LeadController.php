@@ -7,10 +7,13 @@ use App\Models\Lead;
 use App\Models\Ligacao;
 use App\Models\VendedorPerfil;
 use App\Services\Dashboard\DashboardScopeResolver;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class LeadController extends Controller
 {
@@ -47,60 +50,14 @@ class LeadController extends Controller
             $aba = 'leads';
         }
 
-        $scopeQuery = function () use ($codVendedores) {
-            $query = Lead::query()->visivel();
-            if ($codVendedores !== null) {
-                $query->whereIn('cod_vendedor', $codVendedores);
-            }
-
-            return $query;
-        };
-
-        $baseQuery = function () use ($scopeQuery, $busca, $estado, $segmento, $status, $origem) {
-            $query = $scopeQuery();
-
-            if ($busca !== '') {
-                $query->where(function ($q) use ($busca) {
-                    $q->where('nome', 'like', "%{$busca}%")
-                        ->orWhere('razao_social', 'like', "%{$busca}%")
-                        ->orWhere('nome_fantasia', 'like', "%{$busca}%")
-                        ->orWhere('cnpj', 'like', "%{$busca}%")
-                        ->orWhere('email', 'like', "%{$busca}%")
-                        ->orWhere('telefone', 'like', "%{$busca}%");
-                });
-            }
-
-            if ($estado !== '') {
-                $query->where('estado', $estado);
-            }
-            if ($segmento !== '') {
-                $query->where('segmento', $segmento);
-            }
-            if ($status !== '') {
-                $query->where('status', $status);
-            }
-            if ($origem !== '') {
-                $query->where('origem', $origem);
-            }
-
-            return $query;
-        };
-
         $kpis = [
-            'total' => (clone $baseQuery())->count(),
-            'sistema' => (clone $baseQuery())->where('origem', 'sistema')->count(),
-            'manual' => (clone $baseQuery())->where('origem', 'manual')->count(),
-            'ativos' => (clone $baseQuery())->where('status', 'ativo')->count(),
+            'total' => $this->baseQuery($request)->count(),
+            'sistema' => $this->baseQuery($request)->where('origem', 'sistema')->count(),
+            'manual' => $this->baseQuery($request)->where('origem', 'manual')->count(),
+            'ativos' => $this->baseQuery($request)->where('status', 'ativo')->count(),
         ];
 
-        $listaQuery = $baseQuery();
-        match ($ordenar) {
-            'valor_desc' => $listaQuery->orderByRaw('valor_estimado IS NULL, valor_estimado DESC'),
-            'recentes' => $listaQuery->orderByDesc('updated_at'),
-            default => $listaQuery->orderBy('razao_social'),
-        };
-
-        $leads = $listaQuery->paginate(30)->withQueryString();
+        $leads = $this->listaQuery($request)->paginate(30)->withQueryString();
 
         $codigos = $leads->getCollection()->pluck('cod_vendedor')->filter()->unique()->values();
         $nomesPorCod = VendedorPerfil::query()
@@ -144,8 +101,8 @@ class LeadController extends Controller
                 'ordenar' => $ordenar,
             ],
             'opcoes' => [
-                'estados' => $scopeQuery()->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
-                'segmentos' => $scopeQuery()->whereNotNull('segmento')->where('segmento', '!=', '')->distinct()->orderBy('segmento')->pluck('segmento'),
+                'estados' => $this->scopeQuery($request)->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
+                'segmentos' => $this->scopeQuery($request)->whereNotNull('segmento')->where('segmento', '!=', '')->distinct()->orderBy('segmento')->pluck('segmento'),
             ],
             'visao' => [
                 'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
@@ -157,6 +114,94 @@ class LeadController extends Controller
                 'visaoVendedor' => $scope['visaoVendedor'],
             ],
         ]);
+    }
+
+    public function exportar(Request $request): BinaryFileResponse
+    {
+        // Margem de segurança pra escopo admin sem filtro (~17k leads) — ver CarteiraController::exportar().
+        ini_set('memory_limit', '1024M');
+        set_time_limit(300);
+
+        return Excel::download(
+            new \App\Exports\LeadExport($this->listaQuery($request)),
+            'leads-'.now()->format('Y-m-d-His').'.xlsx',
+        );
+    }
+
+    /** Escopo (cod_vendedor, via Lead::visivel()) puro, sem filtros. */
+    protected function scopeQuery(Request $request): Builder
+    {
+        $scope = $this->scopeResolver->resolve(
+            $request->user(),
+            $request->string('visao_supervisor')->value() ?: null,
+            $request->string('visao_vendedor')->value() ?: null,
+        );
+
+        $query = Lead::query()->visivel();
+        if ($scope['codVendedores'] !== null) {
+            $query->whereIn('cod_vendedor', $scope['codVendedores']);
+        }
+
+        return $query;
+    }
+
+    /** scopeQuery() + busca/estado/segmento/status/origem. Usado por index() (KPIs e lista) e exportar(). */
+    protected function baseQuery(Request $request): Builder
+    {
+        $busca = trim((string) $request->string('busca'));
+        $estado = (string) $request->string('estado');
+        $segmento = (string) $request->string('segmento');
+        $status = (string) $request->string('status');
+        $origem = (string) $request->string('origem');
+        if (! in_array($origem, ['sistema', 'manual'], true)) {
+            $origem = '';
+        }
+        if (! in_array($status, ['ativo', 'inativo', 'convertido'], true)) {
+            $status = '';
+        }
+
+        $query = $this->scopeQuery($request);
+
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->where('nome', 'like', "%{$busca}%")
+                    ->orWhere('razao_social', 'like', "%{$busca}%")
+                    ->orWhere('nome_fantasia', 'like', "%{$busca}%")
+                    ->orWhere('cnpj', 'like', "%{$busca}%")
+                    ->orWhere('email', 'like', "%{$busca}%")
+                    ->orWhere('telefone', 'like', "%{$busca}%");
+            });
+        }
+
+        if ($estado !== '') {
+            $query->where('estado', $estado);
+        }
+        if ($segmento !== '') {
+            $query->where('segmento', $segmento);
+        }
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+        if ($origem !== '') {
+            $query->where('origem', $origem);
+        }
+
+        return $query;
+    }
+
+    /** baseQuery() + ordenação. Usado por index() (lista) e exportar(). */
+    protected function listaQuery(Request $request): Builder
+    {
+        $query = $this->baseQuery($request);
+        $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
+
+        match ($ordenar) {
+            'valor_desc' => $query->orderByRaw('valor_estimado IS NULL, valor_estimado DESC'),
+            'recentes' => $query->orderByDesc('updated_at'),
+            default => $query->orderBy('razao_social'),
+        };
+
+        return $query;
     }
 
     public function registrarLigacao(Request $request, Lead $lead): RedirectResponse

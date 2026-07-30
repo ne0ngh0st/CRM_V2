@@ -11,6 +11,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class MetaController extends Controller
 {
@@ -31,6 +33,64 @@ class MetaController extends Controller
         }
 
         $role = $user->getRoleNames()->first();
+        $p = $this->parametrosRanking($request, $user);
+        $resultado = $this->rankingResolver->ranking(
+            $p['scope']['codVendedores'],
+            $p['ano'],
+            $p['mes'],
+            $p['modo'],
+            $p['busca'],
+            $p['faixa'],
+        );
+
+        return Inertia::render('Metas/Index', [
+            'role' => $role,
+            'linhas' => $resultado['linhas'],
+            'totais' => $resultado['totais'],
+            'kpis' => $resultado['kpis'],
+            'periodo' => $resultado['periodo'],
+            'filtros' => [
+                'ano' => $p['ano'],
+                'mes' => $p['mes'],
+                'modo' => $p['modo'],
+                'busca' => $p['busca'],
+                'faixa' => $p['faixa'],
+                'visao_supervisor' => $p['scope']['visaoSupervisor'],
+            ],
+            'opcoes' => [
+                'supervisores' => in_array($role, ['admin', 'diretor'], true)
+                    ? $this->scopeResolver->opcoesSupervisores()
+                    : [],
+                'anos' => range((int) now()->year, (int) now()->year - 2),
+            ],
+            'podeEditar' => $p['modo'] === 'mensal',
+        ]);
+    }
+
+    public function exportar(Request $request): BinaryFileResponse
+    {
+        $user = $request->user();
+        abort_unless($this->podeAcessar($user), 403);
+
+        $p = $this->parametrosRanking($request, $user);
+        $resultado = $this->rankingResolver->ranking(
+            $p['scope']['codVendedores'],
+            $p['ano'],
+            $p['mes'],
+            $p['modo'],
+            $p['busca'],
+            $p['faixa'],
+        );
+
+        return Excel::download(
+            new \App\Exports\MetasExport($resultado['linhas']),
+            "metas-{$p['ano']}-{$p['mes']}-".now()->format('Y-m-d-His').'.xlsx',
+        );
+    }
+
+    /** Parsing de ano/mes/modo/busca/faixa + escopo. Usado por index() e exportar(). */
+    private function parametrosRanking(Request $request, User $user): array
+    {
         $ano = (int) ($request->integer('ano') ?: now()->year);
         $mes = (int) ($request->integer('mes') ?: now()->month);
         $mes = max(1, min(12, $mes));
@@ -45,37 +105,7 @@ class MetaController extends Controller
         // Ranking lista a equipe inteira (ou empresa); não filtra a um vendedor só.
         $scope = $this->scopeResolver->resolve($user, $visaoSupervisor, null);
 
-        $resultado = $this->rankingResolver->ranking(
-            $scope['codVendedores'],
-            $ano,
-            $mes,
-            $modo,
-            $busca,
-            $faixa,
-        );
-
-        return Inertia::render('Metas/Index', [
-            'role' => $role,
-            'linhas' => $resultado['linhas'],
-            'totais' => $resultado['totais'],
-            'kpis' => $resultado['kpis'],
-            'periodo' => $resultado['periodo'],
-            'filtros' => [
-                'ano' => $ano,
-                'mes' => $mes,
-                'modo' => $modo,
-                'busca' => $busca,
-                'faixa' => $faixa,
-                'visao_supervisor' => $scope['visaoSupervisor'],
-            ],
-            'opcoes' => [
-                'supervisores' => in_array($role, ['admin', 'diretor'], true)
-                    ? $this->scopeResolver->opcoesSupervisores()
-                    : [],
-                'anos' => range((int) now()->year, (int) now()->year - 2),
-            ],
-            'podeEditar' => $modo === 'mensal',
-        ]);
+        return compact('ano', 'mes', 'modo', 'busca', 'faixa', 'scope');
     }
 
     public function update(Request $request): RedirectResponse

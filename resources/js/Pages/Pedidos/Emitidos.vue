@@ -8,6 +8,7 @@ import FilterField from '@/Components/FilterField.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import PedidosEmitidosTabela from '@/Components/Pedidos/PedidosEmitidosTabela.vue';
+import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 
 const props = defineProps({
     role: String,
@@ -76,6 +77,13 @@ function limparFiltros() {
     });
     aplicarFiltros();
 }
+
+const temFiltrosAtivos = computed(() =>
+    filtros.busca !== ''
+    || filtros.faturamento !== ''
+    || !!filtros.visao_supervisor
+    || !!filtros.visao_vendedor,
+);
 
 function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
@@ -181,6 +189,13 @@ const periodoLabel = computed(() => {
                             <line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round" />
                             <line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round" />
                         </svg>
+                    </template>
+                    <template #actions>
+                        <ExportarExcelButton
+                            rota="pedidos.exportarEmitidos"
+                            :filtros="filtros"
+                            :tem-filtros-ativos="temFiltrosAtivos"
+                        />
                     </template>
 
                     <PedidosEmitidosTabela v-if="pedidos.data.length" :pedidos="pedidos.data" />

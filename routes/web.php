@@ -42,9 +42,12 @@ Route::middleware('auth')->group(function () {
     Route::delete('/sugestoes/{sugestao}', [SugestaoController::class, 'destroy'])->name('sugestoes.destroy');
 
     Route::get('/pedidos-abertos', [PedidoController::class, 'index'])->name('pedidos.index');
+    Route::get('/pedidos-abertos/exportar', [PedidoController::class, 'exportarAbertos'])->name('pedidos.exportar');
     Route::get('/pedidos-emitidos', [PedidoController::class, 'emitidos'])->name('pedidos.emitidos');
+    Route::get('/pedidos-emitidos/exportar', [PedidoController::class, 'exportarEmitidos'])->name('pedidos.exportarEmitidos');
 
     Route::get('/carteira', [CarteiraController::class, 'index'])->name('carteira.index');
+    Route::get('/carteira/exportar', [CarteiraController::class, 'exportar'])->name('carteira.exportar');
     Route::get('/carteira/{cliente}/detalhes', [CarteiraController::class, 'detalhes'])->name('carteira.detalhes');
     Route::post('/carteira/{cliente}/motivo-inatividade', [CarteiraController::class, 'registrarMotivoInatividade'])->name('carteira.motivoInatividade');
     Route::post('/carteira/{cliente}/ligacao', [CarteiraController::class, 'registrarLigacao'])->name('carteira.ligacao');
@@ -52,14 +55,17 @@ Route::middleware('auth')->group(function () {
     Route::patch('/carteira/agendamentos/{agendamento}', [CarteiraController::class, 'atualizarAgendamento'])->name('carteira.agendamentoStatus');
 
     Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
+    Route::get('/leads/exportar', [LeadController::class, 'exportar'])->name('leads.exportar');
     Route::post('/leads/{lead}/ligacao', [LeadController::class, 'registrarLigacao'])->name('leads.ligacao');
     Route::post('/leads/{lead}/agendamento', [LeadController::class, 'registrarAgendamento'])->name('leads.agendamento');
     Route::patch('/leads/agendamentos/{agendamento}', [LeadController::class, 'atualizarAgendamento'])->name('leads.agendamentoStatus');
     Route::delete('/leads/{lead}', [LeadController::class, 'excluir'])->name('leads.destroy');
 
     Route::get('/tabela-precos', [TabelaPrecoController::class, 'index'])->name('tabela-precos.index');
+    Route::get('/tabela-precos/exportar', [TabelaPrecoController::class, 'exportar'])->name('tabela-precos.exportar');
 
     Route::get('/cadastros', [CadastroController::class, 'index'])->name('cadastros.index');
+    Route::get('/cadastros/exportar', [CadastroController::class, 'exportar'])->name('cadastros.exportar');
     Route::post('/cadastros/bobinas', [CadastroController::class, 'storeBobina'])->name('cadastros.bobinas.store');
     Route::post('/cadastros/bobinas/{bobina}/enviar', [CadastroController::class, 'enviarBobina'])->name('cadastros.bobinas.enviar');
     Route::delete('/cadastros/bobinas/{bobina}', [CadastroController::class, 'destroyBobina'])->name('cadastros.bobinas.destroy');
@@ -72,6 +78,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/cadastros/leads/{lead}', [CadastroController::class, 'destroyLead'])->name('cadastros.leads.destroy');
 
     Route::get('/orcamentos', [OrcamentoController::class, 'index'])->name('orcamentos.index');
+    Route::get('/orcamentos/exportar', [OrcamentoController::class, 'exportar'])->name('orcamentos.exportar');
     Route::get('/orcamentos/novo', [OrcamentoController::class, 'novo'])->name('orcamentos.novo');
     Route::get('/orcamentos/busca-clientes', [OrcamentoController::class, 'buscarClientes'])->name('orcamentos.buscaClientes');
     Route::get('/orcamentos/busca-produtos', [OrcamentoController::class, 'buscarProdutos'])->name('orcamentos.buscaProdutos');
@@ -97,6 +104,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/observacoes/{observacao}/fixar', [ObservacaoController::class, 'togglePin'])->name('observacoes.fixar');
 
     Route::get('/equipe', [EquipeController::class, 'index'])->name('equipe.index');
+    Route::get('/equipe/exportar', [EquipeController::class, 'exportar'])->name('equipe.exportar');
     Route::post('/equipe', [EquipeController::class, 'store'])->name('equipe.store');
     Route::patch('/equipe/supervisor-massa', [EquipeController::class, 'reatribuirSupervisorMassa'])->name('equipe.supervisorMassa');
     Route::patch('/equipe/{usuario}', [EquipeController::class, 'update'])->name('equipe.update');
@@ -106,6 +114,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/visao-gestor', [VisaoGestorController::class, 'index'])->name('visao-gestor.index');
     Route::get('/metas', [MetaController::class, 'index'])->name('metas.index');
+    Route::get('/metas/exportar', [MetaController::class, 'exportar'])->name('metas.exportar');
     Route::patch('/metas', [MetaController::class, 'update'])->name('metas.update');
 });
 

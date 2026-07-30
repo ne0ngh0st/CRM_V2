@@ -1,5 +1,5 @@
 <script setup>
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -8,6 +8,7 @@ import FilterField from '@/Components/FilterField.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import PedidosTabela from '@/Components/Pedidos/PedidosTabela.vue';
+import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import { ROTULOS_STATUS_PEDIDO } from '@/constants/pedidos.js';
 
 const props = defineProps({
@@ -56,6 +57,13 @@ function limparFiltros() {
 function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
 }
+
+const temFiltrosAtivos = computed(() =>
+    ['busca', 'status', 'data_inicio', 'data_fim'].some((k) => filtros[k] !== '')
+    || filtros.situacao !== 'todos'
+    || !!filtros.visao_supervisor
+    || !!filtros.visao_vendedor,
+);
 </script>
 
 <template>
@@ -157,6 +165,13 @@ function formatBRL(valor) {
                             <line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round" />
                             <line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round" />
                         </svg>
+                    </template>
+                    <template #actions>
+                        <ExportarExcelButton
+                            rota="pedidos.exportar"
+                            :filtros="filtros"
+                            :tem-filtros-ativos="temFiltrosAtivos"
+                        />
                     </template>
 
                     <PedidosTabela v-if="pedidos.data.length" :pedidos="pedidos.data" />

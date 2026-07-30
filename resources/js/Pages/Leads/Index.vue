@@ -11,6 +11,7 @@ import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos
 import LeadsTabela from '@/Components/Leads/LeadsTabela.vue';
 import AgendarLigacaoLeadModal from '@/Components/Leads/AgendarLigacaoLeadModal.vue';
 import ObservacaoLeadModal from '@/Components/Leads/ObservacaoLeadModal.vue';
+import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 
 const props = defineProps({
     role: String,
@@ -85,6 +86,12 @@ function abrirAgendamento(lead) {
     leadAtivo.value = lead;
     modalAgendamento.value = true;
 }
+
+const temFiltrosAtivos = computed(() =>
+    ['busca', 'estado', 'segmento', 'status', 'origem'].some((k) => filtros[k] !== '')
+    || !!filtros.visao_supervisor
+    || !!filtros.visao_vendedor,
+);
 </script>
 
 <template>
@@ -204,6 +211,13 @@ function abrirAgendamento(lead) {
                                 <line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round" />
                                 <line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round" />
                             </svg>
+                        </template>
+                        <template #actions>
+                            <ExportarExcelButton
+                                rota="leads.exportar"
+                                :filtros="filtros"
+                                :tem-filtros-ativos="temFiltrosAtivos"
+                            />
                         </template>
 
                         <LeadsTabela

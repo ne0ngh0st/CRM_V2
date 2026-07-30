@@ -8,12 +8,15 @@ use App\Models\SolicitacaoBobina;
 use App\Models\SolicitacaoEtiqueta;
 use App\Models\User;
 use App\Services\Cadastros\SolicitacaoTituloResolver;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class CadastroController extends Controller
 {
@@ -54,61 +57,16 @@ class CadastroController extends Controller
         $codVendedor = $user->vendedorPerfil?->cod_vendedor;
         $solicitanteNome = $user->display_name ?: $user->name;
 
-        $bobinasQuery = SolicitacaoBobina::query()->latest();
-        $etiquetasQuery = SolicitacaoEtiqueta::query()->latest();
-        $clientesQuery = ClienteParaCadastro::query()->latest();
-        $leadsQuery = Lead::query()->where('origem', 'manual')->visivel()->latest();
-
-        if (! $isGestor) {
-            $bobinasQuery->where('user_id', $user->id);
-            $etiquetasQuery->where('user_id', $user->id);
-            $clientesQuery->where('user_id', $user->id);
-            $leadsQuery->where('user_id', $user->id);
-        }
-
-        if ($busca !== '') {
-            $bobinasQuery->where(function ($q) use ($busca) {
-                $q->where('nomenclatura', 'like', "%{$busca}%")
-                    ->orWhere('titulo_padronizado', 'like', "%{$busca}%")
-                    ->orWhere('papel', 'like', "%{$busca}%")
-                    ->orWhere('observacoes', 'like', "%{$busca}%");
-            });
-            $etiquetasQuery->where(function ($q) use ($busca) {
-                $q->where('nomenclatura', 'like', "%{$busca}%")
-                    ->orWhere('titulo_padronizado', 'like', "%{$busca}%")
-                    ->orWhere('medidas', 'like', "%{$busca}%")
-                    ->orWhere('tipo_adesivo', 'like', "%{$busca}%")
-                    ->orWhere('observacoes', 'like', "%{$busca}%");
-            });
-            $clientesQuery->where(function ($q) use ($busca) {
-                $q->where('cnpj_faturamento', 'like', "%{$busca}%")
-                    ->orWhere('razao_social', 'like', "%{$busca}%")
-                    ->orWhere('nome_fantasia', 'like', "%{$busca}%");
-            });
-            $leadsQuery->where(function ($q) use ($busca) {
-                $q->where('razao_social', 'like', "%{$busca}%")
-                    ->orWhere('cnpj', 'like', "%{$busca}%")
-                    ->orWhere('email', 'like', "%{$busca}%");
-            });
-        }
-
-        if ($status !== '') {
-            $bobinasQuery->where('status', $status);
-            $etiquetasQuery->where('status', $status);
-            $clientesQuery->where('status', $status);
-            $leadsQuery->where('status', $status);
-        }
-
         $etiquetasOpcoes = $this->etiquetasOpcoes();
 
         return Inertia::render('Cadastros/Index', [
             'role' => $role,
             'aba' => $aba,
             'subAbaClientes' => $subAbaClientes,
-            'bobinas' => $bobinasQuery->paginate(20)->withQueryString()->through(fn (SolicitacaoBobina $s) => $this->mapBobina($s)),
-            'etiquetas' => $etiquetasQuery->paginate(20)->withQueryString()->through(fn (SolicitacaoEtiqueta $s) => $this->mapEtiqueta($s)),
-            'clientesFila' => $clientesQuery->paginate(20)->withQueryString()->through(fn (ClienteParaCadastro $c) => $this->mapCliente($c)),
-            'leads' => $leadsQuery->paginate(20)->withQueryString()->through(fn (Lead $l) => $this->mapLead($l)),
+            'bobinas' => $this->bobinasQuery($request, $user, $isGestor)->paginate(20)->withQueryString()->through(fn (SolicitacaoBobina $s) => $this->mapBobina($s)),
+            'etiquetas' => $this->etiquetasQuery($request, $user, $isGestor)->paginate(20)->withQueryString()->through(fn (SolicitacaoEtiqueta $s) => $this->mapEtiqueta($s)),
+            'clientesFila' => $this->clientesQuery($request, $user, $isGestor)->paginate(20)->withQueryString()->through(fn (ClienteParaCadastro $c) => $this->mapCliente($c)),
+            'leads' => $this->leadsQuery($request, $user, $isGestor)->paginate(20)->withQueryString()->through(fn (Lead $l) => $this->mapLead($l)),
             'filtros' => [
                 'busca' => $busca,
                 'status' => $status,
@@ -125,6 +83,129 @@ class CadastroController extends Controller
             ],
             'flashMailto' => $request->session()->get('flashMailto'),
         ]);
+    }
+
+    public function exportar(Request $request): BinaryFileResponse
+    {
+        $user = $request->user();
+        $isGestor = in_array($user->getRoleNames()->first(), ['admin', 'diretor', 'supervisor'], true);
+        $recurso = (string) $request->string('recurso');
+        abort_unless(in_array($recurso, ['bobina', 'etiqueta', 'cliente', 'lead'], true), 404);
+
+        $query = match ($recurso) {
+            'bobina' => $this->bobinasQuery($request, $user, $isGestor),
+            'etiqueta' => $this->etiquetasQuery($request, $user, $isGestor),
+            'cliente' => $this->clientesQuery($request, $user, $isGestor),
+            'lead' => $this->leadsQuery($request, $user, $isGestor),
+        };
+
+        return Excel::download(
+            new \App\Exports\CadastroExport($query, $recurso),
+            "cadastros-{$recurso}-".now()->format('Y-m-d-His').'.xlsx',
+        );
+    }
+
+    /** Escopo (user_id se não gestor) + busca/status. Usado por index() e exportar(). */
+    protected function bobinasQuery(Request $request, User $user, bool $isGestor): Builder
+    {
+        $query = SolicitacaoBobina::query()->latest();
+        if (! $isGestor) {
+            $query->where('user_id', $user->id);
+        }
+
+        $busca = trim((string) $request->string('busca'));
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->where('nomenclatura', 'like', "%{$busca}%")
+                    ->orWhere('titulo_padronizado', 'like', "%{$busca}%")
+                    ->orWhere('papel', 'like', "%{$busca}%")
+                    ->orWhere('observacoes', 'like', "%{$busca}%");
+            });
+        }
+
+        $status = trim((string) $request->string('status'));
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        return $query;
+    }
+
+    /** Escopo (user_id se não gestor) + busca/status. Usado por index() e exportar(). */
+    protected function etiquetasQuery(Request $request, User $user, bool $isGestor): Builder
+    {
+        $query = SolicitacaoEtiqueta::query()->latest();
+        if (! $isGestor) {
+            $query->where('user_id', $user->id);
+        }
+
+        $busca = trim((string) $request->string('busca'));
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->where('nomenclatura', 'like', "%{$busca}%")
+                    ->orWhere('titulo_padronizado', 'like', "%{$busca}%")
+                    ->orWhere('medidas', 'like', "%{$busca}%")
+                    ->orWhere('tipo_adesivo', 'like', "%{$busca}%")
+                    ->orWhere('observacoes', 'like', "%{$busca}%");
+            });
+        }
+
+        $status = trim((string) $request->string('status'));
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        return $query;
+    }
+
+    /** Escopo (user_id se não gestor) + busca/status. Usado por index() e exportar(). */
+    protected function clientesQuery(Request $request, User $user, bool $isGestor): Builder
+    {
+        $query = ClienteParaCadastro::query()->latest();
+        if (! $isGestor) {
+            $query->where('user_id', $user->id);
+        }
+
+        $busca = trim((string) $request->string('busca'));
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->where('cnpj_faturamento', 'like', "%{$busca}%")
+                    ->orWhere('razao_social', 'like', "%{$busca}%")
+                    ->orWhere('nome_fantasia', 'like', "%{$busca}%");
+            });
+        }
+
+        $status = trim((string) $request->string('status'));
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        return $query;
+    }
+
+    /** Escopo (user_id se não gestor) + busca/status. Usado por index() e exportar(). */
+    protected function leadsQuery(Request $request, User $user, bool $isGestor): Builder
+    {
+        $query = Lead::query()->where('origem', 'manual')->visivel()->latest();
+        if (! $isGestor) {
+            $query->where('user_id', $user->id);
+        }
+
+        $busca = trim((string) $request->string('busca'));
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->where('razao_social', 'like', "%{$busca}%")
+                    ->orWhere('cnpj', 'like', "%{$busca}%")
+                    ->orWhere('email', 'like', "%{$busca}%");
+            });
+        }
+
+        $status = trim((string) $request->string('status'));
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        return $query;
     }
 
     public function storeBobina(Request $request): RedirectResponse

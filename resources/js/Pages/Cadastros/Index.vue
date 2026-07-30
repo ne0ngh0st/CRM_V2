@@ -16,6 +16,7 @@ import CadastroClienteTabela from '@/Components/Cadastros/CadastroClienteTabela.
 import CadastroLeadForm from '@/Components/Cadastros/CadastroLeadForm.vue';
 import CadastroLeadTabela from '@/Components/Cadastros/CadastroLeadTabela.vue';
 import CadastroDetalhesModal from '@/Components/Cadastros/CadastroDetalhesModal.vue';
+import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 
 const props = defineProps({
     role: String,
@@ -66,6 +67,12 @@ const statusOpcoes = computed(() => {
         { value: 'enviado', label: 'Enviado' },
     ];
 });
+
+const temFiltrosAtivos = computed(() => filtros.busca !== '' || filtros.status !== '');
+
+function filtrosExport(recurso) {
+    return { busca: filtros.busca, status: filtros.status, recurso };
+}
 
 function paramsBase(extra = {}) {
     return {
@@ -211,6 +218,13 @@ const tabBtn = (ativo) =>
                             <template #icon>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full"><line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round"/></svg>
                             </template>
+                            <template #actions>
+                                <ExportarExcelButton
+                                    rota="cadastros.exportar"
+                                    :filtros="filtrosExport('cliente')"
+                                    :tem-filtros-ativos="temFiltrosAtivos"
+                                />
+                            </template>
                             <CadastroClienteTabela
                                 v-if="clientesFila.data.length"
                                 :clientes="clientesFila.data"
@@ -227,6 +241,13 @@ const tabBtn = (ativo) =>
                         <DarkCard title="Leads manuais" :subtitle="`${leads.total} lead${leads.total !== 1 ? 's' : ''}`">
                             <template #icon>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full"><line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round"/></svg>
+                            </template>
+                            <template #actions>
+                                <ExportarExcelButton
+                                    rota="cadastros.exportar"
+                                    :filtros="filtrosExport('lead')"
+                                    :tem-filtros-ativos="temFiltrosAtivos"
+                                />
                             </template>
                             <CadastroLeadTabela
                                 v-if="leads.data.length"
@@ -245,6 +266,13 @@ const tabBtn = (ativo) =>
                     <DarkCard title="Solicitações de bobinas" :subtitle="`${bobinas.total} registro${bobinas.total !== 1 ? 's' : ''}`">
                         <template #icon>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full"><line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round"/></svg>
+                        </template>
+                        <template #actions>
+                            <ExportarExcelButton
+                                rota="cadastros.exportar"
+                                :filtros="filtrosExport('bobina')"
+                                :tem-filtros-ativos="temFiltrosAtivos"
+                            />
                         </template>
                         <CadastroBobinaTabela
                             v-if="bobinas.data.length"
@@ -265,6 +293,13 @@ const tabBtn = (ativo) =>
                     <DarkCard title="Solicitações de etiquetas" :subtitle="`${etiquetas.total} registro${etiquetas.total !== 1 ? 's' : ''}`">
                         <template #icon>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full"><line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round"/></svg>
+                        </template>
+                        <template #actions>
+                            <ExportarExcelButton
+                                rota="cadastros.exportar"
+                                :filtros="filtrosExport('etiqueta')"
+                                :tem-filtros-ativos="temFiltrosAtivos"
+                            />
                         </template>
                         <CadastroEtiquetaTabela
                             v-if="etiquetas.data.length"

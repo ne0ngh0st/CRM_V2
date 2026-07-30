@@ -13,6 +13,7 @@ import EditarUsuarioModal from '@/Components/Equipe/EditarUsuarioModal.vue';
 import TrocarSenhaModal from '@/Components/Equipe/TrocarSenhaModal.vue';
 import SupervisorMassaModal from '@/Components/Equipe/SupervisorMassaModal.vue';
 import ExcluirUsuarioModal from '@/Components/Equipe/ExcluirUsuarioModal.vue';
+import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import { ROTULOS_PERFIL } from '@/constants/perfis.js';
 
 const props = defineProps({
@@ -47,6 +48,10 @@ function aplicarFiltros() {
         only: ['usuarios', 'totalUsuarios', 'totalOnline'],
     });
 }
+
+const temFiltrosAtivos = computed(() =>
+    ['busca', 'perfil', 'supervisor', 'estado', 'tipo', 'status', 'online', 'login'].some((k) => filtros[k] !== ''),
+);
 
 let timeoutBusca;
 function onBuscaInput() {
@@ -227,18 +232,25 @@ function alternarStatus(usuario) {
                             <line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round" />
                         </svg>
                     </template>
-                    <template v-if="podeGerenciar" #actions>
-                        <button
-                            v-if="selecionados.length"
-                            type="button"
-                            class="rounded bg-white/10 px-3 py-1 text-xs font-medium text-gray-100 hover:bg-white/20"
-                            @click="modalMassa = true"
-                        >
-                            Reatribuir Supervisor ({{ selecionados.length }})
-                        </button>
-                        <button type="button" class="rounded bg-teal px-3 py-1 text-xs font-medium text-white hover:bg-teal/90" @click="modalNovo = true">
-                            + Novo Usuário
-                        </button>
+                    <template #actions>
+                        <ExportarExcelButton
+                            rota="equipe.exportar"
+                            :filtros="filtros"
+                            :tem-filtros-ativos="temFiltrosAtivos"
+                        />
+                        <template v-if="podeGerenciar">
+                            <button
+                                v-if="selecionados.length"
+                                type="button"
+                                class="rounded bg-white/10 px-3 py-1 text-xs font-medium text-gray-100 hover:bg-white/20"
+                                @click="modalMassa = true"
+                            >
+                                Reatribuir Supervisor ({{ selecionados.length }})
+                            </button>
+                            <button type="button" class="rounded bg-teal px-3 py-1 text-xs font-medium text-white hover:bg-teal/90" @click="modalNovo = true">
+                                + Novo Usuário
+                            </button>
+                        </template>
                     </template>
 
                     <div v-if="usuarios.length" class="flex flex-col gap-4">

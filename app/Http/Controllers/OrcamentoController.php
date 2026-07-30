@@ -14,6 +14,7 @@ use App\Services\Notificacao\NotificacaoService;
 use App\Services\Orcamento\NivelAprovacaoCalculator;
 use App\Services\Orcamento\OrcamentoCalculoService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class OrcamentoController extends Controller
@@ -53,12 +56,11 @@ class OrcamentoController extends Controller
             return redirect()->route('dashboard');
         }
 
-        $visaoSupervisor = $request->string('visao_supervisor')->value() ?: null;
-        $visaoVendedor = $request->string('visao_vendedor')->value() ?: null;
-
-        $scope = $this->scopeResolver->resolve($user, $visaoSupervisor, $visaoVendedor);
-        $semFiltro = in_array($role, ['admin', 'diretor'], true) && $scope['codVendedores'] === null;
-        $usuarioIds = $this->scopeResolver->usuarioIds($user, $scope);
+        $scope = $this->scopeResolver->resolve(
+            $user,
+            $request->string('visao_supervisor')->value() ?: null,
+            $request->string('visao_vendedor')->value() ?: null,
+        );
 
         $busca = trim((string) $request->string('busca'));
         $status = (string) $request->string('status');
@@ -66,38 +68,7 @@ class OrcamentoController extends Controller
         $dataInicio = (string) $request->string('data_inicio');
         $dataFim = (string) $request->string('data_fim');
 
-        $baseQuery = function () use ($semFiltro, $usuarioIds, $busca, $status, $nivel, $dataInicio, $dataFim) {
-            $query = Orcamento::query();
-
-            if (! $semFiltro) {
-                $query->whereIn('user_id', $usuarioIds);
-            }
-
-            if ($busca !== '') {
-                $query->where(function ($q) use ($busca) {
-                    $q->where('cliente_nome', 'like', "%{$busca}%")
-                        ->orWhere('cliente_cnpj', 'like', "%{$busca}%");
-                });
-            }
-
-            if ($status !== '') {
-                $query->where('status_gestor', $status);
-            }
-
-            if ($nivel !== '') {
-                $query->where('nivel_aprovacao', $nivel);
-            }
-
-            if ($dataInicio !== '') {
-                $query->whereDate('created_at', '>=', $dataInicio);
-            }
-
-            if ($dataFim !== '') {
-                $query->whereDate('created_at', '<=', $dataFim);
-            }
-
-            return $query;
-        };
+        $baseQuery = fn () => $this->baseQuery($request);
 
         $kpis = [
             'total' => (clone $baseQuery())->count(),
@@ -170,6 +141,68 @@ class OrcamentoController extends Controller
                 'visaoVendedor' => $scope['visaoVendedor'],
             ],
         ]);
+    }
+
+    public function exportar(Request $request): BinaryFileResponse
+    {
+        $query = $this->baseQuery($request)->with('user:id,name,display_name')->latest();
+
+        return Excel::download(
+            new \App\Exports\OrcamentoExport($query),
+            'orcamentos-'.now()->format('Y-m-d-His').'.xlsx',
+        );
+    }
+
+    /** Escopo (user_id) + busca/status/nivel/data. Usado por index() (KPIs e lista) e exportar(). */
+    protected function baseQuery(Request $request): Builder
+    {
+        $user = $request->user();
+        $role = $user->getRoleNames()->first();
+
+        $scope = $this->scopeResolver->resolve(
+            $user,
+            $request->string('visao_supervisor')->value() ?: null,
+            $request->string('visao_vendedor')->value() ?: null,
+        );
+        $semFiltro = in_array($role, ['admin', 'diretor'], true) && $scope['codVendedores'] === null;
+        $usuarioIds = $this->scopeResolver->usuarioIds($user, $scope);
+
+        $busca = trim((string) $request->string('busca'));
+        $status = (string) $request->string('status');
+        $nivel = (string) $request->string('nivel');
+        $dataInicio = (string) $request->string('data_inicio');
+        $dataFim = (string) $request->string('data_fim');
+
+        $query = Orcamento::query();
+
+        if (! $semFiltro) {
+            $query->whereIn('user_id', $usuarioIds);
+        }
+
+        if ($busca !== '') {
+            $query->where(function ($q) use ($busca) {
+                $q->where('cliente_nome', 'like', "%{$busca}%")
+                    ->orWhere('cliente_cnpj', 'like', "%{$busca}%");
+            });
+        }
+
+        if ($status !== '') {
+            $query->where('status_gestor', $status);
+        }
+
+        if ($nivel !== '') {
+            $query->where('nivel_aprovacao', $nivel);
+        }
+
+        if ($dataInicio !== '') {
+            $query->whereDate('created_at', '>=', $dataInicio);
+        }
+
+        if ($dataFim !== '') {
+            $query->whereDate('created_at', '<=', $dataFim);
+        }
+
+        return $query;
     }
 
     public function novo(Request $request): Response
