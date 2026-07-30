@@ -88,12 +88,18 @@ function aoFicarVisivel() {
 }
 
 let canal = null;
+// Capturado no mount (não reativo) porque no unmount, durante uma transição de
+// página da SPA (ex.: logout), page.props já pode refletir a próxima página
+// (sem auth.user) — ler userId.value ali lançava erro e travava o mount da
+// página seguinte (era a causa do mosaico da tela de login sumir após logout).
+let canalUserId = null;
 
 onMounted(() => {
     carregar();
 
     if (window.Echo && userId.value) {
-        canal = window.Echo.private(`App.Models.User.${userId.value}`);
+        canalUserId = userId.value;
+        canal = window.Echo.private(`App.Models.User.${canalUserId}`);
         canal.listen('.notificacao.criada', (payload) => {
             notificacoes.value.unshift(payload);
             contagem.value += 1;
@@ -106,8 +112,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-    if (window.Echo && userId.value) {
-        window.Echo.leave(`App.Models.User.${userId.value}`);
+    if (window.Echo && canalUserId) {
+        window.Echo.leave(`App.Models.User.${canalUserId}`);
     }
     document.removeEventListener('visibilitychange', aoFicarVisivel);
 });
