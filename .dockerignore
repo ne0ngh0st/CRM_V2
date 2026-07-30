@@ -1,0 +1,11 @@
+.git
+node_modules
+.claude
+storage/logs/*.log
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+.env.backup
+.env.production
+.env.local
+*.sqlite

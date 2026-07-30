@@ -38,6 +38,7 @@ Rodar localmente:
 - **Atalho que sobe tudo de uma vez** (server + queue:listen + vite + reverb): `composer run dev` — um único comando, um único terminal. Recomendado em vez de subir cada processo manualmente agora que são 4.
 - **`laravel/pail`** (visualizador de log em tempo real) fica no `composer.json` mas **removido do script `dev`**: precisa da extensão `pcntl`, que não existe nos builds de PHP pra Windows — sempre quebrava com `RuntimeException` nesse ambiente. Não afeta nada do sistema (é só conveniência de dev); pra ver log, `storage/logs/laravel.log` direto ou `Get-Content -Wait` no PowerShell.
 - Usuário de teste (senha só existe local, resetada manualmente): `antonio.barbosa@autopel.com` / `homolog123`.
+- **Teste de carga / paridade com produção**: `php artisan serve` processa 1 requisição por vez, não serve pra estimar concorrência real. Pra isso, ver seção "Ambiente Docker de teste de carga (nginx+PHP-FPM)" mais abaixo (`docker-compose.loadtest.yml`, porta `:8090`).
 
 ### Redesenho da tabela de usuários (feito)
 A `USUARIOS` do legado (24 colunas) misturava auth + dados de vendedor + preferências de UI. No v2 foi separado:
@@ -187,6 +188,36 @@ Corrigido, com Tony confirmando a fonte real: tabela `ultimo_faturamento` do TOT
 
 **Regra de negócio confirmada por Tony (2026-07-29): todo `representante` atende só SUPERMERCADISTA**, sem exceção — `SegmentoVendedorSeeder` força isso (sem randomização, sem chance de zero) pra esse perfil; só `vendedor` (interno) mantém a distribuição variada de demonstração. Aplicado também nos 138 representantes reais já cadastrados (dado corrigido direto no banco, não só no seeder).
 
+### Ambiente Docker de teste de carga (nginx+PHP-FPM) — 2026-07-30
+Motivação: `php artisan serve` (o servidor de dev do `composer run dev`) processa **uma requisição por vez** — não dá pra usar ele pra estimar como o sistema aguenta usuários simultâneos, porque qualquer teste de carga contra ele mede a fila do servidor de dev, não a aplicação. No Linux dá pra contornar com `PHP_CLI_SERVER_WORKERS`, mas essa opção depende de `pcntl_fork`, que não existe nos builds de PHP pra Windows (mesmo motivo do `laravel/pail` fora do `composer run dev`). Solução: um stack Docker separado com nginx + PHP-FPM (múltiplos workers de verdade), pra ter uma aproximação real de como o Forge/produção vai se comportar, sem precisar subir nada na AWS.
+
+**Arquivos** (não fazem parte do fluxo normal de dev, só do teste de carga):
+- `docker-compose.loadtest.yml` (raiz do projeto) — sobe 2 serviços: `php` (build local) e `nginx` (imagem oficial `nginx:alpine`).
+- `docker/php/Dockerfile`, `docker/php/www.conf` (pool do PHP-FPM), `docker/php/local.ini` (`memory_limit`, `opcache`).
+- `docker/nginx.conf` — vhost padrão Laravel (root em `public/`, proxy `.php` pro FPM).
+- `docker/loadtest.mjs` — script Node (sem dependência externa, só `fetch` nativo) que loga N "usuários virtuais" (mesma conta, sessões independentes) e fica navegando aleatoriamente pelas páginas core por X segundos, com think-time entre requisições. Uso: `node docker/loadtest.mjs [usuarios] [duracaoSegundos]` (padrão 40/30).
+
+**Como usar:**
+```
+docker compose -f docker-compose.loadtest.yml build php   # só na 1ª vez ou depois de mudar código PHP
+docker compose -f docker-compose.loadtest.yml up -d
+node docker/loadtest.mjs 40 45                             # 40 usuários, 45s
+docker compose -f docker-compose.loadtest.yml down          # derruba quando terminar
+```
+App fica em `http://localhost:8090` (separado do `php artisan serve` em `:8000` — dá pra deixar os dois de pé ao mesmo tempo, portas diferentes).
+
+**Decisão de design importante (achado, não escolha a priori): código é `COPY` pra dentro da imagem, não bind-mount.** Primeira tentativa usava bind-mount (`.:/var/www`, igual ao Compose normal) e cada requisição levava **5-6 segundos** — isoladamente, `require vendor/autoload.php` sozinho levava 3,8s. Causa: a ponte de arquivo Windows→WSL2→container é extremamente lenta pra árvores de muitos arquivos pequenos (exatamente o padrão do autoload do Composer/Laravel), e com `opcache.validate_timestamps=1` isso significa um `stat()` por arquivo incluído em **toda** requisição. Fix: `Dockerfile` faz `COPY . /var/www` (código fica no filesystem nativo do Linux dentro da imagem) + `opcache.validate_timestamps=0` — igual é feito em produção de verdade (Forge também não faz bind-mount de outro SO). **Consequência prática: mudou código PHP, precisa rebuildar a imagem** (`docker compose -f docker-compose.loadtest.yml build php && docker compose -f docker-compose.loadtest.yml up -d --force-recreate`) — não tem live-reload aqui, diferente do `composer run dev`.
+
+**Banco: não é isolado.** `DB_HOST` aponta pra `host.docker.internal:3306` — o mesmo MySQL do XAMPP que o dev normal usa, banco `palma_v2` com os dados reais já importados. Testar carga aqui bate nas mesmas tabelas que você usa no dia a dia (só leitura na maioria das páginas testadas, sem risco de corromper nada, mas evite rodar em paralelo com algo sensível a estado exato do banco).
+
+**Pool do PHP-FPM**: `pm.max_children = 20` em `docker/php/www.conf`, dimensionado pra simular um servidor modesto tipo EC2 `t3.medium` (2 vCPU / 4GB) — o que o Forge rodaria em produção nesse projeto. Ajustável ali se quiser simular servidor maior/menor.
+
+**Achado real do primeiro teste de carga (40 usuários virtuais, 45s), depois do fix de bind-mount:**
+- Sem carga nenhuma (1 requisição), `/dashboard` já leva 2,1s, `/carteira` 2,2s, `/equipe` 1,3s — bem mais que as outras páginas (~0,2-0,3s).
+- Sob 40 usuários simultâneos: `/dashboard` p50 8,4s (p99 12,2s), `/carteira` p50 7,7s (p99 10,7s), `/equipe` p50 10,0s (p99 13,8s). Zero erros/crashes — o stack aguentou, só ficou lento.
+- **Causa identificada**: de faturamentoComparacao(), regra 6, só essa query do Dashboard tem `Cache::remember`. As outras 3 agregações do Home (`carteiraSegmento()`, `orcamentosStats()`, `pedidosAtencao()`) rodam sem cache a cada request — e `carteiraSegmento()` é a pior, porque chama o mesmo `CarteiraAderenciaResolver` (LEFT JOIN em `segmentos`/`segmentos_vendedor` sobre as ~89 mil linhas de `clientes`) que a própria página `/carteira` também roda sem cache. Sob concorrência, esse custo por-request (~2s sozinho) vira fila de contenção real.
+- **Fix proposto, ainda não aplicado**: mesmo padrão de `Cache::remember` (~15 min, chave por escopo de vendedor) nas 3 agregações não-cacheadas do Dashboard. Pendência registrada abaixo.
+
 ## Pendências
 - Popular `etiquetas_materia_prima` com dados reais de custo (Tony faz pela tela `/orcamentos/materia-prima`).
 - Revisitar a fórmula de "margem bruta %" da calculadora de etiqueta se o quirk herdado do legado (unidade por-etiqueta vs. custo-do-rolo) incomodar no uso real.
@@ -199,3 +230,4 @@ Corrigido, com Tony confirmando a fonte real: tabela `ultimo_faturamento` do TOT
 - E-mail transacional (planejado, não feito): AWS SES + PHPMailer via `antonio.barbosa@autopel.com`, notificando Cadastros e PCP.
 - **Importação de dado real**: concluída pra todos os domínios comerciais — `clientes`, `faturamentos`, `pedidos`+`pedido_itens`, `leads`, `produtos` (rotina recorrente) e `orcamentos`+`orcamento_itens` (migração pontual, `legado:import-orcamentos-historico`, 1.885 orçamentos históricos — não roda de novo, orçamento novo nasce direto na tela). Detalhe completo (mapeamento de coluna por domínio, achados de performance, decisões de escopo) em `docs/importacao-dados-legado.md`.
 - **Ação pendente fora do CRM-V2**: pedir pro Adriano incluir um código de status estruturado no relatório "Pedidos em Aberto com Status" do TOTVS (hoje só existe como texto livre no `HISTORICO`, sem padrão — por isso todo pedido em aberto importado recebe `status = 'pendente_totvs'` provisoriamente, ver `docs/importacao-dados-legado.md` seção 8.3).
+- **Cachear `carteiraSegmento()`, `orcamentosStats()` e `pedidosAtencao()` do `DashboardController`** — achado no teste de carga de 2026-07-30 (ver seção "Ambiente Docker de teste de carga" acima): essas 3 agregações do Dashboard não têm `Cache::remember` (só `faturamentoComparacao()` tem), e `carteiraSegmento()` em especial repete a mesma agregação pesada (`CarteiraAderenciaResolver` sobre ~89k `clientes`) que a página `/carteira` já roda sem cache. Sob 40 usuários simultâneos, isso levou os p99 de Dashboard/Carteira/Equipe a 10-14s.
