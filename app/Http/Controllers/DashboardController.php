@@ -13,6 +13,7 @@ use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Metas\MetaRankingResolver;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -162,27 +163,40 @@ class DashboardController extends Controller
     {
         $anoAtual = (int) now()->year;
 
-        $porAno = function (int $ano) use ($codVendedores) {
-            $query = Faturamento::query()
-                ->selectRaw('MONTH(data_emissao) as mes, SUM(valor_total) as total')
-                ->whereYear('data_emissao', $ano)
-                ->groupBy('mes');
+        // BETWEEN em vez de whereYear() é a higiene correta de SQL, mas não resolve
+        // sozinho o caso "empresa inteira": hoje 100% do faturamento importado é de
+        // um único ano, então nenhum índice reduz as linhas lidas — a soma tem que
+        // passar pelas ~900k linhas de qualquer jeito. Por isso o cache: KPI de
+        // dashboard não precisa de frescor ao segundo (ver Regra de ouro nº 6).
+        $chaveEscopo = $codVendedores !== null ? implode(',', $codVendedores) : 'todos';
 
-            if ($codVendedores !== null) {
-                $query->whereIn('cod_vendedor', $codVendedores);
+        return Cache::remember(
+            "dashboard:faturamento-comparacao:{$anoAtual}:{$chaveEscopo}",
+            now()->addMinutes(15),
+            function () use ($anoAtual, $codVendedores) {
+                $porAno = function (int $ano) use ($codVendedores) {
+                    $query = Faturamento::query()
+                        ->selectRaw('MONTH(data_emissao) as mes, SUM(valor_total) as total')
+                        ->whereBetween('data_emissao', ["{$ano}-01-01", "{$ano}-12-31"])
+                        ->groupBy('mes');
+
+                    if ($codVendedores !== null) {
+                        $query->whereIn('cod_vendedor', $codVendedores);
+                    }
+
+                    $totaisPorMes = $query->pluck('total', 'mes');
+
+                    return collect(range(1, 12))->map(fn ($mes) => (float) ($totaisPorMes[$mes] ?? 0))->values()->all();
+                };
+
+                return [
+                    'anoAtual' => $anoAtual,
+                    'anoAnterior' => $anoAtual - 1,
+                    'valoresAnoAtual' => $porAno($anoAtual),
+                    'valoresAnoAnterior' => $porAno($anoAtual - 1),
+                ];
             }
-
-            $totaisPorMes = $query->pluck('total', 'mes');
-
-            return collect(range(1, 12))->map(fn ($mes) => (float) ($totaisPorMes[$mes] ?? 0))->values()->all();
-        };
-
-        return [
-            'anoAtual' => $anoAtual,
-            'anoAnterior' => $anoAtual - 1,
-            'valoresAnoAtual' => $porAno($anoAtual),
-            'valoresAnoAnterior' => $porAno($anoAtual - 1),
-        ];
+        );
     }
 
     private function carteiraSegmento(?array $codVendedores): array
