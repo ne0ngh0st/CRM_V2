@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PedidoController extends Controller
 {
-    private const STATUSES = ['separacao', 'bloqueio', 'wms', 'liberado', 'faturado'];
+    private const STATUSES = ['separacao', 'bloqueio', 'wms', 'liberado', 'faturado', 'pendente_totvs'];
 
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,

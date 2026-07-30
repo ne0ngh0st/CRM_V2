@@ -1,18 +1,18 @@
 # Importação de dados reais do TOTVS pro CRM-V2
 
-> Documento de planejamento (2026-07-28). Ainda **não implementado** — nenhum comando de import
-> além de `legado:import-usuarios` existe hoje. Isto é o registro das decisões e do mapeamento
-> de dados levantado numa sessão de exploração, pra não perder o raciocínio antes de codar.
+> Documento iniciado como planejamento (2026-07-28); em 2026-07-29 os dois primeiros domínios
+> já foram implementados e testados (ver seção 8). Continua sendo o registro de referência do
+> mapeamento de dados, pra não perder o raciocínio a cada domínio novo.
 
 ## 1. Contexto
 
-Hoje o CRM-V2 roda 100% com dado mockado (seeders: `ClienteSeeder`, `OrcamentoSeeder`,
-`PedidoSeeder`, `LeadSeeder`, `SegmentoVendedorSeeder`). Só `users`/`vendedor_perfis` já
-puxam dado real, via `php artisan legado:import-usuarios` (lê `USUARIOS` direto de produção
-KingHost, ver [reference `producao_autopel01_acesso_leitura`]).
+Seeders mockados restantes: `OrcamentoSeeder`, `LeadSeeder`, `SegmentoVendedorSeeder`.
+Já vêm de dado real (ver seção 8): `users`/`vendedor_perfis` (`legado:import-usuarios`),
+`clientes` (`legado:import-clientes`), `faturamentos` (`legado:import-faturamento`),
+`pedidos`+`pedido_itens` (`legado:import-pedidos`).
 
-Faltam: `clientes`, `pedidos`+`pedido_itens`, `leads`, `produtos` (tabela de preços/orçamento).
-`orcamentos` fica de fora da rotina recorrente — ver seção 6.
+Faltam: `leads`, `produtos` (tabela de preços/orçamento). `orcamentos` fica de fora da
+rotina recorrente — ver seção 6.
 
 ## 2. As duas fontes possíveis (e qual é a fonte de verdade)
 
@@ -168,29 +168,135 @@ precisamos pro status do pedido em aberto.
 (ou `QTDA_VENDA`)/`QTD_LIBER`/`VLR_UNIT` (ou `PRC_VENDA`)/`VLR_PEDIDO` (ou `VLR_TOTAL`),
 dependendo do relatório de origem.
 
-### 4.3 Leads
+### 4.3 Leads (`base_marco - SQL.xlsx` → `BASE_LEADS` → `leads`)
 
-**Fonte real é bem diferente do que o nome `BASE_LEADS` sugere.** No espelho a tabela
-`base_leads` (22.570 linhas) vem do arquivo **`base_marco - SQL.xlsx`** (confirmado em
-`ROTINAS_CONFIG` do `sql.py`: rotina `"FAT + BASE_MARCO"` importa `FATURAMENTO` +
-`BASE_LEADS`). Não é uma lista simples de prospect — é uma **base de enriquecimento externa**
-de dados firmográficos (CNAE, faturamento estimado, capital social, lat/long, IBGE,
-classificação ABRAS de supermercados) cruzada com sinal de vendedor/status interno. Só uma
-fração das ~70 colunas mapeia pro `leads` do v2 (`cnpj`, `RAZAOSOCIAL`, `NOMEFANTASIA`,
-`TelefonePrincipalFINAL`, `Email`, `UF`/`CIDADE`, `status`, `CodigoVendedor`/
-`vendedornovahierarquia`); o resto (CNAE, capital social, projeções, IBGE, lat/long) é sinal
-de prospecção que o `leads` do v2 não tem campo pra guardar hoje.
+**Isto NÃO é export TOTVS.** É planilha de enriquecimento externo (aba `base final`,
+22.570 linhas, 71 colunas, header na linha 0). O importador (`sql.py`) carrega como
+`BASE_LEADS` (rotinas `"FAT + BASE_MARCO"` / `"… + BASE LEADS"`). Confirmação no Excel
+bruto de `RELATORIOS TOTVS\base_marco - SQL.xlsx` (2026-07-28).
 
-**Ainda não explorei o CSV/Excel bruto de `base_marco` diretamente** (só vi a config do
-mapeamento via `sql.py` e o schema já carregado no espelho) — antes de mapear de verdade,
-vale abrir o Excel original e decidir com o Tony quanto desse enriquecimento entra no v2
-(campo por campo) vs. fica de fora por escopo.
+**Filtro que o legado usa pra listar leads de sistema** (`pages/COMERCIAL/leads.php`):
 
-### 4.4 Produtos (tabela de preços / orçamento)
+```sql
+WHERE bl.MARCAOPROSPECT = 'SAI PROSPECT'
+```
 
-Tabela `codigo_produtos` no espelho (73.664 linhas), rotina `"PRODUTOS (COD + Produtos SQL)"`
-no importador. **Ainda não explorei o mapeamento de colunas nem o CSV/Excel de origem**
-(`PRODUTOS - SQL.xlsx`) — pendente pra quando chegar a vez desse domínio.
+No Excel bruto isso é a coluna `MARCAÇÃO PROSPECT`:
+- `sai prospect` → **18.467** linhas (~82% da base) — é o universo "lead de sistema"
+- `ok` → 4.103 — **fora** da listagem de leads do legado (cliente já "ok"/não-prospect)
+
+Dentro do subconjunto `sai prospect`, a coluna `status` é quase sempre `prospect`
+(18.442); só ~25 linhas escapam pra `ativo`/`inativo`. Ou seja: o discriminador operacional
+de "aparece na tela de Leads" é **`MARCAÇÃO PROSPECT`**, não a coluna `status`.
+
+Distribuição completa de `status` na base (22.570): `prospect` 18.442 · `inativo` 2.395 ·
+`ativo` 1.622 · `ativo...` 111 (sujeira). `FONTE` (origem da linha): null 14.090 ·
+`z__AUTOPEL (ultimo fat. SUPERMERCADISTAS)` 3.229 · `Fulfillment` 3.187 · `Driva` 1.045 ·
+`NEOWAY MASTER` 692 · `ABRAS` 327.
+
+**Gotcha — `raiz CNPJ` existe NESTE Excel** (coluna `[2]`). Diferente de Clientes (onde a
+raiz é inventada depois no pipeline). Continua valendo a Regra nº 3: **nunca usar pra join/
+agrupar** — CNPJ completo (`cnpj`, coluna `[1]`, formatado `00.000.993/0001-00`) é a chave.
+Preenchimento: CNPJ 100%; telefone final ~99,7%; e-mail ~91%; `Codigo Vendedor` vazio em
+~17,8%.
+
+Cabeçalhos brutos relevantes (amostra; a planilha tem 71 cols — lista completa no Excel):
+
+| Coluna no Excel | Uso no legado / candidata v2 |
+|---|---|
+| `cnpj` | chave do lead |
+| `RAZAO SOCIAL` / `NOME FANTASIA` / `nome final` | identificação |
+| `E-mail` | contato |
+| `Telefone Principal (FINAL)` | telefone canônico (há várias colunas intermediárias de telefone — ignorar) |
+| `UF` / `CIDADE` / `CIDADE (arrumada)` | localização (`arrumada` preferível quando preenchida) |
+| `CEP` / `endereçoCNPJJA` | endereço |
+| `Codigo Vendedor` | dono da carteira de prospecção (`cod_vendedor`) |
+| `vendedor (nova hierarquia)` / `supervisor (nova hierarquia)` | sinal interno; legado usa mais o código |
+| `status` | `prospect`/`ativo`/`inativo` — **não** é o enum do v2 |
+| `MARCAÇÃO PROSPECT` | filtro de inclusão (`sai prospect`) |
+| `projeção R$ (mês)` | candidato a `valor_estimado` — só ~896 preenchidos entre os SAI PROSPECT |
+| `cnae` / `cnae e desc.` | firmográfico; legado ainda referencia `Descricao1` como "segmento", mas **essa coluna NÃO existe** no Excel atual nem no espelho homolog — filtro de segmento do legado provavelmente quebrado/legado de versão antiga |
+| `raiz CNPJ`, ABRAS, capital social, lat/long, IBGE, projeções anuais, última venda AUTOPEL, etc. | enriquecimento — **fora do schema `leads` do v2 hoje** |
+
+**Mapeamento sugerido pro schema v2** (`create_leads_table`):
+
+| Coluna v2 | Fonte | Nota |
+|---|---|---|
+| `origem` | literal `'sistema'` | leads manuais continuam vindo da tela `/cadastros` / `/leads` |
+| `cod_vendedor` | `Codigo Vendedor` | ~18% vazio — lead órfão de carteira |
+| `nome` | `nome final` (fallback `RAZAO SOCIAL`) | |
+| `razao_social` | `RAZAO SOCIAL` | |
+| `nome_fantasia` | `NOME FANTASIA` (fallback `Nome Fantasia CNPJ JÁ…`) | |
+| `cnpj` | `cnpj` | normalizar pontuação |
+| `email` | `E-mail` | |
+| `telefone` | `Telefone Principal (FINAL)` | |
+| `endereco` | `endereçoCNPJJA` | |
+| `cidade` | `CIDADE (arrumada)` fallback `CIDADE` | |
+| `estado` | `UF` | |
+| `segmento` | **em aberto** | sem `Descricao1` na fonte atual; opções: null / `cnae e desc.` / inventar de-para depois |
+| `valor_estimado` | `projeção R$ (mês)` | maioria null |
+| `status` | **decisão pendente** | proposta: importar só `MARCAÇÃO PROSPECT = 'sai prospect'` e mapear `prospect`→`ativo`, `inativo`→`inativo`; `convertido`/`excluido` ficam só pro fluxo do v2 |
+
+**Decisão de escopo ainda aberta com o Tony**: enriquecer o schema `leads` com CNAE/ABRAS/
+lat-long/etc., ou manter o schema enxuto atual e descartar o resto no import (recomendação
+inicial: manter enxuto — a tela `/leads` do v2 não tem UI pra isso).
+
+### 4.4 Produtos — três fontes diferentes (não uma)
+
+Aqui o nome da rotina do importador mente. `"PRODUTOS (COD + Produtos SQL)"` **só carrega
+`CODIGO_PRODUTOS`**. O arquivo `PRODUTOS - SQL.xlsx` (cadastro TOTVS) **não está wired** no
+`PLANILHAS_CONFIG` do `sql.py`. E o preço (`PRCVENDA`) **não vem de nenhum dos dois** — vem
+de um fluxo separado do legado. Detalhe:
+
+#### Fonte A — de-para manual de categoria
+**Arquivo**: `RELATORIOS TOTVS\Arquivos aversos\CODIGO PRODUTOS - SQL.xlsx`
+(cópia em `ROTINA SQL\.XLSX\deparas\`; `subpasta: "deparas"` no `sql.py`).
+Aba `Produtos AUTOPEL`, header linha 0: `desc_prod; cat_prod; cod_prod`.
+~54.929 linhas. Categorias (case misto no Excel): `bobina`/`BOBINA`, `suply`/`SUPLY`,
+`etiqueta`/`ETIQUETA`, `tag`/`TAG`, `volante`/`VOLANTE`.
+**Sem preço, sem unidade.** É só o mapa código→descrição→categoria comercial Autopel.
+
+Há um irmão quase idêntico: `Produtos AUTOPEL.xlsx` (header `cod_prod (FINAL)` em vez de
+`cod_prod`) — mesma ideia, não é o que a rotina lê hoje.
+
+#### Fonte B — cadastro TOTVS (NÃO entra no importador hoje)
+**Arquivo**: `RELATORIOS TOTVS\PRODUTOS - SQL.xlsx`, relatório
+`005 - CADASTRO DE PRODUTO COM NCM.RLT`. Header na linha 2 (linha 1 = título).
+Colunas: `Codigo; Descricao; Grupo; Desc Grupo; SubGrupo; Desc SubGrup; Família;
+Desc.Família; Pos.IPI/NCM; Grupo Trib.; Origem; ATIVO`.
+94.774 linhas (`ATIVO=SIM` 67.504 / `NAO` 27.270). Top `Desc Grupo`: ETIQUETAS, PRODUTO
+INTERMEDIÁRIO, BOBINAS, MATERIA PRIMA BOBINAS, PAPELARIA/OFFICE…
+**Também sem preço.** Mais completo que o de-para (NCM, ativo/inativo, hierarquia TOTVS),
+mas o legado de orçamento/catálogo **não usa essa tabela** — usa `CODIGO_PRODUTOS`.
+
+#### Fonte C — tabela de preços (fluxo à parte, UI admin do legado)
+Página `pages/GESTAO/importar_tabela_preco.php` + `includes/produtos/tabela_preco_import.php`.
+Admin/diretor sobe um `.xlsx`/`.csv` com colunas detectadas por nome
+(`CODIGO`/`COD_PROD` + `PRCVENDA`/`PRECO` obrigatórios; `DESCRICAO`/`UNIDADE` opcionais).
+Efeito em `CODIGO_PRODUTOS`:
+- UPDATE `PRCVENDA` + `UN_PROD` nos códigos que já existem;
+- INSERT dos que não existem, com `CAT_PROD = 'TABELA PADRAO'` (default).
+
+No espelho homolog hoje: 73.664 linhas, **68.737 com `PRCVENDA > 0`**, 18.735 na categoria
+`TABELA PADRAO` (vieram só da tabela de preço). `buscar_produto.php` do legado expõe
+`PRCVENDA` como `preco_venda`/`preco_tabela`.
+
+#### Mapeamento pro schema v2 (`produtos`)
+
+| Coluna v2 | Fonte recomendada | Nota |
+|---|---|---|
+| `cod_produto` | `COD_PROD` (espelho já mergeado) ou `cod_prod` do de-para | unique |
+| `descricao` | `DESC_PROD` / `desc_prod` | |
+| `categoria` | `CAT_PROD` / `cat_prod` | normalizar case (`bobina` vs `BOBINA`); `TABELA PADRAO` = veio só do preço |
+| `unidade` | `UN_PROD` (só existe depois do import de preço) | null no de-para puro |
+| `preco_tabela` | `PRCVENDA` (só existe depois do import de preço) | **não tem** em `PRODUTOS - SQL.xlsx` nem no de-para |
+
+**Implicação pro comando `legado:import-produtos`**: ler o espelho `CODIGO_PRODUTOS` (já
+com preço mergeado pela rotina+UI) é o caminho curto e fiel ao que o legado usa hoje.
+Reconstruir a partir dos Excels brutos exigiria **dois arquivos** (de-para + planilha de
+preço), e a planilha de preço **não mora** em `RELATORIOS TOTVS\` de forma estável — é
+upload pontual do admin. `PRODUTOS - SQL.xlsx` só entra se a gente quiser expandir o
+catálogo além do de-para Autopel (NCM/ATIVO) — decisão de escopo, não bloqueante.
 
 ## 5. Índices/colunas geradas já existentes no espelho (aproveitar, não recriar)
 
@@ -215,14 +321,208 @@ rotina.
 
 - Validar a regra de derivação de `status` do pedido (seção 4.2) contra o PHP do legado
   (`PLANO-DE-ESCAPE`) antes de codar — a amostra de `HISTORICO` até agora é só de uma carga.
-- Decidir com o Tony quanto do enriquecimento de `base_marco`/`BASE_LEADS` entra no `leads`
-  do v2 (seção 4.3) — ainda não abri o Excel bruto dessa base.
-- Mapear `PRODUTOS - SQL.xlsx` → `codigo_produtos` → `produtos` do v2 (seção 4.4) — não
-  investigado ainda.
+- **Leads — decisões de negócio (seção 4.3, Excel já explorado):**
+  1. Confirmar filtro `MARCAÇÃO PROSPECT = 'sai prospect'` como universo do import
+     `origem=sistema`.
+  2. Mapear `prospect`→`ativo` (e o que fazer com linhas `status=inativo` fora do filtro).
+  3. Schema enxuto (recomendado) vs. trazer CNAE/ABRAS/lat-long/etc. pro v2.
+  4. `segmento`: null, `cnae e desc.`, ou outro de-para (a coluna `Descricao1` que o legado
+     filtra **não existe** na fonte atual).
+- **Produtos — decisões de negócio (seção 4.4, Excels já explorados):**
+  1. Importar do espelho `CODIGO_PRODUTOS` (já com `PRCVENDA` mergeado) — caminho curto —
+     ou reconstruir de-para + planilha de preço separados?
+  2. Incluir ou não o cadastro TOTVS (`PRODUTOS - SQL.xlsx`, NCM/ATIVO) além do de-para
+     Autopel?
+  3. Onde mora a planilha de preço "oficial" pra rotina recorrente do v2? (hoje é upload
+     pontual na UI admin do legado, não um arquivo fixo em `RELATORIOS TOTVS\`).
 - Resolver o `de-para` de `COD_SEG` (código numérico do TOTVS) pro nome de segmento
   legível, se o v2 precisar exibir nome em vez de código.
 - Semântica de sync ainda em aberto por domínio: `updateOrCreate` nunca remove — decidir se
   cliente que sumiu do legado devia ser marcado inativo/removido, e como tratar pedido que
-  muda de status entre uma rodada de import e outra.
+  muda de status entre uma rodada de import e outra. Em leads: linha que sai de
+  `sai prospect` → `ok` deve virar `convertido`/`excluido` ou sumir da listagem?
 - Fechar a ordem de construção dos comandos (seção 3 sugere Clientes → Pedidos → Leads →
   Produtos, mas ainda não confirmado com o Tony).
+
+## 8. Progresso real (2026-07-29)
+
+### 8.1 Clientes — feito
+`php artisan legado:import-clientes` (`App\Console\Commands\ImportClientesLegado`,
+`App\Services\Legado\LegadoConexao`). Lê `CLIENTES`+`ultimo_faturamento` do espelho
+(`--fonte=homolog`, padrão) e faz `upsert` em `clientes` por `(cod_cliente, loja)`.
+89.643 clientes reais importados. `ClienteSeeder` removido do `DatabaseSeeder` e as
+~3.983 linhas mock deletadas (identificadas por `LENGTH(cod_cliente) = 4` — o seeder gera
+código sequencial a partir de 1000, sempre 4 dígitos; TOTVS real é sempre 6, com raras
+exceções de 5).
+
+Tratamentos de qualidade de dado aplicados (achados comparando o espelho contra o Excel
+bruto, não são "gambiarra do legado" — são artefato da própria carga do espelho):
+`DDD` vem zero-padded de forma inconsistente (`000031` em vez de `31`) — corrigido com
+`ltrim`. CNPJ vem sem pontuação no Excel de Clientes — reformatado pro padrão com pontuação
+usado no resto do sistema.
+
+**Pendência que ficou visível na tela depois do import**: `cod_segmento` agora é o código
+numérico cru do TOTVS (`000103`), mas `segmentos_vendedor` usa nome por extenso
+(`SUPERMERCADISTA`) — a Aderência por Segmento (Carteira/Home) zerou (0% no segmento) até
+resolver esse de/para (mesmo item já listado acima nas pendências).
+
+### 8.2 Faturamento — feito
+`php artisan legado:import-faturamento` (`App\Console\Commands\ImportFaturamentoLegado`).
+Lê `FATURAMENTO` do espelho via PDO **não-bufferizado**
+(`PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, false` — obrigatório pra 900k+ linhas, senão o driver
+tenta carregar o resultado inteiro na memória do cliente antes da primeira linha) e faz
+`INSERT` em lote (sem upsert — a tabela não tem chave natural única; idempotência vem de
+truncar antes de uma carga completa, ou `--desde=Y-m-d` pra um `period_merge` só numa janela,
+igual ao próprio `ROTINA SQL` faz). **910.447 linhas importadas em ~92s.** `FaturamentoSeeder`
+removido do `DatabaseSeeder`.
+
+**Achado de performance real** (motivo de existir a Regra de ouro nº 6 no `CLAUDE.md` —
+resumo aqui, detalhe lá): a query "Comparação de Faturamento" do Home, sem filtro de
+vendedor (visão admin/diretor/supervisor), foi de instantânea (seed mockado) pra 1,3s com
+os 910k reais — `whereYear()` não é sargable. Troquei por `whereBetween()` + índice em
+`data_emissao`, mas **não resolveu sozinho**: 100% do faturamento importado é de um único ano
+(o espelho só tem esse ano hoje), então o `BETWEEN` não corta nada e o MySQL prefere table
+scan mesmo com o índice disponível (~860ms, sem melhora real). Fix efetivo:
+`Cache::remember(..., now()->addMinutes(15), ...)` em
+`DashboardController::faturamentoComparacao` — primeira carga continua ~880ms, mas fica
+em cache por 15 min por (ano, escopo de vendedor). Lição pra próximos domínios de alto
+volume (`pedidos`, especialmente): **medir com `EXPLAIN` + tempo real antes de considerar
+pronto**, e não assumir que criar um índice resolve — se a condição não corta uma fração
+real da tabela, o índice não ajuda, e a resposta é reduzir quantas vezes a query roda
+(cache/rollup), não insistir em indexar.
+
+### 8.3 Pedidos — feito, com uma decisão de escopo importante
+
+`php artisan legado:import-pedidos` (`App\Console\Commands\ImportPedidosLegado`). Junta
+duas fontes, como já estava mapeado na seção 4.2:
+- **`PEDIDOS_EM_ABERTO`** (grão de item, tem `COD_CLIENT`+`LOJA` direto) → todo pedido aqui
+  vira `status = 'pendente_totvs'` (ver abaixo).
+- **`META_VENDA` filtrado por `DT_FATURAMENTO IS NOT NULL`** → `status = 'faturado'`. Achado
+  importante durante a implementação: **92% das linhas de `META_VENDA` (878.768 de
+  951.062) não têm `DT_FATURAMENTO`** — são o mesmo pedido ainda em aberto, já coberto por
+  `PEDIDOS_EM_ABERTO`. Importar a tabela inteira duplicaria quase tudo; só a fatia com
+  `DT_FATURAMENTO` preenchido (72.294 linhas, 5.084 pedidos) é dado novo de verdade.
+- Cliente linkado por `(cod_cliente, loja)` em `PEDIDOS_EM_ABERTO`, por `cnpj` completo em
+  `META_VENDA` (não tem cod_cliente/loja). 10 pedidos de 8.853 ficaram sem `cliente_id`
+  (cliente não encontrado — aceitável, `cliente_id` é nullable).
+- **583 pedidos apareciam nas duas fontes ao mesmo tempo** (aberto numa carga, já com linha
+  faturada na outra) — bug real encontrado e corrigido durante o teste: o cabeçalho
+  (`pedidos`) já fazia upsert por `numero_pedido` corretamente, mas os **itens**
+  (`pedido_itens`) eram só inseridos, então esses 583 pedidos ficavam com itens duplicados/
+  misturados das duas rodadas. Fix: antes de inserir os itens de uma rodada, apaga
+  `pedido_itens` dos `pedido_id` que essa rodada vai (re)preencher. **8.853 pedidos,
+  98.006 itens** depois do fix (era 114.452 itens antes, ~16k duplicados).
+
+**Decisão de escopo confirmada com o Tony sobre o status do pedido em aberto**: o legado
+**não tem** um enum de status de verdade — confirmado lendo o PHP (`pedidos_abertos_ajax_v2.php`):
+o parâmetro `filtro_status` é lido do POST e **nunca usado** em nenhum `WHERE` (código morto).
+Quem "inventa" status é o JS do front (`assets/js/pedidos-abertos.js`): pega o texto livre de
+`HISTORICO`, tira uns prefixos, e pinta a cor por 3 regras de regex genéricas
+(`REJEIC|CANCEL|BLOQ|RECUS|NEGAD|ATRAS|VENC` → vermelho, `AGUARD|PEND|ANALIS|COMPRV|APROV`
+→ âmbar, `LIBER|FATUR|CONFIRM|ENTREG|CONCLU|FINALIZ` → verde, resto → cinza). O enum
+`separacao/bloqueio/wms/liberado` que já existia no schema do v2 foi um chute de quem
+desenhou o mock, sem corresponder a nada real.
+
+**Solução acordada**: em vez de inventar uma tradução arbitrária do texto pro enum antigo,
+adicionamos um 6º valor **`pendente_totvs`** ("Aguardando classificação do TOTVS") —
+todo pedido em aberto recebe esse status até existir um código estruturado de verdade na
+origem. **Ação pendente, fora do CRM-V2**: pedir pro Adriano incluir uma coluna de código
+de status estruturado no relatório "Pedidos em Aberto com Status" do TOTVS (ex.: separação,
+aguardando arte, bloqueio de estoque, WMS, liberado — os nomes reais do processo interno,
+que o Tony conhece mas que hoje só existem como texto livre não padronizado no `HISTORICO`).
+Quando isso existir, o `legado:import-pedidos` passa a ler esse código em vez de forçar
+`pendente_totvs` pra tudo. Migration `2026_07_29_090549_add_pendente_totvs_status_to_pedidos_table`
+documenta isso no comentário.
+
+**Teste de performance real (Regra de ouro nº 6) — feito de verdade, não só superficial**:
+testei os 5 caminhos de query que `PedidoController` realmente executa pra visão "todos os
+vendedores" (pior caso, admin/diretor/supervisor sem filtro): contagem de abertos (25ms),
+atrasados (9ms), valor em risco (7ms), listagem paginada com eager load (25ms), contagem de
+emitidos no mês (7,5ms). Todos rápidos hoje porque `pedidos` só tem 8.853 linhas — bem menor
+que os 910k de `faturamentos`. Mas achei a mesma lacuna estrutural **antes** dela doer:
+`(cod_vendedor, data_pedido)` só ajuda quem filtra por vendedor; a página "Pedidos Emitidos"
+(histórico completo, sem filtro de vendedor pra gestor) fazia `type: index` (varre o índice
+inteiro, 8.707 linhas) por falta de índice próprio em `data_pedido`. O legado tem 407.604
+linhas na tabela equivalente (`pedidos_status`) — esse histórico vai crescer nessa direção.
+Adicionei o índice (`add_data_pedido_index_to_pedidos_table`) proativamente, antes de virar
+um caso de "1,3 segundo" como o do Faturamento.
+
+### 8.4 Leads — feito
+
+`php artisan legado:import-leads` (`App\Console\Commands\ImportLeadsLegado`). Fonte:
+`base_leads` no espelho (populada a partir de `base_marco - SQL.xlsx`), filtrado por
+`UPPER(TRIM(MARCAOPROSPECT)) = 'SAI PROSPECT'` — decisão confirmada com o Tony. Números
+reais na carga de 2026-07-29 (diferem um pouco do que a seção 4.3 estimou, porque a base
+já tinha sido atualizada entre uma sessão e outra): 17.173 "SAI PROSPECT" (não 18.467) e
+5.397 "ok" (não 4.103) — total 22.570 bate igual. `status` na fatia importada veio 100%
+`prospect` (não os ~25 casos de exceção que a exploração anterior tinha visto) → mapeado
+todo pra `ativo`. `segmento` ficou `null` em todo mundo, por decisão explícita do Tony
+("não inventa") — não existe fonte confiável pra isso hoje.
+
+**Nunca mexe em `origem=manual`** — o comando só apaga e recria `origem=sistema` antes de
+reinserir (138 mock removidos, 10 leads manuais preservados). Isso é comportamento
+permanente do comando, não só desta carga: lead cadastrado pela tela nunca é tocado pelo
+import.
+
+`LeadSeeder` removido do `DatabaseSeeder`. Performance testada (índice composto
+`(origem, status)` já cobre a query mais comum, ~32-37ms pros 17k reais) — sem achado
+digno de nota desta vez.
+
+### 8.5 Produtos — feito
+
+`php artisan legado:import-produtos` (`App\Console\Commands\ImportProdutosLegado`). Fonte:
+`CODIGO_PRODUTOS` no espelho, exatamente como a seção 4.4 recomendava (caminho curto, já
+com `PRCVENDA` mergeado pela rotina de preço do legado).
+
+**Achado não documentado antes**: a tabela tem 73.664 linhas mas só **26.989 `COD_PROD`
+distintos** — média de 2,7 linhas idênticas por produto (reimport da planilha de preço sem
+dedup, no próprio legado). Resolvido com `GROUP BY COD_PROD` + `MAX()` em cada coluna
+(colapsa em 1 linha por código; `MAX(PRCVENDA)` garante que se qualquer uma das duplicatas
+tiver preço preenchido, ele "vence"). Categoria normalizada pra maiúsculo (`bobina`→`BOBINA`)
+pra não duplicar filtro por causa de caixa. **26.989 produtos importados**, 24.432 com
+preço, 6 categorias (`BOBINA`, `ETIQUETA`, `SUPLY`, `TABELA PADRAO`, `TAG`, `VOLANTE`).
+`ProdutoSeeder` removido do `DatabaseSeeder` e as 29 linhas mock apagadas antes do import
+(códigos tipo `BOB001` não colidem com os reais `V29904`/`21822`, mas removidas por limpeza).
+
+## 9. Estado final desta rodada (2026-07-29)
+
+Só `orcamentos` continua mockado por decisão (migração pontual futura, fora de escopo desta
+rotina). Todos os outros domínios do CRM-V2 (`users`, `clientes`, `faturamentos`, `pedidos`,
+`leads`, `produtos`) já vêm de dado real do TOTVS via `legado:import-*`. Pendência real que
+ficou em aberto e depende de terceiro: pedir pro Adriano um código de status estruturado no
+relatório de Pedidos em Aberto (seção 8.3).
+
+### 8.6 Orçamentos — migração pontual feita (2026-07-29)
+
+`php artisan legado:import-orcamentos-historico` (`App\Console\Commands\ImportOrcamentosHistoricoLegado`,
+namespace deliberadamente diferente de `legado:import-*` recorrente — é rodado uma vez).
+
+**Correção de leitura importante**: quando propus essa migração, tinha lido a coluna errada
+e reportado que 98% dos 2.037 orçamentos ficavam parados em "pendente" pra sempre — dado
+preocupante o bastante pra questionar se valia migrar tudo. Na verdade eu tinha olhado
+`status` (aprovação do **cliente**, campo que nem existe no schema do v2 — ver
+`CLAUDE.md`/"Aprovação do cliente... fora de escopo") em vez de `status_gestor` (aprovação
+**interna**, o que o v2 realmente rastreia). Com a coluna certa: **1.912 aprovados (94%), 83
+pendentes, 42 rejeitados** — dado real e saudável, não lixo de teste. Bom lembrete de
+sempre conferir contra o schema de destino antes de tirar conclusão sobre "qualidade" do
+dado de origem.
+
+`itens_orcamento` era mesmo um JSON válido dentro do TEXT, como o mapeamento antigo previa —
+`json_decode` direto, sem drama. **1.885 orçamentos + 2.918 itens importados** (152
+ignorados: `codigo_vendedor` deles — majoritariamente um único vendedor, "SIMONE ALVES"/
+`010492`, 152 orçamentos — não bate com nenhum usuário real importado; provavelmente fora
+do escopo comercial do `legado:import-usuarios`, ver Regra de ouro nº 2). `aprovado_por_id`
+ficou `null` em todo mundo — o legado só guarda o *perfil* de quem aprovou (texto tipo
+"supervisor"), não o usuário específico; não dava pra apontar pra um usuário real sem
+inventar. Datas (`created_at`/`aprovado_em`) preservadas do histórico real, não `now()`.
+
+`nivel_aprovacao_necessario` e `maior_desconto_pct` vieram **100% `nenhum`/`0.00`** em toda
+a base — a lógica de nível de aprovação por desconto não deixou rastro nenhum nesse
+histórico (não investigado o motivo; irrelevante pra uma migração pontual read-only).
+
+`OrcamentoSeeder` removido do `DatabaseSeeder`; 648 orçamentos mock apagados antes do
+import. Performance testada (1.885 linhas — listagem com itens 21ms, soma de aprovados
+1,4ms), sem achado digno de nota.
+
+**Com isso, `orcamentos` deixa de ser mock também** — hoje só a criação de orçamento novo
+continua 100% no fluxo normal da tela do v2 (não recebe mais import depois desta rodada).

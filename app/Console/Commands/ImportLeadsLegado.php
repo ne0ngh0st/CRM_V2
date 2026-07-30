@@ -1,0 +1,86 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Services\Legado\LegadoConexao;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use PDO;
+
+class ImportLeadsLegado extends Command
+{
+    protected $signature = 'legado:import-leads {--fonte=homolog : homolog ou producao}';
+
+    protected $description = 'Import de leads (base_leads, filtrado por MARCAÇÃO PROSPECT) do TOTVS pro CRM-V2';
+
+    public function handle(): int
+    {
+        $fonte = $this->option('fonte');
+        $pdo = LegadoConexao::pdo($fonte);
+
+        $stmt = $pdo->query(
+            "SELECT cnpj, RAZAOSOCIAL, NOMEFANTASIA, nomefinal, Email, TelefonePrincipalFINAL, "
+            .'endereoCNPJJA, CIDADEarrumada, CIDADE, UF, CodigoVendedor, projeoRms '
+            ."FROM base_leads WHERE UPPER(TRIM(MARCAOPROSPECT)) = 'SAI PROSPECT'"
+        );
+
+        $agora = now();
+        $linhas = [];
+
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $razaoSocial = self::valorOuNull($row['RAZAOSOCIAL']) ?? self::valorOuNull($row['nomefinal']);
+            if ($razaoSocial === null) {
+                continue;
+            }
+
+            $linhas[] = [
+                'origem' => 'sistema',
+                'user_id' => null,
+                'cod_vendedor' => self::valorOuNull($row['CodigoVendedor']),
+                'nome' => self::valorOuNull($row['nomefinal']) ?? $razaoSocial,
+                'razao_social' => $razaoSocial,
+                'nome_fantasia' => self::valorOuNull($row['NOMEFANTASIA']),
+                'cnpj' => self::valorOuNull($row['cnpj']),
+                'email' => self::valorOuNull($row['Email']),
+                'telefone' => self::valorOuNull($row['TelefonePrincipalFINAL']),
+                'endereco' => self::valorOuNull($row['endereoCNPJJA']),
+                'cidade' => self::valorOuNull($row['CIDADEarrumada']) ?? self::valorOuNull($row['CIDADE']),
+                'estado' => self::valorOuNull($row['UF']),
+                // Sem de-para de segmento pra lead na fonte atual — não inventar (decisão do Tony).
+                'segmento' => null,
+                'valor_estimado' => self::valorPositivoOuNull($row['projeoRms']),
+                'status' => 'ativo',
+                'created_at' => $agora,
+                'updated_at' => $agora,
+            ];
+        }
+
+        // Nunca mexe em origem=manual — é dado que o vendedor cadastrou pela tela, não do TOTVS.
+        $removidos = DB::table('leads')->where('origem', 'sistema')->delete();
+        $this->info("Leads origem=sistema removidos: {$removidos} (origem=manual preservado).");
+
+        $total = 0;
+        foreach (array_chunk($linhas, 1000) as $lote) {
+            DB::table('leads')->insert($lote);
+            $total += count($lote);
+        }
+
+        $this->info("Leads importados: {$total}");
+
+        return self::SUCCESS;
+    }
+
+    private static function valorOuNull(mixed $valor): ?string
+    {
+        $valor = trim((string) ($valor ?? ''));
+
+        return $valor === '' ? null : $valor;
+    }
+
+    private static function valorPositivoOuNull(mixed $valor): ?float
+    {
+        $valor = (float) ($valor ?? 0);
+
+        return $valor > 0 ? $valor : null;
+    }
+}

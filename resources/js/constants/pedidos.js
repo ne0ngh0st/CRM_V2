@@ -4,6 +4,7 @@ export const ROTULOS_STATUS_PEDIDO = {
     wms: 'WMS',
     liberado: 'Liberado',
     faturado: 'Faturado',
+    pendente_totvs: 'Aguardando classificação do TOTVS',
 };
 
 export const TONS_STATUS_PEDIDO = {
@@ -12,6 +13,7 @@ export const TONS_STATUS_PEDIDO = {
     wms: 'neutral',
     liberado: 'ok',
     faturado: 'ok',
+    pendente_totvs: 'neutral',
 };
 
 export const ROTULOS_SITUACAO_PEDIDO = {
