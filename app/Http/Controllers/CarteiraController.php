@@ -7,6 +7,7 @@ use App\Models\CarteiraMotivoInatividade;
 use App\Models\Cliente;
 use App\Models\Ligacao;
 use App\Models\Pedido;
+use App\Models\Segmento;
 use App\Models\SegmentoVendedor;
 use App\Models\VendedorPerfil;
 use App\Services\Carteira\CarteiraAderenciaResolver;
@@ -93,14 +94,24 @@ class CarteiraController extends Controller
         $listaQuery = $baseQuery();
 
         if ($aderencia !== '') {
-            $listaQuery->leftJoin('segmentos_vendedor', function ($join) {
-                $join->on('segmentos_vendedor.cod_vendedor', '=', 'clientes.cod_vendedor')
-                    ->on('segmentos_vendedor.segmento', '=', 'clientes.cod_segmento');
-            });
+            $temSegmentoDefinido = fn ($q) => $q->selectRaw(1)
+                ->from('segmentos_vendedor as sv2')
+                ->whereColumn('sv2.cod_vendedor', 'clientes.cod_vendedor');
 
-            $aderencia === 'dentro'
-                ? $listaQuery->whereNotNull('segmentos_vendedor.id')
-                : $listaQuery->whereNull('segmentos_vendedor.id');
+            if ($aderencia === 'sem_segmento') {
+                $listaQuery->whereNotExists($temSegmentoDefinido);
+            } else {
+                $listaQuery->whereExists($temSegmentoDefinido)
+                    ->leftJoin('segmentos', 'segmentos.codigo', '=', 'clientes.cod_segmento')
+                    ->leftJoin('segmentos_vendedor', function ($join) {
+                        $join->on('segmentos_vendedor.cod_vendedor', '=', 'clientes.cod_vendedor')
+                            ->on('segmentos_vendedor.segmento_id', '=', 'segmentos.id');
+                    });
+
+                $aderencia === 'dentro'
+                    ? $listaQuery->whereNotNull('segmentos_vendedor.id')
+                    : $listaQuery->whereNull('segmentos_vendedor.id');
+            }
         }
 
         match ($ordenar) {
@@ -129,16 +140,23 @@ class CarteiraController extends Controller
 
         $hoje = now();
 
+        $nomePorCodigo = Segmento::pluck('nome', 'codigo');
+
         $segmentosPorVendedor = SegmentoVendedor::query()
             ->whereIn('cod_vendedor', $codVendedoresPresentes)
+            ->with('segmento')
             ->get()
             ->groupBy('cod_vendedor')
-            ->map(fn ($grupo) => $grupo->pluck('segmento')->all());
+            ->map(fn ($grupo) => $grupo->pluck('segmento.codigo')->all());
 
-        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $segmentosPorVendedor, $hoje) {
+        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $segmentosPorVendedor, $nomePorCodigo, $hoje) {
             $motivo = $motivosPorCliente->get($cliente->id);
             $segmentosVendedor = $segmentosPorVendedor[$cliente->cod_vendedor] ?? [];
-            $estaDentro = $cliente->cod_segmento && in_array($cliente->cod_segmento, $segmentosVendedor, true);
+            $aderencia = match (true) {
+                empty($segmentosVendedor) => 'sem_segmento',
+                $cliente->cod_segmento && in_array($cliente->cod_segmento, $segmentosVendedor, true) => 'dentro',
+                default => 'fora',
+            };
 
             return [
                 'id' => $cliente->id,
@@ -148,12 +166,12 @@ class CarteiraController extends Controller
                 'cnpj' => $cliente->cnpj,
                 'telefone' => $cliente->telefone,
                 'estado' => $cliente->estado,
-                'segmento' => $cliente->cod_segmento,
+                'segmento' => $cliente->cod_segmento ? ($nomePorCodigo[$cliente->cod_segmento] ?? $cliente->cod_segmento) : null,
                 'codVendedor' => $cliente->cod_vendedor,
                 'vendedorNome' => $nomesPorCodVendedor[$cliente->cod_vendedor] ?? $cliente->cod_vendedor,
                 'status' => $this->statusResolver->statusPara($cliente->data_ultima_compra, $hoje),
                 'dataUltimaCompra' => optional($cliente->data_ultima_compra)->format('d/m/Y'),
-                'aderencia' => $estaDentro ? 'dentro' : 'fora',
+                'aderencia' => $aderencia,
                 'motivoInatividade' => $motivo ? [
                     'motivo' => $motivo->motivo,
                     'observacao' => $motivo->observacao,
@@ -178,7 +196,10 @@ class CarteiraController extends Controller
             ],
             'opcoes' => [
                 'estados' => $scopeQuery()->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
-                'segmentos' => $scopeQuery()->whereNotNull('cod_segmento')->where('cod_segmento', '!=', '')->distinct()->orderBy('cod_segmento')->pluck('cod_segmento'),
+                'segmentos' => Segmento::query()
+                    ->whereIn('codigo', $scopeQuery()->whereNotNull('cod_segmento')->where('cod_segmento', '!=', '')->distinct()->pluck('cod_segmento'))
+                    ->orderBy('nome')
+                    ->get(['codigo', 'nome']),
             ],
             'visao' => [
                 'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
@@ -240,7 +261,7 @@ class CarteiraController extends Controller
                 'cep' => $cliente->cep,
                 'telefone' => $cliente->telefone,
                 'email' => $cliente->email,
-                'segmento' => $cliente->cod_segmento,
+                'segmento' => $cliente->cod_segmento ? (Segmento::where('codigo', $cliente->cod_segmento)->value('nome') ?? $cliente->cod_segmento) : null,
                 'codVendedor' => $cliente->cod_vendedor,
                 'vendedorNome' => $vendedorNome?->user?->display_name ?: $vendedorNome?->user?->name ?: $cliente->cod_vendedor,
                 'status' => $this->statusResolver->statusPara($cliente->data_ultima_compra, now()),

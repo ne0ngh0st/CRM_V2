@@ -5,7 +5,7 @@ namespace App\Services\Carteira;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Aderência de carteira: cada vendedor atende 1+ segmentos (setor do cliente —
+ * Aderência de carteira: cada vendedor atende 0+ segmentos (setor do cliente —
  * supermercadista, órgão público etc., ver SegmentoVendedor); esse relatório
  * cruza status (ativo/inativando/inativo) com "dentro" ou "fora" do(s)
  * segmento(s) do vendedor responsável por cada cliente. Equivalente ao
@@ -13,11 +13,20 @@ use Illuminate\Database\Eloquent\Builder;
  * de-para de segmento/tipos especiais (INATIVOS GERAL, PRIMEIRO CONTATO) —
  * cortada de propósito, é complexidade de página própria, não de widget.
  *
+ * Vendedor sem NENHUM segmento definido (`segmentos_vendedor` vazio pra esse
+ * cod_vendedor) não é "dentro" nem "fora" — não há segmento nenhum pra medir
+ * aderência contra. Esses clientes ficam num terceiro grupo (`semSegmentoDefinido`)
+ * e são excluídos do denominador de `pctDentro`/`pctFora`, senão a métrica mentiria
+ * pra pior (0%, como se fosse indisciplina) ou pra melhor (100%, como se fosse
+ * aderência perfeita) num caso que é só falta de cadastro. Confirmado com Tony
+ * em 2026-07-29.
+ *
  * Recebe um Builder (não uma Collection já carregada) e faz a contagem inteira
- * em SQL — um LEFT JOIN pequeno (`segmentos_vendedor` tem ~200 linhas na empresa
- * toda) + um CASE pelos limiares de data já indexados. Isso é o que permite essa
- * mesma classe atender tanto o widget da Home quanto a página cheia de Carteira
- * (até ~90k clientes) sem carregar nada em memória.
+ * em SQL — dois LEFT JOINs pequenos (`segmentos` tem 23 linhas, `segmentos_vendedor`
+ * ~200) + uma subquery EXISTS correlacionada (mesma tabela pequena) + um CASE pelos
+ * limiares de data já indexados. Isso é o que permite essa mesma classe atender
+ * tanto o widget da Home quanto a página cheia de Carteira (até ~90k clientes) sem
+ * carregar nada em memória.
  */
 class CarteiraAderenciaResolver
 {
@@ -31,9 +40,10 @@ class CarteiraAderenciaResolver
         $limiteInativando = $this->statusResolver->limiteInativando()->toDateString();
 
         $linhas = (clone $query)
+            ->leftJoin('segmentos', 'segmentos.codigo', '=', 'clientes.cod_segmento')
             ->leftJoin('segmentos_vendedor', function ($join) {
                 $join->on('segmentos_vendedor.cod_vendedor', '=', 'clientes.cod_vendedor')
-                    ->on('segmentos_vendedor.segmento', '=', 'clientes.cod_segmento');
+                    ->on('segmentos_vendedor.segmento_id', '=', 'segmentos.id');
             })
             // select([]) limpa qualquer select que a query recebida já tivesse (ex.: a
             // página de Carteira usa `select('clientes.*')` pra montar a listagem) — sem
@@ -45,33 +55,40 @@ class CarteiraAderenciaResolver
                     WHEN clientes.data_ultima_compra >= ? THEN \'inativando\'
                     ELSE \'inativo\'
                 END as status_carteira,
-                CASE WHEN segmentos_vendedor.id IS NOT NULL THEN 1 ELSE 0 END as dentro,
+                CASE
+                    WHEN NOT EXISTS (SELECT 1 FROM segmentos_vendedor sv2 WHERE sv2.cod_vendedor = clientes.cod_vendedor) THEN \'sem_segmento\'
+                    WHEN segmentos_vendedor.id IS NOT NULL THEN \'dentro\'
+                    ELSE \'fora\'
+                END as aderencia,
                 COUNT(*) as total
             ', [$limiteAtivo, $limiteInativando])
-            ->groupBy('status_carteira', 'dentro')
+            ->groupBy('status_carteira', 'aderencia')
             ->get();
 
         $dentro = ['ativo' => 0, 'inativando' => 0, 'inativo' => 0];
         $fora = ['ativo' => 0, 'inativando' => 0, 'inativo' => 0];
+        $semSegmento = ['ativo' => 0, 'inativando' => 0, 'inativo' => 0];
 
         foreach ($linhas as $linha) {
-            if ($linha->dentro) {
-                $dentro[$linha->status_carteira] += (int) $linha->total;
-            } else {
-                $fora[$linha->status_carteira] += (int) $linha->total;
-            }
+            match ($linha->aderencia) {
+                'dentro' => $dentro[$linha->status_carteira] += (int) $linha->total,
+                'fora' => $fora[$linha->status_carteira] += (int) $linha->total,
+                default => $semSegmento[$linha->status_carteira] += (int) $linha->total,
+            };
         }
 
         $totalDentro = array_sum($dentro);
         $totalFora = array_sum($fora);
-        $total = $totalDentro + $totalFora;
+        $totalSemSegmento = array_sum($semSegmento);
+        $totalMensuravel = $totalDentro + $totalFora;
 
         return [
-            'total' => $total,
+            'total' => $totalMensuravel + $totalSemSegmento,
             'dentroSegmento' => $this->comPercentuais($dentro),
             'foraSegmento' => $this->comPercentuais($fora),
-            'pctDentro' => $total > 0 ? round($totalDentro / $total * 100, 1) : 0.0,
-            'pctFora' => $total > 0 ? round($totalFora / $total * 100, 1) : 0.0,
+            'semSegmentoDefinido' => $this->comPercentuais($semSegmento),
+            'pctDentro' => $totalMensuravel > 0 ? round($totalDentro / $totalMensuravel * 100, 1) : 0.0,
+            'pctFora' => $totalMensuravel > 0 ? round($totalFora / $totalMensuravel * 100, 1) : 0.0,
         ];
     }
 

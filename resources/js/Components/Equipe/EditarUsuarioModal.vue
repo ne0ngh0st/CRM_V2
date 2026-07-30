@@ -26,6 +26,7 @@ const form = useForm({
     cod_super: '',
     estado: '',
     tipo_usuario: '',
+    segmentos: [],
 });
 
 watch(
@@ -41,6 +42,7 @@ watch(
             cod_super: usuario.codSuper || '',
             estado: usuario.estado || '',
             tipo_usuario: usuario.tipoUsuario || '',
+            segmentos: usuario.segmentosIds ? [...usuario.segmentosIds] : [],
         }).reset();
     },
     { immediate: true },
@@ -98,7 +100,7 @@ function salvar() {
                 </div>
             </div>
 
-            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+            <div class="mt-4 grid gap-4 sm:grid-cols-3">
                 <div>
                     <InputLabel for="edit_cod_super" value="Supervisor" />
                     <select id="edit_cod_super" v-model="form.cod_super" class="mt-1 block w-full rounded-md border-gray-300 text-sm focus:border-cyan focus:ring-cyan">
@@ -112,16 +114,31 @@ function salvar() {
                     <TextInput id="edit_estado" v-model="form.estado" maxlength="2" class="mt-1 block w-full uppercase" placeholder="SP" />
                     <InputError :message="form.errors.estado" class="mt-1" />
                 </div>
+                <div>
+                    <InputLabel for="edit_tipo_usuario" value="Tipo de Usuário" />
+                    <select id="edit_tipo_usuario" v-model="form.tipo_usuario" class="mt-1 block w-full rounded-md border-gray-300 text-sm focus:border-cyan focus:ring-cyan">
+                        <option value="">Selecione</option>
+                        <option value="INTERNO">Interno</option>
+                        <option value="EXTERNO">Externo</option>
+                    </select>
+                    <InputError :message="form.errors.tipo_usuario" class="mt-1" />
+                </div>
             </div>
 
-            <div class="mt-4">
-                <InputLabel for="edit_tipo_usuario" value="Tipo de Usuário" />
-                <select id="edit_tipo_usuario" v-model="form.tipo_usuario" class="mt-1 block w-full rounded-md border-gray-300 text-sm focus:border-cyan focus:ring-cyan sm:w-1/2">
-                    <option value="">Selecione</option>
-                    <option value="INTERNO">Interno</option>
-                    <option value="EXTERNO">Externo</option>
-                </select>
-                <InputError :message="form.errors.tipo_usuario" class="mt-1" />
+            <div v-if="form.cod_vendedor" class="mt-4">
+                <InputLabel value="Segmentos" />
+                <div class="mt-1 grid max-h-28 grid-cols-2 gap-x-3 gap-y-1 overflow-y-auto rounded-md border border-gray-300 p-2 sm:grid-cols-3">
+                    <label v-for="s in opcoes.segmentos" :key="s.id" class="flex items-center gap-1.5 text-xs text-gray-600">
+                        <input
+                            type="checkbox"
+                            :value="s.id"
+                            v-model="form.segmentos"
+                            class="rounded border-gray-300 text-teal focus:ring-cyan"
+                        />
+                        {{ s.nome }}
+                    </label>
+                </div>
+                <InputError :message="form.errors.segmentos" class="mt-1" />
             </div>
 
             <div class="mt-6 flex justify-end gap-3">

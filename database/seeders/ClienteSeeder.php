@@ -2,34 +2,34 @@
 
 namespace Database\Seeders;
 
+use App\Models\Segmento;
 use App\Models\SegmentoVendedor;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * "Segmento" do cliente = setor/vertical (ver SegmentoVendedorSeeder). Pra dar
- * sentido ao relatório de aderência, ~70% dos clientes de cada vendedor caem
- * dentro de um dos segmentos que o próprio vendedor atende — o resto é "fora
- * do segmento" de propósito, pra os números de aderência não saírem 100%.
+ * "Segmento" do cliente = setor/vertical (código real do TOTVS, ver
+ * SegmentoSeeder — `cod_segmento` guarda o código, igual ao import real de
+ * `legado:import-clientes`, nunca o nome). Pra dar sentido ao relatório de
+ * aderência, ~70% dos clientes de cada vendedor caem dentro de um dos
+ * segmentos que o próprio vendedor atende — o resto é "fora do segmento" de
+ * propósito, pra os números de aderência não saírem 100%.
  */
 class ClienteSeeder extends Seeder
 {
-    private const SEGMENTOS_FORA = [
-        'ORGAO PUBLICO', 'DROGARIAS', 'REDE DE LOJAS', 'AEROPORTOS', 'ALIMENTACAO',
-        'REVENDA', 'TRANSPORTE DE CARGA', 'CONSTRUCAO', 'CORPORATIVO', 'E-COMMERCE',
-        'PET SHOP', 'POSTOS E CONVENIENCIAS',
-    ];
-
     public function run(): void
     {
         $agora = now();
         $codCliente = 1000;
         $linhas = [];
 
+        $todosCodigos = Segmento::pluck('codigo');
+
         $segmentosPorVendedor = SegmentoVendedor::query()
+            ->with('segmento')
             ->get()
             ->groupBy('cod_vendedor')
-            ->map(fn ($grupo) => $grupo->pluck('segmento')->all());
+            ->map(fn ($grupo) => $grupo->pluck('segmento.codigo')->all());
 
         // Clientes reais (têm faturamento) — deriva de combos (cod_vendedor, cnpj) já
         // existentes em `faturamentos`, então o status ativo/inativando/inativo (calculado
@@ -53,7 +53,7 @@ class ClienteSeeder extends Seeder
             $segmentosVendedor = $segmentosPorVendedor[$combo->cod_vendedor] ?? [];
             $segmento = $segmentosVendedor && fake()->boolean(70)
                 ? fake()->randomElement($segmentosVendedor)
-                : fake()->randomElement(self::SEGMENTOS_FORA);
+                : $todosCodigos->diff($segmentosVendedor)->random();
 
             $linhas[] = [
                 'cod_cliente' => (string) $codCliente++,
@@ -82,7 +82,7 @@ class ClienteSeeder extends Seeder
             for ($i = 0; $i < $quantidade; $i++) {
                 $segmento = fake()->boolean(70)
                     ? fake()->randomElement($segmentosVendedor)
-                    : fake()->randomElement(self::SEGMENTOS_FORA);
+                    : $todosCodigos->diff($segmentosVendedor)->random();
 
                 $linhas[] = [
                     'cod_cliente' => (string) $codCliente++,

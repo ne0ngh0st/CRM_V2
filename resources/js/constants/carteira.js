@@ -13,4 +13,5 @@ export const TONS_STATUS_CARTEIRA = {
 export const ROTULOS_ADERENCIA = {
     dentro: 'No segmento',
     fora: 'Fora do segmento',
+    sem_segmento: 'Sem segmento definido',
 };

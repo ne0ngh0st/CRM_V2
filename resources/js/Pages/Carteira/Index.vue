@@ -130,7 +130,7 @@ function abrirAgendamento(cliente) {
 
                         <FilterField label="Segmento" :model-value="filtros.segmento" @update:model-value="(v) => { filtros.segmento = v; aplicarFiltros(); }">
                             <option value="">Todos</option>
-                            <option v-for="s in opcoes.segmentos" :key="s" :value="s">{{ s }}</option>
+                            <option v-for="s in opcoes.segmentos" :key="s.codigo" :value="s.codigo">{{ s.nome }}</option>
                         </FilterField>
 
                         <FilterField label="Status" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; aplicarFiltros(); }">
@@ -144,6 +144,7 @@ function abrirAgendamento(cliente) {
                             <option value="">Todas</option>
                             <option value="dentro">No segmento</option>
                             <option value="fora">Fora do segmento</option>
+                            <option value="sem_segmento">Sem segmento definido</option>
                         </FilterField>
 
                         <FilterField v-if="visao.supervisores.length" label="Supervisão" :model-value="filtros.visao_supervisor" @update:model-value="(v) => { filtros.visao_supervisor = v; filtros.visao_vendedor = ''; aplicarFiltros(); }">

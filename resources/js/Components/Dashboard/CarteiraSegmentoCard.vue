@@ -54,43 +54,56 @@ const linhasStatus = (dados, aderenciaChave) => [
             </svg>
         </template>
 
-        <div v-if="carteiraSegmento.total > 0" class="flex flex-col gap-4">
+        <div v-if="carteiraSegmento.total > 0" class="flex h-full flex-col justify-between gap-4">
             <div class="flex flex-wrap gap-2">
                 <KpiTile :value="totalAtivos" label="Ativos" tone="ok" :href="carteiraHref({ status: 'ativo' })" />
                 <KpiTile :value="totalInativando" label="Inativando" tone="warn" :href="carteiraHref({ status: 'inativando' })" />
                 <KpiTile :value="totalInativos" label="Inativos" tone="danger" :href="carteiraHref({ status: 'inativo' })" />
                 <KpiTile :value="`${carteiraSegmento.pctDentro}%`" label="No segmento" tone="info" />
+                <KpiTile
+                    v-if="carteiraSegmento.semSegmentoDefinido.total > 0"
+                    :value="carteiraSegmento.semSegmentoDefinido.total"
+                    label="Sem segmento definido"
+                    tone="default"
+                    :href="carteiraHref({ aderencia: 'sem_segmento' })"
+                />
             </div>
 
-            <div class="flex items-center gap-3 sm:gap-4">
-                <div class="shrink-0">
-                    <p class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">No segmento</p>
-                    <Link :href="carteiraHref({ aderencia: 'dentro' })" class="text-lg font-bold text-emerald-600 hover:underline">
-                        {{ carteiraSegmento.dentroSegmento.total }}
-                        <span class="text-xs font-medium text-gray-400">({{ carteiraSegmento.pctDentro }}%)</span>
-                    </Link>
+            <div class="space-y-2">
+                <div class="flex items-center gap-3 sm:gap-4">
+                    <div class="shrink-0">
+                        <p class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">No segmento</p>
+                        <Link :href="carteiraHref({ aderencia: 'dentro' })" class="text-lg font-bold text-emerald-600 hover:underline">
+                            {{ carteiraSegmento.dentroSegmento.total }}
+                            <span class="text-xs font-medium text-gray-400">({{ carteiraSegmento.pctDentro }}%)</span>
+                        </Link>
+                    </div>
+                    <div class="flex h-2.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                        <div class="bg-emerald-500" :style="{ width: carteiraSegmento.pctDentro + '%' }" />
+                        <div class="bg-red-400" :style="{ width: carteiraSegmento.pctFora + '%' }" />
+                    </div>
+                    <div class="shrink-0 text-right">
+                        <p class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Fora do segmento</p>
+                        <Link :href="carteiraHref({ aderencia: 'fora' })" class="text-lg font-bold text-red-500 hover:underline">
+                            {{ carteiraSegmento.foraSegmento.total }}
+                            <span class="text-xs font-medium text-gray-400">({{ carteiraSegmento.pctFora }}%)</span>
+                        </Link>
+                    </div>
                 </div>
-                <div class="flex h-2.5 flex-1 overflow-hidden rounded-full bg-gray-100">
-                    <div class="bg-emerald-500" :style="{ width: carteiraSegmento.pctDentro + '%' }" />
-                    <div class="bg-red-400" :style="{ width: carteiraSegmento.pctFora + '%' }" />
-                </div>
-                <div class="shrink-0 text-right">
-                    <p class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Fora do segmento</p>
-                    <Link :href="carteiraHref({ aderencia: 'fora' })" class="text-lg font-bold text-red-500 hover:underline">
-                        {{ carteiraSegmento.foraSegmento.total }}
-                        <span class="text-xs font-medium text-gray-400">({{ carteiraSegmento.pctFora }}%)</span>
-                    </Link>
-                </div>
-            </div>
 
-            <p class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
-                <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Ativos ≤ 290 dias</span>
-                <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-amber-500" /> Inativando 291–365 dias</span>
-                <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-red-500" /> Inativos &gt; 365 dias ou sem compra</span>
-            </p>
+                <p class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                    <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Ativos ≤ 290 dias</span>
+                    <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-amber-500" /> Inativando 291–365 dias</span>
+                    <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-red-500" /> Inativos &gt; 365 dias ou sem compra</span>
+                </p>
+            </div>
 
             <div class="grid gap-3 sm:grid-cols-2">
-                <div v-for="grupo in grupos" :key="grupo.chave" class="rounded border border-gray-200 p-3">
+                <div
+                    v-for="grupo in grupos"
+                    :key="grupo.chave"
+                    class="rounded border border-gray-200 p-3"
+                >
                     <div class="flex items-center justify-between">
                         <p class="text-sm font-semibold text-gray-800">{{ grupo.titulo }}</p>
                         <p class="text-xs text-gray-400">{{ grupo.dados.total }} clientes</p>

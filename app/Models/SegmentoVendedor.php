@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SegmentoVendedor extends Model
 {
@@ -10,7 +11,12 @@ class SegmentoVendedor extends Model
 
     protected $fillable = [
         'cod_vendedor',
-        'segmento',
+        'segmento_id',
         'curva_abc',
     ];
+
+    public function segmento(): BelongsTo
+    {
+        return $this->belongsTo(Segmento::class);
+    }
 }

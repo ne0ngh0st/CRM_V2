@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Segmento;
 use App\Models\SegmentoVendedor;
 use App\Models\User;
 use App\Models\VendedorPerfil;
@@ -104,9 +105,10 @@ class EquipeController extends Controller
         $codVendedoresPresentes = $usuarios->pluck('vendedorPerfil.cod_vendedor')->filter()->values();
         $segmentosPorCodVendedor = SegmentoVendedor::query()
             ->whereIn('cod_vendedor', $codVendedoresPresentes)
+            ->with('segmento')
             ->get()
             ->groupBy('cod_vendedor')
-            ->map(fn ($grupo) => $grupo->pluck('segmento')->all());
+            ->map(fn ($grupo) => $grupo->pluck('segmento'));
 
         $nomesPorCodVendedor = VendedorPerfil::query()
             ->with('user:id,name,display_name')
@@ -130,7 +132,8 @@ class EquipeController extends Controller
                 'codSuper' => $u->vendedorPerfil?->cod_super,
                 'ultimoLogin' => optional($u->last_login_at)->toIso8601String(),
                 'online' => $u->last_activity_at?->gt(now()->subMinutes(self::MINUTOS_ONLINE)) ?? false,
-                'segmentos' => $codVendedor ? ($segmentosPorCodVendedor[$codVendedor] ?? []) : [],
+                'segmentos' => $codVendedor ? ($segmentosPorCodVendedor[$codVendedor] ?? collect())->pluck('nome')->all() : [],
+                'segmentosIds' => $codVendedor ? ($segmentosPorCodVendedor[$codVendedor] ?? collect())->pluck('id')->all() : [],
             ];
         });
 
@@ -181,6 +184,7 @@ class EquipeController extends Controller
                 'perfis' => Role::pluck('name'),
                 'supervisores' => $supervisoresDisponiveis,
                 'estados' => $estadosDisponiveis,
+                'segmentos' => Segmento::orderBy('nome')->get(['id', 'codigo', 'nome']),
             ],
             'organograma' => $organograma,
         ]);
@@ -238,6 +242,8 @@ class EquipeController extends Controller
             'cod_super' => ['nullable', 'string', 'max:20'],
             'estado' => ['nullable', 'string', 'max:2'],
             'tipo_usuario' => ['nullable', Rule::in(['INTERNO', 'EXTERNO'])],
+            'segmentos' => ['nullable', 'array'],
+            'segmentos.*' => ['integer', Rule::exists('segmentos', 'id')],
         ]);
 
         $usuario->update([
@@ -250,13 +256,27 @@ class EquipeController extends Controller
 
         $usuario->syncRoles([$data['perfil']]);
 
+        $codVendedorAnterior = $usuario->vendedorPerfil?->cod_vendedor;
+
         if (! empty($data['cod_vendedor'])) {
             VendedorPerfil::updateOrCreate(
                 ['user_id' => $usuario->id],
                 ['cod_vendedor' => $data['cod_vendedor'], 'cod_super' => $data['cod_super'] ?: null],
             );
+
+            if ($codVendedorAnterior && $codVendedorAnterior !== $data['cod_vendedor']) {
+                SegmentoVendedor::where('cod_vendedor', $codVendedorAnterior)->delete();
+            }
+
+            SegmentoVendedor::where('cod_vendedor', $data['cod_vendedor'])->delete();
+            foreach (array_unique($data['segmentos'] ?? []) as $segmentoId) {
+                SegmentoVendedor::create(['cod_vendedor' => $data['cod_vendedor'], 'segmento_id' => $segmentoId]);
+            }
         } else {
             $usuario->vendedorPerfil?->delete();
+            if ($codVendedorAnterior) {
+                SegmentoVendedor::where('cod_vendedor', $codVendedorAnterior)->delete();
+            }
         }
 
         return back();
