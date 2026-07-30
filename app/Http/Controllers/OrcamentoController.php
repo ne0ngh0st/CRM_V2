@@ -93,6 +93,7 @@ class OrcamentoController extends Controller
             'clienteContato' => $o->cliente_contato,
             'vendedorNome' => $o->user->display_name ?: $o->user->name,
             'formaPagamento' => $o->forma_pagamento,
+            'tipoFrete' => $o->tipo_frete,
             'tipoProdutoServico' => $o->tipo_produto_servico,
             'valorTotal' => (float) $o->valor_total,
             'dataValidade' => optional($o->data_validade)->format('Y-m-d'),
@@ -275,6 +276,7 @@ class OrcamentoController extends Controller
                 'cliente_cnpj' => $data['cliente_cnpj'] ?? null,
                 'cliente_contato' => $data['cliente_contato'] ?? null,
                 'forma_pagamento' => $data['forma_pagamento'] ?? null,
+                'tipo_frete' => $data['tipo_frete'],
                 'tipo_produto_servico' => $data['tipo_produto_servico'],
                 'valor_total' => 0,
                 'data_validade' => $data['data_validade'] ?? null,
@@ -309,6 +311,7 @@ class OrcamentoController extends Controller
                 'cliente_cnpj' => $data['cliente_cnpj'] ?? null,
                 'cliente_contato' => $data['cliente_contato'] ?? null,
                 'forma_pagamento' => $data['forma_pagamento'] ?? null,
+                'tipo_frete' => $data['tipo_frete'],
                 'tipo_produto_servico' => $data['tipo_produto_servico'],
                 'data_validade' => $data['data_validade'] ?? null,
                 'observacoes' => $data['observacoes'] ?? null,
@@ -480,7 +483,7 @@ class OrcamentoController extends Controller
         return response()->json($produtos);
     }
 
-    /** @return array{cliente_nome: string, cliente_cnpj: ?string, cliente_contato: ?string, forma_pagamento: ?string, tipo_produto_servico: string, data_validade: ?string, observacoes: ?string, variacao_producao_personalizado: ?string, prazo_producao: ?string, garantia_imagem: ?string, texto_importante: ?string, itens: array} */
+    /** @return array{cliente_nome: string, cliente_cnpj: ?string, cliente_contato: ?string, forma_pagamento: ?string, tipo_frete: string, tipo_produto_servico: string, data_validade: ?string, observacoes: ?string, variacao_producao_personalizado: ?string, prazo_producao: ?string, garantia_imagem: ?string, texto_importante: ?string, itens: array} */
     private function validarOrcamento(Request $request): array
     {
         return $request->validate([
@@ -488,6 +491,7 @@ class OrcamentoController extends Controller
             'cliente_cnpj' => ['nullable', 'string', 'max:18'],
             'cliente_contato' => ['nullable', 'string', 'max:255'],
             'forma_pagamento' => ['nullable', 'string', 'max:50'],
+            'tipo_frete' => ['required', Rule::in(['CIF', 'FOB'])],
             'tipo_produto_servico' => ['required', Rule::in(['produto', 'servico'])],
             'data_validade' => ['nullable', 'date'],
             'observacoes' => ['nullable', 'string'],
@@ -705,7 +709,7 @@ class OrcamentoController extends Controller
         };
     }
 
-    /** @return array{id: int, statusGestor: string, clienteNome: string, clienteCnpj: ?string, clienteContato: ?string, formaPagamento: ?string, tipoProdutoServico: string, dataValidade: ?string, observacoes: ?string, variacaoProducaoPersonalizado: ?string, prazoProducao: ?string, garantiaImagem: ?string, textoImportante: ?string, itens: array} */
+    /** @return array{id: int, statusGestor: string, clienteNome: string, clienteCnpj: ?string, clienteContato: ?string, formaPagamento: ?string, tipoFrete: ?string, tipoProdutoServico: string, dataValidade: ?string, observacoes: ?string, variacaoProducaoPersonalizado: ?string, prazoProducao: ?string, garantiaImagem: ?string, textoImportante: ?string, itens: array} */
     private function mapOrcamentoParaForm(Orcamento $orcamento, bool $isAdmin): array
     {
         return [
@@ -715,6 +719,7 @@ class OrcamentoController extends Controller
             'clienteCnpj' => $orcamento->cliente_cnpj,
             'clienteContato' => $orcamento->cliente_contato,
             'formaPagamento' => $orcamento->forma_pagamento,
+            'tipoFrete' => $orcamento->tipo_frete,
             'tipoProdutoServico' => $orcamento->tipo_produto_servico,
             'dataValidade' => optional($orcamento->data_validade)->format('Y-m-d'),
             'observacoes' => $orcamento->observacoes,

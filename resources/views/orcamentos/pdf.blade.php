@@ -4,37 +4,40 @@
     <meta charset="utf-8">
     <title>Orçamento #{{ $orcamento->id }}</title>
     <style>
-        @page { size: A4; margin: 28px 32px; }
-        body { font-family: 'Helvetica', sans-serif; font-size: 10.5px; color: #1a1a1a; }
+        @page { size: A4; margin: 30px 36px 95px 36px; }
+        body { font-family: 'Helvetica', sans-serif; font-size: 11.5px; color: #1a1a1a; }
         table { border-collapse: collapse; width: 100%; }
-        .topbar { height: 4px; background: #0F3A69; margin-bottom: 12px; }
+        .topbar { height: 6px; background: #0F3A69; margin-bottom: 16px; }
         .header-table td { vertical-align: top; }
-        .empresa-nome { font-size: 13px; font-weight: bold; color: #0F3A69; margin: 0 0 2px; }
-        .empresa-info { font-size: 9px; color: #555; line-height: 1.4; }
-        .doc-box { border: 1px solid #00A9CE; background: #f0fbfd; padding: 8px 12px; text-align: right; }
-        .doc-box .titulo { font-size: 13px; font-weight: bold; color: #0F3A69; text-transform: uppercase; margin: 0; }
-        .doc-box .meta { font-size: 9px; color: #666; margin: 2px 0 0; }
-        .secao { margin-top: 14px; }
-        .secao-titulo { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; font-weight: bold; margin: 0 0 4px; border-bottom: 1px solid #e5e5e5; padding-bottom: 3px; }
-        table.dados td { padding: 2px 0; vertical-align: top; font-size: 10px; }
-        table.dados td.label { width: 110px; color: #666; }
-        table.info-grid > tr > td { width: 50%; vertical-align: top; padding-right: 16px; }
-        table.itens { margin-top: 4px; }
-        table.itens th { background: #1a1a1a; color: #fff; text-align: left; padding: 5px 6px; font-size: 8.5px; text-transform: uppercase; }
+        .empresa-nome { font-size: 15px; font-weight: bold; color: #0F3A69; margin: 6px 0 3px; }
+        .empresa-info { font-size: 10px; color: #555; line-height: 1.5; }
+        .doc-box { border: 1px solid #00A9CE; background: #f0fbfd; padding: 12px 16px; text-align: right; }
+        .doc-box .titulo { font-size: 16px; font-weight: bold; color: #0F3A69; text-transform: uppercase; margin: 0; letter-spacing: 0.5px; }
+        .doc-box .meta { font-size: 10px; color: #666; margin: 3px 0 0; }
+        .secao { margin-top: 20px; }
+        .secao-titulo { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; font-weight: bold; margin: 0 0 7px; border-bottom: 1px solid #e0e0e0; padding-bottom: 5px; }
+        table.dados td { padding: 3.5px 0; vertical-align: top; font-size: 10.5px; }
+        table.dados td.label { width: 125px; color: #666; }
+        table.info-grid > tr > td { width: 50%; vertical-align: top; padding-right: 20px; }
+        table.itens { margin-top: 6px; }
+        table.itens th { background: #1a1a1a; color: #fff; text-align: left; padding: 7px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.3px; }
         table.itens th.num, table.itens td.num { text-align: right; }
-        table.itens td { padding: 5px 6px; border-bottom: 1px solid #e5e5e5; font-size: 9.5px; }
+        table.itens td { padding: 7px 8px; border-bottom: 1px solid #e5e5e5; font-size: 10.5px; }
         table.itens tr:nth-child(even) td { background: #fafbfc; }
-        .totais-table td { padding: 3px 8px; font-size: 10px; }
-        .totais-table .total-final td { border-top: 2px solid #1a1a1a; font-weight: bold; font-size: 12px; padding-top: 6px; color: #0F3A69; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: bold; text-transform: uppercase; }
+        .totais-card { border: 1px solid #e0e0e0; background: #fafbfc; margin-top: 10px; padding: 10px 16px; }
+        .totais-table td { padding: 4px 8px; font-size: 10.5px; }
+        .totais-table .total-final td { border-top: 2px solid #1a1a1a; font-weight: bold; font-size: 13px; padding-top: 8px; color: #0F3A69; }
+        .badge { display: inline-block; padding: 3px 9px; border-radius: 10px; font-size: 9.5px; font-weight: bold; text-transform: uppercase; }
         .badge-aprovado { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
         .badge-pendente { background: #fffbeb; color: #b45309; border: 1px solid #fcd34d; }
         .badge-rejeitado { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
-        .importante-box { border: 1px solid #ff8f00; background: #fff8ec; padding: 8px; margin-top: 8px; font-size: 9.5px; }
-        .importante-box .rotulo { color: #ff8f00; font-weight: bold; text-transform: uppercase; font-size: 8.5px; }
-        .footer-table td { width: 33.33%; vertical-align: top; font-size: 9px; color: #666; padding-top: 4px; }
-        .footer-table .rotulo { text-transform: uppercase; color: #999; font-weight: bold; font-size: 8px; }
-        .rodape-geracao { margin-top: 10px; font-size: 8.5px; color: #999; text-align: center; }
+        .importante-box { border: 1px solid #ff8f00; background: #fff8ec; padding: 11px 14px; margin-top: 10px; font-size: 10px; line-height: 1.5; }
+        .importante-box .rotulo { color: #ff8f00; font-weight: bold; text-transform: uppercase; font-size: 9px; }
+        .rodape-fixo { position: fixed; bottom: -80px; left: 0; right: 0; }
+        .footer-table { border-top: 2px solid #1a1a1a; padding-top: 10px; }
+        .footer-table td { width: 33.33%; vertical-align: top; font-size: 9.5px; color: #666; padding-top: 10px; line-height: 1.5; }
+        .footer-table .rotulo { text-transform: uppercase; color: #999; font-weight: bold; font-size: 8.5px; }
+        .rodape-geracao { margin-top: 8px; font-size: 8.5px; color: #999; text-align: center; }
     </style>
 </head>
 <body>
@@ -45,7 +48,7 @@
             <td style="width: 60%;">
                 @php($logoPath = public_path('images/autopel-logo.png'))
                 @if (file_exists($logoPath))
-                    <img src="{{ $logoPath }}" alt="Autopel" style="height: 42px;" />
+                    <img src="{{ $logoPath }}" alt="Autopel" style="height: 50px;" />
                 @endif
                 <p class="empresa-nome">Autopel Soluções</p>
                 <p class="empresa-info">
@@ -82,6 +85,7 @@
                         </span>
                     </td></tr>
                     <tr><td class="label">Forma de Pagamento</td><td>{{ $orcamento->forma_pagamento ?? '—' }}</td></tr>
+                    <tr><td class="label">Frete</td><td>{{ $orcamento->tipo_frete ?? '—' }}</td></tr>
                     <tr><td class="label">Faturamento</td><td>{{ $orcamento->tipo_produto_servico === 'produto' ? 'Produto (IPI 3,25%)' : 'Serviço (sem IPI)' }}</td></tr>
                     <tr><td class="label">Validade</td><td>{{ optional($orcamento->data_validade)->format('d/m/Y') ?? '—' }}</td></tr>
                 </table>
@@ -130,34 +134,36 @@
             </tbody>
         </table>
 
-        <table class="totais-table" style="width: 40%; margin-left: 60%;">
-            <tr>
-                <td>Subtotal s/IPI</td>
-                <td class="num">R$ {{ number_format($resumo['subtotalProdutosSemIpi'], 2, ',', '.') }}</td>
-            </tr>
-            @if ($orcamento->tipo_produto_servico === 'produto')
+        <div class="totais-card">
+            <table class="totais-table" style="width: 45%; margin-left: 55%;">
                 <tr>
-                    <td>Subtotal c/IPI</td>
-                    <td class="num">R$ {{ number_format($resumo['subtotalProdutosComIpi'], 2, ',', '.') }}</td>
+                    <td>Subtotal s/IPI</td>
+                    <td class="num">R$ {{ number_format($resumo['subtotalProdutosSemIpi'], 2, ',', '.') }}</td>
                 </tr>
-            @endif
-            @if ($resumo['subtotalEtiquetas'] > 0)
-                <tr>
-                    <td>Subtotal etiquetas</td>
-                    <td class="num">R$ {{ number_format($resumo['subtotalEtiquetas'], 2, ',', '.') }}</td>
+                @if ($orcamento->tipo_produto_servico === 'produto')
+                    <tr>
+                        <td>Subtotal c/IPI</td>
+                        <td class="num">R$ {{ number_format($resumo['subtotalProdutosComIpi'], 2, ',', '.') }}</td>
+                    </tr>
+                @endif
+                @if ($resumo['subtotalEtiquetas'] > 0)
+                    <tr>
+                        <td>Subtotal etiquetas</td>
+                        <td class="num">R$ {{ number_format($resumo['subtotalEtiquetas'], 2, ',', '.') }}</td>
+                    </tr>
+                @endif
+                <tr class="total-final">
+                    <td>Valor Total</td>
+                    <td class="num">R$ {{ number_format($resumo['totalGeral'], 2, ',', '.') }}</td>
                 </tr>
-            @endif
-            <tr class="total-final">
-                <td>Valor Total</td>
-                <td class="num">R$ {{ number_format($resumo['totalGeral'], 2, ',', '.') }}</td>
-            </tr>
-        </table>
+            </table>
+        </div>
     </div>
 
     @if ($orcamento->observacoes)
         <div class="secao">
             <p class="secao-titulo">Observações</p>
-            <p style="font-size: 9.5px;">{{ $orcamento->observacoes }}</p>
+            <p style="font-size: 10.5px; line-height: 1.5;">{{ $orcamento->observacoes }}</p>
         </div>
     @endif
 
@@ -189,27 +195,29 @@
         </table>
     </div>
 
-    <table class="footer-table secao">
-        <tr>
-            <td>
-                <p class="rotulo">Vendedor Responsável</p>
-                <p>{{ $orcamento->user->display_name ?: $orcamento->user->name }}</p>
-            </td>
-            <td>
-                <p class="rotulo">Condições</p>
-                <p>Validade: {{ optional($orcamento->data_validade)->format('d/m/Y') ?? '—' }}<br>
-                Pagamento: {{ $orcamento->forma_pagamento ?? '—' }}<br>
-                Prazo de entrega: a combinar</p>
-            </td>
-            <td>
-                <p class="rotulo">Autopel</p>
-                <p>Autopel Soluções<br>CNPJ 06.698.091/0005-90</p>
-            </td>
-        </tr>
-    </table>
+    <div class="rodape-fixo">
+        <table class="footer-table">
+            <tr>
+                <td>
+                    <p class="rotulo">Vendedor Responsável</p>
+                    <p>{{ $orcamento->user->display_name ?: $orcamento->user->name }}</p>
+                </td>
+                <td>
+                    <p class="rotulo">Condições</p>
+                    <p>Validade: {{ optional($orcamento->data_validade)->format('d/m/Y') ?? '—' }}<br>
+                    Pagamento: {{ $orcamento->forma_pagamento ?? '—' }} · Frete: {{ $orcamento->tipo_frete ?? '—' }}<br>
+                    Prazo de entrega: a combinar</p>
+                </td>
+                <td>
+                    <p class="rotulo">Autopel</p>
+                    <p>Autopel Soluções<br>CNPJ 06.698.091/0005-90</p>
+                </td>
+            </tr>
+        </table>
 
-    <p class="rodape-geracao">
-        Documento gerado automaticamente pelo sistema PALMA em {{ now()->format('d/m/Y \à\s H:i') }} — sem valor fiscal.
-    </p>
+        <p class="rodape-geracao">
+            Documento gerado automaticamente pelo sistema PALMA em {{ now()->format('d/m/Y \à\s H:i') }} — sem valor fiscal.
+        </p>
+    </div>
 </body>
 </html>

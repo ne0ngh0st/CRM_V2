@@ -14,6 +14,7 @@ class Orcamento extends Model
         'cliente_cnpj',
         'cliente_contato',
         'forma_pagamento',
+        'tipo_frete',
         'tipo_produto_servico',
         'valor_total',
         'data_validade',

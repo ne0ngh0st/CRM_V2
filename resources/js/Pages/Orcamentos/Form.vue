@@ -14,6 +14,7 @@ import {
     ROTULOS_STATUS_ORCAMENTO,
     TONS_STATUS_ORCAMENTO,
     ROTULOS_TIPO_PRODUTO_SERVICO,
+    ROTULOS_TIPO_FRETE,
 } from '@/constants/orcamentos.js';
 
 const props = defineProps({
@@ -49,6 +50,7 @@ const form = useForm({
     cliente_cnpj: fonte?.clienteCnpj ?? props.prefillCliente?.cnpj ?? '',
     cliente_contato: fonte?.clienteContato ?? props.prefillCliente?.contato ?? '',
     forma_pagamento: fonte?.formaPagamento ?? '',
+    tipo_frete: fonte?.tipoFrete ?? 'CIF',
     tipo_produto_servico: fonte?.tipoProdutoServico ?? 'produto',
     data_validade: fonte?.dataValidade ?? new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
     observacoes: fonte?.observacoes ?? '',
@@ -221,6 +223,17 @@ function salvar() {
                                         <button type="button" class="whitespace-nowrap text-xs text-gray-500 underline" @click="modoFormaPagamentoLivre = false; form.forma_pagamento = ''">voltar</button>
                                     </div>
                                     <InputError :message="form.errors.forma_pagamento" />
+                                </div>
+
+                                <div>
+                                    <label class="text-xs text-gray-500">Frete</label>
+                                    <div class="mt-0.5 flex gap-4">
+                                        <label v-for="(rotulo, valor) in ROTULOS_TIPO_FRETE" :key="valor" class="flex items-center gap-1.5 text-sm">
+                                            <input v-model="form.tipo_frete" type="radio" :value="valor" class="border-gray-300 text-cyan focus:ring-cyan" />
+                                            {{ rotulo }}
+                                        </label>
+                                    </div>
+                                    <InputError :message="form.errors.tipo_frete" />
                                 </div>
 
                                 <div>

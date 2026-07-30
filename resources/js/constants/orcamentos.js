@@ -46,3 +46,8 @@ export const ROTULOS_TIPO_PRODUTO_SERVICO = {
     produto: 'Produto (IPI 3,25%)',
     servico: 'Serviço (sem IPI)',
 };
+
+export const ROTULOS_TIPO_FRETE = {
+    CIF: 'CIF (frete por conta da Autopel)',
+    FOB: 'FOB (frete por conta do cliente)',
+};
