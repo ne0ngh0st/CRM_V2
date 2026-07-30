@@ -28,11 +28,6 @@ const props = defineProps({
 
 const page = usePage();
 
-const rotulosStatus = {
-    faturamentos: 'Faturamento',
-    ligacoes: 'Ligações',
-};
-
 const tonsStatus = {
     atualizado: 'ok',
     atencao: 'warn',
@@ -45,14 +40,22 @@ const labelsStatus = {
     desatualizado: 'Desatualizado',
 };
 
-const statusPills = computed(() =>
-    props.statusSistema.map((item) => ({
-        chave: item.tabela,
-        rotulo: rotulosStatus[item.tabela] || item.tabela,
-        tom: tonsStatus[item.status] || 'neutral',
-        label: labelsStatus[item.status] || 'Verificando…',
-    })),
-);
+// Uma métrica só pro sistema como um todo — o pior status entre as tabelas
+// sincronizadas, não uma pill por tabela.
+const prioridadeStatus = { desatualizado: 3, atencao: 2, atualizado: 1 };
+
+const statusGeral = computed(() => {
+    if (!props.statusSistema.length) return null;
+
+    const pior = props.statusSistema.reduce((acc, item) =>
+        (prioridadeStatus[item.status] || 0) > (prioridadeStatus[acc.status] || 0) ? item : acc,
+    );
+
+    return {
+        tom: tonsStatus[pior.status] || 'neutral',
+        label: labelsStatus[pior.status] || 'Verificando…',
+    };
+});
 
 const mesAno = computed(() => {
     const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -80,8 +83,8 @@ const mesAno = computed(() => {
                         · {{ mesAno }} · dados referentes ao dia anterior (D-1)
                     </template>
                     <template #meta>
-                        <StatusPill v-for="s in statusPills" :key="s.chave" :tone="s.tom">
-                            {{ s.rotulo }}: {{ s.label }}
+                        <StatusPill v-if="statusGeral" :tone="statusGeral.tom" surface="dark">
+                            Sistema: {{ statusGeral.label }}
                         </StatusPill>
                     </template>
                     <template v-if="visao.mostrarSeletor" #filtros>

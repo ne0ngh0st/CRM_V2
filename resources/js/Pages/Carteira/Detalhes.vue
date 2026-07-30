@@ -71,7 +71,7 @@ const campos = [
                         {{ cliente.cnpj ?? 'CNPJ não cadastrado' }} · {{ cliente.codCliente }}/{{ cliente.loja }}
                     </template>
                     <template #meta>
-                        <StatusPill :tone="TONS_STATUS_CARTEIRA[cliente.status]">{{ ROTULOS_STATUS_CARTEIRA[cliente.status] }}</StatusPill>
+                        <StatusPill :tone="TONS_STATUS_CARTEIRA[cliente.status]" surface="dark">{{ ROTULOS_STATUS_CARTEIRA[cliente.status] }}</StatusPill>
                         <KpiTile :value="kpis.pedidos" label="Pedidos" />
                         <KpiTile :value="formatBRL(kpis.volumeTotal)" label="Volume total" compact />
                         <KpiTile :value="formatBRL(kpis.ticketMedio)" label="Ticket médio" compact />

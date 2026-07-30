@@ -145,7 +145,7 @@ function alternarStatus(usuario) {
                         <span v-if="!podeGerenciar"> · visualização da sua equipe</span>
                     </template>
                     <template #meta>
-                        <StatusPill tone="ok">{{ totalOnline }} online agora</StatusPill>
+                        <StatusPill tone="ok" surface="dark">{{ totalOnline }} online agora</StatusPill>
                     </template>
                     <template #filtros>
                         <div class="flex min-w-[180px] max-w-[260px] flex-1 flex-col gap-1">
