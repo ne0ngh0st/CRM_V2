@@ -201,77 +201,106 @@ class DashboardController extends Controller
 
     private function carteiraSegmento(?array $codVendedores): array
     {
-        $query = Cliente::query();
-        if ($codVendedores !== null) {
-            // Qualificado: CarteiraAderenciaResolver faz LEFT JOIN em segmentos_vendedor,
-            // que também tem cod_vendedor — sem o prefixo a query vira ambígua.
-            $query->whereIn('clientes.cod_vendedor', $codVendedores);
-        }
+        $chaveEscopo = $codVendedores !== null ? implode(',', $codVendedores) : 'todos';
 
-        return $this->aderenciaResolver->resolver($query);
+        // Mesmo motivo do faturamentoComparacao() (Regra de ouro nº 6): CarteiraAderenciaResolver
+        // faz LEFT JOIN em segmentos/segmentos_vendedor sobre as ~89k linhas de clientes — achado
+        // no teste de carga de 2026-07-30 como o maior contribuinte pro Dashboard ficar lento
+        // sob concorrência (~2s por request sem cache, escopo admin).
+        return Cache::remember(
+            "dashboard:carteira-segmento:{$chaveEscopo}",
+            now()->addMinutes(15),
+            function () use ($codVendedores) {
+                $query = Cliente::query();
+                if ($codVendedores !== null) {
+                    // Qualificado: CarteiraAderenciaResolver faz LEFT JOIN em segmentos_vendedor,
+                    // que também tem cod_vendedor — sem o prefixo a query vira ambígua.
+                    $query->whereIn('clientes.cod_vendedor', $codVendedores);
+                }
+
+                return $this->aderenciaResolver->resolver($query);
+            }
+        );
     }
 
     /** @param array<int> $usuarioIds */
     private function orcamentosStats(array $usuarioIds): array
     {
-        $query = Orcamento::query()->whereIn('user_id', $usuarioIds);
+        sort($usuarioIds);
+        $chaveEscopo = md5(implode(',', $usuarioIds));
 
-        return [
-            'total' => (clone $query)->count(),
-            'valorTotal' => (float) (clone $query)->sum('valor_total'),
-            'aguardandoSupervisor' => (clone $query)->where('status_gestor', 'pendente')->where('nivel_aprovacao', 'supervisor')->count(),
-            'aguardandoDiretor' => (clone $query)->where('status_gestor', 'pendente')->where('nivel_aprovacao', 'diretor')->count(),
-            'aprovados' => (clone $query)->where('status_gestor', 'aprovado')->count(),
-            'valorAprovado' => (float) (clone $query)->where('status_gestor', 'aprovado')->sum('valor_total'),
-            'rejeitados' => (clone $query)->where('status_gestor', 'rejeitado')->count(),
-            'itens' => (clone $query)
-                ->latest()
-                ->limit(8)
-                ->get(['id', 'cliente_nome', 'valor_total', 'status_gestor', 'created_at'])
-                ->map(fn (Orcamento $o) => [
-                    'id' => $o->id,
-                    'cliente' => $o->cliente_nome,
-                    'valorTotal' => (float) $o->valor_total,
-                    'status' => $o->status_gestor,
-                    'criadoHoje' => $o->created_at->isToday(),
-                    'criadoEm' => $o->created_at->format('d/m/Y'),
-                ])
-                ->values(),
-        ];
+        return Cache::remember(
+            "dashboard:orcamentos-stats:{$chaveEscopo}",
+            now()->addMinutes(15),
+            function () use ($usuarioIds) {
+                $query = Orcamento::query()->whereIn('user_id', $usuarioIds);
+
+                return [
+                    'total' => (clone $query)->count(),
+                    'valorTotal' => (float) (clone $query)->sum('valor_total'),
+                    'aguardandoSupervisor' => (clone $query)->where('status_gestor', 'pendente')->where('nivel_aprovacao', 'supervisor')->count(),
+                    'aguardandoDiretor' => (clone $query)->where('status_gestor', 'pendente')->where('nivel_aprovacao', 'diretor')->count(),
+                    'aprovados' => (clone $query)->where('status_gestor', 'aprovado')->count(),
+                    'valorAprovado' => (float) (clone $query)->where('status_gestor', 'aprovado')->sum('valor_total'),
+                    'rejeitados' => (clone $query)->where('status_gestor', 'rejeitado')->count(),
+                    'itens' => (clone $query)
+                        ->latest()
+                        ->limit(8)
+                        ->get(['id', 'cliente_nome', 'valor_total', 'status_gestor', 'created_at'])
+                        ->map(fn (Orcamento $o) => [
+                            'id' => $o->id,
+                            'cliente' => $o->cliente_nome,
+                            'valorTotal' => (float) $o->valor_total,
+                            'status' => $o->status_gestor,
+                            'criadoHoje' => $o->created_at->isToday(),
+                            'criadoEm' => $o->created_at->format('d/m/Y'),
+                        ])
+                        ->values(),
+                ];
+            }
+        );
     }
 
     private function pedidosAtencao(?array $codVendedores): array
     {
-        $emAberto = Pedido::query()->whereNull('data_faturamento');
-        if ($codVendedores !== null) {
-            $emAberto->whereIn('cod_vendedor', $codVendedores);
-        }
+        $chaveEscopo = $codVendedores !== null ? implode(',', $codVendedores) : 'todos';
 
-        $hoje = now()->toDateString();
-        $em7Dias = now()->addDays(7)->toDateString();
+        return Cache::remember(
+            "dashboard:pedidos-atencao:{$chaveEscopo}",
+            now()->addMinutes(15),
+            function () use ($codVendedores) {
+                $emAberto = Pedido::query()->whereNull('data_faturamento');
+                if ($codVendedores !== null) {
+                    $emAberto->whereIn('cod_vendedor', $codVendedores);
+                }
 
-        $atrasados = (clone $emAberto)->whereDate('data_previsao_faturamento', '<', $hoje);
-        $vencendo = (clone $emAberto)->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias]);
+                $hoje = now()->toDateString();
+                $em7Dias = now()->addDays(7)->toDateString();
 
-        $itens = (clone $atrasados)
-            ->with('cliente:id,razao_social')
-            ->orderBy('data_previsao_faturamento')
-            ->limit(8)
-            ->get()
-            ->map(fn (Pedido $p) => [
-                'numero' => $p->numero_pedido,
-                'cliente' => $p->cliente?->razao_social ?? '—',
-                'valorTotal' => (float) $p->valor_total,
-                'previsao' => optional($p->data_previsao_faturamento)->format('d/m/Y'),
-                'diasAtraso' => (int) abs(now()->diffInDays($p->data_previsao_faturamento)),
-            ])
-            ->values();
+                $atrasados = (clone $emAberto)->whereDate('data_previsao_faturamento', '<', $hoje);
+                $vencendo = (clone $emAberto)->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias]);
 
-        return [
-            'atrasados' => (clone $atrasados)->count(),
-            'vencendo' => (clone $vencendo)->count(),
-            'valorEmRisco' => (float) (clone $atrasados)->sum('valor_total') + (float) (clone $vencendo)->sum('valor_total'),
-            'itens' => $itens,
-        ];
+                $itens = (clone $atrasados)
+                    ->with('cliente:id,razao_social')
+                    ->orderBy('data_previsao_faturamento')
+                    ->limit(8)
+                    ->get()
+                    ->map(fn (Pedido $p) => [
+                        'numero' => $p->numero_pedido,
+                        'cliente' => $p->cliente?->razao_social ?? '—',
+                        'valorTotal' => (float) $p->valor_total,
+                        'previsao' => optional($p->data_previsao_faturamento)->format('d/m/Y'),
+                        'diasAtraso' => (int) abs(now()->diffInDays($p->data_previsao_faturamento)),
+                    ])
+                    ->values();
+
+                return [
+                    'atrasados' => (clone $atrasados)->count(),
+                    'vencendo' => (clone $vencendo)->count(),
+                    'valorEmRisco' => (float) (clone $atrasados)->sum('valor_total') + (float) (clone $vencendo)->sum('valor_total'),
+                    'itens' => $itens,
+                ];
+            }
+        );
     }
 }
