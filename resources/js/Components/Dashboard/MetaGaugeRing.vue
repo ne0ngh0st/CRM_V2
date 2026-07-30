@@ -6,7 +6,6 @@ const props = defineProps({
     label: { type: String, required: true },
     legenda: { type: String, required: true },
     dados: { type: Object, required: true },
-    termo: { type: String, required: true },
     href: { type: String, default: null },
 });
 
@@ -21,12 +20,6 @@ const cor = computed(() => {
     if (props.dados.percentual >= 80) return '#f59e0b';
     return '#ef4444';
 });
-
-const diferenca = computed(() => Math.abs(props.dados.faturamento - props.dados.meta));
-
-function formatBRL(valor) {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
-}
 </script>
 
 <template>
@@ -55,22 +48,5 @@ function formatBRL(valor) {
         </svg>
 
         <p class="mt-1 text-xs font-medium text-gray-500">{{ legenda }}</p>
-
-        <div class="mt-2 text-center text-sm">
-            <p class="text-gray-500">
-                Realizado: <span class="font-semibold text-gray-800">{{ formatBRL(dados.faturamento) }}</span>
-            </p>
-            <p class="text-gray-500">
-                {{ termo }}: <span class="font-semibold text-gray-800">{{ formatBRL(dados.meta) }}</span>
-            </p>
-            <p class="mt-1 font-medium" :style="{ color: cor }">
-                <template v-if="dados.percentual >= 100">
-                    {{ termo }} superad{{ termo === 'Objetivo' ? 'o' : 'a' }} em {{ formatBRL(diferenca) }}
-                </template>
-                <template v-else>
-                    Faltam {{ formatBRL(diferenca) }}
-                </template>
-            </p>
-        </div>
     </component>
 </template>

@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import MetaGaugeRing from '@/Components/Dashboard/MetaGaugeRing.vue';
+import MetaFatCard from '@/Components/Dashboard/MetaFatCard.vue';
 
 const props = defineProps({
     metaGauge: {
@@ -45,8 +46,23 @@ function formatBRL(valor) {
         </template>
 
         <div class="flex flex-col items-start justify-center gap-6 sm:flex-row sm:items-start sm:justify-around">
-            <MetaGaugeRing label="Mês" :legenda="`${termo} do mês`" :dados="metaGauge.mes" :termo="termo" :href="hrefMetaMes" />
-            <MetaGaugeRing label="Ano" :legenda="`Acumulado ${anoAtual}`" :dados="metaGauge.ano" :termo="termo" :href="hrefMetaAno" />
+            <MetaGaugeRing label="Mês" :legenda="`${termo} do mês`" :dados="metaGauge.mes" :href="hrefMetaMes" />
+            <MetaGaugeRing label="Ano" :legenda="`Acumulado ${anoAtual}`" :dados="metaGauge.ano" :href="hrefMetaAno" />
+        </div>
+
+        <div class="mt-5 space-y-2.5">
+            <MetaFatCard
+                titulo="Faturamento do mês"
+                :dados="metaGauge.mes"
+                :termo="termo"
+                :href="hrefMetaMes"
+            />
+            <MetaFatCard
+                :titulo="`Acumulado ${anoAtual}`"
+                :dados="metaGauge.ano"
+                :termo="termo"
+                :href="hrefMetaAno"
+            />
         </div>
 
         <div v-if="metaGauge.pedidosEmitidos" class="mt-5 border-t border-gray-100 pt-4">
