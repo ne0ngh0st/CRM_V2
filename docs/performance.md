@@ -23,6 +23,25 @@ Metas por classe de interação. `p95` = 95% das requisições devem estar abaix
 
 Não existe "página que é lenta porque é pesada". Existe página que ainda não foi transformada em assíncrona.
 
+## Resultado das Fases 0-5 sob carga (2026-08-27)
+
+Teste de carga com 40 usuários virtuais por 45 s, contra nginx + PHP-FPM, containers de dev parados. Mesmo ambiente e mesmo método nas duas medições — a única variável é o código.
+
+| | Antes (fases 0-1) | Depois (fases 0-5) | |
+|---|---:|---:|---|
+| **Throughput** | 14,3 req/s | **27,9 req/s** | +95% |
+| Requisições em 45 s | 702 | **1.289** | +84% |
+| `/carteira` p50 | 4.894 ms | **647 ms** | −87% |
+| `/dashboard` p50 | 2.556 ms | **670 ms** | −74% |
+| `/leads` p50 | 1.769 ms | **890 ms** | −50% |
+| `/equipe` p50 | 1.566 ms | **851 ms** | −46% |
+| `/cadastros` p50 | 995 ms | **328 ms** | −67% |
+| Erros | 0 | 0 | |
+
+**Todas as 10 páginas ficaram subsecond no p50.** No p95, 6 das 10 — as quatro acima (carteira 1.022 ms, equipe 1.097 ms, leads 1.159 ms, metas 1.122 ms) passam de 1 s por pouco.
+
+⚠️ **Isso não é a meta cumprida, e sim um forte indício.** O orçamento da Regra de ouro nº 9 fala em p95, e esses números vêm de um ambiente pior que produção (WSL2, máquina de trabalho) sob um cenário mais agressivo que o real — 40 usuários batendo sem pausa não é o mesmo que 200 pessoas/dia lendo a tela entre cliques. A meta só se declara cumprida no `TargetResponseTime` do ALB.
+
 ## Ordem de trabalho: medir → mudar → medir
 
 Isto é a Regra de ouro nº 6 aplicada: **nunca otimizar por intuição.** Duas vezes neste projeto o palpite errou — o índice em `data_emissao` que não rendeu nada (baixa seletividade) e a simulação de memória do import que "provou" que cabia, quando não cabia.
