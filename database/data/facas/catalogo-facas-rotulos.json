@@ -1,0 +1,75 @@
+[
+  {
+    "item": 1,
+    "largura": "80",
+    "altura": "230",
+    "detalhes": [],
+    "icones": [
+      "1.png"
+    ]
+  },
+  {
+    "item": 2,
+    "largura": "Ø40",
+    "altura": "Ø40",
+    "detalhes": [],
+    "icones": [
+      "2.png"
+    ]
+  },
+  {
+    "item": 3,
+    "largura": "30",
+    "altura": "31,5",
+    "detalhes": [],
+    "icones": [
+      "3.png"
+    ]
+  },
+  {
+    "item": 4,
+    "largura": "60",
+    "altura": "100",
+    "detalhes": [],
+    "icones": [
+      "4.png"
+    ]
+  },
+  {
+    "item": 5,
+    "largura": "45",
+    "altura": "100",
+    "detalhes": [],
+    "icones": [
+      "5.png"
+    ]
+  },
+  {
+    "item": 6,
+    "largura": "35",
+    "altura": "97",
+    "detalhes": [],
+    "icones": [
+      "6.png"
+    ]
+  },
+  {
+    "item": 7,
+    "largura": "50",
+    "altura": "60",
+    "detalhes": [],
+    "icones": [
+      "7.png"
+    ]
+  },
+  {
+    "item": 8,
+    "largura": "100",
+    "altura": "130",
+    "detalhes": [],
+    "icones": [
+      "8.png"
+    ]
+  }
+]
+

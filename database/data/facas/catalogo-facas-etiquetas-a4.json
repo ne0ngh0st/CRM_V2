@@ -1,0 +1,265 @@
+[
+  {
+    "item": 1,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 84 etiquetas",
+      "C/ 31x17mm"
+    ],
+    "icones": [
+      "1.png"
+    ]
+  },
+  {
+    "item": 2,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 36 etiquetas",
+      "C/ 52,5x32mm"
+    ],
+    "icones": [
+      "2.png"
+    ]
+  },
+  {
+    "item": 3,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 2 etiquetas",
+      "C/ 210x145mm"
+    ],
+    "icones": [
+      "3.png"
+    ]
+  },
+  {
+    "item": 4,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 9 etiquetas",
+      "C/ 99x70mm",
+      "Obs.: linha tracejada fora liner (verso)"
+    ],
+    "icones": [
+      "4.png"
+    ]
+  },
+  {
+    "item": 5,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 16 un",
+      "99,1x34mm"
+    ],
+    "icones": [
+      "5.png"
+    ]
+  },
+  {
+    "item": 6,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 14 un",
+      "99,1x38,1mm"
+    ],
+    "icones": [
+      "6.png"
+    ]
+  },
+  {
+    "item": 7,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 8 un",
+      "99,1x67,7mm"
+    ],
+    "icones": [
+      "7.png"
+    ]
+  },
+  {
+    "item": 8,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 27 un",
+      "70x33mm"
+    ],
+    "icones": [
+      "8.png"
+    ]
+  },
+  {
+    "item": 9,
+    "largura": "215,9",
+    "altura": "279,4",
+    "detalhes": [
+      "Carta 215,9x279,4mm",
+      "Folha c/ 20 un",
+      "101,6x25,4mm"
+    ],
+    "icones": [
+      "9.png"
+    ]
+  },
+  {
+    "item": 10,
+    "largura": "215,9",
+    "altura": "279,4",
+    "detalhes": [
+      "Carta 215,9x279,4mm",
+      "Folha c/ 9 un",
+      "106,36x138,11mm"
+    ],
+    "icones": [
+      "10.png"
+    ]
+  },
+  {
+    "item": 11,
+    "largura": "215,9",
+    "altura": "279,4",
+    "detalhes": [
+      "Carta 215,9x279,4mm",
+      "Folha c/ 6 un",
+      "101,6x84,7mm"
+    ],
+    "icones": [
+      "11.png"
+    ]
+  },
+  {
+    "item": 12,
+    "largura": "215,9",
+    "altura": "279,4",
+    "detalhes": [
+      "Carta 215,9x279,4mm",
+      "Folha c/ 10 un",
+      "101,6x50,8mm"
+    ],
+    "icones": [
+      "12.png"
+    ]
+  },
+  {
+    "item": 13,
+    "largura": "215,9",
+    "altura": "279,4",
+    "detalhes": [
+      "Carta 215,9x279,4mm",
+      "Folha c/ 30 un",
+      "66,7x25,4mm"
+    ],
+    "icones": [
+      "13.png"
+    ]
+  },
+  {
+    "item": 14,
+    "largura": "215,9",
+    "altura": "279,4",
+    "detalhes": [
+      "Carta 215,9x279,4mm",
+      "Folha c/ 14 un",
+      "101,6x31,9mm"
+    ],
+    "icones": [
+      "14.png"
+    ]
+  },
+  {
+    "item": 15,
+    "largura": "215,9",
+    "altura": "279,4",
+    "detalhes": [
+      "Carta 215,9x279,4mm",
+      "Folha c/ 4 un",
+      "215,9x279,4mm"
+    ],
+    "icones": [
+      "15.png"
+    ]
+  },
+  {
+    "item": 16,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 36 etiquetas",
+      "C/ 45x30mm"
+    ],
+    "icones": [
+      "16.png"
+    ]
+  },
+  {
+    "item": 17,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 12 etiquetas",
+      "C/ 48x90mm",
+      "Obs.: linha laranja é corte no liner (verso)"
+    ],
+    "icones": [
+      "17.png"
+    ]
+  },
+  {
+    "item": 18,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 6 etiquetas",
+      "C/ 105x99mm"
+    ],
+    "icones": [
+      "18.png"
+    ]
+  },
+  {
+    "item": 19,
+    "largura": "210",
+    "altura": "297",
+    "detalhes": [
+      "A4 210x297mm",
+      "Folha c/ 10 etiquetas",
+      "C/ 77,79x49,56mm"
+    ],
+    "icones": [
+      "19.png"
+    ]
+  },
+  {
+    "item": 20,
+    "largura": "215,9",
+    "altura": "279,4",
+    "detalhes": [
+      "Carta 215,9x279,4mm",
+      "Folha c/ 14 un",
+      "101,6x34mm"
+    ],
+    "icones": [
+      "20.png"
+    ]
+  }
+]
+

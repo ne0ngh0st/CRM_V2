@@ -1,0 +1,223 @@
+[
+  {
+    "item": 1,
+    "largura": "Ø 40",
+    "altura": "Ø 40",
+    "detalhes": [
+      "Redonda"
+    ],
+    "icones": [
+      "1.png"
+    ]
+  },
+  {
+    "item": 2,
+    "largura": "Ø 40",
+    "altura": "Ø 40",
+    "detalhes": [
+      "Redonda com picote"
+    ],
+    "icones": [
+      "2.png"
+    ]
+  },
+  {
+    "item": 3,
+    "largura": "Ø 25 x Ø 25",
+    "altura": "Ø 25",
+    "detalhes": [
+      "Redonda"
+    ],
+    "icones": [
+      "3.png"
+    ]
+  },
+  {
+    "item": 4,
+    "largura": "Ø 55",
+    "altura": "Ø 55",
+    "detalhes": [
+      "Redonda"
+    ],
+    "icones": [
+      "4.png"
+    ]
+  },
+  {
+    "item": 5,
+    "largura": "51",
+    "altura": "32,5",
+    "detalhes": [
+      "Retangular sem liner entre repetições"
+    ],
+    "icones": [
+      "5.png"
+    ]
+  },
+  {
+    "item": 6,
+    "largura": "51+5",
+    "altura": "0",
+    "detalhes": [
+      "Meio corte lateral direita 5mm - contínua"
+    ],
+    "icones": [
+      "6.png"
+    ]
+  },
+  {
+    "item": 7,
+    "largura": "56+3",
+    "altura": "0",
+    "detalhes": [
+      "Meio corte lateral direita 3mm - contínua"
+    ],
+    "icones": [
+      "7.png"
+    ]
+  },
+  {
+    "item": 8,
+    "largura": "56+2",
+    "altura": "0",
+    "detalhes": [
+      "Meio corte lateral direita 2mm - contínua"
+    ],
+    "icones": [
+      "8.png"
+    ]
+  },
+  {
+    "item": 9,
+    "largura": "62",
+    "altura": "0",
+    "detalhes": [
+      "Meio corte lateral direita 2,5mm - contínua"
+    ],
+    "icones": [
+      "9.png"
+    ]
+  },
+  {
+    "item": 10,
+    "largura": "75",
+    "altura": "0",
+    "detalhes": [
+      "Meio corte lateral direita 4mm - contínua"
+    ],
+    "icones": [
+      "10.png"
+    ]
+  },
+  {
+    "item": 11,
+    "largura": "100",
+    "altura": "0",
+    "detalhes": [
+      "Meio corte lateral direita 5mm - contínua"
+    ],
+    "icones": [
+      "11.png"
+    ]
+  },
+  {
+    "item": 12,
+    "largura": "45",
+    "altura": "89",
+    "detalhes": [
+      "\"X\" integrado"
+    ],
+    "icones": [
+      "12.png"
+    ]
+  },
+  {
+    "item": 13,
+    "largura": "80",
+    "altura": "65",
+    "detalhes": [
+      "Com picote \"serrilhado\" integrado"
+    ],
+    "icones": [
+      "13.png"
+    ]
+  },
+  {
+    "item": 14,
+    "largura": "20",
+    "altura": "25",
+    "detalhes": [
+      "2 carreiras"
+    ],
+    "icones": [
+      "14.png"
+    ]
+  },
+  {
+    "item": 15,
+    "largura": "34",
+    "altura": "23",
+    "detalhes": [
+      "3 carreiras"
+    ],
+    "icones": [
+      "15.png"
+    ]
+  },
+  {
+    "item": 16,
+    "largura": "30",
+    "altura": "30",
+    "detalhes": [
+      "3 carreiras com picote \"x + o\""
+    ],
+    "icones": [
+      "16.png"
+    ]
+  },
+  {
+    "item": 17,
+    "largura": "30/29",
+    "altura": "0",
+    "detalhes": [
+      "Contínua com picote \"padrão\" e recuo de 30mm para código de barras"
+    ],
+    "icones": [
+      "17.png"
+    ]
+  },
+  {
+    "item": 18,
+    "largura": "59",
+    "altura": "0",
+    "detalhes": [
+      "Contínua com picote \"laterais\""
+    ],
+    "icones": [
+      "18.png"
+    ]
+  },
+  {
+    "item": 19,
+    "largura": "59",
+    "altura": "0",
+    "detalhes": [
+      "Contínua com picote \"laterais + picote em grau para corte\""
+    ],
+    "icones": [
+      "19.png"
+    ]
+  },
+  {
+    "item": 20,
+    "largura": "95",
+    "altura": "130",
+    "detalhes": [
+      "Corte retangular com serrilha entre as etiquetas"
+    ],
+    "icones": [
+      "20.png"
+    ]
+  }
+]
+

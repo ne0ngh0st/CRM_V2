@@ -1,0 +1,219 @@
+[
+  {
+    "item": 1,
+    "largura": "0/160",
+    "altura": 25,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda lateral"
+    ],
+    "icones": [
+      "1.png"
+    ]
+  },
+  {
+    "item": 2,
+    "largura": 100,
+    "altura": 30,
+    "detalhes": [
+      "Largura fixa",
+      "Fendas nas 2 laterais + central"
+    ],
+    "icones": [
+      "2.png"
+    ]
+  },
+  {
+    "item": 3,
+    "largura": 100,
+    "altura": 80,
+    "detalhes": [
+      "Largura fixa",
+      "Fenda lateral / 2 carreiras 50"
+    ],
+    "icones": [
+      "3.png"
+    ]
+  },
+  {
+    "item": 4,
+    "largura": 100,
+    "altura": 120,
+    "detalhes": [
+      "Largura fixa",
+      "Fenda lateral / 2 carreiras 50"
+    ],
+    "icones": [
+      "4.png"
+    ]
+  },
+  {
+    "item": 5,
+    "largura": 105,
+    "altura": 30,
+    "detalhes": [
+      "Largura fixa",
+      "Fendas nas 2 laterais"
+    ],
+    "icones": [
+      "5.png"
+    ]
+  },
+  {
+    "item": 6,
+    "largura": 105,
+    "altura": 30,
+    "detalhes": [
+      "Largura fixa",
+      "Fendas nas 2 laterais + central"
+    ],
+    "icones": [
+      "6.png"
+    ]
+  },
+  {
+    "item": 7,
+    "largura": "0/160",
+    "altura": 30,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda central"
+    ],
+    "icones": [
+      "7.png"
+    ]
+  },
+  {
+    "item": 8,
+    "largura": "0/160",
+    "altura": 30,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda lateral"
+    ],
+    "icones": [
+      "8.png"
+    ]
+  },
+  {
+    "item": 9,
+    "largura": "0/160",
+    "altura": 35,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda central"
+    ],
+    "icones": [
+      "9.png"
+    ]
+  },
+  {
+    "item": 10,
+    "largura": "0/160",
+    "altura": 35,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda lateral"
+    ],
+    "icones": [
+      "10.png"
+    ]
+  },
+  {
+    "item": 11,
+    "largura": "0/160",
+    "altura": 40,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda lateral"
+    ],
+    "icones": [
+      "11.png"
+    ]
+  },
+  {
+    "item": 12,
+    "largura": "0/160",
+    "altura": 50,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda lateral"
+    ],
+    "icones": [
+      "12.png"
+    ]
+  },
+  {
+    "item": 13,
+    "largura": "0/160",
+    "altura": 72,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda lateral"
+    ],
+    "icones": [
+      "13.png"
+    ]
+  },
+  {
+    "item": 14,
+    "largura": "0/160",
+    "altura": 75,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda lateral"
+    ],
+    "icones": [
+      "14.png"
+    ]
+  },
+  {
+    "item": 15,
+    "largura": "0/160",
+    "altura": 148,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda lateral"
+    ],
+    "icones": [
+      "15.png"
+    ]
+  },
+  {
+    "item": 16,
+    "largura": "0/160",
+    "altura": 148,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda central"
+    ],
+    "icones": [
+      "16.png"
+    ]
+  },
+  {
+    "item": 17,
+    "largura": "0/160",
+    "altura": 210,
+    "detalhes": [
+      "Largura móvel",
+      "Fenda lateral"
+    ],
+    "icones": [
+      "17.png"
+    ]
+  },
+  {
+    "item": 18,
+    "largura": 70,
+    "altura": 110,
+    "detalhes": [
+      "Largura fixa",
+      "Fendas nas 2 laterais + central + serrilha a 30 mm da cabeça"
+    ],
+    "icones": [
+      "18.png"
+    ]
+  }
+]
+
