@@ -1,0 +1,120 @@
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: palma_v2
+      MYSQL_USER: palma
+      MYSQL_PASSWORD: palma
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Cache + sessão + fila. Tudo em RAM: nada aqui é fonte de verdade, então o serviço
+  # pode ser destruído e recriado sem perda (a única exceção é a fila — ver nota abaixo).
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # ⚠️ volatile-lru, NUNCA allkeys-lru.
+    # Quando a memória enche, o Redis precisa descartar alguma coisa. Com `allkeys-lru`
+    # ele pode descartar QUALQUER chave — inclusive jobs enfileirados e sessões de
+    # usuários logados, que não têm prazo de validade. Com `volatile-lru` ele só descarta
+    # chave que tenha TTL, ou seja, só cache. Consequência que virou regra do projeto:
+    # `Cache::forever()` é proibido aqui, porque cria chave sem TTL — ela ficaria imune
+    # ao descarte e imortal, ocupando memória para sempre.
+    #
+    # `appendonly no`: sem persistência em disco. Em dev é o certo (é cache), mas
+    # significa que um restart esvazia a fila. Jobs aqui são notificações, então tudo bem.
+    command: redis-server --maxmemory 256mb --maxmemory-policy volatile-lru --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/dev/Dockerfile
+    working_dir: /var/www
+    command: php artisan serve --host=0.0.0.0 --port=8000
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: mysql
+      # ⚠️ Obrigatório: o .env diz REDIS_HOST=127.0.0.1, que DENTRO do container aponta
+      # para o próprio container, não para o serviço redis. Mesmo motivo do DB_HOST.
+      REDIS_HOST: redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/var/www
+      - vendor_data:/var/www/vendor
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  queue:
+    build:
+      context: .
+      dockerfile: docker/dev/Dockerfile
+    working_dir: /var/www
+    command: php artisan queue:listen --tries=1
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+    volumes:
+      - .:/var/www
+      - vendor_data:/var/www/vendor
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  reverb:
+    build:
+      context: .
+      dockerfile: docker/dev/Dockerfile
+    working_dir: /var/www
+    command: php artisan reverb:start --debug --host=0.0.0.0
+    ports:
+      - "8082:8080"
+    environment:
+      DB_HOST: mysql
+      REDIS_HOST: redis
+    volumes:
+      - .:/var/www
+      - vendor_data:/var/www/vendor
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  vite:
+    image: node:22-alpine
+    working_dir: /var/www
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/var/www
+      - node_modules_data:/var/www/node_modules
+      - vendor_data:/var/www/vendor:ro
+
+volumes:
+  mysql_data:
+  vendor_data:
+  node_modules_data:

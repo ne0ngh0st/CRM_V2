@@ -22,8 +22,17 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
-        <!-- <env name="DB_CONNECTION" value="sqlite"/> -->
-        <!-- <env name="DB_DATABASE" value=":memory:"/> -->
+        <!-- NÃO comentar/alterar estas duas linhas. Sem elas os testes rodam contra a
+             conexão padrão (o palma_v2 de desenvolvimento) e o RefreshDatabase faz
+             migrate:fresh nele, apagando todo o dado importado do legado — aconteceu em
+             2026-08-10. force="true" garante que nem variável de ambiente do container
+             sobrescreve. A trava em tests/TestCase.php segura se isto for mexido.
+             É MySQL e não SQLite de propósito: as queries do projeto usam SQL específico
+             de MySQL (CONCAT, orderByRaw '... IS NULL', COUNT(DISTINCT)), então testar
+             em SQLite daria confiança falsa — e o SQLite em memória ainda quebra o
+             RefreshDatabase aqui ("no such table: roles"). -->
+        <env name="DB_CONNECTION" value="mysql" force="true"/>
+        <env name="DB_DATABASE" value="palma_v2_test" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
