@@ -54,6 +54,13 @@ services:
       # ⚠️ Obrigatório: o .env diz REDIS_HOST=127.0.0.1, que DENTRO do container aponta
       # para o próprio container, não para o serviço redis. Mesmo motivo do DB_HOST.
       REDIS_HOST: redis
+      # ⚠️ Lado SERVIDOR do Reverb (app/worker → reverb). O .env diz localhost:8082, que
+      # dentro do container é o PRÓPRIO container: o broadcast falhava em silêncio e o
+      # sino em tempo real nunca funcionou no Docker. O browser continua em localhost:8082
+      # pelas VITE_REVERB_* do .env, que agora são independentes destas.
+      REVERB_HOST: reverb
+      REVERB_PORT: 8080
+      REVERB_SCHEME: http
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -70,10 +77,29 @@ services:
       context: .
       dockerfile: docker/dev/Dockerfile
     working_dir: /var/www
-    command: php artisan queue:listen --tries=1
+    # --timeout=700 dá folga sobre o $timeout=600 do GerarExportacaoCarteiraJob: o worker
+    # precisa de margem MAIOR que o job, senão mata o processo sem passar pelo failed() e
+    # o registro fica preso em "processando" para sempre.
+    #
+    # ⚠️ SE A FILA "PARAR DE FUNCIONAR", SUSPEITE DA IMAGEM ANTES DO CÓDIGO.
+    # Em 2026-08-27 o worker anunciava "Processing jobs from the [default] queue" e não
+    # consumia nada. A causa não era o `queue:listen` nem o job: `docker compose build app`
+    # reconstrói SÓ a imagem do serviço `app`, e os serviços `queue` e `reverb` — que usam
+    # o mesmo Dockerfile — continuaram com a imagem antiga, sem a extensão phpredis. O
+    # worker morria com "Class Redis not found" a cada tentativa, e o erro só aparecia em
+    # `docker compose logs queue`.
+    #
+    # Depois de mexer no Dockerfile: `docker compose build` (sem argumento) ou nomeie os
+    # três serviços. Nunca só `app`.
+    command: php artisan queue:listen --tries=1 --timeout=700
     environment:
       DB_HOST: mysql
       REDIS_HOST: redis
+      # Mesmo motivo do serviço `app`: o worker também dispara broadcast (notificação de
+      # exportação pronta, por exemplo) e precisa alcançar o Reverb pelo nome do serviço.
+      REVERB_HOST: reverb
+      REVERB_PORT: 8080
+      REVERB_SCHEME: http
     volumes:
       - .:/var/www
       - vendor_data:/var/www/vendor
