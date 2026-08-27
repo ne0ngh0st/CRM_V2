@@ -288,6 +288,35 @@ Todas as listagens do sistema usam `paginate()` hoje. Opções, em ordem de pref
 
 ⚠️ `CarteiraController::index()` já passa `total:` calculado por uma query separada sem o join de ordenação — isso continua sendo um COUNT, só que mais barato.
 
+### ✅ Fase 6 feita em 2026-08-27 — e o plano estava mirando errado
+
+| Rota | Queries | SQL |
+|---|---|---|
+| `/leads` | 11 → **6** | 170 → **26 ms** |
+| `/pedidos-abertos` | 10 → 10 | 70 → **28 ms** |
+| `/tabela-precos` | 7 → **3** | 72 → **44 ms** |
+
+**A lição desta fase é sobre método, não sobre SQL.** O plano mandava consolidar os `count()` repetidos. Medindo antes de mexer, em `/leads`:
+
+| Suspeito | Custo real |
+|---|---:|
+| `ORDER BY razao_social` (sem índice) | **48 ms** |
+| `DISTINCT estado` (dropdown) | **45 ms** |
+| Os 4 counts juntos | 19 ms |
+
+Os counts eram o menor dos três. Consolidá-los rendeu 5 ms; o índice rendeu 47 ms. Quem seguisse o plano sem medir teria feito o trabalho certo no alvo errado.
+
+**Causa raiz:** `leads` nunca recebeu o índice em `razao_social` — a migration de agosto o adicionou em `clientes` e deixou a tabela irmã de fora, apesar de as duas telas terem exatamente o mesmo desenho.
+
+**O anti-padrão que sobreviveu:** `ORDER BY data_previsao_faturamento IS NULL, ... ASC` em Pedidos — 6,6 ms contra 0,73 ms. A Carteira já tinha corrigido isso em agosto; Pedidos não. Removido sem trade-off: medido que **zero** dos 3.517 pedidos em aberto tem previsão nula.
+
+⚠️ **Dois alarmes falsos desmontados pela medição**, que valem mais que os ganhos:
+
+1. O `whereDate()` quase não custava — porque não havia índice em `data_previsao_faturamento` para ele bloquear. Só passou a importar **depois** que o índice foi criado. Corrigi-lo antes teria sido trabalho por nada.
+2. A primeira versão da migration indexava `leads.valor_estimado` (a tela ordena por ela). Medindo: **100% dos 17.173 leads têm esse campo nulo**. O índice foi removido antes do commit — ordenar por coluna toda nula não ordena nada, e o índice só custaria escrita nos imports.
+
+**O que ficou deliberadamente como está:** `ORDER BY preco_tabela IS NULL` em `/tabela-precos`. Diferente de Pedidos, ali os nulos existem de verdade (2.557 de 26.989, 9,5%) e a expressão os joga para o fim, o que é o comportamento desejado.
+
 ## 1.7 🟠 Boot do Laravel sem os caches de produção
 
 Sem `config:cache`, `route:cache`, `view:cache`, `event:cache` e OPcache com `validate_timestamps=0`, cada requisição relê e reinterpreta configuração, rotas e arquivos do framework. Você já mediu o extremo disso neste projeto: **3,8 s só no `require vendor/autoload.php`** no experimento de bind-mount.
