@@ -4,6 +4,7 @@ import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import NotificationBell from '@/Components/NotificationBell.vue';
+import SimulacaoBanner from '@/Components/SimulacaoBanner.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 
@@ -21,11 +22,17 @@ const visaoGestorAtiva = computed(() =>
 );
 const pedidosAtivo = computed(() => route().current('pedidos.*'));
 const carteiraAtiva = computed(() => route().current('carteira.*') || route().current('leads.*'));
+const catalogoAtivo = computed(() =>
+    route().current('tabela-precos.*') || route().current('catalogo-facas.*'),
+);
 </script>
 
 <template>
     <div>
         <div class="min-h-screen bg-zinc-100">
+            <!-- Antes do nav: fica no topo de QUALQUER página que use este layout. -->
+            <SimulacaoBanner />
+
             <nav class="bg-black">
                 <!-- Primary Navigation Menu -->
                 <div class="mx-auto max-w-[1800px] px-3 sm:px-4 lg:px-6">
@@ -177,15 +184,39 @@ const carteiraAtiva = computed(() => route().current('carteira.*') || route().cu
                                 >
                                     Cadastros
                                 </NavLink>
-                                <NavLink
+                                <div
                                     v-if="!isAssistente"
-                                    :href="route('tabela-precos.index')"
-                                    :active="route().current('tabela-precos.*')"
-                                    class="!text-white/80 hover:!text-white"
-                                    :class="route().current('tabela-precos.*') ? '!border-cyan !text-white' : '!border-transparent'"
+                                    class="relative inline-flex items-center"
                                 >
-                                    Tabela de Preços
-                                </NavLink>
+                                    <Dropdown align="left" width="48">
+                                        <template #trigger>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none"
+                                                :class="catalogoAtivo
+                                                    ? 'border-cyan text-white'
+                                                    : 'border-transparent text-white/80 hover:text-white'"
+                                            >
+                                                Catálogo
+                                                <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path
+                                                        fill-rule="evenodd"
+                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                        clip-rule="evenodd"
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </template>
+                                        <template #content>
+                                            <DropdownLink :href="route('tabela-precos.index')">
+                                                Tabela de Preços
+                                            </DropdownLink>
+                                            <DropdownLink :href="route('catalogo-facas.index')">
+                                                Catálogo de Facas
+                                            </DropdownLink>
+                                        </template>
+                                    </Dropdown>
+                                </div>
                             </div>
                         </div>
 
@@ -378,7 +409,14 @@ const carteiraAtiva = computed(() => route().current('carteira.*') || route().cu
                             :href="route('tabela-precos.index')"
                             :active="route().current('tabela-precos.*')"
                         >
-                            Tabela de Preços
+                            Catálogo · Tabela de Preços
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            v-if="!isAssistente"
+                            :href="route('catalogo-facas.index')"
+                            :active="route().current('catalogo-facas.*')"
+                        >
+                            Catálogo · Facas
                         </ResponsiveNavLink>
                     </div>
 
