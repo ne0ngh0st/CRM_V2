@@ -21,6 +21,11 @@
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
+        <!-- Sem broadcast em teste: o NotificacaoService dispara um evento pro Reverb, e
+             sem isto qualquer teste que gere notificação tenta abrir conexão com um
+             servidor WebSocket que não existe aqui, falhando com "Pusher error". A
+             notificação em si continua sendo gravada e verificável no banco. -->
+        <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <!-- NÃO comentar/alterar estas duas linhas. Sem elas os testes rodam contra a
              conexão padrão (o palma_v2 de desenvolvimento) e o RefreshDatabase faz

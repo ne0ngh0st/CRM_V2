@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\MetaMensal;
 use App\Models\User;
 use App\Models\VendedorPerfil;
@@ -16,6 +17,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class MetaController extends Controller
 {
+    use ExportaPlanilha;
+
     /** @var list<string> */
     private const GESTORES = ['admin', 'diretor', 'supervisor'];
 
@@ -69,6 +72,8 @@ class MetaController extends Controller
 
     public function exportar(Request $request): BinaryFileResponse
     {
+        $this->prepararExport('metas');
+
         $user = $request->user();
         abort_unless($this->podeAcessar($user), 403);
 

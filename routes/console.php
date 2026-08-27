@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\AquecerCacheDashboardJob;
+use App\Jobs\ExpurgarExportacoesJob;
 use App\Jobs\ExpurgarNotificacoesLidasJob;
 use App\Jobs\NotificarAgendamentosDoDiaJob;
 use App\Jobs\NotificarPedidosAtencaoJob;
@@ -30,6 +31,8 @@ Artisan::command('inspire', function () {
 Schedule::job(new NotificarAgendamentosDoDiaJob)->dailyAt('07:00')->onOneServer();
 Schedule::job(new NotificarPedidosAtencaoJob)->dailyAt('07:05')->onOneServer();
 Schedule::job(new ExpurgarNotificacoesLidasJob)->weeklyOn(1, '03:00')->onOneServer();
+// Planilhas vencidas: sem expurgo o disco do servidor so cresce (ver ExpurgarExportacoesJob).
+Schedule::job(new ExpurgarExportacoesJob)->dailyAt('03:30')->onOneServer();
 
 /*
  * Cache warming do Dashboard (ver docs/performance.md §1.3).

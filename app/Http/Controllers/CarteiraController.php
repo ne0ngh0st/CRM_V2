@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\AgendamentoLigacao;
 use App\Models\CarteiraMotivoInatividade;
+use App\Jobs\GerarExportacaoCarteiraJob;
 use App\Models\Cliente;
+use App\Models\Exportacao;
 use App\Models\GrupoCliente;
 use App\Models\Ligacao;
 use App\Models\Pedido;
@@ -26,6 +29,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class CarteiraController extends Controller
 {
+    use ExportaPlanilha;
+
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly CarteiraAderenciaResolver $aderenciaResolver,
@@ -252,17 +257,32 @@ class CarteiraController extends Controller
         ]);
     }
 
-    public function exportar(Request $request): BinaryFileResponse
+    /**
+     * Enfileira a geração da planilha da Carteira.
+     *
+     * ⚠️ ESTE ENDPOINT NÃO DEVOLVE ARQUIVO, e a mudança não é estilística.
+     * O export completo (escopo admin, ~90k clientes) leva ~95 s e ~540 MB. Atrás do ALB,
+     * cujo idle timeout padrão é 60 s, gerar de forma síncrona resultaria em 504 garantido
+     * — com o servidor seguindo ocupado por mais 35 s produzindo um arquivo que ninguém
+     * receberia. O usuário é avisado pelo sino quando ficar pronto.
+     *
+     * As outras oito exportações do sistema continuam síncronas: nenhuma tem volume que
+     * justifique a assincronia, e download imediato é melhor experiência quando cabe.
+     */
+    public function exportar(Request $request): RedirectResponse
     {
-        // Medido com os ~89.800 clientes sem filtro (escopo admin): ~540MB de pico e ~100s —
-        // acima do memory_limit/max_execution_time padrão do PHP-FPM. Ajuste só desta request.
-        ini_set('memory_limit', '1024M');
-        set_time_limit(300);
+        $exportacao = Exportacao::create([
+            'user_id' => $request->user()->id,
+            'recurso' => 'carteira',
+            // Só os filtros da tela: o job reconstrói a query a partir deles, e guardá-los
+            // deixa o arquivo auditável depois ("por que este Excel tem 300 linhas?").
+            'filtros' => $request->only(['busca', 'estado', 'segmento', 'status', 'aderencia', 'ordenar', 'visao_supervisor', 'visao_vendedor']),
+            'status' => Exportacao::STATUS_PROCESSANDO,
+        ]);
 
-        return Excel::download(
-            new \App\Exports\CarteiraExport($this->listaQuery($request), $this->statusResolver),
-            'carteira-'.now()->format('Y-m-d-His').'.xlsx',
-        );
+        GerarExportacaoCarteiraJob::dispatch($exportacao->id);
+
+        return back()->with('status', 'exportacao-enfileirada');
     }
 
     /** Escopo (cod_vendedor) puro, sem filtros de busca/estado/segmento/status. */
@@ -350,7 +370,7 @@ class CarteiraController extends Controller
     ];
 
     /** baseQuery() + aderência + ordenação. Usado por index() (lista) e exportar(). */
-    protected function listaQuery(Request $request): Builder
+    public function listaQuery(Request $request): Builder
     {
         return $this->aplicarOrdenacao(
             $this->filtradaQuery($request),

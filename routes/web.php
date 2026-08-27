@@ -5,6 +5,7 @@ use App\Http\Controllers\CarteiraController;
 use App\Http\Controllers\CatalogoFacaController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipeController;
+use App\Http\Controllers\ExportacaoController;
 use App\Http\Controllers\EtiquetaMateriaPrimaController;
 use App\Http\Controllers\InicioController;
 use App\Http\Controllers\LeadController;
@@ -48,7 +49,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/pedidos-emitidos/exportar', [PedidoController::class, 'exportarEmitidos'])->name('pedidos.exportarEmitidos');
 
     Route::get('/carteira', [CarteiraController::class, 'index'])->name('carteira.index');
-    Route::get('/carteira/exportar', [CarteiraController::class, 'exportar'])->name('carteira.exportar');
+    // POST porque deixou de ser uma leitura: dispara um job (ver CarteiraController::exportar).
+    Route::post('/carteira/exportar', [CarteiraController::class, 'exportar'])->name('carteira.exportar');
+    Route::get('/exportacoes/{exportacao}/download', [ExportacaoController::class, 'download'])->name('exportacoes.download');
     Route::get('/carteira/{cliente}/detalhes', [CarteiraController::class, 'detalhes'])->name('carteira.detalhes');
     Route::post('/carteira/{cliente}/motivo-inatividade', [CarteiraController::class, 'registrarMotivoInatividade'])->name('carteira.motivoInatividade');
     Route::post('/carteira/{cliente}/ligacao', [CarteiraController::class, 'registrarLigacao'])->name('carteira.ligacao');

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\Cliente;
 use App\Models\EtiquetaMateriaPrima;
 use App\Models\Lead;
@@ -30,6 +31,8 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class OrcamentoController extends Controller
 {
+    use ExportaPlanilha;
+
     private const ORDEM_NIVEL = ['nenhum' => 0, 'supervisor' => 1, 'diretor' => 2];
 
     private const OUTRAS_INFORMACOES_PADRAO = [
@@ -146,6 +149,8 @@ class OrcamentoController extends Controller
 
     public function exportar(Request $request): BinaryFileResponse
     {
+        $this->prepararExport('orcamentos');
+
         $query = $this->baseQuery($request)->with('user:id,name,display_name')->latest();
 
         return Excel::download(

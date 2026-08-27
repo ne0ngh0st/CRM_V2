@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\ClienteParaCadastro;
 use App\Models\Lead;
 use App\Models\SolicitacaoBobina;
@@ -23,6 +24,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class CadastroController extends Controller
 {
+    use ExportaPlanilha;
+
     private const ESTADOS = [
         'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
         'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC',
@@ -112,6 +115,8 @@ class CadastroController extends Controller
 
     public function exportar(Request $request): BinaryFileResponse
     {
+        $this->prepararExport('cadastros');
+
         $user = $request->user();
         $isGestor = in_array($user->getRoleNames()->first(), ['admin', 'diretor', 'supervisor'], true);
         $recurso = (string) $request->string('recurso');

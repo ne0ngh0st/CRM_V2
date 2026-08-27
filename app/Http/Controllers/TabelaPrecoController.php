@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\Produto;
 use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
@@ -15,6 +16,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class TabelaPrecoController extends Controller
 {
+    use ExportaPlanilha;
+
     public function __construct(
         private readonly CacheDeAgregacao $cache,
     ) {}
@@ -106,9 +109,8 @@ class TabelaPrecoController extends Controller
 
     public function exportar(Request $request): BinaryFileResponse
     {
-        // Catálogo tem ~27k produtos — margem de segurança, ver CarteiraController::exportar().
-        ini_set('memory_limit', '1024M');
-        set_time_limit(300);
+        $this->prepararExport('tabela-precos');
+
 
         return Excel::download(
             new \App\Exports\TabelaPrecoExport($this->listaQuery($request)),

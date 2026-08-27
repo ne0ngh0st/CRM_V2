@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\Pedido;
 use App\Models\VendedorPerfil;
 use App\Services\Dashboard\DashboardScopeResolver;
@@ -16,6 +17,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PedidoController extends Controller
 {
+    use ExportaPlanilha;
+
     private const STATUSES = ['separacao', 'bloqueio', 'wms', 'liberado', 'faturado', 'pendente_totvs'];
 
     public function __construct(
@@ -131,10 +134,8 @@ class PedidoController extends Controller
 
     public function exportarAbertos(Request $request): BinaryFileResponse
     {
-        // Tabelas de pedidos podem crescer bastante sem filtro (ver Carteira, medido em ~90k linhas
-        // = ~540MB/100s) — margem de segurança só nesta request.
-        ini_set('memory_limit', '1024M');
-        set_time_limit(300);
+        $this->prepararExport('pedidos-abertos');
+
 
         $query = $this->listaQueryAbertos($request)
             ->with('cliente:id,razao_social,cnpj')
@@ -355,9 +356,8 @@ class PedidoController extends Controller
 
     public function exportarEmitidos(Request $request): BinaryFileResponse
     {
-        // Ver exportarAbertos() — mesma margem de segurança pra tabela `pedidos`.
-        ini_set('memory_limit', '1024M');
-        set_time_limit(300);
+        $this->prepararExport('pedidos-emitidos');
+
 
         $ano = (int) ($request->integer('ano') ?: now()->year);
         $mes = max(1, min(12, (int) ($request->integer('mes') ?: now()->month)));

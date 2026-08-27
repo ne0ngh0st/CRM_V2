@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\AgendamentoLigacao;
 use App\Models\Lead;
 use App\Models\Ligacao;
@@ -19,6 +20,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class LeadController extends Controller
 {
+    use ExportaPlanilha;
+
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly CacheDeAgregacao $cache,
@@ -172,9 +175,8 @@ class LeadController extends Controller
 
     public function exportar(Request $request): BinaryFileResponse
     {
-        // Margem de segurança pra escopo admin sem filtro (~17k leads) — ver CarteiraController::exportar().
-        ini_set('memory_limit', '1024M');
-        set_time_limit(300);
+        $this->prepararExport('leads');
+
 
         return Excel::download(
             new \App\Exports\LeadExport($this->listaQuery($request)),
