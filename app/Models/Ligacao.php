@@ -17,8 +17,6 @@ class Ligacao extends Model
         'tipo_contato',
         'status',
         'data_ligacao',
-        'perguntas_respondidas_count',
-        'perguntas_obrigatorias_count',
     ];
 
     protected function casts(): array
