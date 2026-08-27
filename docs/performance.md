@@ -332,6 +332,24 @@ Duas ferramentas do Inertia v2 (já disponível, `inertiajs/inertia-laravel: ^2.
 - **Partial reloads** (`only: [...]`) — recarrega só as props que mudaram.
 - **Deferred props** (`Inertia::defer()`) — a página renderiza imediatamente e as props caras chegam depois.
 
+### ✅ Fase 8 feita em 2026-08-27 — prefetch na navegação
+
+Os três wrappers (`NavLink`, `DropdownLink`, `ResponsiveNavLink`) passaram a declarar `prefetch` e `cacheFor` como props e repassá-las ao `<Link>`. Foi feito **explicitamente**, e não confiando no fallthrough de atributo, para que a capacidade fique visível na assinatura do componente e não dependa de o `<Link>` continuar sendo o nó raiz do template.
+
+**O critério de qual link ganha o quê mudou durante a implementação.** O plano original dividia por custo ("caras" em `click`, "baratas" em `hover`), mas depois das fases 5 e 6 todas as páginas ficaram entre 4 e 51 ms — a distinção perdeu sentido. O critério passou a ser **comportamental**:
+
+| Onde | Modo | Por quê |
+|---|---|---|
+| Links dentro de dropdown (9) | `hover` | Abrir o menu já é intenção demonstrada: o usuário está escolhendo entre 2-3 opções |
+| "Início" | `hover` | Página mais visitada e uma das mais baratas |
+| "Orçamentos" e "Cadastros" (links diretos) | `click` | O mouse passa por eles a caminho de outro item da navbar |
+| Logout | nenhum | É ação, não navegação |
+| Menu mobile | nenhum | Touch não tem hover; prefetch ali só gastaria dados |
+
+`cacheFor` padrão de 30s evita refazer a busca quando o usuário passa o mouse várias vezes pelo mesmo item.
+
+⚠️ **Recalibrar com dados do ALB depois do deploy.** Prefetch multiplica requisições, e a política acima é conservadora justamente porque foi decidida sem métrica de produção. Se o `RequestCount` subir muito mais que o esperado, mover alguns `hover` para `click`; se sobrar folga, o caminho inverso.
+
 ## 1.9 🟡 N+1 e `SELECT *`
 
 Já houve um caso resolvido (itens do pedido na ficha do cliente, com `with('itens:...')`, medido em 11 queries para 20 pedidos e 161 itens). O padrão a manter: **eager loading com lista explícita de colunas**.
@@ -361,7 +379,7 @@ Ganho alto, esforço baixo. Fazer tudo isto **antes** de considerar máquina mai
 | 5 | Cache warming dos escopos de gestor | 1 job + agendamento | **Muito alto** — mata o cache frio |
 | 6 | Cachear a aderência no `CarteiraController::index()` | mesmo padrão já usado no Dashboard | Alto — `/carteira` custa 2,2 s hoje |
 | 7 | Deferred props no Dashboard | 1 linha por prop cara | **Muito alto** na percepção |
-| 8 | `<Link prefetch>` na navegação principal | 1 atributo por link | Alto na percepção |
+| 8 | ✅ `<Link prefetch>` na navegação principal | 1 atributo por link | Alto na percepção |
 | 9 | Partial reloads (`only:`) nos filtros | pequeno, por página | Médio-alto |
 | 10 | Brotli/gzip no nginx | config | Médio-alto (JSON do Inertia comprime muito) |
 | 11 | Cache imutável nos assets com hash | config | Médio |

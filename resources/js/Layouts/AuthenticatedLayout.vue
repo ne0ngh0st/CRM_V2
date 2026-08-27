@@ -54,6 +54,7 @@ const catalogoAtivo = computed(() =>
                                 <NavLink
                                     :href="route('dashboard')"
                                     :active="route().current('dashboard')"
+                                    prefetch="hover"
                                     class="!text-white/80 hover:!text-white"
                                     :class="route().current('dashboard') ? '!border-cyan !text-white' : '!border-transparent'"
                                 >
@@ -85,13 +86,13 @@ const catalogoAtivo = computed(() =>
                                             </button>
                                         </template>
                                         <template #content>
-                                            <DropdownLink :href="route('equipe.index')">
+                                            <DropdownLink :href="route('equipe.index')" prefetch="hover">
                                                 Equipe
                                             </DropdownLink>
-                                            <DropdownLink :href="route('visao-gestor.index')">
+                                            <DropdownLink :href="route('visao-gestor.index')" prefetch="hover">
                                                 Observações e ligações
                                             </DropdownLink>
-                                            <DropdownLink :href="route('metas.index')">
+                                            <DropdownLink :href="route('metas.index')" prefetch="hover">
                                                 Metas
                                             </DropdownLink>
                                         </template>
@@ -123,10 +124,10 @@ const catalogoAtivo = computed(() =>
                                             </button>
                                         </template>
                                         <template #content>
-                                            <DropdownLink :href="route('carteira.index')">
+                                            <DropdownLink :href="route('carteira.index')" prefetch="hover">
                                                 Clientes
                                             </DropdownLink>
-                                            <DropdownLink :href="route('leads.index')">
+                                            <DropdownLink :href="route('leads.index')" prefetch="hover">
                                                 Leads
                                             </DropdownLink>
                                         </template>
@@ -157,10 +158,10 @@ const catalogoAtivo = computed(() =>
                                             </button>
                                         </template>
                                         <template #content>
-                                            <DropdownLink :href="route('pedidos.index')">
+                                            <DropdownLink :href="route('pedidos.index')" prefetch="hover">
                                                 Pedidos em aberto
                                             </DropdownLink>
-                                            <DropdownLink :href="route('pedidos.emitidos')">
+                                            <DropdownLink :href="route('pedidos.emitidos')" prefetch="hover">
                                                 Pedidos emitidos
                                             </DropdownLink>
                                         </template>
@@ -171,6 +172,7 @@ const catalogoAtivo = computed(() =>
                                     v-if="!isAssistente"
                                     :href="route('orcamentos.index')"
                                     :active="route().current('orcamentos.index')"
+                                    prefetch="click"
                                     class="!text-white/80 hover:!text-white"
                                     :class="route().current('orcamentos.index') ? '!border-cyan !text-white' : '!border-transparent'"
                                 >
@@ -179,6 +181,7 @@ const catalogoAtivo = computed(() =>
                                 <NavLink
                                     :href="route('cadastros.index')"
                                     :active="route().current('cadastros.*')"
+                                    prefetch="click"
                                     class="!text-white/80 hover:!text-white"
                                     :class="route().current('cadastros.*') ? '!border-cyan !text-white' : '!border-transparent'"
                                 >
@@ -208,10 +211,10 @@ const catalogoAtivo = computed(() =>
                                             </button>
                                         </template>
                                         <template #content>
-                                            <DropdownLink :href="route('tabela-precos.index')">
+                                            <DropdownLink :href="route('tabela-precos.index')" prefetch="hover">
                                                 Tabela de Preços
                                             </DropdownLink>
-                                            <DropdownLink :href="route('catalogo-facas.index')">
+                                            <DropdownLink :href="route('catalogo-facas.index')" prefetch="hover">
                                                 Catálogo de Facas
                                             </DropdownLink>
                                         </template>
