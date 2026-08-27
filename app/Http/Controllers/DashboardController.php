@@ -48,6 +48,9 @@ class DashboardController extends Controller
         return Inertia::render('Dashboard', [
             'role' => $role,
             'statusSistema' => $this->blocos->statusSistema(),
+            // Só admin: "cache aquecido" é informação de operação, não de negócio — para
+            // um vendedor seria jargão sem significado ocupando espaço no topo da tela.
+            'statusCache' => $role === 'admin' ? $this->blocos->statusCache() : null,
             'visao' => [
                 'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
                 'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],

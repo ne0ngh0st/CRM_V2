@@ -31,6 +31,14 @@ const dotClasses = {
     md: 'h-1.5 w-1.5',
 };
 
+// Slot #icon opcional: substitui a bolinha por um SVG, para as raras pills em que o
+// símbolo carrega significado próprio (ex.: o fogo do cache aquecido no Painel).
+// Sem o slot, a bolinha continua sendo o padrão — nenhuma pill existente muda.
+const iconClasses = {
+    sm: 'h-2.5 w-2.5',
+    md: 'h-3 w-3',
+};
+
 const toneClasses = {
     light: {
         ok: 'bg-green-50 text-green-700 border-green-300',
@@ -52,7 +60,10 @@ const toneClasses = {
         class="inline-flex items-center whitespace-nowrap rounded-full border font-bold uppercase tracking-wide"
         :class="[toneClasses[surface][tone], sizeClasses[size]]"
     >
-        <span class="shrink-0 rounded-full bg-current" :class="dotClasses[size]" />
+        <span v-if="$slots.icon" class="shrink-0" :class="iconClasses[size]">
+            <slot name="icon" />
+        </span>
+        <span v-else class="shrink-0 rounded-full bg-current" :class="dotClasses[size]" />
         <slot />
     </span>
 </template>

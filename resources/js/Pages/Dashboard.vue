@@ -16,6 +16,7 @@ import { Head, usePage } from '@inertiajs/vue3';
 const props = defineProps({
     role: String,
     statusSistema: Array,
+    statusCache: Object,
     visao: Object,
     metaGauge: Object,
     ligacoesStats: Object,
@@ -57,6 +58,30 @@ const statusGeral = computed(() => {
     };
 });
 
+// Pill de fogo: estado do cache warming (só admin). Serve pra que um worker parado seja
+// VISÍVEL — sem ela, o cache esfria em silêncio e a lentidão só aparece como reclamação.
+const cacheWarming = computed(() => {
+    if (!props.statusCache) return null;
+
+    const mapa = {
+        aquecido: { tom: 'ok', label: 'Cache aquecido' },
+        esfriando: { tom: 'warn', label: 'Cache esfriando' },
+        frio: { tom: 'danger', label: 'Cache frio' },
+        // Estado normal em dev: o scheduler só roda com cron de verdade.
+        ausente: { tom: 'neutral', label: 'Cache sem warming' },
+    };
+
+    const item = mapa[props.statusCache.status] || mapa.ausente;
+    const minutos = props.statusCache.minutos;
+
+    return {
+        ...item,
+        titulo: minutos === null
+            ? 'Nenhum aquecimento registrado nas últimas 24h'
+            : `Último aquecimento há ${minutos} min`,
+    };
+});
+
 const mesAno = computed(() => {
     const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
     const agora = new Date();
@@ -85,6 +110,19 @@ const mesAno = computed(() => {
                     <template #meta>
                         <StatusPill v-if="statusGeral" :tone="statusGeral.tom" surface="dark">
                             Sistema: {{ statusGeral.label }}
+                        </StatusPill>
+                        <StatusPill
+                            v-if="cacheWarming"
+                            :tone="cacheWarming.tom"
+                            surface="dark"
+                            :title="cacheWarming.titulo"
+                        >
+                            <template #icon>
+                                <svg viewBox="0 0 24 24" fill="currentColor" class="h-full w-full">
+                                    <path d="M12 2.5c.3 3-1.2 4.3-2.6 5.6C7.9 9.5 6.5 10.8 6.5 14a5.5 5.5 0 0 0 11 0c0-2.4-1-4-2-5.3-.3 1-1 1.8-1.8 2.1.5-2.4-.4-5.9-1.7-8.3Zm0 17a2.6 2.6 0 0 1-2.6-2.6c0-1.5.9-2.2 1.6-2.9.5-.5 1-1 1.2-1.8.9.9 2.4 2.2 2.4 4.7A2.6 2.6 0 0 1 12 19.5Z" />
+                                </svg>
+                            </template>
+                            {{ cacheWarming.label }}
                         </StatusPill>
                     </template>
                     <template v-if="visao.mostrarSeletor" #filtros>

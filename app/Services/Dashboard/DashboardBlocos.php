@@ -8,12 +8,15 @@ use App\Models\Faturamento;
 use App\Models\Ligacao;
 use App\Models\Observacao;
 use App\Models\Orcamento;
+use App\Jobs\AquecerCacheDashboardJob;
 use App\Models\Pedido;
 use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Metas\MetaRankingResolver;
 use Closure;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Os blocos de dados do Dashboard, cada um com sua própria chave de cache.
@@ -74,6 +77,43 @@ class DashboardBlocos
                 'ultimaSincronizacao' => $s->last_synced_at->toIso8601String(),
             ];
         })->values()->all();
+    }
+
+    /**
+     * Estado do cache warming, para a pill de fogo do Painel.
+     *
+     * ⚠️ Existe porque um worker morto esfria o cache EM SILÊNCIO: o sistema continua
+     * correto, só volta a ficar lento, e a degradação só apareceria como reclamação de
+     * usuário dias depois. O job roda a cada 10 min, então passar de 20 sem aquecer já
+     * significa que alguma rodada não aconteceu.
+     *
+     * Não custa query: lê a marca que o próprio job grava no cache.
+     */
+    public function statusCache(): array
+    {
+        $marca = Cache::get(AquecerCacheDashboardJob::CHAVE_ULTIMO_AQUECIMENTO);
+
+        if (! $marca) {
+            // Estado normal em desenvolvimento: o scheduler só dispara com um cron real
+            // chamando `schedule:run`. Por isso é 'neutro', não alarme.
+            return ['status' => 'ausente', 'minutos' => null, 'em' => null];
+        }
+
+        // ⚠️ Ordem importa: no Carbon 3 (Laravel 11) diffInMinutes devolve valor COM
+        // SINAL. `now()->diffInMinutes($passado)` dá negativo, e um cache velho de 100
+        // minutos passaria no teste `<= 20` como se estivesse quente. O mesmo tropeço já
+        // aparece resolvido com abs() no pedidosAtencao.
+        $minutos = (int) Carbon::parse($marca['em'])->diffInMinutes(now());
+
+        return [
+            'status' => match (true) {
+                $minutos <= 20 => 'aquecido',
+                $minutos <= 40 => 'esfriando',
+                default => 'frio',
+            },
+            'minutos' => $minutos,
+            'em' => $marca['em'],
+        ];
     }
 
     /** @param array<int> $usuarioIds */
