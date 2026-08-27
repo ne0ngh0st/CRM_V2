@@ -80,7 +80,7 @@ const maxWidthClass = computed(() => {
         ref="dialog"
     >
         <div
-            class="fixed inset-0 z-50 overflow-y-auto px-4 py-6 sm:px-0"
+            class="fixed inset-0 z-50 overflow-y-auto p-4"
             scroll-region
         >
             <Transition
@@ -93,31 +93,36 @@ const maxWidthClass = computed(() => {
             >
                 <div
                     v-show="show"
-                    class="fixed inset-0 transform transition-all"
+                    class="fixed inset-0 transform bg-corp-black/60 transition-all"
                     @click="close"
-                >
-                    <div
-                        class="absolute inset-0 bg-gray-500 opacity-75"
-                    />
-                </div>
+                />
             </Transition>
 
-            <Transition
-                enter-active-class="ease-out duration-300"
-                enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                enter-to-class="opacity-100 translate-y-0 sm:scale-100"
-                leave-active-class="ease-in duration-200"
-                leave-from-class="opacity-100 translate-y-0 sm:scale-100"
-                leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-            >
-                <div
-                    v-show="show"
-                    class="mb-6 transform overflow-hidden rounded-lg bg-white shadow-xl transition-all sm:mx-auto sm:w-full"
-                    :class="maxWidthClass"
+            <!--
+                Centralização vertical: o scroll fica no container de fora e o flex
+                `min-h-full items-center` no de dentro. Não trocar por `flex` direto
+                no container que rola — modal mais alto que a tela tem o topo cortado
+                e fica inalcançável. O `py-6`/`mb-6` do scaffold Breeze, que alinhava
+                tudo no topo, saiu daqui.
+            -->
+            <div class="pointer-events-none relative flex min-h-full items-center justify-center">
+                <Transition
+                    enter-active-class="ease-out duration-300"
+                    enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    enter-to-class="opacity-100 translate-y-0 sm:scale-100"
+                    leave-active-class="ease-in duration-200"
+                    leave-from-class="opacity-100 translate-y-0 sm:scale-100"
+                    leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
                 >
-                    <slot v-if="showSlot" />
-                </div>
-            </Transition>
+                    <div
+                        v-show="show"
+                        class="pointer-events-auto w-full transform overflow-hidden rounded border border-gray-300 bg-white shadow-2xl transition-all sm:mx-auto"
+                        :class="maxWidthClass"
+                    >
+                        <slot v-if="showSlot" />
+                    </div>
+                </Transition>
+            </div>
         </div>
     </dialog>
 </template>
