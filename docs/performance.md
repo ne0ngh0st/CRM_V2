@@ -219,6 +219,24 @@ php artisan cache:aquecer --status    # quando foi o último aquecimento
 
 ⚠️ **Um worker morto esfria o cache em silêncio.** Por isso o job grava `perf:ultimo-aquecimento`, lido por `cache:aquecer --status`. Sem essa marca, a degradação só apareceria como reclamação de usuário.
 
+### ✅ Fase 5 feita em 2026-08-27 — a Carteira
+
+| Escopo | Antes | Depois |
+|---|---:|---:|
+| admin | 12 queries / **951 ms** | 8 queries / **51 ms** |
+| supervisor | 12 / 214 ms | 8 / 42 ms |
+| vendedor | 14 / 21 ms | 8 / 16 ms |
+
+**O achado que valeu mais que o plano:** a Carteira **sem filtro** calcula exatamente a mesma coisa que o card do Dashboard. `baseQuery()` sem filtros é `scopeQuery()` mais um `select('clientes.*')`, e o `CarteiraAderenciaResolver` limpa o select logo no início — a diferença some. Como a pergunta é a mesma, as duas telas passaram a dividir a mesma chave (Regra de ouro nº 8).
+
+O ganho real disso não é economizar uma query: **essa chave já é aquecida pelo job**, então a Carteira sem filtro passou a nunca pagar a agregação, de graça. O plano previa aquecer os KPIs da Carteira separadamente; não foi preciso.
+
+Com filtro ativo, cai num cache próprio de TTL **curto** (10 min). O TTL de 30 só faz sentido para chave que o job reescreve a cada 10 — numa chave que ninguém aquece, ele apenas guarda dado velho por mais tempo.
+
+Também nesta fase: os dois `DISTINCT` sobre a tabela inteira (dropdowns de estado e segmento) cacheados por 6 h — dependem só do escopo, nunca dos filtros, senão o dropdown perderia opções conforme o usuário filtra. E os agendamentos viraram `Inertia::optional()`, carregados só na aba Calendário.
+
+⚠️ **Prop opcional não vem em visita completa.** Entrar por `/carteira?aba=calendario` ou dar F5 é uma visita completa, e o Inertia não envia `optional` nesses casos — sem um `onMounted` que busque, o calendário abre vazio.
+
 ## 1.4 🔴 Trabalho síncrono longo dentro do request
 
 O export de Excel da Carteira sem filtro, escopo admin: **95 s e 538 MB de pico**.
