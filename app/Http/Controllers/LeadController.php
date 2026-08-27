@@ -6,6 +6,8 @@ use App\Models\AgendamentoLigacao;
 use App\Models\Lead;
 use App\Models\Ligacao;
 use App\Models\VendedorPerfil;
+use App\Services\Cache\CacheDeAgregacao;
+use App\Services\Cache\ChaveEscopo;
 use App\Services\Dashboard\DashboardScopeResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -19,7 +21,30 @@ class LeadController extends Controller
 {
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
+        private readonly CacheDeAgregacao $cache,
     ) {
+    }
+
+    /**
+     * Opcoes dos dropdowns de Estado e Segmento.
+     *
+     * Dois DISTINCT sobre os ~17 mil leads (45 ms medidos so no de estado). Dependem
+     * apenas do escopo, nunca dos filtros ativos, e mudam so quando entra lead novo —
+     * logo, cacheaveis com TTL longo. Mesmo desenho usado na Carteira.
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return array{estados: mixed, segmentos: mixed}
+     */
+    private function opcoesDeFiltro(Request $request, ?array $codVendedores): array
+    {
+        return $this->cache->lembrarPorHoras(
+            ChaveEscopo::deCodVendedores($codVendedores)->para('leads-opcoes'),
+            (int) config('perf.ttl_lookup_minutos', 360) / 60,
+            fn () => [
+                'estados' => $this->scopeQuery($request)->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
+                'segmentos' => $this->scopeQuery($request)->whereNotNull('segmento')->where('segmento', '!=', '')->distinct()->orderBy('segmento')->pluck('segmento'),
+            ],
+        );
     }
 
     public function index(Request $request): Response
@@ -50,11 +75,31 @@ class LeadController extends Controller
             $aba = 'leads';
         }
 
+        /*
+         * Uma linha agregada em vez de quatro varreduras.
+         *
+         * Cada `count()` reexecutava `baseQuery()` do zero — quatro passagens pelos 17 mil
+         * leads para responder quatro perguntas sobre o mesmo conjunto. Medido: 18,9 ms
+         * nos quatro separados contra 14,0 ms na consolidada.
+         *
+         * ⚠️ O ganho é menor do que parece à primeira vista, e vale saber por quê: os
+         * counts separados usam índice (`origem`, `status`), enquanto os SUM() com
+         * expressão varrem tudo. O que a consolidação realmente economiza são as idas ao
+         * banco — irrelevante com o MySQL na mesma máquina, mas em produção, com o RDS
+         * separado por rede, cada round-trip custa cerca de 1 ms.
+         */
+        $contagem = $this->baseQuery($request)
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("SUM(origem = 'sistema') as sistema")
+            ->selectRaw("SUM(origem = 'manual') as manual")
+            ->selectRaw("SUM(status = 'ativo') as ativos")
+            ->first();
+
         $kpis = [
-            'total' => $this->baseQuery($request)->count(),
-            'sistema' => $this->baseQuery($request)->where('origem', 'sistema')->count(),
-            'manual' => $this->baseQuery($request)->where('origem', 'manual')->count(),
-            'ativos' => $this->baseQuery($request)->where('status', 'ativo')->count(),
+            'total' => (int) ($contagem->total ?? 0),
+            'sistema' => (int) ($contagem->sistema ?? 0),
+            'manual' => (int) ($contagem->manual ?? 0),
+            'ativos' => (int) ($contagem->ativos ?? 0),
         ];
 
         $leads = $this->listaQuery($request)->paginate(30)->withQueryString();
@@ -101,8 +146,10 @@ class LeadController extends Controller
                 'ordenar' => $ordenar,
             ],
             'opcoes' => [
-                'estados' => $this->scopeQuery($request)->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
-                'segmentos' => $this->scopeQuery($request)->whereNotNull('segmento')->where('segmento', '!=', '')->distinct()->orderBy('segmento')->pluck('segmento'),
+                // Dois DISTINCT sobre os 17 mil leads (45 ms medidos no de estado). Dependem
+                // só do escopo, nunca dos filtros — senão o dropdown perderia opções conforme
+                // o usuário filtra. Mesmo tratamento dado aos dropdowns da Carteira.
+                ...$this->opcoesDeFiltro($request, $scope['codVendedores']),
             ],
             'visao' => [
                 'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),

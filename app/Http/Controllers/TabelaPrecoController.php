@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Produto;
+use App\Services\Cache\CacheDeAgregacao;
+use App\Services\Cache\ChaveEscopo;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +15,10 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class TabelaPrecoController extends Controller
 {
+    public function __construct(
+        private readonly CacheDeAgregacao $cache,
+    ) {}
+
     public function index(Request $request): Response
     {
         $user = $request->user();
@@ -23,13 +29,28 @@ class TabelaPrecoController extends Controller
         $preco = (string) $request->string('preco') ?: 'todos';
         $ordenar = (string) $request->string('ordenar') ?: 'codigo_asc';
 
-        $baseQuery = fn () => $this->baseQuery($request);
+        /*
+         * Quatro varreduras dos 27 mil produtos viraram uma. Cada `(clone $baseQuery())`
+         * não só clonava: reexecutava `baseQuery()` do zero para responder mais uma
+         * pergunta sobre exatamente o mesmo conjunto.
+         *
+         * `comPreco` e `semPreco` são complementares por construção — o segundo é o que
+         * sobra do primeiro —, então nem precisa perguntar duas vezes ao banco.
+         */
+        $contagem = $this->baseQuery($request)
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("COUNT(DISTINCT CASE WHEN categoria IS NOT NULL AND categoria != '' THEN categoria END) as categorias")
+            ->selectRaw('SUM(preco_tabela IS NOT NULL AND preco_tabela > 0) as com_preco')
+            ->first();
+
+        $total = (int) ($contagem->total ?? 0);
+        $comPreco = (int) ($contagem->com_preco ?? 0);
 
         $kpis = [
-            'total' => (clone $baseQuery())->count(),
-            'categorias' => (int) (clone $baseQuery())->whereNotNull('categoria')->where('categoria', '!=', '')->count(DB::raw('DISTINCT categoria')),
-            'comPreco' => (clone $baseQuery())->whereNotNull('preco_tabela')->where('preco_tabela', '>', 0)->count(),
-            'semPreco' => (clone $baseQuery())->where(fn ($q) => $q->whereNull('preco_tabela')->orWhere('preco_tabela', '<=', 0))->count(),
+            'total' => $total,
+            'categorias' => (int) ($contagem->categorias ?? 0),
+            'comPreco' => $comPreco,
+            'semPreco' => $total - $comPreco,
         ];
 
         $produtos = $this->listaQuery($request)
@@ -44,17 +65,28 @@ class TabelaPrecoController extends Controller
                 'precoTabela' => $p->preco_tabela !== null ? (float) $p->preco_tabela : null,
             ]);
 
-        $categorias = Produto::query()
-            ->whereNotNull('categoria')
-            ->where('categoria', '!=', '')
-            ->select('categoria', DB::raw('COUNT(*) as total'))
-            ->groupBy('categoria')
-            ->orderBy('categoria')
-            ->get()
-            ->map(fn ($row) => [
-                'nome' => $row->categoria,
-                'total' => (int) $row->total,
-            ]);
+        /*
+         * Dropdown de categorias: GROUP BY sobre os 27 mil produtos, e o resultado nao
+         * depende de filtro nenhum — e a lista COMPLETA de categorias de propósito, senao
+         * o dropdown perderia opcoes conforme o usuario filtra. Muda so quando o TOTVS
+         * traz produto novo, entao TTL longo. Mesmo tratamento dos dropdowns da Carteira
+         * e de Leads.
+         */
+        $categorias = $this->cache->lembrarPorHoras(
+            'agg:'.ChaveEscopo::VERSAO.':tabela-precos-categorias',
+            (int) config('perf.ttl_lookup_minutos', 360) / 60,
+            fn () => Produto::query()
+                ->whereNotNull('categoria')
+                ->where('categoria', '!=', '')
+                ->select('categoria', DB::raw('COUNT(*) as total'))
+                ->groupBy('categoria')
+                ->orderBy('categoria')
+                ->get()
+                ->map(fn ($row) => [
+                    'nome' => $row->categoria,
+                    'total' => (int) $row->total,
+                ]),
+        );
 
         return Inertia::render('TabelaPrecos/Index', [
             'role' => $role,
