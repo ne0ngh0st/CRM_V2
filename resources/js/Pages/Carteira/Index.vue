@@ -227,10 +227,13 @@ const temFiltrosAtivos = computed(() =>
                             </svg>
                         </template>
                         <template #actions>
+                            <!-- assincrono: a carteira completa leva ~95s, mais que o idle
+                                 timeout do ALB. Gera em fila e avisa no sino. -->
                             <ExportarExcelButton
                                 rota="carteira.exportar"
                                 :filtros="filtros"
                                 :tem-filtros-ativos="temFiltrosAtivos"
+                                assincrono
                             />
                         </template>
 
