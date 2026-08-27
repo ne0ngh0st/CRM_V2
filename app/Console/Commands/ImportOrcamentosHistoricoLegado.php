@@ -26,7 +26,7 @@ class ImportOrcamentosHistoricoLegado extends Command
 
         $userIdPorCodVendedor = VendedorPerfil::query()->pluck('user_id', 'cod_vendedor');
 
-        $stmt = $pdo->query('SELECT * FROM orcamentos ORDER BY id');
+        $stmt = $pdo->query('SELECT * FROM ORCAMENTOS ORDER BY id');
 
         $agora = now();
         $total = 0;

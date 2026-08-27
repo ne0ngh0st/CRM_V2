@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RoleSeeder::class,
             SegmentoSeeder::class,
+            FacaSeeder::class,
         ]);
 
         // Os seeders abaixo dependem dos usuários reais já estarem importados
