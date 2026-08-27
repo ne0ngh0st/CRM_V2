@@ -2,9 +2,11 @@
 
 use App\Http\Controllers\CadastroController;
 use App\Http\Controllers\CarteiraController;
+use App\Http\Controllers\CatalogoFacaController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipeController;
 use App\Http\Controllers\EtiquetaMateriaPrimaController;
+use App\Http\Controllers\InicioController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\NotificacaoController;
@@ -12,14 +14,13 @@ use App\Http\Controllers\ObservacaoController;
 use App\Http\Controllers\OrcamentoController;
 use App\Http\Controllers\PedidoController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SimulacaoController;
 use App\Http\Controllers\SugestaoController;
 use App\Http\Controllers\TabelaPrecoController;
 use App\Http\Controllers\VisaoGestorController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return redirect()->route(auth()->check() ? 'dashboard' : 'login');
-});
+Route::get('/', InicioController::class)->name('inicio');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])
@@ -64,9 +65,18 @@ Route::middleware('auth')->group(function () {
     Route::get('/tabela-precos', [TabelaPrecoController::class, 'index'])->name('tabela-precos.index');
     Route::get('/tabela-precos/exportar', [TabelaPrecoController::class, 'exportar'])->name('tabela-precos.exportar');
 
+    Route::get('/catalogo-facas', [CatalogoFacaController::class, 'index'])->name('catalogo-facas.index');
+    // CRUD admin-only (checado no controller, como no EtiquetaMateriaPrimaController).
+    Route::post('/catalogo-facas', [CatalogoFacaController::class, 'store'])->name('catalogo-facas.store');
+    Route::post('/catalogo-facas/recursos/{recurso}/excluir', [CatalogoFacaController::class, 'destroyRecurso'])->name('catalogo-facas.recursos.destroy');
+    Route::post('/catalogo-facas/{faca}/recursos', [CatalogoFacaController::class, 'storeRecurso'])->name('catalogo-facas.recursos.store');
+    Route::patch('/catalogo-facas/{faca}', [CatalogoFacaController::class, 'update'])->name('catalogo-facas.update');
+    Route::delete('/catalogo-facas/{faca}', [CatalogoFacaController::class, 'destroy'])->name('catalogo-facas.destroy');
+
     Route::get('/cadastros', [CadastroController::class, 'index'])->name('cadastros.index');
     Route::get('/cadastros/exportar', [CadastroController::class, 'exportar'])->name('cadastros.exportar');
     Route::post('/cadastros/bobinas', [CadastroController::class, 'storeBobina'])->name('cadastros.bobinas.store');
+    Route::get('/cadastros/bobinas/{bobina}/pdf', [CadastroController::class, 'pdfBobina'])->name('cadastros.bobinas.pdf');
     Route::post('/cadastros/bobinas/{bobina}/enviar', [CadastroController::class, 'enviarBobina'])->name('cadastros.bobinas.enviar');
     Route::delete('/cadastros/bobinas/{bobina}', [CadastroController::class, 'destroyBobina'])->name('cadastros.bobinas.destroy');
     Route::post('/cadastros/etiquetas', [CadastroController::class, 'storeEtiqueta'])->name('cadastros.etiquetas.store');
@@ -111,6 +121,14 @@ Route::middleware('auth')->group(function () {
     Route::patch('/equipe/{usuario}/senha', [EquipeController::class, 'atualizarSenha'])->name('equipe.senha');
     Route::patch('/equipe/{usuario}/status', [EquipeController::class, 'toggleStatus'])->name('equipe.status');
     Route::delete('/equipe/{usuario}', [EquipeController::class, 'destroy'])->name('equipe.destroy');
+
+    // Simular usuário: iniciar é admin-only (checado no controller); encerrar precisa
+    // valer pro usuário SIMULADO, que normalmente não é admin — a autorização de lá é
+    // "existe simulação nesta sessão".
+    // `encerrar` precisa vir ANTES de `{usuario}`, senão a rota literal é capturada pelo
+    // parâmetro e o model binding devolve 404 procurando um usuário chamado "encerrar".
+    Route::post('/simulacao/encerrar', [SimulacaoController::class, 'encerrar'])->name('simulacao.encerrar');
+    Route::post('/simulacao/{usuario}', [SimulacaoController::class, 'iniciar'])->name('simulacao.iniciar');
 
     Route::get('/visao-gestor', [VisaoGestorController::class, 'index'])->name('visao-gestor.index');
     Route::get('/metas', [MetaController::class, 'index'])->name('metas.index');
