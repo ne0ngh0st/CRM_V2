@@ -45,6 +45,31 @@ class CacheDeAgregacao
         return $valor;
     }
 
+    /**
+     * Variante com TTL curto e explícito, para o que NÃO é aquecido pelo warming.
+     *
+     * O TTL padrão (30 min) só faz sentido para chaves que o job reescreve a cada 10 —
+     * numa chave que ninguém aquece, ele apenas guarda dado velho por mais tempo. É o
+     * caso dos KPIs da Carteira com filtro ativo: a combinação vem da query string, o
+     * job não tem como enumerá-la, e o valor é oportunista.
+     */
+    public function lembrarPorMinutos(string $chave, int $minutos, Closure $calcular): mixed
+    {
+        return Cache::remember($chave, now()->addMinutes(max(1, $minutos)), $calcular);
+    }
+
+    /**
+     * Variante para lookups que mudam raramente (dropdowns, tabelas de referência).
+     *
+     * TTL próprio porque a natureza do dado é outra: as agregações são recalculadas pelo
+     * warming a cada 10 min, enquanto uma lista de estados só muda quando o TOTVS traz
+     * cliente novo. Usar o TTL curto das agregações aqui seria recomputar de graça.
+     */
+    public function lembrarPorHoras(string $chave, int $horas, Closure $calcular): mixed
+    {
+        return Cache::remember($chave, now()->addHours(max(1, $horas)), $calcular);
+    }
+
     public function esquecer(string $chave): void
     {
         Cache::forget($chave);

@@ -10,8 +10,11 @@ use App\Models\Ligacao;
 use App\Models\Pedido;
 use App\Models\Segmento;
 use App\Models\VendedorPerfil;
+use App\Services\Cache\CacheDeAgregacao;
+use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Carteira\ClienteStatusResolver;
+use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -27,7 +30,106 @@ class CarteiraController extends Controller
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly CarteiraAderenciaResolver $aderenciaResolver,
         private readonly ClienteStatusResolver $statusResolver,
+        private readonly CacheDeAgregacao $cache,
+        private readonly DashboardBlocos $blocos,
     ) {
+    }
+
+    /**
+     * KPIs de aderência do topo da Carteira.
+     *
+     * O bloco mais caro da tela: ~950 ms de SQL no escopo admin (LEFT JOIN em
+     * segmentos/segmentos_vendedor sobre as ~90k linhas de clientes). Era o último lugar
+     * do sistema rodando essa agregação sem cache, e a razão de /carteira ter sido o pior
+     * p50 do teste de carga.
+     *
+     * ⚠️ SEM FILTRO, ISTO É EXATAMENTE O CARD DO DASHBOARD.
+     * `baseQuery()` sem filtros é `scopeQuery()` mais um `select('clientes.*')` — e o
+     * CarteiraAderenciaResolver limpa o select logo no início, então a diferença some.
+     * Como a pergunta é a mesma, a resposta tem que ser a mesma (Regra de ouro nº 8):
+     * delegamos ao bloco do Dashboard e as duas telas passam a dividir a MESMA chave.
+     *
+     * Isso vale mais que economia de uma query: essa chave já é aquecida pelo job de
+     * warming, então a Carteira sem filtro passou a nunca pagar a agregação — de graça,
+     * sem precisar aquecer nada novo.
+     *
+     * Com filtro ativo, cai no cache próprio: chave com data (o resolver classifica por
+     * dias desde a última compra, 290/365, a partir de now()) e TTL curto, já que a
+     * cardinalidade vem da query string e é ilimitada em teoria.
+     *
+     * @param  array<string>|null  $codVendedores
+     */
+    private function aderencia(Request $request, ?array $codVendedores): array
+    {
+        $escopo = ChaveEscopo::deCodVendedores($codVendedores);
+        $assinatura = $this->assinaturaDosFiltros($request);
+
+        if ($assinatura === 'vazio') {
+            return $this->blocos->carteiraSegmento($escopo, $codVendedores);
+        }
+
+        return $this->cache->lembrarPorMinutos(
+            $escopo->paraDoDia('carteira-kpis', ['f' => $assinatura]),
+            10,
+            fn () => $this->aderenciaResolver->resolver($this->baseQuery($request)),
+        );
+    }
+
+    /**
+     * Opções dos dropdowns de Estado e Segmento.
+     *
+     * ⚠️ São dois DISTINCT sobre a tabela inteira de clientes (~90k linhas), e dependem
+     * SÓ do escopo — nunca dos filtros ativos, senão o dropdown perderia opções conforme
+     * o usuário filtra. Por dependerem só do escopo, são perfeitamente cacheáveis, e por
+     * mudarem apenas quando o TOTVS traz cliente novo, o TTL pode ser longo.
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return array{estados: mixed, segmentos: mixed}
+     */
+    private function opcoesDeFiltro(Request $request, ?array $codVendedores): array
+    {
+        return $this->cache->lembrarPorHoras(
+            ChaveEscopo::deCodVendedores($codVendedores)->para('carteira-opcoes'),
+            (int) config('perf.ttl_lookup_minutos', 360) / 60,
+            fn () => [
+                'estados' => $this->scopeQuery($request)
+                    ->whereNotNull('estado')->where('estado', '!=', '')
+                    ->distinct()->orderBy('estado')->pluck('estado'),
+                'segmentos' => Segmento::query()
+                    ->whereIn('codigo', $this->scopeQuery($request)
+                        ->whereNotNull('cod_segmento')->where('cod_segmento', '!=', '')
+                        ->distinct()->pluck('cod_segmento'))
+                    ->orderBy('nome')
+                    ->get(['codigo', 'nome']),
+            ],
+        );
+    }
+
+    /**
+     * Assinatura estável dos filtros ativos, para compor a chave de cache dos KPIs.
+     *
+     * ⚠️ Sem filtro nenhum devolve a constante 'vazio', e isso é essencial: é o único
+     * caso que o warming alcança (as demais combinações vêm da query string e são
+     * ilimitadas em teoria). Manter esse caso legível, em vez de virar mais um hash,
+     * é o que permite tratá-lo de propósito em `aderencia()`.
+     */
+    private function assinaturaDosFiltros(Request $request): string
+    {
+        $filtros = array_filter([
+            'busca' => trim((string) $request->string('busca')),
+            'estado' => (string) $request->string('estado'),
+            'segmento' => (string) $request->string('segmento'),
+            'status' => (string) $request->string('status'),
+            'aderencia' => (string) $request->string('aderencia'),
+        ], fn (string $v) => $v !== '');
+
+        if ($filtros === []) {
+            return 'vazio';
+        }
+
+        ksort($filtros);
+
+        return md5(json_encode($filtros));
     }
 
     public function index(Request $request): Response
@@ -50,7 +152,7 @@ class CarteiraController extends Controller
         $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
         $aba = (string) $request->string('aba') ?: 'clientes';
 
-        $kpis = $this->aderenciaResolver->resolver($this->baseQuery($request));
+        $kpis = $this->aderencia($request, $codVendedores);
 
         /*
          * O total é contado por `filtradaQuery()`, que NÃO tem o join de ordenação.
@@ -129,13 +231,7 @@ class CarteiraController extends Controller
                 'aderencia' => $aderencia,
                 'ordenar' => $ordenar,
             ],
-            'opcoes' => [
-                'estados' => $this->scopeQuery($request)->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
-                'segmentos' => Segmento::query()
-                    ->whereIn('codigo', $this->scopeQuery($request)->whereNotNull('cod_segmento')->where('cod_segmento', '!=', '')->distinct()->pluck('cod_segmento'))
-                    ->orderBy('nome')
-                    ->get(['codigo', 'nome']),
-            ],
+            'opcoes' => $this->opcoesDeFiltro($request, $codVendedores),
             'visao' => [
                 'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
                 'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
