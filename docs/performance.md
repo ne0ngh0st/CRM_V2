@@ -193,6 +193,32 @@ O contraste entre 5 e 40 é a medida exata do que o cache frio custa — e o arg
 
 Isto é o que transforma "rápido quando o cache está quente" em "rápido sempre".
 
+### ✅ Fase 3 feita em 2026-08-27
+
+`AquecerCacheDashboardJob` + `EscoposAquecidos` + comando `cache:aquecer`, agendado a cada 10 minutos com `onOneServer()` e `withoutOverlapping(15)`.
+
+**Números reais:** 10 escopos (1 empresa inteira + 9 equipes de supervisor), aquecidos em **9,1 s**. Rodando a cada 10 minutos, é 1,5% de duty cycle — irrelevante para o banco.
+
+**Resultado no Dashboard, escopo admin:**
+
+| | Queries | SQL |
+|---|---:|---:|
+| Cache frio (o que o azarado pagava) | 40 | ~5.000 ms |
+| Cache aquecido pelo job | **5** | **12,8 ms** |
+
+Um detalhe que confirmou o desenho: o supervisor `010395` tem **7 códigos de vendedor mas 8 usuários**. É o caso documentado de `cod_vendedor` compartilhado entre contas — e é por isso que os blocos por usuário (`orcamentosStats`, ligações, observações) chaveiam por `usuarioIds` e não por código.
+
+**Comandos úteis:**
+
+```bash
+php artisan cache:aquecer --listar    # quais escopos seriam aquecidos
+php artisan cache:aquecer --status    # quando foi o último aquecimento
+```
+
+⚠️ **O scheduler não roda sozinho localmente.** Ele depende de um cron real chamando `php artisan schedule:run` a cada minuto — em produção é o toggle *Scheduler* do Forge. Localmente, rodar `cache:aquecer` na mão quando quiser o efeito.
+
+⚠️ **Um worker morto esfria o cache em silêncio.** Por isso o job grava `perf:ultimo-aquecimento`, lido por `cache:aquecer --status`. Sem essa marca, a degradação só apareceria como reclamação de usuário.
+
 ## 1.4 🔴 Trabalho síncrono longo dentro do request
 
 O export de Excel da Carteira sem filtro, escopo admin: **95 s e 538 MB de pico**.

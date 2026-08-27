@@ -165,22 +165,38 @@ class DashboardScopeResolver
      */
     private function calcularUsuarioIds(User $user, array $scope): array
     {
-        $role = $this->roleDe($user);
-
-        if (in_array($role, ['vendedor', 'representante'], true)) {
+        // Vendedor/representante agrega só o próprio histórico, mesmo que o código de
+        // vendedor seja compartilhado com outra conta (acontece no legado).
+        if (in_array($this->roleDe($user), ['vendedor', 'representante'], true)) {
             return [$user->id];
         }
 
-        if ($scope['codVendedores'] === null) {
+        return $this->usuarioIdsDoEscopo($scope['codVendedores']);
+    }
+
+    /**
+     * Ids de `users` de um escopo, sem precisar de um usuário logado.
+     *
+     * Existe para o job de cache warming, que enumera escopos em vez de partir de quem
+     * está olhando. Fica aqui, e não no job, para que a regra de "quais usuários compõem
+     * este escopo" continue existindo num lugar só (Regra de ouro nº 8) — se divergir, o
+     * job aquece uma chave que nenhuma requisição vai procurar.
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return array<int>
+     */
+    public function usuarioIdsDoEscopo(?array $codVendedores): array
+    {
+        if ($codVendedores === null) {
             return User::role(['vendedor', 'representante'])->pluck('id')->all();
         }
 
-        if ($scope['codVendedores'] === []) {
+        if ($codVendedores === []) {
             return [];
         }
 
         return VendedorPerfil::query()
-            ->whereIn('cod_vendedor', $scope['codVendedores'])
+            ->whereIn('cod_vendedor', $codVendedores)
             ->pluck('user_id')
             ->unique()
             ->values()
