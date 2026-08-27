@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -45,23 +45,39 @@ function paramsComAba(aba = props.aba) {
     return { ...filtros, aba };
 }
 
+// `agendamentos` é uma prop opcional no servidor (Inertia::optional): só vem quando
+// pedida explicitamente no `only`. Filtrar mexe na lista de clientes, não na agenda —
+// então NÃO pedimos agendamentos aqui, e a consulta deixa de rodar à toa.
 function aplicarFiltros() {
     router.get(route('carteira.index'), paramsComAba('clientes'), {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['clientes', 'kpis', 'filtros', 'visao', 'agendamentos', 'aba'],
+        only: ['clientes', 'kpis', 'filtros', 'visao', 'aba'],
     });
 }
 
 function trocarAba(aba) {
+    const apenas = ['clientes', 'kpis', 'filtros', 'visao', 'aba'];
+
+    // Só a aba Calendário paga pelos agendamentos.
+    if (aba === 'calendario') apenas.push('agendamentos');
+
     router.get(route('carteira.index'), paramsComAba(aba), {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['clientes', 'kpis', 'filtros', 'visao', 'agendamentos', 'aba'],
+        only: apenas,
     });
 }
+
+// Entrar direto por URL (/carteira?aba=calendario) é uma visita completa, e visita
+// completa não traz prop opcional — sem isto o calendário abriria vazio.
+onMounted(() => {
+    if (props.aba === 'calendario' && !props.agendamentos.length) {
+        router.reload({ only: ['agendamentos'], preserveState: true, preserveScroll: true });
+    }
+});
 
 // Substituiu o select "Ordenar por" — a ordenação agora é o clique no header da
 // coluna. Volta pra página 1 de propósito: manter o offset ao reordenar deixa o

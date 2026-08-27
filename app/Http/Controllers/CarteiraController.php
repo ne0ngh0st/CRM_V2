@@ -222,7 +222,15 @@ class CarteiraController extends Controller
             'aba' => in_array($aba, ['clientes', 'calendario'], true) ? $aba : 'clientes',
             'clientes' => $clientes,
             'kpis' => $kpis,
-            'agendamentos' => $this->agendamentosDoEscopo($codVendedores),
+            /*
+             * Prop opcional: só é enviada quando a requisição pede explicitamente
+             * (`only: ['agendamentos']`). A aba Clientes, que é onde a maioria das
+             * visitas para, deixou de pagar por uma consulta que ia direto pro lixo.
+             *
+             * ⚠️ Visita completa (F5, ou entrar por /carteira?aba=calendario) NÃO traz
+             * prop opcional — é o `onMounted` do Carteira/Index.vue que busca nesse caso.
+             */
+            'agendamentos' => Inertia::optional(fn () => $this->agendamentosDoEscopo($codVendedores)),
             'filtros' => [
                 'busca' => $busca,
                 'estado' => $estado,
@@ -601,11 +609,20 @@ class CarteiraController extends Controller
     {
         $query = AgendamentoLigacao::query()
             ->with(['cliente:id,razao_social,cnpj,telefone,cod_vendedor', 'user:id,name,display_name'])
-            ->whereBetween('data_agendamento', [now()->subMonths(3)->startOfMonth(), now()->addMonths(6)->endOfMonth()])
-            ->orderBy('data_agendamento');
+            // Janela de -1 a +3 meses (era -3/+6) com teto de 500. O calendário mostra um
+            // mês por vez; trazer meio ano de cada lado era payload que ninguém abria.
+            ->whereBetween('data_agendamento', [now()->subMonth()->startOfMonth(), now()->addMonths(3)->endOfMonth()])
+            ->orderBy('data_agendamento')
+            ->limit(500);
 
         if ($codVendedores !== null) {
-            $query->whereHas('cliente', fn ($q) => $q->whereIn('cod_vendedor', $codVendedores));
+            // Subquery IN em vez de whereHas: o whereHas gera um EXISTS correlacionado,
+            // avaliado por linha de agendamento. A subquery resolve a lista de clientes
+            // uma vez só e tem plano de execução mais previsível.
+            $query->whereIn(
+                'cliente_id',
+                Cliente::query()->select('id')->whereIn('cod_vendedor', $codVendedores),
+            );
         }
 
         return $query->get()->map(fn (AgendamentoLigacao $a) => [
