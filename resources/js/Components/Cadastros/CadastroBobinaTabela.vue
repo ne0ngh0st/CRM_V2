@@ -13,48 +13,51 @@ function tone(status) {
 </script>
 
 <template>
-    <div class="overflow-x-auto">
-        <table class="w-full min-w-[800px] text-sm">
+    <div class="tbl-wrap">
+        <table class="tbl min-w-[800px]">
             <thead>
-                <tr class="divide-x divide-gray-200 border-b-2 border-gray-300 bg-gray-50 text-center text-[0.65rem] uppercase tracking-wide text-gray-500">
-                    <th class="px-3 py-2.5 font-semibold">#</th>
-                    <th class="px-3 py-2.5 font-semibold">Data</th>
-                    <th class="px-3 py-2.5 font-semibold">Título TOTVS</th>
-                    <th class="px-3 py-2.5 font-semibold">Nomenclatura</th>
-                    <th class="px-3 py-2.5 font-semibold">Qtd caixa</th>
-                    <th class="px-3 py-2.5 font-semibold">Estoque S/N</th>
-                    <th class="px-3 py-2.5 font-semibold">Status</th>
-                    <th class="px-3 py-2.5 font-semibold">Ações</th>
+                <tr class="tbl-head-row">
+                    <th class="tbl-th">#</th>
+                    <th class="tbl-th">Data</th>
+                    <th class="tbl-th">Título TOTVS</th>
+                    <th class="tbl-th">Nomenclatura</th>
+                    <th class="tbl-th">Qtd caixa</th>
+                    <th class="tbl-th">Estoque S/N</th>
+                    <th class="tbl-th">Status</th>
+                    <th class="tbl-th">Ações</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-200">
-                <tr v-for="item in bobinas" :key="item.id" class="divide-x divide-gray-200 hover:bg-gray-50/60">
-                    <td class="px-3 py-2.5 text-center align-middle text-gray-500">{{ item.id }}</td>
-                    <td class="px-3 py-2.5 text-center align-middle text-gray-600">{{ item.data }}</td>
-                    <td class="px-3 py-2.5 text-center align-middle text-gray-800">
-                        <span class="mx-auto block max-w-[220px] truncate" :title="item.tituloPadronizado">{{ item.tituloPadronizado }}</span>
+            <tbody class="tbl-body">
+                <tr v-for="item in bobinas" :key="item.id" class="tbl-row">
+                    <td class="tbl-td">{{ item.id }}</td>
+                    <td class="tbl-td">{{ item.data }}</td>
+                    <td class="tbl-td">
+                        <span class="tbl-main mx-auto max-w-[220px]" :title="item.tituloPadronizado">{{ item.tituloPadronizado }}</span>
                     </td>
-                    <td class="px-3 py-2.5 text-center align-middle text-gray-700">
-                        <span class="mx-auto block max-w-[160px] truncate" :title="item.nomenclatura">{{ item.nomenclatura }}</span>
+                    <td class="tbl-td">
+                        <span class="tbl-trunc max-w-[160px]" :title="item.nomenclatura">{{ item.nomenclatura }}</span>
                     </td>
-                    <td class="px-3 py-2.5 text-center align-middle text-gray-600">{{ item.quantidadeCaixa ?? '—' }}</td>
-                    <td class="px-3 py-2.5 text-center align-middle text-gray-600">{{ item.estoqueSegurancaSn || '—' }}</td>
-                    <td class="px-3 py-2.5 text-center align-middle">
-                        <StatusPill :tone="tone(item.status)">{{ item.status }}</StatusPill>
+                    <td class="tbl-td">{{ item.quantidadeCaixa ?? '—' }}</td>
+                    <td class="tbl-td">{{ item.estoqueSegurancaSn || '—' }}</td>
+                    <td class="tbl-td">
+                        <StatusPill :tone="tone(item.status)" size="sm">{{ item.status }}</StatusPill>
                     </td>
-                    <td class="px-3 py-2.5 text-center align-middle">
-                        <div class="flex items-center justify-center gap-1">
-                            <button type="button" title="Detalhes" class="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-800" @click="emit('detalhes', item)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-3.5 w-3.5"><circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01" stroke-linecap="round"/></svg>
+                    <td class="tbl-td">
+                        <div class="tbl-acoes">
+                            <button type="button" title="Detalhes" class="tbl-acao tbl-acao-neutro" @click="emit('detalhes', item)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01" stroke-linecap="round"/></svg>
                             </button>
-                            <button type="button" title="Copiar para formulário" class="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-500 hover:border-teal-300 hover:text-teal-700" @click="emit('copiar', item)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-3.5 w-3.5"><rect x="8" y="8" width="12" height="12" rx="1"/><path d="M4 16V4h12" stroke-linecap="round"/></svg>
+                            <button type="button" title="Copiar para formulário" class="tbl-acao tbl-acao-teal" @click="emit('copiar', item)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="8" width="12" height="12" rx="1"/><path d="M4 16V4h12" stroke-linecap="round"/></svg>
                             </button>
-                            <button v-if="item.status === 'pendente'" type="button" title="Enviar p/ Cadastro" class="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-500 hover:border-amber-300 hover:text-amber-700" @click="emit('enviar', item)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-3.5 w-3.5"><path d="M4 12l16-7-7 16-2-6-7-3z" stroke-linejoin="round"/></svg>
+                            <a :href="route('cadastros.bobinas.pdf', item.id)" target="_blank" rel="noopener" title="Ficha em PDF" class="tbl-acao tbl-acao-navy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3H7a1 1 0 00-1 1v16a1 1 0 001 1h10a1 1 0 001-1V7z" stroke-linejoin="round"/><path d="M14 3v4h4" stroke-linejoin="round"/><path d="M9 13h6M9 16h4" stroke-linecap="round"/></svg>
+                            </a>
+                            <button v-if="item.status === 'pendente'" type="button" title="Enviar p/ Cadastro" class="tbl-acao tbl-acao-amber" @click="emit('enviar', item)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 12l16-7-7 16-2-6-7-3z" stroke-linejoin="round"/></svg>
                             </button>
-                            <button type="button" title="Excluir" class="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600" @click="emit('excluir', item)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-3.5 w-3.5"><path d="M5 7h14M9 7V5h6v2M10 11v6M14 11v6M7 7l1 12h8l1-12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            <button type="button" title="Excluir" class="tbl-acao tbl-acao-danger" @click="emit('excluir', item)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7h14M9 7V5h6v2M10 11v6M14 11v6M7 7l1 12h8l1-12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                             </button>
                         </div>
                     </td>

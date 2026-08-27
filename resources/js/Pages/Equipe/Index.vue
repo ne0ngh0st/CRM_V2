@@ -120,6 +120,16 @@ function abrirExcluir(usuario) {
     modalExcluir.value = true;
 }
 
+function simularUsuario(usuario) {
+    const nome = usuario.displayName || usuario.nome || usuario.name;
+    if (!confirm(`Ver o sistema como "${nome}"?\n\nVocê passa a enxergar exatamente o que este usuário vê, e suas ações ficam registradas na auditoria. Use o banner no topo para voltar.`)) {
+        return;
+    }
+    // Sem preserveState: a simulação troca o usuário autenticado, então a página inteira
+    // precisa ser remontada com os dados do alvo.
+    router.post(route('simulacao.iniciar', usuario.id));
+}
+
 function alternarStatus(usuario) {
     router.patch(route('equipe.status', usuario.id), {}, { preserveScroll: true, preserveState: true });
 }
@@ -261,12 +271,14 @@ function alternarStatus(usuario) {
                             :pode-gerenciar="podeGerenciar"
                             :selecionados="selecionados"
                             :usuario-logado-id="$page.props.auth.user.id"
+                            :pode-simular="role === 'admin' && !$page.props.simulacao?.ativa"
                             @toggle-selecionado="toggleSelecionado"
                             @toggle-grupo="toggleGrupo"
                             @editar="abrirEditar"
                             @trocar-senha="abrirSenha"
                             @toggle-status="alternarStatus"
                             @excluir="abrirExcluir"
+                            @simular="simularUsuario"
                         />
                     </div>
                     <p v-else class="text-sm text-gray-400">Nenhum usuário encontrado com os filtros atuais.</p>

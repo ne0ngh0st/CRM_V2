@@ -26,9 +26,12 @@ class ImportClientesLegado extends Command
         $ultimaCompra = $this->carregarUltimaCompra($pdo);
         $this->info(sprintf('%d combinações cod_cliente+loja com data de última compra.', count($ultimaCompra)));
 
+        $gruposImportados = $this->importarGrupos($pdo);
+        $this->info("Grupos de cliente importados/atualizados: {$gruposImportados}");
+
         $this->info("Lendo clientes ({$fonte})...");
         $stmt = $pdo->query(
-            'SELECT COD_CLIENT, LOJA, CNPJ, CLIENTE, NOME_FANTASIA, COD_VENDEDOR, COD_SEG, '
+            'SELECT COD_CLIENT, LOJA, CNPJ, CLIENTE, NOME_FANTASIA, COD_VENDEDOR, COD_SEG, GrpVendas, '
             .'Estado, CEP, DDD, Telefone, EMailNFe FROM CLIENTES'
         );
 
@@ -55,6 +58,7 @@ class ImportClientesLegado extends Command
                 'nome_fantasia' => self::valorOuNull($row['NOME_FANTASIA'] ?? ''),
                 'cod_vendedor' => self::valorOuNull($row['COD_VENDEDOR'] ?? ''),
                 'cod_segmento' => self::normalizarSegmento($row['COD_SEG'] ?? ''),
+                'cod_grupo' => self::normalizarCodigo($row['GrpVendas'] ?? ''),
                 'estado' => self::valorOuNull($row['Estado'] ?? ''),
                 'cep' => self::valorOuNull($row['CEP'] ?? ''),
                 'telefone' => self::montarTelefone($row['DDD'] ?? '', $row['Telefone'] ?? ''),
@@ -114,13 +118,54 @@ class ImportClientesLegado extends Command
         return $mapa;
     }
 
+    /**
+     * `CLIENTES.GrpVendas` só traz o CÓDIGO do grupo; a descrição existe apenas em
+     * `ultimo_faturamento` (mesma situação de Segmento1/Descricao1). Conferido no
+     * espelho: nenhum código tem mais de uma descrição, então o mapa é 1:1.
+     *
+     * Roda junto do import de clientes de propósito — se fosse comando separado,
+     * daria pra importar cliente com grupo que não existe na tabela de lookup.
+     */
+    private function importarGrupos(PDO $pdo): int
+    {
+        $stmt = $pdo->query(
+            'SELECT GrpVendas, MIN(Descricao) AS descricao FROM ultimo_faturamento '
+            .'WHERE GrpVendas IS NOT NULL GROUP BY GrpVendas'
+        );
+
+        $lote = [];
+        $agora = now();
+
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $codigo = self::normalizarCodigo($row['GrpVendas']);
+            $nome = trim((string) ($row['descricao'] ?? ''));
+
+            if ($codigo === null || $nome === '') {
+                continue;
+            }
+
+            $lote[] = [
+                'codigo' => $codigo,
+                'nome' => $nome,
+                'created_at' => $agora,
+                'updated_at' => $agora,
+            ];
+        }
+
+        foreach (array_chunk($lote, 500) as $pedaco) {
+            DB::table('grupos_cliente')->upsert($pedaco, ['codigo'], ['nome', 'updated_at']);
+        }
+
+        return count($lote);
+    }
+
     private function upsertLote(array $lote): void
     {
         DB::table('clientes')->upsert(
             $lote,
             ['cod_cliente', 'loja'],
             [
-                'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor', 'cod_segmento',
+                'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor', 'cod_segmento', 'cod_grupo',
                 'estado', 'cep', 'telefone', 'email', 'data_ultima_compra', 'updated_at',
             ]
         );
@@ -141,6 +186,22 @@ class ImportClientesLegado extends Command
     private static function normalizarSegmento(string $valor): ?string
     {
         $valor = trim($valor);
+
+        if ($valor === '') {
+            return null;
+        }
+
+        return ctype_digit($valor) ? (string) ((int) $valor) : $valor;
+    }
+
+    /**
+     * Mesma normalização do segmento, usada pra `GrpVendas`: garante que o código
+     * gravado em `clientes.cod_grupo` bata com `grupos_cliente.codigo` mesmo se a
+     * origem mudar de int pra varchar com zero à esquerda algum dia.
+     */
+    private static function normalizarCodigo(mixed $valor): ?string
+    {
+        $valor = trim((string) $valor);
 
         if ($valor === '') {
             return null;

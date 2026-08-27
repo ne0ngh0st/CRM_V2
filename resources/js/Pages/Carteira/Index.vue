@@ -10,7 +10,7 @@ import CarteiraSegmentoCard from '@/Components/Dashboard/CarteiraSegmentoCard.vu
 import CarteiraTabela from '@/Components/Carteira/CarteiraTabela.vue';
 import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos.vue';
 import MotivoInatividadeModal from '@/Components/Carteira/MotivoInatividadeModal.vue';
-import ObservacaoModal from '@/Components/Carteira/ObservacaoModal.vue';
+import ObservacoesModal from '@/Components/Observacoes/ObservacoesModal.vue';
 import AgendarLigacaoModal from '@/Components/Carteira/AgendarLigacaoModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 
@@ -25,7 +25,9 @@ const props = defineProps({
     visao: Object,
 });
 
-const isGestor = computed(() => ['admin', 'diretor', 'supervisor', 'assistente'].includes(props.role));
+// "Ver detalhes" é liberado pra todos os perfis (decisão do Tony, 2026-08-10) — o
+// escopo já é garantido no servidor por `CarteiraController::autorizarCliente()`,
+// então o vendedor só alcança cliente da própria carteira.
 const isVendedor = computed(() => ['vendedor', 'representante'].includes(props.role));
 
 const filtros = reactive({
@@ -59,6 +61,14 @@ function trocarAba(aba) {
         replace: true,
         only: ['clientes', 'kpis', 'filtros', 'visao', 'agendamentos', 'aba'],
     });
+}
+
+// Substituiu o select "Ordenar por" — a ordenação agora é o clique no header da
+// coluna. Volta pra página 1 de propósito: manter o offset ao reordenar deixa o
+// usuário no meio de uma lista que não é mais a mesma.
+function ordenarPor(valor) {
+    filtros.ordenar = valor;
+    aplicarFiltros();
 }
 
 let timeoutBusca;
@@ -164,12 +174,6 @@ const temFiltrosAtivos = computed(() =>
                             <option v-for="v in visao.vendedores" :key="v.cod_vendedor" :value="v.cod_vendedor">{{ v.nome }}</option>
                         </FilterField>
 
-                        <FilterField label="Ordenar por" :model-value="filtros.ordenar" @update:model-value="(v) => { filtros.ordenar = v; aplicarFiltros(); }">
-                            <option value="nome_asc">Razão social · A-Z</option>
-                            <option value="ultima_compra_desc">Última compra · mais recente</option>
-                            <option value="ultima_compra_asc">Última compra · mais antiga</option>
-                        </FilterField>
-
                         <button type="button" class="self-end rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100" @click="limparFiltros">
                             Limpar filtros
                         </button>
@@ -217,11 +221,13 @@ const temFiltrosAtivos = computed(() =>
                         <CarteiraTabela
                             v-if="clientes.data.length"
                             :clientes="clientes.data"
-                            :pode-ver-detalhes="isGestor"
+                            :pode-ver-detalhes="true"
                             :pode-ligar="isVendedor"
                             :pode-agendar="isVendedor"
                             :pode-orcamento="isVendedor"
                             :pode-observar="true"
+                            :ordenar="filtros.ordenar"
+                            @ordenar="ordenarPor"
                             @motivo-inatividade="abrirMotivo"
                             @observacao="abrirObservacao"
                             @agendar-ligacao="abrirAgendamento"
@@ -239,7 +245,13 @@ const temFiltrosAtivos = computed(() =>
         </div>
 
         <MotivoInatividadeModal :show="modalMotivo" :cliente="clienteAtivo" @close="modalMotivo = false" />
-        <ObservacaoModal :show="modalObservacao" :cliente="clienteAtivo" @close="modalObservacao = false" />
+        <ObservacoesModal
+            :show="modalObservacao"
+            :subtitulo="clienteAtivo ? `${clienteAtivo.razaoSocial} · ${clienteAtivo.cnpj || 'CNPJ não cadastrado'}` : ''"
+            :historico-url="clienteAtivo ? route('observacoes.porCliente', clienteAtivo.id) : null"
+            :payload="clienteAtivo ? { cliente_id: clienteAtivo.id, cnpj: clienteAtivo.cnpj || undefined } : {}"
+            @close="modalObservacao = false"
+        />
         <AgendarLigacaoModal :show="modalAgendamento" :cliente="clienteAtivo" @close="modalAgendamento = false" />
     </AuthenticatedLayout>
 </template>

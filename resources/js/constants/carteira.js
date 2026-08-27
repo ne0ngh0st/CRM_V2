@@ -9,9 +9,3 @@ export const TONS_STATUS_CARTEIRA = {
     inativando: 'warn',
     inativo: 'danger',
 };
-
-export const ROTULOS_ADERENCIA = {
-    dentro: 'No segmento',
-    fora: 'Fora do segmento',
-    sem_segmento: 'Sem segmento definido',
-};

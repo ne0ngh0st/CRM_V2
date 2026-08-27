@@ -10,7 +10,7 @@ import Pagination from '@/Components/Pagination.vue';
 import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos.vue';
 import LeadsTabela from '@/Components/Leads/LeadsTabela.vue';
 import AgendarLigacaoLeadModal from '@/Components/Leads/AgendarLigacaoLeadModal.vue';
-import ObservacaoLeadModal from '@/Components/Leads/ObservacaoLeadModal.vue';
+import ObservacoesModal from '@/Components/Observacoes/ObservacoesModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 
 const props = defineProps({
@@ -247,9 +247,11 @@ const temFiltrosAtivos = computed(() =>
             </div>
         </div>
 
-        <ObservacaoLeadModal
+        <ObservacoesModal
             :show="modalObservacao"
-            :lead="leadAtivo"
+            :subtitulo="leadAtivo?.razaoSocial || leadAtivo?.nome || ''"
+            :historico-url="leadAtivo ? route('observacoes.porLead', leadAtivo.id) : null"
+            :payload="leadAtivo ? { lead_id: leadAtivo.id, cnpj: leadAtivo.cnpj || undefined } : {}"
             @close="modalObservacao = false"
         />
         <AgendarLigacaoLeadModal

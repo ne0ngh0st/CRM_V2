@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\AgendamentoLigacao;
 use App\Models\CarteiraMotivoInatividade;
 use App\Models\Cliente;
+use App\Models\GrupoCliente;
 use App\Models\Ligacao;
 use App\Models\Pedido;
 use App\Models\Segmento;
-use App\Models\SegmentoVendedor;
 use App\Models\VendedorPerfil;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Carteira\ClienteStatusResolver;
@@ -52,9 +52,18 @@ class CarteiraController extends Controller
 
         $kpis = $this->aderenciaResolver->resolver($this->baseQuery($request));
 
-        $listaQuery = $this->listaQuery($request);
-
-        $clientes = $listaQuery->paginate(30)->withQueryString();
+        /*
+         * O total é contado por `filtradaQuery()`, que NÃO tem o join de ordenação.
+         * Ordenar por nome de grupo/segmento faz um LEFT JOIN, e sem isso o COUNT da
+         * paginação pagaria o join também: medido em ~450ms dos ~610ms totais.
+         * O join é num campo `unique` (`grupos_cliente.codigo`, `segmentos.codigo`),
+         * então é 1:1 no máximo e não muda a contagem — a conta continua correta.
+         * Se algum dia entrar aqui um join que possa multiplicar linha, este atalho
+         * deixa de valer e o total sai errado.
+         */
+        $clientes = $this->listaQuery($request)
+            ->paginate(perPage: 30, total: $this->filtradaQuery($request)->count())
+            ->withQueryString();
 
         $codVendedoresPresentes = $clientes->getCollection()->pluck('cod_vendedor')->filter()->unique()->values();
         $nomesPorCodVendedor = VendedorPerfil::query()
@@ -76,21 +85,13 @@ class CarteiraController extends Controller
 
         $nomePorCodigo = Segmento::pluck('nome', 'codigo');
 
-        $segmentosPorVendedor = SegmentoVendedor::query()
-            ->whereIn('cod_vendedor', $codVendedoresPresentes)
-            ->with('segmento')
-            ->get()
-            ->groupBy('cod_vendedor')
-            ->map(fn ($grupo) => $grupo->pluck('segmento.codigo')->all());
+        // Só os grupos que aparecem nesta página — são 2.4k no total, não vale carregar tudo.
+        $nomePorGrupo = GrupoCliente::query()
+            ->whereIn('codigo', $clientes->getCollection()->pluck('cod_grupo')->filter()->unique())
+            ->pluck('nome', 'codigo');
 
-        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $segmentosPorVendedor, $nomePorCodigo, $hoje) {
+        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $nomePorCodigo, $nomePorGrupo, $hoje) {
             $motivo = $motivosPorCliente->get($cliente->id);
-            $segmentosVendedor = $segmentosPorVendedor[$cliente->cod_vendedor] ?? [];
-            $aderencia = match (true) {
-                empty($segmentosVendedor) => 'sem_segmento',
-                $cliente->cod_segmento && in_array($cliente->cod_segmento, $segmentosVendedor, true) => 'dentro',
-                default => 'fora',
-            };
 
             return [
                 'id' => $cliente->id,
@@ -101,11 +102,11 @@ class CarteiraController extends Controller
                 'telefone' => $cliente->telefone,
                 'estado' => $cliente->estado,
                 'segmento' => $cliente->cod_segmento ? ($nomePorCodigo[$cliente->cod_segmento] ?? $cliente->cod_segmento) : null,
+                'grupo' => $cliente->cod_grupo ? ($nomePorGrupo[$cliente->cod_grupo] ?? $cliente->cod_grupo) : null,
                 'codVendedor' => $cliente->cod_vendedor,
                 'vendedorNome' => $nomesPorCodVendedor[$cliente->cod_vendedor] ?? $cliente->cod_vendedor,
                 'status' => $this->statusResolver->statusPara($cliente->data_ultima_compra, $hoje),
                 'dataUltimaCompra' => optional($cliente->data_ultima_compra)->format('d/m/Y'),
-                'aderencia' => $aderencia,
                 'motivoInatividade' => $motivo ? [
                     'motivo' => $motivo->motivo,
                     'observacao' => $motivo->observacao,
@@ -218,12 +219,50 @@ class CarteiraController extends Controller
         return $query;
     }
 
+    /**
+     * Colunas que a tela deixa ordenar por clique no header.
+     *
+     * É whitelist de propósito: o campo vem da query string, e concatenar isso
+     * direto num orderBy seria injeção de SQL. Nunca trocar por passar o valor
+     * cru pro orderBy(), nem "só validar se não tem espaço".
+     *
+     * `join` marca as duas que ordenam por um nome que mora em outra tabela.
+     * Custo medido com 91.293 clientes (escopo admin, sem filtro): coluna direta
+     * indexada ~0,5ms; as com join ~156ms, porque o LEFT JOIN força filesort e
+     * nenhum índice cobre. Por isso nenhuma das duas é a ordem padrão da tela —
+     * são ação explícita do usuário, não custo de todo carregamento.
+     */
+    private const ORDENACOES = [
+        'nome' => ['coluna' => 'clientes.razao_social'],
+        'grupo' => ['coluna' => 'grp_ord.nome', 'join' => 'grupo'],
+        'vendedor' => ['coluna' => 'clientes.cod_vendedor'],
+        'estado' => ['coluna' => 'clientes.estado'],
+        'segmento' => ['coluna' => 'seg_ord.nome', 'join' => 'segmento'],
+        // Status é derivado de data_ultima_compra por faixas, então ordenar por
+        // um é ordenar pelo outro. Só inverte o sentido: "status asc" é
+        // Ativo -> Inativo, que é compra mais RECENTE primeiro.
+        'status' => ['coluna' => 'clientes.data_ultima_compra', 'inverter' => true],
+        'ultima_compra' => ['coluna' => 'clientes.data_ultima_compra'],
+    ];
+
     /** baseQuery() + aderência + ordenação. Usado por index() (lista) e exportar(). */
     protected function listaQuery(Request $request): Builder
     {
+        return $this->aplicarOrdenacao(
+            $this->filtradaQuery($request),
+            (string) $request->string('ordenar') ?: 'nome_asc',
+        );
+    }
+
+    /**
+     * baseQuery() + aderência, sem ordenação. Existe separado porque é a query que
+     * define QUANTAS linhas a lista tem — o join de ordenação por nome de
+     * grupo/segmento não pode entrar nessa conta (ver `index()`).
+     */
+    protected function filtradaQuery(Request $request): Builder
+    {
         $query = $this->baseQuery($request);
         $aderencia = (string) $request->string('aderencia');
-        $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
 
         if ($aderencia !== '') {
             $temSegmentoDefinido = fn ($q) => $q->selectRaw(1)
@@ -246,13 +285,59 @@ class CarteiraController extends Controller
             }
         }
 
-        match ($ordenar) {
-            'ultima_compra_desc' => $query->orderByRaw('clientes.data_ultima_compra IS NULL, clientes.data_ultima_compra DESC'),
-            'ultima_compra_asc' => $query->orderByRaw('clientes.data_ultima_compra IS NULL, clientes.data_ultima_compra ASC'),
-            default => $query->orderBy('clientes.razao_social'),
+        return $query;
+    }
+
+    /**
+     * `ordenar` chega como "<campo>_<asc|desc>" (ex.: "grupo_desc"). Campo fora da
+     * whitelist ou direção inválida cai no padrão, sem erro pro usuário.
+     */
+    protected function aplicarOrdenacao(Builder $query, string $ordenar): Builder
+    {
+        preg_match('/^(.*)_(asc|desc)$/', $ordenar, $partes);
+
+        $campo = $partes[1] ?? 'nome';
+        $direcao = $partes[2] ?? 'asc';
+
+        $config = self::ORDENACOES[$campo] ?? self::ORDENACOES['nome'];
+
+        if (($config['inverter'] ?? false)) {
+            $direcao = $direcao === 'asc' ? 'desc' : 'asc';
+        }
+
+        // Aliases: `listaQuery` já pode ter dado join em `segmentos` pro filtro de
+        // aderência — sem alias o segundo join quebra com "Not unique table/alias".
+        match ($config['join'] ?? null) {
+            'grupo' => $query->leftJoin('grupos_cliente as grp_ord', 'grp_ord.codigo', '=', 'clientes.cod_grupo'),
+            'segmento' => $query->leftJoin('segmentos as seg_ord', 'seg_ord.codigo', '=', 'clientes.cod_segmento'),
+            default => null,
         };
 
-        return $query;
+        /*
+         * ⚠️ Sem `data_ultima_compra IS NULL` na frente, que é como isto era escrito.
+         * Aquilo põe uma EXPRESSÃO como primeira chave de ordenação, e expressão não
+         * usa índice: media 80ms mesmo com o índice em `data_ultima_compra`, contra
+         * 0,34ms sem ela (mesma armadilha da Regra de ouro nº 6, agora no ORDER BY).
+         *
+         * O MySQL já entrega o que aquilo queria no DESC: NULL é o menor valor, então
+         * "nunca comprou" vai pro fim sozinho. No ASC os NULLs vêm primeiro — mudança
+         * de comportamento assumida, e que faz sentido: quem nunca comprou é o mais
+         * frio de todos. MySQL 8 não tem NULLS LAST, então manter os dois com NULL no
+         * fim custaria o filesort de volta.
+         */
+        return $query->orderBy($config['coluna'], $direcao)
+            /*
+             * Desempate estável: sem isso, páginas diferentes podem repetir/pular
+             * registros quando a coluna ordenada tem muitos valores iguais (estado,
+             * grupo, status).
+             *
+             * ⚠️ A direção do desempate TEM que acompanhar a da coluna. Um índice
+             * secundário do InnoDB já carrega a PK dentro dele, mas na ordem dele:
+             * ordenar "coluna DESC, id ASC" mistura os sentidos, nenhum índice
+             * atende, e volta o `type: ALL` + filesort (medido: 80ms contra 0,39ms).
+             * Fixar `->orderBy('clientes.id')` aqui reintroduz o problema.
+             */
+            ->orderBy('clientes.id', $direcao);
     }
 
     public function detalhes(Request $request, Cliente $cliente): Response
@@ -271,6 +356,10 @@ class CarteiraController extends Controller
 
         $pedidos = Pedido::query()
             ->where('cliente_id', $cliente->id)
+            // Os itens vêm junto (uma query a mais pra página inteira, não uma por
+            // pedido) porque a linha é expansível. São só 20 pedidos por página —
+            // o cliente com mais pedidos da base tem 32 no total.
+            ->with('itens:id,pedido_id,cod_produto,descricao,quantidade,quantidade_liberada,valor_unitario,valor_total')
             ->withCount('itens')
             ->orderByDesc('data_pedido')
             ->paginate(20)
@@ -284,6 +373,15 @@ class CarteiraController extends Controller
                 'valorTotal' => (float) $p->valor_total,
                 'itensCount' => $p->itens_count,
                 'emAberto' => $p->data_faturamento === null,
+                'itens' => $p->itens->map(fn ($i) => [
+                    'id' => $i->id,
+                    'codProduto' => $i->cod_produto,
+                    'descricao' => $i->descricao,
+                    'quantidade' => (float) $i->quantidade,
+                    'quantidadeLiberada' => $i->quantidade_liberada !== null ? (float) $i->quantidade_liberada : null,
+                    'valorUnitario' => (float) $i->valor_unitario,
+                    'valorTotal' => (float) $i->valor_total,
+                ])->all(),
             ]);
 
         $vendedorNome = VendedorPerfil::query()
