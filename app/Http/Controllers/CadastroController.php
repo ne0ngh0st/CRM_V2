@@ -8,9 +8,12 @@ use App\Models\SolicitacaoBobina;
 use App\Models\SolicitacaoEtiqueta;
 use App\Models\User;
 use App\Services\Cadastros\SolicitacaoTituloResolver;
+use App\Services\Solicitacoes\BobinaPdfPresenter;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\File;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -83,6 +86,28 @@ class CadastroController extends Controller
             ],
             'flashMailto' => $request->session()->get('flashMailto'),
         ]);
+    }
+
+    /**
+     * Ficha da solicitação em PDF — o legado tinha isso
+     * (`includes/pdf/solicitacao_bobina_pdf.php`) e o v2 só mandava `mailto:`.
+     */
+    public function pdfBobina(Request $request, SolicitacaoBobina $bobina): HttpResponse
+    {
+        $user = $request->user();
+        $isGestor = in_array($user->getRoleNames()->first(), ['admin', 'diretor', 'supervisor'], true);
+
+        // Mesmo escopo da listagem: quem não é gestor só vê a própria solicitação.
+        abort_unless($isGestor || $bobina->user_id === $user->id, 403);
+
+        $bobina->load('enviadoPor');
+
+        $pdf = Pdf::loadView('solicitacoes.bobina-pdf', app(BobinaPdfPresenter::class)->montar($bobina));
+        $nomeArquivo = "solicitacao-bobina-{$bobina->id}.pdf";
+
+        return $request->boolean('download')
+            ? $pdf->download($nomeArquivo)
+            : $pdf->stream($nomeArquivo);
     }
 
     public function exportar(Request $request): BinaryFileResponse
@@ -235,6 +260,7 @@ class CadastroController extends Controller
             $data['papel'] ?? null,
             $data['largura'] ?? null,
             $data['metragem'] ?? null,
+            $data['gramatura'] ?? null,
         );
 
         $solicitacao = SolicitacaoBobina::query()->create([
@@ -296,7 +322,7 @@ class CadastroController extends Controller
             $data['nomenclatura'],
             $data['medidas'] ?? null,
             $data['tipo_adesivo'] ?? null,
-            $data['saida_rolo'],
+            $data['metragem'] ?? null,
         );
 
         $solicitacao = SolicitacaoEtiqueta::query()->create([
