@@ -136,7 +136,14 @@ class LeadController extends Controller
             'aba' => $aba,
             'leads' => $leads,
             'kpis' => $kpis,
-            'agendamentos' => $this->agendamentosDoEscopo($codVendedores),
+            /*
+             * Prop opcional, mesmo tratamento da Carteira: a aba Leads, onde a maioria
+             * das visitas para, deixou de pagar por uma consulta que ia pro lixo.
+             *
+             * ⚠️ Visita completa (F5, ou /leads?aba=calendario) NAO traz prop opcional —
+             * o onMounted do Leads/Index.vue cobre esse caso.
+             */
+            'agendamentos' => Inertia::optional(fn () => $this->agendamentosDoEscopo($codVendedores)),
             'filtros' => [
                 'busca' => $busca,
                 'estado' => $estado,
@@ -335,11 +342,16 @@ class LeadController extends Controller
         $query = AgendamentoLigacao::query()
             ->with(['lead:id,razao_social,nome,cnpj,telefone,cod_vendedor', 'user:id,name,display_name'])
             ->whereNotNull('lead_id')
-            ->whereBetween('data_agendamento', [now()->subMonths(3)->startOfMonth(), now()->addMonths(6)->endOfMonth()])
-            ->orderBy('data_agendamento');
+            // Janela de -1 a +3 meses com teto de 500, igual a Carteira: o calendario
+            // mostra um mes por vez, e meio ano de cada lado era payload que ninguem abria.
+            ->whereBetween('data_agendamento', [now()->subMonth()->startOfMonth(), now()->addMonths(3)->endOfMonth()])
+            ->orderBy('data_agendamento')
+            ->limit(500);
 
         if ($codVendedores !== null) {
-            $query->whereHas('lead', fn ($q) => $q->whereIn('cod_vendedor', $codVendedores));
+            // Subquery IN em vez de whereHas: o whereHas gera EXISTS correlacionado,
+            // avaliado por linha de agendamento.
+            $query->whereIn('lead_id', Lead::query()->select('id')->whereIn('cod_vendedor', $codVendedores));
         }
 
         return $query->get()->map(fn (AgendamentoLigacao $a) => [
