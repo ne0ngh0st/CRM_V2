@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Support\Uploads\Disco;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -65,7 +66,7 @@ class ProfileController extends Controller
         $path = $request->file('foto_perfil')->storeAs(
             'perfis',
             'perfil_'.$user->id.'_'.time().'.'.$ext,
-            'public',
+            Disco::nomeUploads(),
         );
 
         $user->update(['foto_perfil' => $path]);
@@ -89,8 +90,8 @@ class ProfileController extends Controller
             return;
         }
 
-        if (Storage::disk('public')->exists($path)) {
-            Storage::disk('public')->delete($path);
-        }
+        // delete() em caminho inexistente e no-op nos dois drivers; checar antes
+        // custaria uma ida ao S3 a cada troca de foto, sem ganho nenhum.
+        Disco::uploads()->delete($path);
     }
 }

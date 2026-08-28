@@ -2,16 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\AgendamentoLigacao;
 use App\Models\CarteiraMotivoInatividade;
+use App\Jobs\GerarExportacaoCarteiraJob;
 use App\Models\Cliente;
+use App\Models\Exportacao;
+use App\Models\GrupoCliente;
 use App\Models\Ligacao;
 use App\Models\Pedido;
 use App\Models\Segmento;
-use App\Models\SegmentoVendedor;
 use App\Models\VendedorPerfil;
+use App\Services\Cache\CacheDeAgregacao;
+use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Carteira\ClienteStatusResolver;
+use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -23,11 +29,112 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class CarteiraController extends Controller
 {
+    use ExportaPlanilha;
+
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly CarteiraAderenciaResolver $aderenciaResolver,
         private readonly ClienteStatusResolver $statusResolver,
+        private readonly CacheDeAgregacao $cache,
+        private readonly DashboardBlocos $blocos,
     ) {
+    }
+
+    /**
+     * KPIs de aderência do topo da Carteira.
+     *
+     * O bloco mais caro da tela: ~950 ms de SQL no escopo admin (LEFT JOIN em
+     * segmentos/segmentos_vendedor sobre as ~90k linhas de clientes). Era o último lugar
+     * do sistema rodando essa agregação sem cache, e a razão de /carteira ter sido o pior
+     * p50 do teste de carga.
+     *
+     * ⚠️ SEM FILTRO, ISTO É EXATAMENTE O CARD DO DASHBOARD.
+     * `baseQuery()` sem filtros é `scopeQuery()` mais um `select('clientes.*')` — e o
+     * CarteiraAderenciaResolver limpa o select logo no início, então a diferença some.
+     * Como a pergunta é a mesma, a resposta tem que ser a mesma (Regra de ouro nº 8):
+     * delegamos ao bloco do Dashboard e as duas telas passam a dividir a MESMA chave.
+     *
+     * Isso vale mais que economia de uma query: essa chave já é aquecida pelo job de
+     * warming, então a Carteira sem filtro passou a nunca pagar a agregação — de graça,
+     * sem precisar aquecer nada novo.
+     *
+     * Com filtro ativo, cai no cache próprio: chave com data (o resolver classifica por
+     * dias desde a última compra, 290/365, a partir de now()) e TTL curto, já que a
+     * cardinalidade vem da query string e é ilimitada em teoria.
+     *
+     * @param  array<string>|null  $codVendedores
+     */
+    private function aderencia(Request $request, ?array $codVendedores): array
+    {
+        $escopo = ChaveEscopo::deCodVendedores($codVendedores);
+        $assinatura = $this->assinaturaDosFiltros($request);
+
+        if ($assinatura === 'vazio') {
+            return $this->blocos->carteiraSegmento($escopo, $codVendedores);
+        }
+
+        return $this->cache->lembrarPorMinutos(
+            $escopo->paraDoDia('carteira-kpis', ['f' => $assinatura]),
+            10,
+            fn () => $this->aderenciaResolver->resolver($this->baseQuery($request)),
+        );
+    }
+
+    /**
+     * Opções dos dropdowns de Estado e Segmento.
+     *
+     * ⚠️ São dois DISTINCT sobre a tabela inteira de clientes (~90k linhas), e dependem
+     * SÓ do escopo — nunca dos filtros ativos, senão o dropdown perderia opções conforme
+     * o usuário filtra. Por dependerem só do escopo, são perfeitamente cacheáveis, e por
+     * mudarem apenas quando o TOTVS traz cliente novo, o TTL pode ser longo.
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return array{estados: mixed, segmentos: mixed}
+     */
+    private function opcoesDeFiltro(Request $request, ?array $codVendedores): array
+    {
+        return $this->cache->lembrarPorHoras(
+            ChaveEscopo::deCodVendedores($codVendedores)->para('carteira-opcoes'),
+            (int) config('perf.ttl_lookup_minutos', 360) / 60,
+            fn () => [
+                'estados' => $this->scopeQuery($request)
+                    ->whereNotNull('estado')->where('estado', '!=', '')
+                    ->distinct()->orderBy('estado')->pluck('estado'),
+                'segmentos' => Segmento::query()
+                    ->whereIn('codigo', $this->scopeQuery($request)
+                        ->whereNotNull('cod_segmento')->where('cod_segmento', '!=', '')
+                        ->distinct()->pluck('cod_segmento'))
+                    ->orderBy('nome')
+                    ->get(['codigo', 'nome']),
+            ],
+        );
+    }
+
+    /**
+     * Assinatura estável dos filtros ativos, para compor a chave de cache dos KPIs.
+     *
+     * ⚠️ Sem filtro nenhum devolve a constante 'vazio', e isso é essencial: é o único
+     * caso que o warming alcança (as demais combinações vêm da query string e são
+     * ilimitadas em teoria). Manter esse caso legível, em vez de virar mais um hash,
+     * é o que permite tratá-lo de propósito em `aderencia()`.
+     */
+    private function assinaturaDosFiltros(Request $request): string
+    {
+        $filtros = array_filter([
+            'busca' => trim((string) $request->string('busca')),
+            'estado' => (string) $request->string('estado'),
+            'segmento' => (string) $request->string('segmento'),
+            'status' => (string) $request->string('status'),
+            'aderencia' => (string) $request->string('aderencia'),
+        ], fn (string $v) => $v !== '');
+
+        if ($filtros === []) {
+            return 'vazio';
+        }
+
+        ksort($filtros);
+
+        return md5(json_encode($filtros));
     }
 
     public function index(Request $request): Response
@@ -50,11 +157,20 @@ class CarteiraController extends Controller
         $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
         $aba = (string) $request->string('aba') ?: 'clientes';
 
-        $kpis = $this->aderenciaResolver->resolver($this->baseQuery($request));
+        $kpis = $this->aderencia($request, $codVendedores);
 
-        $listaQuery = $this->listaQuery($request);
-
-        $clientes = $listaQuery->paginate(30)->withQueryString();
+        /*
+         * O total é contado por `filtradaQuery()`, que NÃO tem o join de ordenação.
+         * Ordenar por nome de grupo/segmento faz um LEFT JOIN, e sem isso o COUNT da
+         * paginação pagaria o join também: medido em ~450ms dos ~610ms totais.
+         * O join é num campo `unique` (`grupos_cliente.codigo`, `segmentos.codigo`),
+         * então é 1:1 no máximo e não muda a contagem — a conta continua correta.
+         * Se algum dia entrar aqui um join que possa multiplicar linha, este atalho
+         * deixa de valer e o total sai errado.
+         */
+        $clientes = $this->listaQuery($request)
+            ->paginate(perPage: 30, total: $this->filtradaQuery($request)->count())
+            ->withQueryString();
 
         $codVendedoresPresentes = $clientes->getCollection()->pluck('cod_vendedor')->filter()->unique()->values();
         $nomesPorCodVendedor = VendedorPerfil::query()
@@ -76,21 +192,13 @@ class CarteiraController extends Controller
 
         $nomePorCodigo = Segmento::pluck('nome', 'codigo');
 
-        $segmentosPorVendedor = SegmentoVendedor::query()
-            ->whereIn('cod_vendedor', $codVendedoresPresentes)
-            ->with('segmento')
-            ->get()
-            ->groupBy('cod_vendedor')
-            ->map(fn ($grupo) => $grupo->pluck('segmento.codigo')->all());
+        // Só os grupos que aparecem nesta página — são 2.4k no total, não vale carregar tudo.
+        $nomePorGrupo = GrupoCliente::query()
+            ->whereIn('codigo', $clientes->getCollection()->pluck('cod_grupo')->filter()->unique())
+            ->pluck('nome', 'codigo');
 
-        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $segmentosPorVendedor, $nomePorCodigo, $hoje) {
+        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $nomePorCodigo, $nomePorGrupo, $hoje) {
             $motivo = $motivosPorCliente->get($cliente->id);
-            $segmentosVendedor = $segmentosPorVendedor[$cliente->cod_vendedor] ?? [];
-            $aderencia = match (true) {
-                empty($segmentosVendedor) => 'sem_segmento',
-                $cliente->cod_segmento && in_array($cliente->cod_segmento, $segmentosVendedor, true) => 'dentro',
-                default => 'fora',
-            };
 
             return [
                 'id' => $cliente->id,
@@ -101,11 +209,11 @@ class CarteiraController extends Controller
                 'telefone' => $cliente->telefone,
                 'estado' => $cliente->estado,
                 'segmento' => $cliente->cod_segmento ? ($nomePorCodigo[$cliente->cod_segmento] ?? $cliente->cod_segmento) : null,
+                'grupo' => $cliente->cod_grupo ? ($nomePorGrupo[$cliente->cod_grupo] ?? $cliente->cod_grupo) : null,
                 'codVendedor' => $cliente->cod_vendedor,
                 'vendedorNome' => $nomesPorCodVendedor[$cliente->cod_vendedor] ?? $cliente->cod_vendedor,
                 'status' => $this->statusResolver->statusPara($cliente->data_ultima_compra, $hoje),
                 'dataUltimaCompra' => optional($cliente->data_ultima_compra)->format('d/m/Y'),
-                'aderencia' => $aderencia,
                 'motivoInatividade' => $motivo ? [
                     'motivo' => $motivo->motivo,
                     'observacao' => $motivo->observacao,
@@ -119,7 +227,15 @@ class CarteiraController extends Controller
             'aba' => in_array($aba, ['clientes', 'calendario'], true) ? $aba : 'clientes',
             'clientes' => $clientes,
             'kpis' => $kpis,
-            'agendamentos' => $this->agendamentosDoEscopo($codVendedores),
+            /*
+             * Prop opcional: só é enviada quando a requisição pede explicitamente
+             * (`only: ['agendamentos']`). A aba Clientes, que é onde a maioria das
+             * visitas para, deixou de pagar por uma consulta que ia direto pro lixo.
+             *
+             * ⚠️ Visita completa (F5, ou entrar por /carteira?aba=calendario) NÃO traz
+             * prop opcional — é o `onMounted` do Carteira/Index.vue que busca nesse caso.
+             */
+            'agendamentos' => Inertia::optional(fn () => $this->agendamentosDoEscopo($codVendedores)),
             'filtros' => [
                 'busca' => $busca,
                 'estado' => $estado,
@@ -128,13 +244,7 @@ class CarteiraController extends Controller
                 'aderencia' => $aderencia,
                 'ordenar' => $ordenar,
             ],
-            'opcoes' => [
-                'estados' => $this->scopeQuery($request)->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
-                'segmentos' => Segmento::query()
-                    ->whereIn('codigo', $this->scopeQuery($request)->whereNotNull('cod_segmento')->where('cod_segmento', '!=', '')->distinct()->pluck('cod_segmento'))
-                    ->orderBy('nome')
-                    ->get(['codigo', 'nome']),
-            ],
+            'opcoes' => $this->opcoesDeFiltro($request, $codVendedores),
             'visao' => [
                 'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
                 'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
@@ -147,17 +257,32 @@ class CarteiraController extends Controller
         ]);
     }
 
-    public function exportar(Request $request): BinaryFileResponse
+    /**
+     * Enfileira a geração da planilha da Carteira.
+     *
+     * ⚠️ ESTE ENDPOINT NÃO DEVOLVE ARQUIVO, e a mudança não é estilística.
+     * O export completo (escopo admin, ~90k clientes) leva ~95 s e ~540 MB. Atrás do ALB,
+     * cujo idle timeout padrão é 60 s, gerar de forma síncrona resultaria em 504 garantido
+     * — com o servidor seguindo ocupado por mais 35 s produzindo um arquivo que ninguém
+     * receberia. O usuário é avisado pelo sino quando ficar pronto.
+     *
+     * As outras oito exportações do sistema continuam síncronas: nenhuma tem volume que
+     * justifique a assincronia, e download imediato é melhor experiência quando cabe.
+     */
+    public function exportar(Request $request): RedirectResponse
     {
-        // Medido com os ~89.800 clientes sem filtro (escopo admin): ~540MB de pico e ~100s —
-        // acima do memory_limit/max_execution_time padrão do PHP-FPM. Ajuste só desta request.
-        ini_set('memory_limit', '1024M');
-        set_time_limit(300);
+        $exportacao = Exportacao::create([
+            'user_id' => $request->user()->id,
+            'recurso' => 'carteira',
+            // Só os filtros da tela: o job reconstrói a query a partir deles, e guardá-los
+            // deixa o arquivo auditável depois ("por que este Excel tem 300 linhas?").
+            'filtros' => $request->only(['busca', 'estado', 'segmento', 'status', 'aderencia', 'ordenar', 'visao_supervisor', 'visao_vendedor']),
+            'status' => Exportacao::STATUS_PROCESSANDO,
+        ]);
 
-        return Excel::download(
-            new \App\Exports\CarteiraExport($this->listaQuery($request), $this->statusResolver),
-            'carteira-'.now()->format('Y-m-d-His').'.xlsx',
-        );
+        GerarExportacaoCarteiraJob::dispatch($exportacao->id);
+
+        return back()->with('status', 'exportacao-enfileirada');
     }
 
     /** Escopo (cod_vendedor) puro, sem filtros de busca/estado/segmento/status. */
@@ -218,12 +343,50 @@ class CarteiraController extends Controller
         return $query;
     }
 
+    /**
+     * Colunas que a tela deixa ordenar por clique no header.
+     *
+     * É whitelist de propósito: o campo vem da query string, e concatenar isso
+     * direto num orderBy seria injeção de SQL. Nunca trocar por passar o valor
+     * cru pro orderBy(), nem "só validar se não tem espaço".
+     *
+     * `join` marca as duas que ordenam por um nome que mora em outra tabela.
+     * Custo medido com 91.293 clientes (escopo admin, sem filtro): coluna direta
+     * indexada ~0,5ms; as com join ~156ms, porque o LEFT JOIN força filesort e
+     * nenhum índice cobre. Por isso nenhuma das duas é a ordem padrão da tela —
+     * são ação explícita do usuário, não custo de todo carregamento.
+     */
+    private const ORDENACOES = [
+        'nome' => ['coluna' => 'clientes.razao_social'],
+        'grupo' => ['coluna' => 'grp_ord.nome', 'join' => 'grupo'],
+        'vendedor' => ['coluna' => 'clientes.cod_vendedor'],
+        'estado' => ['coluna' => 'clientes.estado'],
+        'segmento' => ['coluna' => 'seg_ord.nome', 'join' => 'segmento'],
+        // Status é derivado de data_ultima_compra por faixas, então ordenar por
+        // um é ordenar pelo outro. Só inverte o sentido: "status asc" é
+        // Ativo -> Inativo, que é compra mais RECENTE primeiro.
+        'status' => ['coluna' => 'clientes.data_ultima_compra', 'inverter' => true],
+        'ultima_compra' => ['coluna' => 'clientes.data_ultima_compra'],
+    ];
+
     /** baseQuery() + aderência + ordenação. Usado por index() (lista) e exportar(). */
-    protected function listaQuery(Request $request): Builder
+    public function listaQuery(Request $request): Builder
+    {
+        return $this->aplicarOrdenacao(
+            $this->filtradaQuery($request),
+            (string) $request->string('ordenar') ?: 'nome_asc',
+        );
+    }
+
+    /**
+     * baseQuery() + aderência, sem ordenação. Existe separado porque é a query que
+     * define QUANTAS linhas a lista tem — o join de ordenação por nome de
+     * grupo/segmento não pode entrar nessa conta (ver `index()`).
+     */
+    protected function filtradaQuery(Request $request): Builder
     {
         $query = $this->baseQuery($request);
         $aderencia = (string) $request->string('aderencia');
-        $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
 
         if ($aderencia !== '') {
             $temSegmentoDefinido = fn ($q) => $q->selectRaw(1)
@@ -246,13 +409,59 @@ class CarteiraController extends Controller
             }
         }
 
-        match ($ordenar) {
-            'ultima_compra_desc' => $query->orderByRaw('clientes.data_ultima_compra IS NULL, clientes.data_ultima_compra DESC'),
-            'ultima_compra_asc' => $query->orderByRaw('clientes.data_ultima_compra IS NULL, clientes.data_ultima_compra ASC'),
-            default => $query->orderBy('clientes.razao_social'),
+        return $query;
+    }
+
+    /**
+     * `ordenar` chega como "<campo>_<asc|desc>" (ex.: "grupo_desc"). Campo fora da
+     * whitelist ou direção inválida cai no padrão, sem erro pro usuário.
+     */
+    protected function aplicarOrdenacao(Builder $query, string $ordenar): Builder
+    {
+        preg_match('/^(.*)_(asc|desc)$/', $ordenar, $partes);
+
+        $campo = $partes[1] ?? 'nome';
+        $direcao = $partes[2] ?? 'asc';
+
+        $config = self::ORDENACOES[$campo] ?? self::ORDENACOES['nome'];
+
+        if (($config['inverter'] ?? false)) {
+            $direcao = $direcao === 'asc' ? 'desc' : 'asc';
+        }
+
+        // Aliases: `listaQuery` já pode ter dado join em `segmentos` pro filtro de
+        // aderência — sem alias o segundo join quebra com "Not unique table/alias".
+        match ($config['join'] ?? null) {
+            'grupo' => $query->leftJoin('grupos_cliente as grp_ord', 'grp_ord.codigo', '=', 'clientes.cod_grupo'),
+            'segmento' => $query->leftJoin('segmentos as seg_ord', 'seg_ord.codigo', '=', 'clientes.cod_segmento'),
+            default => null,
         };
 
-        return $query;
+        /*
+         * ⚠️ Sem `data_ultima_compra IS NULL` na frente, que é como isto era escrito.
+         * Aquilo põe uma EXPRESSÃO como primeira chave de ordenação, e expressão não
+         * usa índice: media 80ms mesmo com o índice em `data_ultima_compra`, contra
+         * 0,34ms sem ela (mesma armadilha da Regra de ouro nº 6, agora no ORDER BY).
+         *
+         * O MySQL já entrega o que aquilo queria no DESC: NULL é o menor valor, então
+         * "nunca comprou" vai pro fim sozinho. No ASC os NULLs vêm primeiro — mudança
+         * de comportamento assumida, e que faz sentido: quem nunca comprou é o mais
+         * frio de todos. MySQL 8 não tem NULLS LAST, então manter os dois com NULL no
+         * fim custaria o filesort de volta.
+         */
+        return $query->orderBy($config['coluna'], $direcao)
+            /*
+             * Desempate estável: sem isso, páginas diferentes podem repetir/pular
+             * registros quando a coluna ordenada tem muitos valores iguais (estado,
+             * grupo, status).
+             *
+             * ⚠️ A direção do desempate TEM que acompanhar a da coluna. Um índice
+             * secundário do InnoDB já carrega a PK dentro dele, mas na ordem dele:
+             * ordenar "coluna DESC, id ASC" mistura os sentidos, nenhum índice
+             * atende, e volta o `type: ALL` + filesort (medido: 80ms contra 0,39ms).
+             * Fixar `->orderBy('clientes.id')` aqui reintroduz o problema.
+             */
+            ->orderBy('clientes.id', $direcao);
     }
 
     public function detalhes(Request $request, Cliente $cliente): Response
@@ -271,6 +480,10 @@ class CarteiraController extends Controller
 
         $pedidos = Pedido::query()
             ->where('cliente_id', $cliente->id)
+            // Os itens vêm junto (uma query a mais pra página inteira, não uma por
+            // pedido) porque a linha é expansível. São só 20 pedidos por página —
+            // o cliente com mais pedidos da base tem 32 no total.
+            ->with('itens:id,pedido_id,cod_produto,descricao,quantidade,quantidade_liberada,valor_unitario,valor_total')
             ->withCount('itens')
             ->orderByDesc('data_pedido')
             ->paginate(20)
@@ -284,6 +497,15 @@ class CarteiraController extends Controller
                 'valorTotal' => (float) $p->valor_total,
                 'itensCount' => $p->itens_count,
                 'emAberto' => $p->data_faturamento === null,
+                'itens' => $p->itens->map(fn ($i) => [
+                    'id' => $i->id,
+                    'codProduto' => $i->cod_produto,
+                    'descricao' => $i->descricao,
+                    'quantidade' => (float) $i->quantidade,
+                    'quantidadeLiberada' => $i->quantidade_liberada !== null ? (float) $i->quantidade_liberada : null,
+                    'valorUnitario' => (float) $i->valor_unitario,
+                    'valorTotal' => (float) $i->valor_total,
+                ])->all(),
             ]);
 
         $vendedorNome = VendedorPerfil::query()
@@ -407,11 +629,20 @@ class CarteiraController extends Controller
     {
         $query = AgendamentoLigacao::query()
             ->with(['cliente:id,razao_social,cnpj,telefone,cod_vendedor', 'user:id,name,display_name'])
-            ->whereBetween('data_agendamento', [now()->subMonths(3)->startOfMonth(), now()->addMonths(6)->endOfMonth()])
-            ->orderBy('data_agendamento');
+            // Janela de -1 a +3 meses (era -3/+6) com teto de 500. O calendário mostra um
+            // mês por vez; trazer meio ano de cada lado era payload que ninguém abria.
+            ->whereBetween('data_agendamento', [now()->subMonth()->startOfMonth(), now()->addMonths(3)->endOfMonth()])
+            ->orderBy('data_agendamento')
+            ->limit(500);
 
         if ($codVendedores !== null) {
-            $query->whereHas('cliente', fn ($q) => $q->whereIn('cod_vendedor', $codVendedores));
+            // Subquery IN em vez de whereHas: o whereHas gera um EXISTS correlacionado,
+            // avaliado por linha de agendamento. A subquery resolve a lista de clientes
+            // uma vez só e tem plano de execução mais previsível.
+            $query->whereIn(
+                'cliente_id',
+                Cliente::query()->select('id')->whereIn('cod_vendedor', $codVendedores),
+            );
         }
 
         return $query->get()->map(fn (AgendamentoLigacao $a) => [

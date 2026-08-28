@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\Pedido;
 use App\Models\VendedorPerfil;
 use App\Services\Dashboard\DashboardScopeResolver;
@@ -16,6 +17,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PedidoController extends Controller
 {
+    use ExportaPlanilha;
+
     private const STATUSES = ['separacao', 'bloqueio', 'wms', 'liberado', 'faturado', 'pendente_totvs'];
 
     public function __construct(
@@ -46,11 +49,11 @@ class PedidoController extends Controller
 
         $kpis = [
             'totalAberto' => $this->baseQueryAbertos($request)->count(),
-            'atrasados' => $this->baseQueryAbertos($request)->whereDate('data_previsao_faturamento', '<', $hoje)->count(),
+            'atrasados' => $this->baseQueryAbertos($request)->where('data_previsao_faturamento', '<', $hoje)->count(),
             'vencendo' => $this->baseQueryAbertos($request)->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias])->count(),
             'valorEmRisco' => (float) $this->baseQueryAbertos($request)
                 ->where(function ($q) use ($hoje, $em7Dias) {
-                    $q->whereDate('data_previsao_faturamento', '<', $hoje)
+                    $q->where('data_previsao_faturamento', '<', $hoje)
                         ->orWhereBetween('data_previsao_faturamento', [$hoje, $em7Dias]);
                 })
                 ->sum('valor_total'),
@@ -131,10 +134,8 @@ class PedidoController extends Controller
 
     public function exportarAbertos(Request $request): BinaryFileResponse
     {
-        // Tabelas de pedidos podem crescer bastante sem filtro (ver Carteira, medido em ~90k linhas
-        // = ~540MB/100s) — margem de segurança só nesta request.
-        ini_set('memory_limit', '1024M');
-        set_time_limit(300);
+        $this->prepararExport('pedidos-abertos');
+
 
         $query = $this->listaQueryAbertos($request)
             ->with('cliente:id,razao_social,cnpj')
@@ -179,11 +180,11 @@ class PedidoController extends Controller
         }
 
         if ($dataInicio !== '') {
-            $query->whereDate('data_pedido', '>=', $dataInicio);
+            $query->where('data_pedido', '>=', $dataInicio);
         }
 
         if ($dataFim !== '') {
-            $query->whereDate('data_pedido', '<=', $dataFim);
+            $query->where('data_pedido', '<=', $dataFim);
         }
 
         return $query;
@@ -199,21 +200,33 @@ class PedidoController extends Controller
         $ordenar = (string) $request->string('ordenar') ?: 'previsao_asc';
 
         match ($situacao) {
-            'atrasado' => $query->whereDate('data_previsao_faturamento', '<', $hoje),
+            'atrasado' => $query->where('data_previsao_faturamento', '<', $hoje),
             'vencendo' => $query->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias]),
-            'risco' => $query->where(fn ($q) => $q->whereDate('data_previsao_faturamento', '<', $hoje)
+            'risco' => $query->where(fn ($q) => $q->where('data_previsao_faturamento', '<', $hoje)
                 ->orWhereBetween('data_previsao_faturamento', [$hoje, $em7Dias])),
-            'no_prazo' => $query->where(fn ($q) => $q->whereDate('data_previsao_faturamento', '>', $em7Dias)->orWhereNull('data_previsao_faturamento')),
+            'no_prazo' => $query->where(fn ($q) => $q->where('data_previsao_faturamento', '>', $em7Dias)->orWhereNull('data_previsao_faturamento')),
             default => null,
         };
 
+        /*
+         * ⚠️ SEM `data_previsao_faturamento IS NULL` na frente.
+         *
+         * Expressão como primeira chave de ordenação impede o uso do índice — medido
+         * aqui: 6,6 ms com a expressão contra 0,73 ms sem ela, 9x. É o mesmo anti-padrão
+         * que a Carteira já tinha corrigido em agosto e que sobreviveu nesta tela.
+         *
+         * A expressão existia para jogar os pedidos sem previsão para o fim. Ela não faz
+         * falta: medido em 2026-08-27, ZERO dos 3.517 pedidos em aberto têm previsão nula
+         * (o TOTVS sempre preenche). Se um dia passarem a existir, no ASC eles apareceriam
+         * primeiro — e aí a decisão precisa ser tomada de novo, com o número na mão.
+         */
         match ($ordenar) {
-            'previsao_desc' => $query->orderByRaw('data_previsao_faturamento IS NULL, data_previsao_faturamento DESC'),
+            'previsao_desc' => $query->orderByDesc('data_previsao_faturamento'),
             'valor_desc' => $query->orderByDesc('valor_total'),
             'valor_asc' => $query->orderBy('valor_total'),
             'data_pedido_desc' => $query->orderByDesc('data_pedido'),
             'data_pedido_asc' => $query->orderBy('data_pedido'),
-            default => $query->orderByRaw('data_previsao_faturamento IS NULL, data_previsao_faturamento ASC'),
+            default => $query->orderBy('data_previsao_faturamento'),
         };
 
         return $query;
@@ -343,9 +356,8 @@ class PedidoController extends Controller
 
     public function exportarEmitidos(Request $request): BinaryFileResponse
     {
-        // Ver exportarAbertos() — mesma margem de segurança pra tabela `pedidos`.
-        ini_set('memory_limit', '1024M');
-        set_time_limit(300);
+        $this->prepararExport('pedidos-emitidos');
+
 
         $ano = (int) ($request->integer('ano') ?: now()->year);
         $mes = max(1, min(12, (int) ($request->integer('mes') ?: now()->month)));

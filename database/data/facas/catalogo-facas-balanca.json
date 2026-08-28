@@ -1,0 +1,447 @@
+[
+  {
+    "item": 1,
+    "largura": 40,
+    "altura": 25,
+    "detalhes": [
+      "Observação: Para essa faca só temos na versão com picote."
+    ],
+    "icones": [
+      "X + LATERAIS SUP E INF.png"
+    ]
+  },
+  {
+    "item": 2,
+    "largura": 40,
+    "altura": 30,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png"
+    ]
+  },
+  {
+    "item": 3,
+    "largura": 40,
+    "altura": 40,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "\"X\""
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "X.png"
+    ]
+  },
+  {
+    "item": 4,
+    "largura": 40,
+    "altura": 55,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png"
+    ]
+  },
+  {
+    "item": 5,
+    "largura": 40,
+    "altura": 60,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "4 lados",
+      "Laterais + \"X\""
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "4 LADOS.png",
+      "LATERAIS + X.png"
+    ]
+  },
+  {
+    "item": 6,
+    "largura": 40,
+    "altura": 124,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png"
+    ]
+  },
+  {
+    "item": 7,
+    "largura": 60,
+    "altura": 25,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png"
+    ]
+  },
+  {
+    "item": 8,
+    "largura": 60,
+    "altura": 30,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "Serrilhado"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "SERRILHADO.png"
+    ]
+  },
+  {
+    "item": 9,
+    "largura": 60,
+    "altura": 40,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "\"X\""
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "X.png"
+    ]
+  },
+  {
+    "item": 10,
+    "largura": 60,
+    "altura": 45,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "3 laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "3 LATERAIS.png"
+    ]
+  },
+  {
+    "item": 11,
+    "largura": 60,
+    "altura": 50,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "\"X\" mais + (cruz)"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "X MAIS  + (CRUZ).png"
+    ]
+  },
+  {
+    "item": 12,
+    "largura": 60,
+    "altura": 55,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "3 laterais",
+      "\"X\" mais + (cruz)"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "3 LATERAIS.png",
+      "X MAIS  + (CRUZ).png"
+    ]
+  },
+  {
+    "item": 13,
+    "largura": 60,
+    "altura": 60,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "\"X\""
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "X.png"
+    ]
+  },
+  {
+    "item": 14,
+    "largura": 60,
+    "altura": 65,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png"
+    ]
+  },
+  {
+    "item": 15,
+    "largura": 60,
+    "altura": 70,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "\"X\""
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "X.png"
+    ]
+  },
+  {
+    "item": 16,
+    "largura": 60,
+    "altura": 75,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "3 laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "3 LATERAIS.png"
+    ]
+  },
+  {
+    "item": 17,
+    "largura": 60,
+    "altura": 80,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "\"X\" mais + (cruz)"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "X MAIS  + (CRUZ).png"
+    ]
+  },
+  {
+    "item": 18,
+    "largura": 60,
+    "altura": 90,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "\"X\""
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "X.png"
+    ]
+  },
+  {
+    "item": 19,
+    "largura": 60,
+    "altura": 96,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png"
+    ]
+  },
+  {
+    "item": 20,
+    "largura": 60,
+    "altura": 100,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais",
+      "\"X\"",
+      "3 laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png",
+      "X.png",
+      "3 LATERAIS.png"
+    ]
+  },
+  {
+    "item": 21,
+    "largura": 60,
+    "altura": 105,
+    "detalhes": [
+      "Corte retangular",
+      "Laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "LATERAIS.png"
+    ]
+  },
+  {
+    "item": 22,
+    "largura": 60,
+    "altura": 110,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "\"X\""
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "X.png"
+    ]
+  },
+  {
+    "item": 23,
+    "largura": 60,
+    "altura": 115,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png"
+    ]
+  },
+  {
+    "item": 24,
+    "largura": 60,
+    "altura": 120,
+    "detalhes": [
+      "Observação: Para essa faca só temos na versão com picote.",
+      "\"X\" mais + (cruz)",
+      "Laterais"
+    ],
+    "icones": [
+      "X MAIS  + (CRUZ).png",
+      "LATERAIS.png"
+    ]
+  },
+  {
+    "item": 25,
+    "largura": 60,
+    "altura": 124,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png"
+    ]
+  },
+  {
+    "item": 26,
+    "largura": 60,
+    "altura": 130,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png"
+    ]
+  },
+  {
+    "item": 27,
+    "largura": 60,
+    "altura": 135,
+    "detalhes": [
+      "Corte retangular",
+      "Padrão (cobrinha)",
+      "Observação: Dificuldade para leitura de código de barras",
+      "Laterais"
+    ],
+    "icones": [
+      "CORTE RETANGULAR.png",
+      "PADRAO (COBRINHA).png",
+      "LATERAIS.png"
+    ]
+  }
+]
+

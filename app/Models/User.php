@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Support\Uploads\Disco;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -58,12 +59,22 @@ class User extends Authenticatable
             return null;
         }
 
-        if (str_starts_with($this->foto_perfil, 'perfis/')
-            && Storage::disk('public')->exists($this->foto_perfil)) {
-            return Storage::disk('public')->url($this->foto_perfil);
+        if (! str_starts_with($this->foto_perfil, 'perfis/')) {
+            // Valor herdado do legado (assets/img/perfis/...) — não é caminho no nosso
+            // storage, então não há URL a gerar.
+            return null;
         }
 
-        return null;
+        /*
+         * ⚠️ Sem `exists()` aqui, de propósito.
+         *
+         * A versão anterior checava a existência antes de gerar a URL, o que era barato
+         * com disco local. Com o S3 isso vira uma chamada de REDE por usuário renderizado
+         * — e esta accessor roda no layout, em toda página. Uma foto apagada por fora vira
+         * um 404 na tag <img>, que custa infinitamente menos que uma ida ao S3 a cada
+         * carregamento.
+         */
+        return Disco::uploads()->url($this->foto_perfil);
     }
 
     /**

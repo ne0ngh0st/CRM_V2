@@ -21,7 +21,7 @@ const props = defineProps({
     },
 });
 
-const expandido = ref(false);
+const expandido = ref(true);
 
 const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 

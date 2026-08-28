@@ -1,0 +1,39 @@
+[
+  {
+    "item": 1,
+    "largura": "54",
+    "altura": "536,7",
+    "detalhes": [
+      "Referência: SITA / Salvador",
+      "Bahia Airport"
+    ],
+    "icones": [
+      "1.png"
+    ]
+  },
+  {
+    "item": 2,
+    "largura": "54",
+    "altura": "482,6",
+    "detalhes": [
+      "Referência: Aerolínea",
+      "S"
+    ],
+    "icones": [
+      "2.png"
+    ]
+  },
+  {
+    "item": 3,
+    "largura": "53",
+    "altura": "482",
+    "detalhes": [
+      "Referência: BH - Air"
+    ],
+    "icones": [
+      "3.0.png",
+      "3.1.png"
+    ]
+  }
+]
+

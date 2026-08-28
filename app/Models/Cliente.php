@@ -15,6 +15,7 @@ class Cliente extends Model
         'nome_fantasia',
         'cod_vendedor',
         'cod_segmento',
+        'cod_grupo',
         'estado',
         'cep',
         'telefone',

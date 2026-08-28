@@ -52,6 +52,23 @@ watch(
     },
 );
 
+// Escolher a gramatura sugere o papel correspondente (mesmo comportamento do
+// legado, assets/js/solicitacoes-bobinas.js). É só sugestão — dá pra trocar
+// depois. Não confundir com o mapa de nomenclatura do título, que é outro:
+// aqui 44 → KPR (matéria-prima), no título 44 → TS KPH BC (nome no TOTVS).
+// ⚠️ Ligado ao @change do select, não a um watch: watch dispararia no prefill
+// também e sobrescreveria o papel que veio salvo.
+const GRAMATURA_PARA_PAPEL = {
+    44: 'kpr',
+    48: 'termicco',
+    55: 'termoscript',
+};
+
+function sugerirPapelPelaGramatura() {
+    const sugerido = GRAMATURA_PARA_PAPEL[form.gramatura];
+    if (sugerido) form.papel = sugerido;
+}
+
 function submit() {
     form.post(route('cadastros.bobinas.store'), {
         preserveScroll: true,
@@ -130,10 +147,13 @@ const fieldClass = 'mt-1 block w-full rounded border-gray-300 text-xs focus:bord
                         </div>
                         <div>
                             <InputLabel value="Gramatura (g/m²)" class="!text-xs" />
-                            <select v-model="form.gramatura" :class="fieldClass">
+                            <select v-model="form.gramatura" :class="fieldClass" @change="sugerirPapelPelaGramatura">
                                 <option value="">Selecione</option>
                                 <option v-for="g in ['44','48','55','72','105','167']" :key="g" :value="g">{{ g }}</option>
                             </select>
+                            <p class="mt-1 text-[0.65rem] leading-3 text-gray-400">
+                                O título TOTVS segue a gramatura: 44 → TS KPH BC · 48 → TÉRMICO · 55 → TERMOSCRIPT.
+                            </p>
                         </div>
                     </div>
                     <div class="grid gap-3 sm:grid-cols-2">

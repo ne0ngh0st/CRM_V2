@@ -1,3 +1,176 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+    /*
+     * Tokens de tabela de dados — implementação da Regra de ouro nº 5 (ver CLAUDE.md).
+     * A densidade das ~16 tabelas do sistema mora AQUI, não copiada por arquivo:
+     * antes o literal `px-3 py-2.5` estava repetido à mão em 14 componentes/páginas,
+     * então todo ajuste de densidade driftava entre elas.
+     * Mudou aqui, muda em todas as tabelas que usam os tokens.
+     */
+    /* Container da tabela. Toda tabela do sistema tem colunas demais pra caber no
+       celular, então o scroll horizontal é regra, não exceção. */
+    .tbl-wrap {
+        @apply overflow-x-auto;
+    }
+
+    .tbl {
+        @apply w-full text-sm;
+    }
+
+    .tbl-head-row {
+        @apply divide-x divide-gray-200 border-b-2 border-gray-300 bg-gray-50 text-center text-[0.65rem] uppercase tracking-wide text-gray-500;
+    }
+
+    .tbl-th {
+        @apply px-3 py-1.5 font-semibold;
+    }
+
+    .tbl-body {
+        @apply divide-y divide-gray-200;
+    }
+
+    .tbl-row {
+        @apply divide-x divide-gray-200 hover:bg-gray-50/60;
+    }
+
+    /* `text-gray-600` é a cor padrão de célula. Antes cada tabela escolhia entre
+       gray-600/gray-700/gray-800 a esmo, o que fazia colunas vizinhas terem tons
+       diferentes sem motivo. Quem precisa de destaque usa `.tbl-main`. */
+    .tbl-td {
+        @apply px-3 py-1.5 text-center align-middle text-gray-600;
+    }
+
+    /* Texto principal de uma célula de duas linhas (ex.: razão social).
+       `leading-4` é o que segura a altura da linha — sem isso o line-height
+       padrão do text-sm (20px) dobrado com a 2ª linha é o que inflava a linha. */
+    .tbl-main {
+        @apply block truncate font-medium leading-4 text-gray-800;
+    }
+
+    /* Célula de uma linha só que precisa truncar (nome de grupo, descrição longa).
+       A largura máxima continua inline, porque varia legitimamente por coluna. */
+    .tbl-trunc {
+        @apply mx-auto block truncate;
+    }
+
+    /* Segunda linha de apoio dentro da mesma célula (CNPJ, código, etc.). */
+    .tbl-sub {
+        @apply block text-[0.65rem] leading-3 text-gray-400;
+    }
+
+    /*
+     * Botão-ícone da coluna "Ações". `.tbl-acao` é a caixa; a cor vem de um
+     * modificador, e a cor identifica a FUNÇÃO do botão (não a página).
+     * O ícone já nasce colorido — antes só pintava no hover, o que obrigava a
+     * caçar o botão certo passando o mouse por cima de todos.
+     *
+     * Mapa função -> modificador (ver Regra de ouro nº 5 no CLAUDE.md):
+     *   ver detalhes .......... .tbl-acao-neutro
+     *   editar / ligar ........ .tbl-acao-teal
+     *   agendar ............... .tbl-acao-cyan
+     *   orçamento / documento . .tbl-acao-navy
+     *   observação / toggle ... .tbl-acao-amber
+     *   excluir ............... .tbl-acao-danger
+     */
+    /*
+     * Sub-tabela de itens da linha expandida (Orçamentos, Pedidos, Pedidos Emitidos
+     * — os três tinham o mesmo estilo escrito à mão). É mais densa e mais clara que
+     * a tabela principal de propósito: está dentro de uma linha, sobre `bg-gray-50`,
+     * então precisa se distinguir do container sem competir com ele.
+     */
+    .tbl-itens {
+        @apply mt-2 w-full overflow-hidden rounded border border-gray-200 text-xs;
+    }
+
+    .tbl-itens-head-row {
+        @apply divide-x divide-gray-200 border-b-2 border-gray-300 bg-gray-100 text-center text-gray-500;
+    }
+
+    .tbl-itens-th {
+        @apply px-2 py-1.5 font-semibold;
+    }
+
+    /* Sem hover: a linha de item não é clicável nem selecionável. */
+    .tbl-itens-row {
+        @apply divide-x divide-gray-200;
+    }
+
+    .tbl-itens-td {
+        @apply px-2 py-1.5 text-center align-middle text-gray-600;
+    }
+
+    /* Wrapper da coluna "Ações". `flex-wrap` porque perfil com muitas permissões
+       chega a 5 botões e não pode estourar a largura da coluna. */
+    .tbl-acoes {
+        @apply flex flex-wrap items-center justify-center gap-1;
+    }
+
+    .tbl-acao {
+        @apply inline-flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-gray-500 transition;
+    }
+
+    /* O ícone dimensionado aqui, e não classe por classe em cada `<svg>`: eram 5
+       repetições só na Carteira, e replicar isso em 16 tabelas é como o tamanho
+       do ícone acabaria divergindo entre telas. */
+    .tbl-acao svg {
+        @apply h-3.5 w-3.5;
+    }
+
+    .tbl-acao-neutro {
+        @apply border-gray-200 text-gray-500 hover:border-gray-400 hover:bg-gray-100 hover:text-gray-700;
+    }
+
+    .tbl-acao-teal {
+        @apply border-teal/25 text-teal hover:border-teal hover:bg-teal/10;
+    }
+
+    /*
+     * cyan (#00A9CE) e amber (#ff8f00) da marca rendem ~2,8:1 e ~2,2:1 sobre
+     * branco — abaixo dos 3:1 que um glifo fino precisa pra ser legível. Então a
+     * borda/tint usa o tom da marca e o ÍCONE usa `-dark` (a mesma cor escurecida,
+     * definida no tailwind.config.js). Não "corrigir" pra text-cyan/text-amber:
+     * o ícone some no branco. E não usar `cyan-700`/`amber-600`: este projeto
+     * sobrescreve `cyan`/`amber` por um hex único, então a escala do Tailwind
+     * não existe aqui (o build quebra).
+     */
+    .tbl-acao-cyan {
+        @apply border-cyan/30 text-cyan-dark hover:border-cyan hover:bg-cyan/10;
+    }
+
+    .tbl-acao-navy {
+        @apply border-navy/25 text-navy hover:border-navy hover:bg-navy/10;
+    }
+
+    .tbl-acao-amber {
+        @apply border-amber/30 text-amber-dark hover:border-amber hover:bg-amber/10;
+    }
+
+    /* Ligação é verde por convenção universal de telefonia (o "atender" do celular). */
+    .tbl-acao-verde {
+        @apply border-green-300 text-green-700 hover:border-green-500 hover:bg-green-50;
+    }
+
+    .tbl-acao-danger {
+        @apply border-red-300 text-red-600 hover:border-red-500 hover:bg-red-50;
+    }
+
+    /*
+     * ⚠️ Tem que ficar DEPOIS dos modificadores de cor. `.tbl-acao:disabled:hover` e
+     * `.tbl-acao-verde:hover` têm a mesma especificidade, então quem ganha é o que
+     * vem por último no arquivo. Subir este bloco faz o botão desabilitado voltar a
+     * acender no hover.
+     *
+     * Também evita repetir a corrente de `disabled:` em cada botão: antes eram 6
+     * classes soltas no HTML, do tipo que se replica errado nas outras tabelas.
+     */
+    .tbl-acao:disabled {
+        @apply cursor-not-allowed border-gray-200 text-gray-400 opacity-60;
+    }
+
+    .tbl-acao:disabled:hover {
+        @apply border-gray-200 bg-transparent text-gray-400;
+    }
+}

@@ -235,53 +235,55 @@ function salvarMeta() {
                     />
                 </template>
 
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
+                <div class="tbl-wrap">
+                    <table class="tbl">
                         <thead>
-                            <tr class="divide-x divide-gray-200 border-b-2 border-gray-300 bg-gray-50 text-center text-[0.65rem] uppercase tracking-wide text-gray-500">
-                                <th class="px-3 py-2.5 font-semibold">Vendedor</th>
-                                <th class="px-3 py-2.5 font-semibold">Código</th>
-                                <th class="px-3 py-2.5 font-semibold">Fat. realizado</th>
-                                <th class="px-3 py-2.5 font-semibold">Fat. meta</th>
-                                <th class="px-3 py-2.5 font-semibold">Fat. %</th>
-                                <th class="px-3 py-2.5 font-semibold">Venda realizado</th>
-                                <th class="px-3 py-2.5 font-semibold">Venda meta</th>
-                                <th class="px-3 py-2.5 font-semibold">Venda %</th>
-                                <th v-if="podeEditar" class="px-3 py-2.5 font-semibold">Ações</th>
+                            <tr class="tbl-head-row">
+                                <th class="tbl-th">Vendedor</th>
+                                <th class="tbl-th">Código</th>
+                                <th class="tbl-th">Fat. realizado</th>
+                                <th class="tbl-th">Fat. meta</th>
+                                <th class="tbl-th">Fat. %</th>
+                                <th class="tbl-th">Venda realizado</th>
+                                <th class="tbl-th">Venda meta</th>
+                                <th class="tbl-th">Venda %</th>
+                                <th v-if="podeEditar" class="tbl-th">Ações</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-200">
+                        <tbody class="tbl-body">
                             <tr
                                 v-for="linha in linhas"
                                 :key="linha.userId"
-                                class="divide-x divide-gray-200 hover:bg-gray-50/60"
+                                class="tbl-row"
                             >
-                                <td class="px-3 py-2.5 text-center align-middle font-medium text-gray-800">{{ linha.nome }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle text-gray-600">{{ linha.codVendedor }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle text-gray-700">{{ formatMoney(linha.fatRealizado) }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle text-gray-700">{{ formatMoney(linha.fatMeta) }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle">
-                                    <StatusPill v-if="linha.fatPct !== null" :tone="tonePct(linha.fatPct)">{{ formatPct(linha.fatPct) }}</StatusPill>
+                                <td class="tbl-td font-medium text-gray-800">{{ linha.nome }}</td>
+                                <td class="tbl-td">{{ linha.codVendedor }}</td>
+                                <td class="tbl-td">{{ formatMoney(linha.fatRealizado) }}</td>
+                                <td class="tbl-td">{{ formatMoney(linha.fatMeta) }}</td>
+                                <td class="tbl-td">
+                                    <StatusPill v-if="linha.fatPct !== null" :tone="tonePct(linha.fatPct)" size="sm">{{ formatPct(linha.fatPct) }}</StatusPill>
                                     <span v-else class="text-gray-400">—</span>
                                 </td>
-                                <td class="px-3 py-2.5 text-center align-middle text-gray-700">{{ formatMoney(linha.vendaRealizado) }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle text-gray-700">{{ formatMoney(linha.vendaMeta) }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle">
-                                    <StatusPill v-if="linha.vendaPct !== null" :tone="tonePct(linha.vendaPct)">{{ formatPct(linha.vendaPct) }}</StatusPill>
+                                <td class="tbl-td">{{ formatMoney(linha.vendaRealizado) }}</td>
+                                <td class="tbl-td">{{ formatMoney(linha.vendaMeta) }}</td>
+                                <td class="tbl-td">
+                                    <StatusPill v-if="linha.vendaPct !== null" :tone="tonePct(linha.vendaPct)" size="sm">{{ formatPct(linha.vendaPct) }}</StatusPill>
                                     <span v-else class="text-gray-400">—</span>
                                 </td>
-                                <td v-if="podeEditar" class="px-3 py-2.5 text-center align-middle">
-                                    <button
-                                        type="button"
-                                        title="Editar metas do mês"
-                                        class="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-500 transition hover:border-teal hover:text-teal"
-                                        @click="abrirEdicao(linha)"
-                                    >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-3.5 w-3.5">
-                                            <path d="M4 20h4l10-10-4-4L4 16v4z" stroke-linejoin="round" />
-                                            <path d="M13 7l4 4" stroke-linecap="round" />
-                                        </svg>
-                                    </button>
+                                <td v-if="podeEditar" class="tbl-td">
+                                    <div class="tbl-acoes">
+                                        <button
+                                            type="button"
+                                            title="Editar metas do mês"
+                                            class="tbl-acao tbl-acao-teal"
+                                            @click="abrirEdicao(linha)"
+                                        >
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                <path d="M4 20h4l10-10-4-4L4 16v4z" stroke-linejoin="round" />
+                                                <path d="M13 7l4 4" stroke-linecap="round" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                             <tr v-if="!linhas.length">
@@ -291,21 +293,22 @@ function salvarMeta() {
                             </tr>
                         </tbody>
                         <tfoot v-if="linhas.length">
+                            <!-- Linha de totais: só esta tabela tem, por isso não virou token. -->
                             <tr class="divide-x divide-gray-200 border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-800">
-                                <td class="px-3 py-2.5 text-center align-middle" colspan="2">Totais</td>
-                                <td class="px-3 py-2.5 text-center align-middle">{{ formatMoney(totais.fatRealizado) }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle">{{ formatMoney(totais.fatMeta) }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle">
-                                    <StatusPill v-if="totais.fatPct !== null" :tone="tonePct(totais.fatPct)">{{ formatPct(totais.fatPct) }}</StatusPill>
+                                <td class="tbl-td text-gray-800" colspan="2">Totais</td>
+                                <td class="tbl-td text-gray-800">{{ formatMoney(totais.fatRealizado) }}</td>
+                                <td class="tbl-td text-gray-800">{{ formatMoney(totais.fatMeta) }}</td>
+                                <td class="tbl-td">
+                                    <StatusPill v-if="totais.fatPct !== null" :tone="tonePct(totais.fatPct)" size="sm">{{ formatPct(totais.fatPct) }}</StatusPill>
                                     <span v-else class="text-gray-400">—</span>
                                 </td>
-                                <td class="px-3 py-2.5 text-center align-middle">{{ formatMoney(totais.vendaRealizado) }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle">{{ formatMoney(totais.vendaMeta) }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle">
-                                    <StatusPill v-if="totais.vendaPct !== null" :tone="tonePct(totais.vendaPct)">{{ formatPct(totais.vendaPct) }}</StatusPill>
+                                <td class="tbl-td text-gray-800">{{ formatMoney(totais.vendaRealizado) }}</td>
+                                <td class="tbl-td text-gray-800">{{ formatMoney(totais.vendaMeta) }}</td>
+                                <td class="tbl-td">
+                                    <StatusPill v-if="totais.vendaPct !== null" :tone="tonePct(totais.vendaPct)" size="sm">{{ formatPct(totais.vendaPct) }}</StatusPill>
                                     <span v-else class="text-gray-400">—</span>
                                 </td>
-                                <td v-if="podeEditar" class="px-3 py-2.5" />
+                                <td v-if="podeEditar" class="tbl-td" />
                             </tr>
                         </tfoot>
                     </table>

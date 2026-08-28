@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\AgendamentoLigacao;
 use App\Models\Lead;
 use App\Models\Ligacao;
 use App\Models\VendedorPerfil;
+use App\Services\Cache\CacheDeAgregacao;
+use App\Services\Cache\ChaveEscopo;
 use App\Services\Dashboard\DashboardScopeResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -17,9 +20,34 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class LeadController extends Controller
 {
+    use ExportaPlanilha;
+
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
+        private readonly CacheDeAgregacao $cache,
     ) {
+    }
+
+    /**
+     * Opcoes dos dropdowns de Estado e Segmento.
+     *
+     * Dois DISTINCT sobre os ~17 mil leads (45 ms medidos so no de estado). Dependem
+     * apenas do escopo, nunca dos filtros ativos, e mudam so quando entra lead novo —
+     * logo, cacheaveis com TTL longo. Mesmo desenho usado na Carteira.
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return array{estados: mixed, segmentos: mixed}
+     */
+    private function opcoesDeFiltro(Request $request, ?array $codVendedores): array
+    {
+        return $this->cache->lembrarPorHoras(
+            ChaveEscopo::deCodVendedores($codVendedores)->para('leads-opcoes'),
+            (int) config('perf.ttl_lookup_minutos', 360) / 60,
+            fn () => [
+                'estados' => $this->scopeQuery($request)->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
+                'segmentos' => $this->scopeQuery($request)->whereNotNull('segmento')->where('segmento', '!=', '')->distinct()->orderBy('segmento')->pluck('segmento'),
+            ],
+        );
     }
 
     public function index(Request $request): Response
@@ -50,11 +78,31 @@ class LeadController extends Controller
             $aba = 'leads';
         }
 
+        /*
+         * Uma linha agregada em vez de quatro varreduras.
+         *
+         * Cada `count()` reexecutava `baseQuery()` do zero — quatro passagens pelos 17 mil
+         * leads para responder quatro perguntas sobre o mesmo conjunto. Medido: 18,9 ms
+         * nos quatro separados contra 14,0 ms na consolidada.
+         *
+         * ⚠️ O ganho é menor do que parece à primeira vista, e vale saber por quê: os
+         * counts separados usam índice (`origem`, `status`), enquanto os SUM() com
+         * expressão varrem tudo. O que a consolidação realmente economiza são as idas ao
+         * banco — irrelevante com o MySQL na mesma máquina, mas em produção, com o RDS
+         * separado por rede, cada round-trip custa cerca de 1 ms.
+         */
+        $contagem = $this->baseQuery($request)
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("SUM(origem = 'sistema') as sistema")
+            ->selectRaw("SUM(origem = 'manual') as manual")
+            ->selectRaw("SUM(status = 'ativo') as ativos")
+            ->first();
+
         $kpis = [
-            'total' => $this->baseQuery($request)->count(),
-            'sistema' => $this->baseQuery($request)->where('origem', 'sistema')->count(),
-            'manual' => $this->baseQuery($request)->where('origem', 'manual')->count(),
-            'ativos' => $this->baseQuery($request)->where('status', 'ativo')->count(),
+            'total' => (int) ($contagem->total ?? 0),
+            'sistema' => (int) ($contagem->sistema ?? 0),
+            'manual' => (int) ($contagem->manual ?? 0),
+            'ativos' => (int) ($contagem->ativos ?? 0),
         ];
 
         $leads = $this->listaQuery($request)->paginate(30)->withQueryString();
@@ -91,7 +139,14 @@ class LeadController extends Controller
             'aba' => $aba,
             'leads' => $leads,
             'kpis' => $kpis,
-            'agendamentos' => $this->agendamentosDoEscopo($codVendedores),
+            /*
+             * Prop opcional, mesmo tratamento da Carteira: a aba Leads, onde a maioria
+             * das visitas para, deixou de pagar por uma consulta que ia pro lixo.
+             *
+             * ⚠️ Visita completa (F5, ou /leads?aba=calendario) NAO traz prop opcional —
+             * o onMounted do Leads/Index.vue cobre esse caso.
+             */
+            'agendamentos' => Inertia::optional(fn () => $this->agendamentosDoEscopo($codVendedores)),
             'filtros' => [
                 'busca' => $busca,
                 'estado' => $estado,
@@ -101,8 +156,10 @@ class LeadController extends Controller
                 'ordenar' => $ordenar,
             ],
             'opcoes' => [
-                'estados' => $this->scopeQuery($request)->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
-                'segmentos' => $this->scopeQuery($request)->whereNotNull('segmento')->where('segmento', '!=', '')->distinct()->orderBy('segmento')->pluck('segmento'),
+                // Dois DISTINCT sobre os 17 mil leads (45 ms medidos no de estado). Dependem
+                // só do escopo, nunca dos filtros — senão o dropdown perderia opções conforme
+                // o usuário filtra. Mesmo tratamento dado aos dropdowns da Carteira.
+                ...$this->opcoesDeFiltro($request, $scope['codVendedores']),
             ],
             'visao' => [
                 'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
@@ -118,9 +175,8 @@ class LeadController extends Controller
 
     public function exportar(Request $request): BinaryFileResponse
     {
-        // Margem de segurança pra escopo admin sem filtro (~17k leads) — ver CarteiraController::exportar().
-        ini_set('memory_limit', '1024M');
-        set_time_limit(300);
+        $this->prepararExport('leads');
+
 
         return Excel::download(
             new \App\Exports\LeadExport($this->listaQuery($request)),
@@ -288,11 +344,16 @@ class LeadController extends Controller
         $query = AgendamentoLigacao::query()
             ->with(['lead:id,razao_social,nome,cnpj,telefone,cod_vendedor', 'user:id,name,display_name'])
             ->whereNotNull('lead_id')
-            ->whereBetween('data_agendamento', [now()->subMonths(3)->startOfMonth(), now()->addMonths(6)->endOfMonth()])
-            ->orderBy('data_agendamento');
+            // Janela de -1 a +3 meses com teto de 500, igual a Carteira: o calendario
+            // mostra um mes por vez, e meio ano de cada lado era payload que ninguem abria.
+            ->whereBetween('data_agendamento', [now()->subMonth()->startOfMonth(), now()->addMonths(3)->endOfMonth()])
+            ->orderBy('data_agendamento')
+            ->limit(500);
 
         if ($codVendedores !== null) {
-            $query->whereHas('lead', fn ($q) => $q->whereIn('cod_vendedor', $codVendedores));
+            // Subquery IN em vez de whereHas: o whereHas gera EXISTS correlacionado,
+            // avaliado por linha de agendamento.
+            $query->whereIn('lead_id', Lead::query()->select('id')->whereIn('cod_vendedor', $codVendedores));
         }
 
         return $query->get()->map(fn (AgendamentoLigacao $a) => [

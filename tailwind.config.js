@@ -18,8 +18,12 @@ export default {
             colors: {
                 navy: '#0F3A69',
                 teal: '#005A6F',
-                cyan: '#00A9CE',
-                amber: '#ff8f00',
+                // `DEFAULT` mantém `text-cyan`/`bg-cyan/10`/`border-cyan` funcionando igual.
+                // `dark` é a MESMA cor escurecida, só pra glifo pequeno: o cyan e o âmbar
+                // da marca dão ~2,8:1 e ~2,2:1 sobre branco, abaixo dos 3:1 que um ícone
+                // fino precisa. Não são cores novas da marca — são tons de apoio.
+                cyan: { DEFAULT: '#00A9CE', dark: '#00728B' },
+                amber: { DEFAULT: '#ff8f00', dark: '#B36400' },
                 'brand-gray': '#C8C9C7',
                 'corp-black': '#1a1a1a',
                 'corp-dark': '#2d2d2d',

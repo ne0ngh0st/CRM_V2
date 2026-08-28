@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\User;
 use App\Models\VendedorPerfil;
+use App\Services\Legado\LegadoConexao;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -23,11 +24,7 @@ class ImportUsuariosLegado extends Command
 
     public function handle(): int
     {
-        $pdo = new PDO(
-            sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4', env('LEGADO_DB_HOST'), env('LEGADO_DB_DATABASE')),
-            env('LEGADO_DB_USERNAME'),
-            env('LEGADO_DB_PASSWORD'),
-        );
+        $pdo = LegadoConexao::pdo();
 
         $placeholders = implode(',', array_fill(0, count(self::PERFIS_ESCOPO), '?'));
         $stmt = $pdo->prepare("SELECT * FROM USUARIOS WHERE UPPER(PERFIL) IN ($placeholders)");
@@ -41,26 +38,47 @@ class ImportUsuariosLegado extends Command
 
         DB::transaction(function () use ($rows, &$criados, &$perfis) {
             foreach ($rows as $row) {
-                $user = User::updateOrCreate(
-                    ['email' => $row['EMAIL']],
-                    [
-                        'name' => $row['NOME_COMPLETO'],
-                        'display_name' => $row['NOME_EXIBICAO'],
-                        'username' => $row['USERNAME'],
+                $user = User::firstOrNew(['email' => $row['EMAIL']]);
+
+                /*
+                 * ⚠️ Campos de PRIMEIRA CARGA — só entram quando o usuário ainda não existe.
+                 *
+                 * Reimportar é rotina (o espelho do legado é atualizado periodicamente), e
+                 * tudo que estiver aqui seria SOBRESCRITO a cada rodada. Estes campos são
+                 * do CRM-V2 depois do primeiro import, não do legado:
+                 *
+                 * - password: é gerada aleatória de propósito (nunca migramos hash do legado).
+                 *   Estando no update, reimportar derrubava o acesso de TODOS os usuários de
+                 *   uma vez — em produção com beta testers, sem "esqueci minha senha" (SES não
+                 *   configurado), isso é perda total de acesso.
+                 * - display_name, telefone, foto_perfil: editáveis pelo próprio usuário em
+                 *   /profile (ProfileUpdateRequest + ProfileController::updateFoto).
+                 * - last_login_at, last_activity_at: quem escreve isso é o login no CRM-V2.
+                 *   O valor do legado é o login no sistema ANTIGO e não interessa aqui.
+                 */
+                if (! $user->exists) {
+                    $user->fill([
                         'password' => Hash::make(Str::random(40)),
                         'email_verified_at' => now(),
-                        'tipo_usuario' => $row['TIPO_USUARIO'] ?: 'INTERNO',
-                        'is_active' => (bool) $row['ATIVO'],
+                        'display_name' => $row['NOME_EXIBICAO'],
+                        'telefone' => $row['TELEFONE'],
+                        'foto_perfil' => $row['FOTO_PERFIL'],
                         'last_login_at' => $row['ULTIMO_LOGIN'],
                         'last_activity_at' => $row['ULTIMA_ATIVIDADE'],
-                        'telefone' => $row['TELEFONE'],
-                        'estado' => $row['ESTADO'],
-                        'foto_perfil' => $row['FOTO_PERFIL'],
-                        'sidebar_color' => $row['SIDEBAR_COLOR'] ?: '#1a237e',
-                        'secondary_color' => $row['SECONDARY_COLOR'] ?: '#ff8f00',
-                        'navbar_template' => $row['NAVBAR_TEMPLATE'] ?: 'default',
-                    ]
-                );
+                    ]);
+                }
+
+                // Campos que o legado continua sendo dono — atualizados em toda rodada.
+                $user->fill([
+                    'name' => $row['NOME_COMPLETO'],
+                    'username' => $row['USERNAME'],
+                    'tipo_usuario' => $row['TIPO_USUARIO'] ?: 'INTERNO',
+                    'is_active' => (bool) $row['ATIVO'],
+                    'estado' => $row['ESTADO'],
+                    'sidebar_color' => $row['SIDEBAR_COLOR'] ?: '#1a237e',
+                    'secondary_color' => $row['SECONDARY_COLOR'] ?: '#ff8f00',
+                    'navbar_template' => $row['NAVBAR_TEMPLATE'] ?: 'default',
+                ])->save();
 
                 $role = strtolower($row['PERFIL']);
                 $user->syncRoles([$role]);

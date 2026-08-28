@@ -196,6 +196,10 @@ class ImportPedidosLegado extends Command
         }
         $flush();
 
+        // As linhas cruas já foram todas transformadas em cabeçalho + itens; segurar
+        // o resultado do fetchAll() daqui pra frente é carregar 161 mil arrays à toa.
+        unset($linhas);
+
         $total = 0;
         foreach (array_chunk($lotesCabecalho, 500, true) as $lote) {
             DB::table('pedidos')->upsert(
@@ -215,24 +219,48 @@ class ImportPedidosLegado extends Command
         // senão o pedido fica com itens duplicados/misturados das duas fontes.
         DB::table('pedido_itens')->whereIn('pedido_id', $idsPorNumero->values())->delete();
 
-        $todosItens = [];
-        foreach ($itensPorNumero as $numero => $itens) {
+        /*
+         * ⚠️ Insere enquanto percorre, em vez de montar a lista inteira e depois
+         * fatiar com array_chunk(). Aquela versão estourava o `memory_limit` de 512M
+         * do CLI com "Allowed memory size exhausted" na rodada de FATURADOS: os
+         * 161.114 itens de META_VENDA ficavam em memória TRÊS vezes ao mesmo tempo
+         * (fetchAll + `$itensPorNumero` + a lista final). A rodada de abertos, com
+         * 25 mil itens, sempre coube — por isso o sintoma era só pedido faturado
+         * ficar sem item, e não um erro óbvio de import quebrado.
+         *
+         * Regra de ouro nº 6 em ação: o import "funcionava" com 9.154 faturados e
+         * passou a morrer com 12.006. Se um dia voltar a apertar, o próximo passo é
+         * parar de usar fetchAll() e percorrer o cursor do PDO.
+         *
+         * Percorre `array_keys` (e não o array direto) de propósito: dar `unset` na
+         * própria coleção sendo iterada por valor faz o PHP separar/copiar o array,
+         * o que dobraria o consumo justamente no ponto que se quer aliviar.
+         */
+        $buffer = [];
+        foreach (array_keys($itensPorNumero) as $numero) {
             $pedidoId = $idsPorNumero[$numero] ?? null;
-            if ($pedidoId === null) {
-                continue;
+
+            if ($pedidoId !== null) {
+                foreach ($itensPorNumero[$numero] as $item) {
+                    $buffer[] = $item + [
+                        'pedido_id' => $pedidoId,
+                        'created_at' => $agora,
+                        'updated_at' => $agora,
+                    ];
+
+                    if (count($buffer) >= 1000) {
+                        DB::table('pedido_itens')->insert($buffer);
+                        $buffer = [];
+                    }
+                }
             }
 
-            foreach ($itens as $item) {
-                $todosItens[] = array_merge($item, [
-                    'pedido_id' => $pedidoId,
-                    'created_at' => $agora,
-                    'updated_at' => $agora,
-                ]);
-            }
+            // Grupo já gravado (ou descartado): libera antes de seguir.
+            unset($itensPorNumero[$numero]);
         }
 
-        foreach (array_chunk($todosItens, 1000) as $lote) {
-            DB::table('pedido_itens')->insert($lote);
+        if ($buffer !== []) {
+            DB::table('pedido_itens')->insert($buffer);
         }
 
         return $total;

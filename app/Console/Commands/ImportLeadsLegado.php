@@ -21,7 +21,7 @@ class ImportLeadsLegado extends Command
         $stmt = $pdo->query(
             "SELECT cnpj, RAZAOSOCIAL, NOMEFANTASIA, nomefinal, Email, TelefonePrincipalFINAL, "
             .'endereoCNPJJA, CIDADEarrumada, CIDADE, UF, CodigoVendedor, projeoRms '
-            ."FROM base_leads WHERE UPPER(TRIM(MARCAOPROSPECT)) = 'SAI PROSPECT'"
+            ."FROM BASE_LEADS WHERE UPPER(TRIM(MARCAOPROSPECT)) = 'SAI PROSPECT'"
         );
 
         $agora = now();

@@ -1,6 +1,16 @@
 .git
 node_modules
 .claude
+# vendor/ no host é só o ponto de montagem do volume nomeado `vendor_data` — está VAZIO.
+# Copiá-lo geraria uma imagem sem autoload. O Dockerfile do loadtest roda composer install.
+vendor
+# public/hot só existe enquanto o Vite dev server está de pé. Dentro da imagem ele faria o
+# Laravel apontar os assets pra http://localhost:5173, que não existe lá — página sem CSS/JS.
+public/hot
+# public/storage é o symlink do `artisan storage:link`. No Windows ele vira um tipo de
+# link que o build do Docker não consegue ler ("invalid file request"), abortando o build
+# inteiro. É recriado dentro da imagem, no Dockerfile.
+public/storage
 storage/logs/*.log
 storage/framework/cache/data/*
 storage/framework/sessions/*

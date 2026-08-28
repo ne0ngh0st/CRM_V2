@@ -30,3 +30,4 @@ Desktop.ini
 *.log
 /database/*.sqlite
 /database/*.sqlite-journal
+.env.backup*

@@ -23,28 +23,28 @@ function formatQuantidade(valor) {
 </script>
 
 <template>
-    <div class="overflow-x-auto">
-        <table class="w-full min-w-[900px] text-sm">
+    <div class="tbl-wrap">
+        <table class="tbl min-w-[900px]">
             <thead>
-                <tr class="divide-x divide-gray-200 border-b-2 border-gray-300 bg-gray-50 text-center text-[0.65rem] uppercase tracking-wide text-gray-500">
-                    <th class="w-8 px-2 py-2.5"></th>
-                    <th class="px-3 py-2.5 font-semibold">Pedido</th>
-                    <th class="px-3 py-2.5 font-semibold">Cliente</th>
-                    <th class="px-3 py-2.5 font-semibold">Vendedor</th>
-                    <th class="px-3 py-2.5 font-semibold">Data Pedido</th>
-                    <th class="px-3 py-2.5 font-semibold">Faturamento</th>
-                    <th class="px-3 py-2.5 font-semibold">Valor Total</th>
-                    <th class="px-3 py-2.5 font-semibold">Status</th>
-                    <th class="px-3 py-2.5 font-semibold">Itens</th>
+                <tr class="tbl-head-row">
+                    <th class="tbl-th w-8"></th>
+                    <th class="tbl-th">Pedido</th>
+                    <th class="tbl-th">Cliente</th>
+                    <th class="tbl-th">Vendedor</th>
+                    <th class="tbl-th">Data Pedido</th>
+                    <th class="tbl-th">Faturamento</th>
+                    <th class="tbl-th">Valor Total</th>
+                    <th class="tbl-th">Status</th>
+                    <th class="tbl-th">Itens</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-200">
+            <tbody class="tbl-body">
                 <template v-for="pedido in pedidos" :key="pedido.id">
                     <tr
-                        class="cursor-pointer divide-x divide-gray-200 hover:bg-gray-50/60"
+                        class="tbl-row cursor-pointer"
                         @click="toggle(pedido.id)"
                     >
-                        <td class="px-2 py-2.5 text-center align-middle text-gray-400">
+                        <td class="tbl-td text-gray-400">
                             <svg
                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                 class="mx-auto h-3.5 w-3.5 transition-transform"
@@ -53,51 +53,51 @@ function formatQuantidade(valor) {
                                 <polyline points="9,6 15,12 9,18" stroke-linecap="round" stroke-linejoin="round" />
                             </svg>
                         </td>
-                        <td class="px-3 py-2.5 text-center align-middle font-semibold text-gray-800">{{ pedido.numeroPedido }}</td>
-                        <td class="px-3 py-2.5 text-center align-middle text-gray-700">
-                            <span class="mx-auto block max-w-[220px] truncate" :title="pedido.cliente?.razaoSocial">{{ pedido.cliente?.razaoSocial ?? '—' }}</span>
+                        <td class="tbl-td font-medium text-gray-800">{{ pedido.numeroPedido }}</td>
+                        <td class="tbl-td">
+                            <span class="tbl-trunc max-w-[220px]" :title="pedido.cliente?.razaoSocial">{{ pedido.cliente?.razaoSocial ?? '—' }}</span>
                         </td>
-                        <td class="px-3 py-2.5 text-center align-middle text-gray-700">{{ pedido.vendedorNome }}</td>
-                        <td class="px-3 py-2.5 text-center align-middle text-gray-500">{{ pedido.dataPedido }}</td>
-                        <td class="px-3 py-2.5 text-center align-middle">
-                            <StatusPill :tone="pedido.faturado ? 'ok' : 'warn'">
+                        <td class="tbl-td">{{ pedido.vendedorNome }}</td>
+                        <td class="tbl-td">{{ pedido.dataPedido }}</td>
+                        <td class="tbl-td">
+                            <StatusPill :tone="pedido.faturado ? 'ok' : 'warn'" size="sm">
                                 {{ pedido.faturado ? (pedido.dataFaturamento ?? 'Faturado') : 'Em aberto' }}
                             </StatusPill>
                         </td>
-                        <td class="px-3 py-2.5 text-center align-middle font-semibold text-gray-800">{{ formatBRL(pedido.valorTotal) }}</td>
-                        <td class="px-3 py-2.5 text-center align-middle">
-                            <StatusPill :tone="TONS_STATUS_PEDIDO[pedido.status] || 'neutral'">
+                        <td class="tbl-td font-medium text-gray-800">{{ formatBRL(pedido.valorTotal) }}</td>
+                        <td class="tbl-td">
+                            <StatusPill :tone="TONS_STATUS_PEDIDO[pedido.status] || 'neutral'" size="sm">
                                 {{ ROTULOS_STATUS_PEDIDO[pedido.status] || pedido.status }}
                             </StatusPill>
                         </td>
-                        <td class="px-3 py-2.5 text-center align-middle text-gray-500">{{ pedido.itens.length }}</td>
+                        <td class="tbl-td">{{ pedido.itens.length }}</td>
                     </tr>
                     <tr v-if="expandido === pedido.id" class="bg-gray-50">
                         <td colspan="9" class="p-4">
                             <div class="grid gap-4 lg:grid-cols-3">
                                 <div class="lg:col-span-2">
                                     <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens do pedido</p>
-                                    <table class="mt-2 w-full overflow-hidden rounded border border-gray-200 text-xs">
+                                    <table class="tbl-itens">
                                         <thead>
-                                            <tr class="divide-x divide-gray-200 border-b-2 border-gray-300 bg-gray-100 text-center text-gray-500">
-                                                <th class="px-2 py-1.5 font-semibold">Produto</th>
-                                                <th class="px-2 py-1.5 font-semibold">Qtd.</th>
-                                                <th class="px-2 py-1.5 font-semibold">Qtd. Liberada</th>
-                                                <th class="px-2 py-1.5 font-semibold">Vlr. Unit.</th>
-                                                <th class="px-2 py-1.5 font-semibold">Vlr. Total</th>
+                                            <tr class="tbl-itens-head-row">
+                                                <th class="tbl-itens-th">Produto</th>
+                                                <th class="tbl-itens-th">Qtd.</th>
+                                                <th class="tbl-itens-th">Qtd. Liberada</th>
+                                                <th class="tbl-itens-th">Vlr. Unit.</th>
+                                                <th class="tbl-itens-th">Vlr. Total</th>
                                             </tr>
                                         </thead>
-                                        <tbody class="divide-y divide-gray-200">
-                                            <tr v-for="(item, idx) in pedido.itens" :key="idx" class="divide-x divide-gray-200">
-                                                <td class="px-2 py-1.5 text-center align-middle text-gray-700">
+                                        <tbody class="tbl-body">
+                                            <tr v-for="(item, idx) in pedido.itens" :key="idx" class="tbl-itens-row">
+                                                <td class="tbl-itens-td">
                                                     <span v-if="item.codProduto" class="text-gray-400">{{ item.codProduto }} · </span>{{ item.descricao }}
                                                 </td>
-                                                <td class="px-2 py-1.5 text-center align-middle text-gray-600">{{ formatQuantidade(item.quantidade) }}</td>
-                                                <td class="px-2 py-1.5 text-center align-middle text-gray-600">
+                                                <td class="tbl-itens-td">{{ formatQuantidade(item.quantidade) }}</td>
+                                                <td class="tbl-itens-td">
                                                     {{ item.quantidadeLiberada !== null ? formatQuantidade(item.quantidadeLiberada) : '—' }}
                                                 </td>
-                                                <td class="px-2 py-1.5 text-center align-middle text-gray-600">{{ formatBRL(item.valorUnitario) }}</td>
-                                                <td class="px-2 py-1.5 text-center align-middle font-medium text-gray-800">{{ formatBRL(item.valorTotal) }}</td>
+                                                <td class="tbl-itens-td">{{ formatBRL(item.valorUnitario) }}</td>
+                                                <td class="tbl-itens-td font-medium text-gray-800">{{ formatBRL(item.valorTotal) }}</td>
                                             </tr>
                                         </tbody>
                                     </table>

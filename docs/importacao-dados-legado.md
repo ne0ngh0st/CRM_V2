@@ -412,6 +412,18 @@ duas fontes, como já estava mapeado na seção 4.2:
   misturados das duas rodadas. Fix: antes de inserir os itens de uma rodada, apaga
   `pedido_itens` dos `pedido_id` que essa rodada vai (re)preencher. **8.853 pedidos,
   98.006 itens** depois do fix (era 114.452 itens antes, ~16k duplicados).
+- **⚠️ Segundo bug, encontrado em 2026-08-10: os itens dos pedidos FATURADOS não entravam.**
+  Sintoma na tela: "Itens = 0" em todo pedido faturado, na ficha do cliente e em
+  `/pedidos-emitidos` (linha expansível abrindo vazia) — 73% dos clientes com pedido.
+  Causa: `Allowed memory size exhausted` (512M do CLI) dentro de `processarGrupos`, que
+  montava a lista completa de itens antes de fatiar com `array_chunk()` — os 161.114 itens
+  de `META_VENDA` ficavam em memória **três vezes** (`fetchAll` + `$itensPorNumero` + a
+  lista final). A rodada de abertos (25 mil itens) sempre coube, por isso parecia problema
+  específico de "faturado". O comando **erra e sai com código 255**; passou batido por estar
+  no meio da sequência de restauração, deixando cabeçalhos corretos e só os itens faltando.
+  Fix: inserir em lotes de 1.000 durante o percurso, `unset` no `fetchAll` após o
+  agrupamento e liberar cada grupo depois de gravado (iterando `array_keys`, nunca o array
+  sendo modificado). **Estado atual: 15.523 pedidos, 186.497 itens, zero pedido sem item.**
 
 **Decisão de escopo confirmada com o Tony sobre o status do pedido em aberto**: o legado
 **não tem** um enum de status de verdade — confirmado lendo o PHP (`pedidos_abertos_ajax_v2.php`):

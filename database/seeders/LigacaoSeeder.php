@@ -19,10 +19,6 @@ class LigacaoSeeder extends Seeder
 
             for ($i = 0; $i < $quantidade; $i++) {
                 $status = fake()->randomElement(['finalizada', 'finalizada', 'finalizada', 'cancelada', 'ativa']);
-                $obrigatorias = 9;
-                $respondidas = $status === 'finalizada'
-                    ? fake()->numberBetween(7, 9)
-                    : fake()->numberBetween(0, 4);
 
                 $linhas[] = [
                     'usuario_id' => $usuario->id,
@@ -30,8 +26,6 @@ class LigacaoSeeder extends Seeder
                     'tipo_contato' => fake()->randomElement(['telefonica', 'telefonica', 'whatsapp', 'presencial', 'email']),
                     'status' => $status,
                     'data_ligacao' => fake()->dateTimeBetween('-6 months', 'now'),
-                    'perguntas_respondidas_count' => $respondidas,
-                    'perguntas_obrigatorias_count' => $obrigatorias,
                     'created_at' => $agora,
                     'updated_at' => $agora,
                 ];

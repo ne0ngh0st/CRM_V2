@@ -24,6 +24,7 @@ class ClienteSeeder extends Seeder
         $linhas = [];
 
         $todosCodigos = Segmento::pluck('codigo');
+        $codigosGrupo = $this->semearGrupos($agora);
 
         $segmentosPorVendedor = SegmentoVendedor::query()
             ->with('segmento')
@@ -63,6 +64,7 @@ class ClienteSeeder extends Seeder
                 'nome_fantasia' => $combo->cliente_nome,
                 'cod_vendedor' => $combo->cod_vendedor,
                 'cod_segmento' => $segmento,
+                'cod_grupo' => fake()->boolean(30) ? '9998' : fake()->randomElement($codigosGrupo),
                 'estado' => fake()->stateAbbr(),
                 'cep' => fake()->numerify('#####-###'),
                 'telefone' => fake()->numerify('(##) #####-####'),
@@ -106,5 +108,44 @@ class ClienteSeeder extends Seeder
         foreach (array_chunk($linhas, 500) as $chunk) {
             DB::table('clientes')->insert($chunk);
         }
+    }
+
+    /**
+     * Grupo de cliente (`GrpVendas` do TOTVS) — no dado real são 2.432 grupos, com
+     * o 9998 "CLIENTES DIVERSOS" concentrando ~30% da base (é o balde de quem não
+     * pertence a grupo nenhum). O seed reproduz essa forma em miniatura pra a tela
+     * não parecer que todo cliente tem grupo próprio.
+     *
+     * `cod_grupo` guarda o CÓDIGO, nunca o nome — mesmo cuidado que o segmento
+     * precisou depois do mismatch nome×código de 2026-07-29.
+     *
+     * @return list<string>
+     */
+    private function semearGrupos(\DateTimeInterface $agora): array
+    {
+        $grupos = [
+            '13' => 'DROGARAIA',
+            '54' => 'C&A',
+            '60' => 'ASSAI',
+            '192' => 'DROGARIA SAO PAULO',
+            '279' => 'GRUPO CARREFOUR',
+            '790' => 'DROGASIL',
+            '1742' => 'FARMACIA PAGUE MENOS',
+            '9998' => 'CLIENTES DIVERSOS',
+        ];
+
+        DB::table('grupos_cliente')->insert(
+            collect($grupos)
+                ->map(fn (string $nome, string $codigo) => [
+                    'codigo' => $codigo,
+                    'nome' => $nome,
+                    'created_at' => $agora,
+                    'updated_at' => $agora,
+                ])
+                ->values()
+                ->all()
+        );
+
+        return array_keys($grupos);
     }
 }

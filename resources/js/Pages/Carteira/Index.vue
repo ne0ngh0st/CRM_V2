@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -10,7 +10,7 @@ import CarteiraSegmentoCard from '@/Components/Dashboard/CarteiraSegmentoCard.vu
 import CarteiraTabela from '@/Components/Carteira/CarteiraTabela.vue';
 import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos.vue';
 import MotivoInatividadeModal from '@/Components/Carteira/MotivoInatividadeModal.vue';
-import ObservacaoModal from '@/Components/Carteira/ObservacaoModal.vue';
+import ObservacoesModal from '@/Components/Observacoes/ObservacoesModal.vue';
 import AgendarLigacaoModal from '@/Components/Carteira/AgendarLigacaoModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 
@@ -25,7 +25,9 @@ const props = defineProps({
     visao: Object,
 });
 
-const isGestor = computed(() => ['admin', 'diretor', 'supervisor', 'assistente'].includes(props.role));
+// "Ver detalhes" é liberado pra todos os perfis (decisão do Tony, 2026-08-10) — o
+// escopo já é garantido no servidor por `CarteiraController::autorizarCliente()`,
+// então o vendedor só alcança cliente da própria carteira.
 const isVendedor = computed(() => ['vendedor', 'representante'].includes(props.role));
 
 const filtros = reactive({
@@ -43,22 +45,46 @@ function paramsComAba(aba = props.aba) {
     return { ...filtros, aba };
 }
 
+// `agendamentos` é uma prop opcional no servidor (Inertia::optional): só vem quando
+// pedida explicitamente no `only`. Filtrar mexe na lista de clientes, não na agenda —
+// então NÃO pedimos agendamentos aqui, e a consulta deixa de rodar à toa.
 function aplicarFiltros() {
     router.get(route('carteira.index'), paramsComAba('clientes'), {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['clientes', 'kpis', 'filtros', 'visao', 'agendamentos', 'aba'],
+        only: ['clientes', 'kpis', 'filtros', 'visao', 'aba'],
     });
 }
 
 function trocarAba(aba) {
+    const apenas = ['clientes', 'kpis', 'filtros', 'visao', 'aba'];
+
+    // Só a aba Calendário paga pelos agendamentos.
+    if (aba === 'calendario') apenas.push('agendamentos');
+
     router.get(route('carteira.index'), paramsComAba(aba), {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['clientes', 'kpis', 'filtros', 'visao', 'agendamentos', 'aba'],
+        only: apenas,
     });
+}
+
+// Entrar direto por URL (/carteira?aba=calendario) é uma visita completa, e visita
+// completa não traz prop opcional — sem isto o calendário abriria vazio.
+onMounted(() => {
+    if (props.aba === 'calendario' && !props.agendamentos.length) {
+        router.reload({ only: ['agendamentos'], preserveState: true, preserveScroll: true });
+    }
+});
+
+// Substituiu o select "Ordenar por" — a ordenação agora é o clique no header da
+// coluna. Volta pra página 1 de propósito: manter o offset ao reordenar deixa o
+// usuário no meio de uma lista que não é mais a mesma.
+function ordenarPor(valor) {
+    filtros.ordenar = valor;
+    aplicarFiltros();
 }
 
 let timeoutBusca;
@@ -164,12 +190,6 @@ const temFiltrosAtivos = computed(() =>
                             <option v-for="v in visao.vendedores" :key="v.cod_vendedor" :value="v.cod_vendedor">{{ v.nome }}</option>
                         </FilterField>
 
-                        <FilterField label="Ordenar por" :model-value="filtros.ordenar" @update:model-value="(v) => { filtros.ordenar = v; aplicarFiltros(); }">
-                            <option value="nome_asc">Razão social · A-Z</option>
-                            <option value="ultima_compra_desc">Última compra · mais recente</option>
-                            <option value="ultima_compra_asc">Última compra · mais antiga</option>
-                        </FilterField>
-
                         <button type="button" class="self-end rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100" @click="limparFiltros">
                             Limpar filtros
                         </button>
@@ -207,21 +227,26 @@ const temFiltrosAtivos = computed(() =>
                             </svg>
                         </template>
                         <template #actions>
+                            <!-- assincrono: a carteira completa leva ~95s, mais que o idle
+                                 timeout do ALB. Gera em fila e avisa no sino. -->
                             <ExportarExcelButton
                                 rota="carteira.exportar"
                                 :filtros="filtros"
                                 :tem-filtros-ativos="temFiltrosAtivos"
+                                assincrono
                             />
                         </template>
 
                         <CarteiraTabela
                             v-if="clientes.data.length"
                             :clientes="clientes.data"
-                            :pode-ver-detalhes="isGestor"
+                            :pode-ver-detalhes="true"
                             :pode-ligar="isVendedor"
                             :pode-agendar="isVendedor"
                             :pode-orcamento="isVendedor"
                             :pode-observar="true"
+                            :ordenar="filtros.ordenar"
+                            @ordenar="ordenarPor"
                             @motivo-inatividade="abrirMotivo"
                             @observacao="abrirObservacao"
                             @agendar-ligacao="abrirAgendamento"
@@ -239,7 +264,13 @@ const temFiltrosAtivos = computed(() =>
         </div>
 
         <MotivoInatividadeModal :show="modalMotivo" :cliente="clienteAtivo" @close="modalMotivo = false" />
-        <ObservacaoModal :show="modalObservacao" :cliente="clienteAtivo" @close="modalObservacao = false" />
+        <ObservacoesModal
+            :show="modalObservacao"
+            :subtitulo="clienteAtivo ? `${clienteAtivo.razaoSocial} · ${clienteAtivo.cnpj || 'CNPJ não cadastrado'}` : ''"
+            :historico-url="clienteAtivo ? route('observacoes.porCliente', clienteAtivo.id) : null"
+            :payload="clienteAtivo ? { cliente_id: clienteAtivo.id, cnpj: clienteAtivo.cnpj || undefined } : {}"
+            @close="modalObservacao = false"
+        />
         <AgendarLigacaoModal :show="modalAgendamento" :cliente="clienteAtivo" @close="modalAgendamento = false" />
     </AuthenticatedLayout>
 </template>

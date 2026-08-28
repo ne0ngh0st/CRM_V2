@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -10,7 +10,7 @@ import Pagination from '@/Components/Pagination.vue';
 import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos.vue';
 import LeadsTabela from '@/Components/Leads/LeadsTabela.vue';
 import AgendarLigacaoLeadModal from '@/Components/Leads/AgendarLigacaoLeadModal.vue';
-import ObservacaoLeadModal from '@/Components/Leads/ObservacaoLeadModal.vue';
+import ObservacoesModal from '@/Components/Observacoes/ObservacoesModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 
 const props = defineProps({
@@ -46,18 +46,30 @@ function aplicarFiltros() {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['leads', 'kpis', 'filtros', 'visao', 'agendamentos', 'aba'],
+        only: ['leads', 'kpis', 'filtros', 'visao', 'aba'],
     });
 }
 
+// `agendamentos` e prop opcional no servidor: so vem quando pedida no `only`.
+// Filtrar mexe na lista de leads, nao na agenda.
 function trocarAba(aba) {
     router.get(route('leads.index'), paramsComAba(aba), {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['leads', 'kpis', 'filtros', 'visao', 'agendamentos', 'aba'],
+        only: aba === 'calendario'
+            ? ['leads', 'kpis', 'filtros', 'visao', 'aba', 'agendamentos']
+            : ['leads', 'kpis', 'filtros', 'visao', 'aba'],
     });
 }
+
+// Entrar direto por URL (/leads?aba=calendario) e visita completa, e visita completa
+// nao traz prop opcional — sem isto o calendario abriria vazio.
+onMounted(() => {
+    if (props.aba === 'calendario' && !props.agendamentos.length) {
+        router.reload({ only: ['agendamentos'], preserveState: true, preserveScroll: true });
+    }
+});
 
 let timeoutBusca;
 function onBuscaInput() {
@@ -247,9 +259,11 @@ const temFiltrosAtivos = computed(() =>
             </div>
         </div>
 
-        <ObservacaoLeadModal
+        <ObservacoesModal
             :show="modalObservacao"
-            :lead="leadAtivo"
+            :subtitulo="leadAtivo?.razaoSocial || leadAtivo?.nome || ''"
+            :historico-url="leadAtivo ? route('observacoes.porLead', leadAtivo.id) : null"
+            :payload="leadAtivo ? { lead_id: leadAtivo.id, cnpj: leadAtivo.cnpj || undefined } : {}"
             @close="modalObservacao = false"
         />
         <AgendarLigacaoLeadModal

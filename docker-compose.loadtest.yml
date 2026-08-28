@@ -6,6 +6,12 @@ services:
     environment:
       - DB_HOST=host.docker.internal
       - DB_PORT=3306
+      # Reusa o Redis do docker-compose.yml de dev (que publica a 6379 no host), mesmo
+      # padrão já adotado pro MySQL. Não vale subir um Redis próprio: o objetivo aqui é
+      # medir o stack nginx+PHP-FPM, e o `docker compose up -d` de dev precisa estar de pé
+      # de qualquer jeito pro banco funcionar.
+      - REDIS_HOST=host.docker.internal
+      - REDIS_PORT=6379
       - APP_URL=http://localhost:8090
     extra_hosts:
       - "host.docker.internal:host-gateway"

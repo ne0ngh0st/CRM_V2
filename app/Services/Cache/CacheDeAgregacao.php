@@ -1,0 +1,87 @@
+<?php
+
+namespace App\Services\Cache;
+
+use Closure;
+use Illuminate\Support\Facades\Cache;
+
+/**
+ * Camada fina sobre o cache para as agregações caras do sistema.
+ *
+ * Existe por dois motivos, nenhum deles "abstrair o Laravel":
+ *
+ * 1. O TTL mora num lugar só (`config('perf.ttl_agregacao_minutos')`), e precisa combinar
+ *    com o intervalo do job de warming. Espalhado em `now()->addMinutes(15)` por bloco,
+ *    ajustar essa relação viraria caça a literais.
+ * 2. `aquecer()` e `lembrar()` compartilham a MESMA chave e o MESMO cálculo por
+ *    construção — é o que garante que o job de warming grave exatamente onde o
+ *    controller vai ler.
+ *
+ * ⚠️ `Cache::forever()` é proibido neste projeto: o Redis roda com
+ * `maxmemory-policy volatile-lru`, que só descarta chave COM prazo de validade. Chave
+ * sem TTL fica imune ao descarte e imortal. Por isso todo método daqui grava com TTL.
+ */
+class CacheDeAgregacao
+{
+    /** Lê do cache ou calcula e guarda. É o caminho normal, usado pelos controllers. */
+    public function lembrar(string $chave, Closure $calcular): mixed
+    {
+        return Cache::remember($chave, $this->ttl(), $calcular);
+    }
+
+    /**
+     * Recalcula e sobrescreve, ignorando o que estiver lá. É o caminho do job de warming.
+     *
+     * Note que NÃO é `forget()` + `remember()`: isso abriria uma janela em que a chave
+     * não existe, e quem chegasse nesse intervalo pagaria a agregação inteira — que é
+     * exatamente o problema que o warming existe para eliminar.
+     */
+    public function aquecer(string $chave, Closure $calcular): mixed
+    {
+        $valor = $calcular();
+
+        Cache::put($chave, $valor, $this->ttl());
+
+        return $valor;
+    }
+
+    /**
+     * Variante com TTL curto e explícito, para o que NÃO é aquecido pelo warming.
+     *
+     * O TTL padrão (30 min) só faz sentido para chaves que o job reescreve a cada 10 —
+     * numa chave que ninguém aquece, ele apenas guarda dado velho por mais tempo. É o
+     * caso dos KPIs da Carteira com filtro ativo: a combinação vem da query string, o
+     * job não tem como enumerá-la, e o valor é oportunista.
+     */
+    public function lembrarPorMinutos(string $chave, int $minutos, Closure $calcular): mixed
+    {
+        return Cache::remember($chave, now()->addMinutes(max(1, $minutos)), $calcular);
+    }
+
+    /**
+     * Variante para lookups que mudam raramente (dropdowns, tabelas de referência).
+     *
+     * TTL próprio porque a natureza do dado é outra: as agregações são recalculadas pelo
+     * warming a cada 10 min, enquanto uma lista de estados só muda quando o TOTVS traz
+     * cliente novo. Usar o TTL curto das agregações aqui seria recomputar de graça.
+     */
+    public function lembrarPorHoras(string $chave, int $horas, Closure $calcular): mixed
+    {
+        return Cache::remember($chave, now()->addHours(max(1, $horas)), $calcular);
+    }
+
+    public function esquecer(string $chave): void
+    {
+        Cache::forget($chave);
+    }
+
+    /**
+     * TTL das agregações. Precisa ser folgadamente maior que o intervalo do warming
+     * (hoje 30 min de TTL contra 10 min de job — margem de 3x), para que uma rodada
+     * perdida do worker não deixe a chave expirar na cara de um usuário.
+     */
+    private function ttl(): \DateTimeInterface
+    {
+        return now()->addMinutes((int) config('perf.ttl_agregacao_minutos', 30));
+    }
+}

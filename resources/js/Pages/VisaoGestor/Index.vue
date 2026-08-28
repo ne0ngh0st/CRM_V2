@@ -121,52 +121,54 @@ function formatData(iso) {
                     </svg>
                 </template>
 
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
+                <div class="tbl-wrap">
+                    <table class="tbl">
                         <thead>
-                            <tr class="divide-x divide-gray-200 border-b-2 border-gray-300 bg-gray-50 text-center text-[0.65rem] uppercase tracking-wide text-gray-500">
-                                <th class="px-3 py-2.5 font-semibold">Vendedor</th>
-                                <th class="px-3 py-2.5 font-semibold">Código</th>
-                                <th class="px-3 py-2.5 font-semibold">Status</th>
-                                <th class="px-3 py-2.5 font-semibold">Lig. mês</th>
-                                <th class="px-3 py-2.5 font-semibold">Obs. mês</th>
-                                <th class="px-3 py-2.5 font-semibold">Última ligação</th>
-                                <th class="px-3 py-2.5 font-semibold">Última obs.</th>
-                                <th class="px-3 py-2.5 font-semibold">Ações</th>
+                            <tr class="tbl-head-row">
+                                <th class="tbl-th">Vendedor</th>
+                                <th class="tbl-th">Código</th>
+                                <th class="tbl-th">Status</th>
+                                <th class="tbl-th">Lig. mês</th>
+                                <th class="tbl-th">Obs. mês</th>
+                                <th class="tbl-th">Última ligação</th>
+                                <th class="tbl-th">Última obs.</th>
+                                <th class="tbl-th">Ações</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-200">
+                        <tbody class="tbl-body">
                             <tr
                                 v-for="linha in linhas"
                                 :key="linha.userId"
-                                class="divide-x divide-gray-200 hover:bg-gray-50/60"
+                                class="tbl-row"
                             >
-                                <td class="px-3 py-2.5 text-center align-middle font-medium text-gray-800">{{ linha.nome }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle text-gray-600">{{ linha.codVendedor || '—' }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle">
-                                    <StatusPill :tone="linha.atencao ? 'danger' : 'ok'">
+                                <td class="tbl-td font-medium text-gray-800">{{ linha.nome }}</td>
+                                <td class="tbl-td">{{ linha.codVendedor || '—' }}</td>
+                                <td class="tbl-td">
+                                    <StatusPill :tone="linha.atencao ? 'danger' : 'ok'" size="sm">
                                         {{ linha.atencao ? 'Atenção' : 'Em dia' }}
                                     </StatusPill>
-                                    <div v-if="linha.motivoAtencao" class="mt-1 text-[0.65rem] text-gray-400">
+                                    <div v-if="linha.motivoAtencao" class="tbl-sub mt-1">
                                         {{ linha.motivoAtencao }}
                                     </div>
                                 </td>
-                                <td class="px-3 py-2.5 text-center align-middle text-gray-700">{{ linha.ligacoesMes }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle text-gray-700">{{ linha.observacoesMes }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle text-gray-600">{{ formatData(linha.ultimaLigacao) }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle text-gray-600">{{ formatData(linha.ultimaObservacao) }}</td>
-                                <td class="px-3 py-2.5 text-center align-middle">
-                                    <Link
-                                        v-if="linha.codVendedor"
-                                        :href="route('carteira.index', { visao_vendedor: linha.codVendedor })"
-                                        title="Ver carteira"
-                                        class="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-500 transition hover:border-teal hover:text-teal"
-                                    >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-3.5 w-3.5">
-                                            <path d="M3 7h18v10H3z" />
-                                            <path d="M3 10h18" stroke-linecap="round" />
-                                        </svg>
-                                    </Link>
+                                <td class="tbl-td">{{ linha.ligacoesMes }}</td>
+                                <td class="tbl-td">{{ linha.observacoesMes }}</td>
+                                <td class="tbl-td">{{ formatData(linha.ultimaLigacao) }}</td>
+                                <td class="tbl-td">{{ formatData(linha.ultimaObservacao) }}</td>
+                                <td class="tbl-td">
+                                    <div class="tbl-acoes">
+                                        <Link
+                                            v-if="linha.codVendedor"
+                                            :href="route('carteira.index', { visao_vendedor: linha.codVendedor })"
+                                            title="Ver carteira"
+                                            class="tbl-acao tbl-acao-neutro"
+                                        >
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                <path d="M3 7h18v10H3z" />
+                                                <path d="M3 10h18" stroke-linecap="round" />
+                                            </svg>
+                                        </Link>
+                                    </div>
                                 </td>
                             </tr>
                             <tr v-if="!linhas.length">

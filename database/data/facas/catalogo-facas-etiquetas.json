@@ -1,0 +1,26 @@
+[
+  { "item": 1, "largura": 50, "altura": 30, "observacao": "" },
+  { "item": 2, "largura": 70, "altura": 30, "observacao": "" },
+  { "item": 3, "largura": 75, "altura": 50, "observacao": "" },
+  { "item": 4, "largura": 80, "altura": 30, "observacao": "" },
+  { "item": 5, "largura": 80, "altura": 42, "observacao": "" },
+  { "item": 6, "largura": 80, "altura": 175, "observacao": "" },
+  { "item": 7, "largura": 90, "altura": 30, "observacao": "" },
+  { "item": 8, "largura": 90, "altura": 60, "observacao": "" },
+  { "item": 9, "largura": 90, "altura": 82, "observacao": "" },
+  { "item": 10, "largura": 95, "altura": 130, "observacao": "" },
+  { "item": 11, "largura": 100, "altura": 30, "observacao": "" },
+  { "item": 12, "largura": 100, "altura": 40, "observacao": "" },
+  { "item": 13, "largura": 100, "altura": 50, "observacao": "" },
+  { "item": 14, "largura": 100, "altura": 63, "observacao": "" },
+  { "item": 15, "largura": 100, "altura": 70, "observacao": "" },
+  { "item": 16, "largura": 100, "altura": 75, "observacao": "" },
+  { "item": 17, "largura": 100, "altura": 80, "observacao": "" },
+  { "item": 18, "largura": 100, "altura": 85, "observacao": "" },
+  { "item": 19, "largura": 100, "altura": 100, "observacao": "" },
+  { "item": 20, "largura": 100, "altura": 140, "observacao": "" },
+  { "item": 21, "largura": 100, "altura": 150, "observacao": "" },
+  { "item": 22, "largura": 100, "altura": 159, "observacao": "" },
+  { "item": 23, "largura": 103, "altura": 80, "observacao": "" }
+]
+

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\Segmento;
 use App\Models\SegmentoVendedor;
 use App\Models\User;
@@ -20,6 +21,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EquipeController extends Controller
 {
+    use ExportaPlanilha;
+
     /** Janela de "online agora", mesma da usuario_presenca_minutos_online() do legado. */
     private const MINUTOS_ONLINE = 5;
 
@@ -110,7 +113,10 @@ class EquipeController extends Controller
         $organograma = null;
         if ($podeGerenciar) {
             $nosOrganograma = VendedorPerfil::query()
-                ->with('user:id,name,display_name')
+                // ⚠️ 'user.roles' é obrigatório aqui: o map abaixo chama getRoleNames()
+                // por nó, e sem as roles carregadas o Spatie consulta o banco uma vez
+                // por usuário — eram 201 queries extras nesta página (218 no total).
+                ->with(['user:id,name,display_name', 'user.roles'])
                 ->get()
                 ->filter(fn (VendedorPerfil $vp) => $vp->user !== null)
                 ->map(fn (VendedorPerfil $vp) => [
@@ -143,6 +149,8 @@ class EquipeController extends Controller
 
     public function exportar(Request $request): BinaryFileResponse
     {
+        $this->prepararExport('equipe');
+
         $user = $request->user();
         abort_unless($this->scope->podeAcessar($user), 403);
 

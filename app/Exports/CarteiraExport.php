@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\Cliente;
+use App\Models\GrupoCliente;
 use App\Models\Segmento;
 use App\Models\SegmentoVendedor;
 use App\Models\VendedorPerfil;
@@ -22,6 +23,8 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
 
     private Collection $nomePorCodigo;
 
+    private Collection $nomePorGrupo;
+
     public function __construct(
         private readonly Builder $query,
         private readonly ClienteStatusResolver $statusResolver,
@@ -38,6 +41,10 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
             ->map(fn ($grupo) => $grupo->pluck('segmento.codigo')->all());
 
         $this->nomePorCodigo = Segmento::pluck('nome', 'codigo');
+
+        // 2.4k grupos; aqui vale carregar tudo de uma vez porque o export percorre
+        // a carteira inteira em chunks e não dá pra saber quais aparecem de antemão.
+        $this->nomePorGrupo = GrupoCliente::pluck('nome', 'codigo');
     }
 
     public function query(): Builder
@@ -47,7 +54,7 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
 
     public function headings(): array
     {
-        return ['Cliente', 'CNPJ', 'Vendedor', 'Estado', 'Segmento', 'Status', 'Aderência', 'Última Compra'];
+        return ['Cliente', 'CNPJ', 'Grupo', 'Vendedor', 'Estado', 'Segmento', 'Status', 'Aderência', 'Última Compra'];
     }
 
     /** @param  Cliente  $cliente */
@@ -64,6 +71,7 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
         return [
             $cliente->razao_social,
             $cliente->cnpj,
+            $cliente->cod_grupo ? ($this->nomePorGrupo[$cliente->cod_grupo] ?? $cliente->cod_grupo) : null,
             $this->nomesPorCodVendedor[$cliente->cod_vendedor] ?? $cliente->cod_vendedor,
             $cliente->estado,
             $cliente->cod_segmento ? ($this->nomePorCodigo[$cliente->cod_segmento] ?? $cliente->cod_segmento) : null,
