@@ -6,6 +6,7 @@ use App\Exports\CarteiraExport;
 use App\Models\Exportacao;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Notificacao\NotificacaoService;
+use App\Support\Uploads\Disco;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -66,7 +67,7 @@ class GerarExportacaoCarteiraJob implements ShouldQueue
             $query = $this->queryDaTela($exportacao);
             $linhas = (clone $query)->count();
 
-            Excel::store(new CarteiraExport($query, $statusResolver), $caminho, 'local');
+            Excel::store(new CarteiraExport($query, $statusResolver), $caminho, Disco::nomeExports());
 
             $exportacao->update([
                 'status' => Exportacao::STATUS_PRONTO,

@@ -541,26 +541,48 @@ php artisan queue:restart
 php artisan cache:aquecer
 ```
 
-### 5.4 ⚠️ Mudança de código pendente: uploads para o S3
+### 5.4 ✅ Uploads e exports no S3 — feito em 2026-08-27
 
-**Isto ainda não foi feito e é bloqueador de multi-nó.** Hoje gravam em disco local:
+Não existe mais `Storage::disk('public')` nem `disk('local')` espalhado pelo código. Cada
+tipo de arquivo aponta para um **disco lógico**, resolvido por `App\Support\Uploads\Disco`:
 
-| Arquivo | O que grava |
-|---|---|
-| `app/Http/Controllers/CatalogoFacaController.php` | Imagens de faca → `storage/app/public/facas/` |
-| `app/Http/Controllers/ProfileController.php` (`updateFoto`) | Foto de perfil |
-| `app/Jobs/GerarExportacaoCarteiraJob.php` | Planilha → `storage/app/exports/` (disco `local`) |
+| Disco lógico | Conteúdo | Dev | Produção |
+|---|---|---|---|
+| `uploads` | Foto de perfil, imagem de faca | `public` | **`s3`** |
+| `exports` | Planilhas geradas pelo job | `local` | **`s3`** |
 
-Com 2 nós, o arquivo enviado no nó A não existe no nó B — a imagem quebra em ~50% dos
-carregamentos, e o link de download da exportação falha metade das vezes.
+**No `.env` de produção, basta:**
 
-**O que muda:** `FILESYSTEM_DISK=s3` e trocar `Storage::disk('local')` por
-`Storage::disk('s3')` no job, além de ajustar a geração de URL nos dois controllers para
-`Storage::url()`.
+```dotenv
+UPLOADS_DISK=s3
+EXPORTS_DISK=s3
+```
 
-⚠️ **As imagens em `public/images/facas/` NÃO mudam** — são versionadas no git e vêm do
-legado. Só o que o usuário envia vai para o S3. A coluna `faca_recursos.imagem` já guarda
-o caminho web completo justamente para os dois casos coexistirem.
+⚠️ **`exports` NUNCA pode ser público.** O download passa pelo `ExportacaoController`, que
+confere se o arquivo pertence a quem pediu — um `.xlsx` da Carteira contém a base inteira
+de clientes de alguém. O bucket deve manter "bloquear acesso público" ligado.
+
+⚠️ **As imagens em `public/images/facas/` não mudam** — são versionadas no git e vêm do
+legado. Só o que o usuário envia vai para o S3.
+
+**Três formatos convivem na coluna `faca_recursos.imagem`**, e `urlDaImagem()` resolve os
+três sem migration:
+
+| Formato | Origem | URL gerada |
+|---|---|---|
+| `images/facas/...` | Asset versionado (legado) | `/images/facas/...` |
+| `storage/facas/...` | Upload anterior a 27/08 | `/storage/facas/...` |
+| `facas/...` | Upload novo (caminho no disco) | `Storage::url()` — S3 em produção |
+
+⚠️ Se você **migrar os arquivos antigos** de `storage/app/public/facas` para o S3, os
+registros do formato 2 continuarão apontando para `/storage/...` e vão quebrar. Ou copie
+mantendo o caminho servido pelo `storage:link`, ou rode um `UPDATE` trocando o prefixo
+`storage/facas/` por `facas/`.
+
+**Uma otimização junto:** o accessor `User::foto_url` deixou de chamar `exists()` antes de
+gerar a URL. Com disco local isso era barato; com S3 seria uma chamada de rede **por
+usuário renderizado**, e o accessor roda no layout de toda página. Foto apagada por fora
+vira um 404 na tag `<img>`, que custa infinitamente menos.
 
 ### 5.5 Configuração do PHP e do nginx
 
@@ -901,7 +923,7 @@ rodar, confirme o que o `down()` daquela migration faz.
 - [ ] AWS Budgets com alerta em 80% e 100%
 
 **Aplicação**
-- [ ] Uploads indo para o S3 (seção 5.4) ⚠️ **pendente**
+- [ ] `UPLOADS_DISK=s3` e `EXPORTS_DISK=s3` no .env (seção 5.4)
 - [ ] Worker `queue:work` com `--timeout=700`
 - [ ] **Scheduler ligado** no Forge
 - [ ] Reverb rodando e o WebSocket conectando pelo domínio público
@@ -1005,7 +1027,7 @@ a fila (jobs perdidos) junto com o cache.
 
 | Item | Impacto | Quando |
 |---|---|---|
-| **Uploads para o S3** | 🔴 Bloqueador de 2 nós | Antes do primeiro deploy |
+| ~~Uploads para o S3~~ | Feito em 2026-08-27 | ✅ |
 | Sincronização automática com o TOTVS | Dado envelhece entre cargas manuais | Depende do Adriano |
 | SES para e-mail transacional | Sem "esqueci minha senha" | Antes de abrir para todos |
 | Laravel Pulse | Menos visibilidade de slow queries | Semana 1 |

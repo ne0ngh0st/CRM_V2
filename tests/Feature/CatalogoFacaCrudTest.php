@@ -105,9 +105,49 @@ class CatalogoFacaCrudTest extends TestCase
 
         $recurso = $faca->recursos()->first();
         $this->assertSame('Corte retangular', $recurso->descricao);
-        // Vai pro storage (persiste entre deploys), não pra public/images.
-        $this->assertStringStartsWith('storage/facas/', $recurso->imagem);
-        Storage::disk('public')->assertExists(str_replace('storage/', '', $recurso->imagem));
+
+        /*
+         * Guarda o CAMINHO NO DISCO ('facas/x.png'), não uma URL pronta.
+         *
+         * Até 2026-08-27 gravava 'storage/facas/x.png' — uma URL já montada, que só
+         * funciona com disco local. Com o S3 em produção a URL é outra, então ela passou
+         * a ser derivada na leitura (CatalogoFacaController::urlDaImagem).
+         *
+         * O que continua valendo, e é o ponto deste teste: o upload NUNCA vai para
+         * public/images/facas, que é versionado no git e recriado a cada release.
+         */
+        $this->assertStringStartsWith('facas/', $recurso->imagem);
+        $this->assertStringNotContainsString('images/', $recurso->imagem);
+        Storage::disk('public')->assertExists($recurso->imagem);
+    }
+
+    /**
+     * A coluna `imagem` tem três formatos convivendo, e a tela precisa exibir os três.
+     * Sem isto, uma migration de formato passaria despercebida até alguém abrir o
+     * catálogo e ver imagem quebrada.
+     */
+    public function test_url_da_imagem_cobre_os_tres_formatos(): void
+    {
+        Storage::fake('public');
+        $faca = $this->faca();
+
+        // 1. asset versionado (veio do legado)  2. upload no formato antigo  3. upload novo
+        $faca->recursos()->create(['descricao' => 'legado', 'imagem' => 'images/facas/balanca/a.png', 'ordem' => 1]);
+        $faca->recursos()->create(['descricao' => 'antigo', 'imagem' => 'storage/facas/b.png', 'ordem' => 2]);
+        $faca->recursos()->create(['descricao' => 'novo', 'imagem' => 'facas/c.png', 'ordem' => 3]);
+
+        $this->actingAs($this->usuario('admin'))
+            ->get(route('catalogo-facas.index'))
+            ->assertOk()
+            ->assertInertia(function ($page) {
+                $recursos = collect($page->toArray()['props']['facas'])
+                    ->flatMap(fn ($f) => $f['recursos'])
+                    ->keyBy('descricao');
+
+                $this->assertSame('/images/facas/balanca/a.png', $recursos['legado']['imagem']);
+                $this->assertSame('/storage/facas/b.png', $recursos['antigo']['imagem']);
+                $this->assertStringContainsString('facas/c.png', $recursos['novo']['imagem']);
+            });
     }
 
     public function test_recurso_exige_descricao_ou_imagem(): void

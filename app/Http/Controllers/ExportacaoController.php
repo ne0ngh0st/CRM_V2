@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Exportacao;
+use App\Support\Uploads\Disco;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -24,8 +25,8 @@ class ExportacaoController extends Controller
         abort_unless($exportacao->user_id === $request->user()->id, 403);
 
         abort_unless($exportacao->disponivel(), 404, 'Esta exportação não está mais disponível.');
-        abort_unless(Storage::disk('local')->exists($exportacao->caminho), 404, 'O arquivo foi removido.');
+        abort_unless(Disco::exports()->exists($exportacao->caminho), 404, 'O arquivo foi removido.');
 
-        return Storage::disk('local')->download($exportacao->caminho, $exportacao->nome_arquivo);
+        return Disco::exports()->download($exportacao->caminho, $exportacao->nome_arquivo);
     }
 }

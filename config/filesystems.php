@@ -28,6 +28,30 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Discos lógicos da aplicação
+    |--------------------------------------------------------------------------
+    |
+    | Em vez de espalhar `Storage::disk('public')` pelo código, cada TIPO de arquivo
+    | aponta para um nome configurável. Assim o mesmo código funciona em dev (disco
+    | local) e em produção (S3) sem `if` nenhum.
+    |
+    | ⚠️ Isto não é abstração por gosto: com dois app nodes atrás do ALB, arquivo
+    | gravado no disco local do nó A não existe no nó B — a imagem quebra em ~50% dos
+    | carregamentos e o link de download da planilha falha metade das vezes.
+    |
+    | uploads → conteúdo servido ao navegador (foto de perfil, imagem de faca).
+    |           Precisa ser público.
+    | exports → planilhas geradas em segundo plano. NUNCA público: o download passa
+    |           pelo ExportacaoController, que confere se o arquivo é de quem pediu.
+    |
+    */
+
+    'uploads' => env('UPLOADS_DISK', 'public'),
+
+    'exports' => env('EXPORTS_DISK', 'local'),
+
     'disks' => [
 
         'local' => [

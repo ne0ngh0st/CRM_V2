@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Exportacao;
+use App\Support\Uploads\Disco;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -30,8 +31,8 @@ class ExpurgarExportacoesJob implements ShouldQueue
         $apagados = 0;
 
         foreach ($vencidas as $exportacao) {
-            if ($exportacao->caminho && Storage::disk('local')->exists($exportacao->caminho)) {
-                Storage::disk('local')->delete($exportacao->caminho);
+            if ($exportacao->caminho && Disco::exports()->exists($exportacao->caminho)) {
+                Disco::exports()->delete($exportacao->caminho);
                 $apagados++;
             }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Faca;
 use App\Models\FacaRecurso;
+use App\Support\Uploads\Disco;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -41,7 +42,7 @@ class CatalogoFacaController extends Controller
                 'recursos' => $faca->recursos->map(fn (FacaRecurso $r) => [
                     'id' => $r->id,
                     'descricao' => $r->descricao,
-                    'imagem' => $r->imagem ? '/'.ltrim($r->imagem, '/') : null,
+                    'imagem' => $this->urlDaImagem($r->imagem),
                 ])->values(),
             ]);
 
@@ -157,11 +158,15 @@ class CatalogoFacaController extends Controller
     }
 
     /**
-     * Uploads vão pra storage/app/public/facas (servido por /storage/facas/... via
-     * `artisan storage:link`), NÃO pra public/images/facas. As de public/ vieram do
-     * legado e são versionadas no git; num deploy Forge o diretório do código é
-     * recriado a cada release, então arquivo enviado pela tela que fosse parar lá
-     * sumiria na próxima subida.
+     * Uploads vão para o DISCO DE UPLOADS (local em dev, S3 em produção), nunca para
+     * `public/images/facas`.
+     *
+     * As imagens de `public/` vieram do legado e são versionadas no git. Dois motivos
+     * para o upload não ir para lá: no Forge o diretório do código é recriado a cada
+     * release, e com dois app nodes o arquivo gravado no disco de um não existe no outro
+     * — a imagem quebraria em cerca de metade dos carregamentos.
+     *
+     * Ver a classe Disco e docs/deploy-aws.md, seção 5.4.
      */
     private function guardarImagem(Request $request): string
     {
@@ -179,19 +184,52 @@ class CatalogoFacaController extends Controller
         abort_if($extensao === null, 422, 'Formato de imagem não suportado.');
 
         $nome = Str::uuid()->toString().'.'.$extensao;
-        $arquivo->storeAs('facas', $nome, 'public');
+        $arquivo->storeAs('facas', $nome, Disco::nomeUploads());
 
-        return 'storage/facas/'.$nome;
+        // Guarda o CAMINHO NO DISCO ('facas/x.png'), não uma URL pronta. A URL é
+        // derivada na leitura por urlDaImagem(), porque ela muda conforme o disco:
+        // '/storage/facas/x.png' em dev, uma URL do S3 em produção.
+        return 'facas/'.$nome;
+    }
+
+    /**
+     * Resolve a URL de exibição, cobrindo os TRÊS formatos que existem na coluna.
+     *
+     * Nenhuma migration foi feita de propósito: os registros antigos continuam válidos e
+     * o custo é este método, que é barato e explícito.
+     *
+     *  1. `images/facas/...`  → asset versionado no repositório, veio do legado
+     *  2. `storage/facas/...` → upload gravado antes de 2026-08-27 (formato antigo)
+     *  3. `facas/...`         → upload novo: caminho no disco de uploads
+     */
+    private function urlDaImagem(?string $imagem): ?string
+    {
+        if ($imagem === null || $imagem === '') {
+            return null;
+        }
+
+        if (str_starts_with($imagem, 'images/') || str_starts_with($imagem, 'storage/')) {
+            return '/'.ltrim($imagem, '/');
+        }
+
+        return Disco::uploads()->url($imagem);
     }
 
     /** Só remove arquivo que foi enviado pela tela; imagem do legado é versionada. */
     private function apagarImagemEnviada(FacaRecurso $recurso): void
     {
-        if ($recurso->imagem === null || ! str_starts_with($recurso->imagem, 'storage/facas/')) {
-            return;
+        $imagem = $recurso->imagem;
+
+        if ($imagem === null || str_starts_with($imagem, 'images/')) {
+            return; // asset do repositório: não se mexe
         }
 
-        Storage::disk('public')->delete(Str::after($recurso->imagem, 'storage/'));
+        // Formato antigo guardava a URL ('storage/facas/x.png'); o novo guarda o caminho.
+        $caminho = str_starts_with($imagem, 'storage/')
+            ? Str::after($imagem, 'storage/')
+            : $imagem;
+
+        Disco::uploads()->delete($caminho);
     }
 
     /** @return array<string, mixed> */
