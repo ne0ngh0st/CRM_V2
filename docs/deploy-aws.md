@@ -309,11 +309,23 @@ Inertia (uma requisição XHR por navegação) o usuário sente em cada clique.
 | CloudWatch | métricas + alarmes + logs | | 8 |
 | Route 53 | 1 zona hospedada + queries | | 1 |
 | SES | e-mail transacional (quando entrar) | US$ 0,10/1.000 | ~0 |
-| **Subtotal AWS** | | | **~346** |
-| Laravel Forge | plano Growth | | 19 |
-| **TOTAL** | | | **~365** |
+| **TOTAL AWS** | | | **~346** |
 
-**≈ R$ 2.010/mês** a R$ 5,50/US$.
+**≈ R$ 1.900/mês** a R$ 5,50/US$ — tudo na fatura da AWS (conta 890615325644).
+
+### 3.1.1 ⚠️ Gerenciamento do servidor é OUTRO centro de custo
+
+O Laravel Forge (~US$ 19/mês) **não** entra na fatura AWS: é assinatura própria da Laravel,
+cartão separado, cobrança internacional com IOF. O AWS Budget não enxerga esse gasto.
+
+São dois pontos de falha de pagamento diferentes: cartão recusado na Laravel derruba o
+painel de gerenciamento e o deploy automático (as máquinas seguem rodando).
+
+**A alternativa sem custo adicional** é provisionar por SSH — instalar PHP, nginx,
+supervisor, cron e o script de deploy à mão. O trabalho de instalar é equivalente; a
+diferença aparece na OPERAÇÃO: sem o painel, ver log de job, reiniciar worker e disparar
+deploy passam a ser linha de comando. Para quem vai manter o sistema sozinho e está
+começando, essa diferença pesa mais que os US$ 19.
 
 ### 3.2 ⚠️ Isso é exatamente o teto do orçamento
 
