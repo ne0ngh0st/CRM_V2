@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Exportacao;
 use App\Support\Uploads\Disco;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**

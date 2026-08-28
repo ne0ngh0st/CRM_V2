@@ -7,7 +7,6 @@ use App\Support\Uploads\Disco;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Apaga do disco as planilhas vencidas.

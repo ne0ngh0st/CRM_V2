@@ -31,3 +31,6 @@ Desktop.ini
 /database/*.sqlite
 /database/*.sqlite-journal
 .env.backup*
+
+# IDs dos recursos AWS provisionados (nao versionar)
+.aws-crm-v2-ids.txt
