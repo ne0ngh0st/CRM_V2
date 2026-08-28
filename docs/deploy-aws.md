@@ -34,7 +34,7 @@ completa desde o beta, orçamento **R$ 2.000/mês**, beta só depois das fases d
                          Internet
                             │
                     ┌───────▼────────┐
-                    │  Route 53      │  crm.autopel.com
+                    │  Route 53      │  crm.autopel.online
                     └───────┬────────┘
                             │
                   ┌─────────▼──────────┐
@@ -353,6 +353,38 @@ RDS primário **na mesma AZ do app-1**.
 
 > Ordem pensada para que cada passo dependa apenas dos anteriores. Tempo estimado: 3-4h.
 
+### 4.0 Credenciais — use SEMPRE o profile `crm-v2`
+
+A conta AWS **890615325644** hospeda três sistemas. O CRM-V2 tem um usuário IAM dedicado
+(`crm-v2-deploy`) e um profile local:
+
+```bash
+aws sts get-caller-identity --profile crm-v2
+# → arn:aws:iam::890615325644:user/crm-v2-deploy
+```
+
+| Propriedade | Valor | Por que importa |
+|---|---|---|
+| Região default do profile | `sa-east-1` | Não precisa passar `--region` — e comando esquecido não cria recurso na Virgínia |
+| Acesso a `us-east-1` | **negado** (`UnauthorizedOperation`) | Não alcança a infra do Licitações nem do Autoprint, que rodam lá |
+| Route 53 | só a zona `autopel.online` | Não consegue mexer em zona de outro projeto |
+
+⚠️ **Nunca use o profile default para este projeto.** Ele aponta para `us-east-1` e tem
+`AdministratorAccess` na conta inteira — inclusive sobre a produção do sistema de
+licitações. O isolamento do `crm-v2` é proteção real, não formalidade.
+
+```bash
+export AWS_PROFILE=crm-v2   # ou --profile crm-v2 em cada comando
+```
+
+**O que já existe na conta (levantado em 2026-08-27):**
+
+| Sistema | Região | Infra |
+|---|---|---|
+| Licitações | `us-east-1` | VPC própria via CDK, bastion + app EC2, MySQL local |
+| Autoprint | `us-east-1` | Bucket de deploy + secret de ingestão |
+| **CRM-V2** | **`sa-east-1`** | **Vazio — só a VPC default** |
+
 ### 4.1 Rede (30 min)
 
 1. **VPC** dedicada (não use a default) — CIDR `10.0.0.0/16`
@@ -396,11 +428,11 @@ RDS primário **na mesma AZ do app-1**.
 
 ### 4.5 ACM + Route 53 (20 min, depende de propagação DNS)
 
-- Certificado para `crm.autopel.com` em **sa-east-1** (ALB exige certificado na mesma região)
+- Certificado para `crm.autopel.online` em **sa-east-1** (ALB exige certificado na mesma região)
 - Validação por DNS (registro CNAME na zona)
-- ⚠️ **A zona de `autopel.com` provavelmente está fora da AWS.** Se estiver, você só cria
-  o CNAME de validação e depois o registro apontando para o ALB no provedor atual — não
-  precisa migrar a zona.
+- ✅ **A zona `autopel.online` já está no Route 53** (`Z01098153VPQ0G1VCPV09`) e o usuário
+  `crm-v2-deploy` tem permissão de escrita nela. Validação e registro final saem por CLI,
+  sem passar por provedor externo.
 
 ### 4.6 ALB (30 min)
 
@@ -442,7 +474,7 @@ APP_NAME="PALMA CRM"
 APP_ENV=production
 APP_KEY=                      # php artisan key:generate --show
 APP_DEBUG=false               # ⚠️ CRÍTICO — ver 5.2
-APP_URL=https://crm.autopel.com
+APP_URL=https://crm.autopel.online
 APP_LOCALE=pt_BR
 APP_TIMEZONE=America/Sao_Paulo
 
@@ -478,7 +510,7 @@ REVERB_SERVER_PORT=8080
 
 # Reverb — LADO NAVEGADOR. Passa pelo ALB, então é o domínio público em 443/wss.
 VITE_REVERB_APP_KEY="${REVERB_APP_KEY}"
-VITE_REVERB_HOST=crm.autopel.com
+VITE_REVERB_HOST=crm.autopel.online
 VITE_REVERB_PORT=443
 VITE_REVERB_SCHEME=https
 
@@ -511,7 +543,7 @@ vulnerabilidade conhecida exposta na internet.
 ### 5.3 Script de deploy (Forge)
 
 ```bash
-cd /home/forge/crm.autopel.com
+cd /home/forge/crm.autopel.online
 
 git pull origin main
 
@@ -686,10 +718,10 @@ php artisan tinker
 
 | # | Teste | Comando / ação | Esperado |
 |---|---|---|---|
-| 1 | Health check | `curl -I https://crm.autopel.com/up` | `200` |
-| 2 | Raiz redireciona | `curl -I https://crm.autopel.com/` | `302` → `/login` |
+| 1 | Health check | `curl -I https://crm.autopel.online/up` | `200` |
+| 2 | Raiz redireciona | `curl -I https://crm.autopel.online/` | `302` → `/login` |
 | 3 | Login renderiza | Abrir no navegador | Tela com o mosaico de triângulos |
-| 4 | HTTPS forçado | `curl -I http://crm.autopel.com` | `301` para `https` |
+| 4 | HTTPS forçado | `curl -I http://crm.autopel.online` | `301` para `https` |
 | 5 | Assets carregam | DevTools → Network | Sem 404 em `/build/` |
 
 ### 7.2 ⚠️ Os caches de produção realmente funcionaram
@@ -761,7 +793,7 @@ Se der 500 silencioso, o valor está travado e é preciso mudar para `php_value`
 
 | # | Teste | Esperado |
 |---|---|---|
-| 1 | DevTools → Network → WS | Conexão `wss://crm.autopel.com/app/...` com status `101` |
+| 1 | DevTools → Network → WS | Conexão `wss://crm.autopel.online/app/...` com status `101` |
 | 2 | Gerar notificação (aprovar orçamento em outra aba) | Sino atualiza **sem F5** |
 | 3 | Target group `tg-reverb` | `healthy` |
 
@@ -795,7 +827,7 @@ p95, por target group. Navegue por todas as páginas core e depois compare:
 **Teste de carga** (opcional, mas recomendado antes de liberar):
 
 ```bash
-LOADTEST_BASE_URL=https://crm.autopel.com node docker/loadtest.mjs 40 45
+LOADTEST_BASE_URL=https://crm.autopel.online node docker/loadtest.mjs 40 45
 ```
 
 Referência do ambiente local (Docker/WSL2, que é **pior** que EC2): 27,9 req/s, todas as
