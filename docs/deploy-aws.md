@@ -385,6 +385,41 @@ export AWS_PROFILE=crm-v2   # ou --profile crm-v2 em cada comando
 | Autoprint | `us-east-1` | Bucket de deploy + secret de ingestão |
 | **CRM-V2** | **`sa-east-1`** | **Vazio — só a VPC default** |
 
+### 4.0.1 Pre-requisitos descobertos no provisionamento real (2026-08-27)
+
+Tres coisas que so aparecem na hora e travam o dia se pegarem de surpresa:
+
+**1. Service-linked roles.** Servico nunca usado na conta exige uma SLR, criada uma unica
+vez e apenas por quem tem `iam:CreateServiceLinkedRole` (nao o `crm-v2-deploy`).
+Nesta conta ja existiam as de RDS e ElasticLoadBalancing; a de ElastiCache faltava:
+
+```bash
+# com o profile ADMIN, nao o crm-v2
+aws iam create-service-linked-role --aws-service-name elasticache.amazonaws.com
+```
+
+O erro que denuncia isso e `ServiceLinkedRoleNotFoundFault`, e ele aparece em TODOS os
+comandos do servico — inclusive nos de criar subnet group e parameter group.
+
+**2. KMS.** Storage criptografado no RDS e senha gerenciada no Secrets Manager exigem
+permissao de KMS, que o `crm-v2-deploy` nao tinha. Ver `policy-kms.json` na raiz do
+projeto. ⚠️ **Criptografia de storage nao pode ser ligada depois** — so recriando a
+instancia. Resolver ANTES de criar o RDS.
+
+⚠️ Depois de aplicar essa policy, `aws kms describe-key` continua sendo negado, e isso e
+o esperado: a condicao `kms:ViaService` so libera KMS quando a chamada vem ATRAVES de
+RDS/S3/SecretsManager/ElastiCache. O teste valido e criar o recurso, nao consultar a chave.
+
+**3. Git Bash no Windows corrompe argumentos com path.** O MSYS converte `/up` em
+`C:/Users/.../up`, e o erro fala de "path invalido" sem dizer que foi o shell:
+
+```bash
+export MSYS_NO_PATHCONV=1   # antes de qualquer comando aws com path
+```
+
+O mesmo vale para `--matcher HttpCode=200,404`, que o CLI le como lista — use JSON:
+`--matcher '{"HttpCode":"200,404"}'`.
+
 ### 4.1 Rede (30 min)
 
 1. **VPC** dedicada (não use a default) — CIDR `10.0.0.0/16`
@@ -408,7 +443,12 @@ export AWS_PROFILE=crm-v2   # ou --profile crm-v2 em cada comando
 - `db.t4g.small`, **Multi-AZ**, 20 GB gp3
 - Subnet group nas subnets de banco, SG `crm-db`, **sem acesso público**
 - Backup 7 dias, **PITR ligado**, janela de manutenção fora do horário comercial
-- **Performance Insights ligado** (7 dias de retenção são grátis)
+- ⚠️ **Performance Insights NAO funciona em `db.t4g.small`** (nem em qualquer burstable
+  `micro`/`small`) — o erro e `InvalidParameterCombination`. Subir para `medium` so por
+  isso dobraria o custo do RDS. Em vez disso, slow query log exportado pro CloudWatch,
+  que atende a mesma necessidade de achar query lenta:
+  `--enable-cloudwatch-logs-exports '["slowquery","error"]'` mais os parametros
+  `slow_query_log=1` e `long_query_time=0.5` no parameter group
 - Parameter group: `max_allowed_packet` ≥ 64 MB (os imports fazem insert em lote)
 
 ### 4.3 ElastiCache (15 min)
