@@ -678,12 +678,36 @@ class CadastroController extends Controller
             $dados['solicitanteEmail'] ?? null,
         ])));
 
-        $mail = Mail::to($dados['to']);
+        $assunto = $dados['subject'];
+        $destino = $dados['to'];
+
+        /*
+         * Modo teste: manda tudo para um endereço só, sem cc.
+         *
+         * ⚠️ `config()`, nunca `env()`: em produção o config é cacheado e o .env sequer
+         * é lido, então `env()` devolveria null e o redirecionamento sumiria justamente
+         * onde ele protege (armadilha 9.2 do docs/deploy-aws.md).
+         *
+         * O prefixo no assunto carrega o destino real porque o objetivo do teste é
+         * conferir o ROTEAMENTO; sem ele você vê o conteúdo e continua sem saber se
+         * teria ido pro PCP ou pro Cadastro.
+         */
+        if ($redirecionar = config('cadastros.redirecionar_emails_para')) {
+            $reais = implode(', ', array_values(array_unique(array_filter(
+                array_merge([$destino], $ccs)
+            ))));
+
+            $assunto = "[TESTE → {$reais}] {$assunto}";
+            $destino = $redirecionar;
+            $ccs = [];
+        }
+
+        $mail = Mail::to($destino);
         if ($ccs !== []) {
             $mail = $mail->cc($ccs);
         }
 
-        $mail->queue(new CadastroSolicitacaoMail($dados['subject'], $dados['body'], $anexoConteudo, $anexoNome));
+        $mail->queue(new CadastroSolicitacaoMail($assunto, $dados['body'], $anexoConteudo, $anexoNome));
     }
 
     /** Bobina tem ficha em PDF (mesma usada em `pdfBobina`) — vai anexada no e-mail. */

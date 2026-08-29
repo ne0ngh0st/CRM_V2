@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Notifications\RedefinirSenhaNotification;
 use App\Support\Uploads\Disco;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -52,6 +53,15 @@ class User extends Authenticatable
      * URL pública da foto (só uploads do v2 em storage/public/perfis).
      * Paths do legado (assets/img/perfis/...) não existem neste app.
      */
+    /**
+     * Troca a notificação de reset padrão do Laravel (inglês, assinada "Laravel")
+     * pela nossa, em pt_BR. Ver App\Notifications\RedefinirSenhaNotification.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new RedefinirSenhaNotification($token));
+    }
+
     public function getFotoUrlAttribute(): ?string
     {
         if (! $this->foto_perfil) {
