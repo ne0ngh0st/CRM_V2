@@ -44,6 +44,36 @@ class Disco
         return config('filesystems.uploads', 'public');
     }
 
+    /**
+     * URL para o navegador exibir um arquivo de upload.
+     *
+     * ⚠️ NÃO troque por `Disco::uploads()->url(...)`. Em produção o disco é o S3 e o
+     * bucket bloqueia acesso público — obrigatoriamente, porque o mesmo bucket guarda as
+     * planilhas de `exports/`, e cada uma contém a carteira inteira de um vendedor. Uma
+     * URL pública do S3 responde 403, e o sintoma é imagem quebrada sem erro nenhum no
+     * log do Laravel: para o PHP, gerar a URL funcionou. Descoberto em 2026-08-28, ao
+     * ativar o S3 em produção.
+     *
+     * Em disco local (dev) não há o que assinar, então cai no `url()` normal.
+     *
+     * ⚠️ Efeito colateral aceito: a URL assinada muda a cada renderização, então o
+     * navegador não reaproveita a imagem entre carregamentos de página. Hoje isso pesa
+     * pouco (as 166 imagens do catálogo de facas são assets versionados em
+     * `public/images/`, que nem passam por aqui — só upload de tela chega neste método).
+     * Se um dia pesar, a saída é CloudFront com Origin Access Control na frente do
+     * bucket, servindo URL estável e cacheável sem abrir o bucket.
+     */
+    public static function urlUpload(string $caminho): string
+    {
+        $disco = self::nomeUploads();
+
+        if (config("filesystems.disks.{$disco}.driver") === 's3') {
+            return self::uploads()->temporaryUrl($caminho, now()->addHour());
+        }
+
+        return self::uploads()->url($caminho);
+    }
+
     public static function nomeExports(): string
     {
         return config('filesystems.exports', 'local');

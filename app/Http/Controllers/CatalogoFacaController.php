@@ -211,7 +211,7 @@ class CatalogoFacaController extends Controller
             return '/'.ltrim($imagem, '/');
         }
 
-        return Disco::uploads()->url($imagem);
+        return Disco::urlUpload($imagem);
     }
 
     /** Só remove arquivo que foi enviado pela tela; imagem do legado é versionada. */

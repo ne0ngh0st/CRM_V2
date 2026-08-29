@@ -73,7 +73,7 @@ class User extends Authenticatable
          * um 404 na tag <img>, que custa infinitamente menos que uma ida ao S3 a cada
          * carregamento.
          */
-        return Disco::uploads()->url($this->foto_perfil);
+        return Disco::urlUpload($this->foto_perfil);
     }
 
     /**
