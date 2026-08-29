@@ -3,8 +3,10 @@
 // Uso: node loadtest.mjs [usuarios] [duracaoSegundos]
 
 const BASE_URL = process.env.LOADTEST_BASE_URL ?? 'http://localhost:8090';
-const EMAIL = 'antonio.barbosa@autopel.com';
-const PASSWORD = 'homolog123';
+const EMAIL = process.env.LOADTEST_EMAIL ?? 'antonio.barbosa@autopel.com';
+// ⚠️ Nunca chumbar senha de producao aqui: este arquivo e versionado. O default e a
+// senha do ambiente local; contra producao, passe LOADTEST_PASSWORD no ambiente.
+const PASSWORD = process.env.LOADTEST_PASSWORD ?? 'homolog123';
 const VIRTUAL_USERS = Number(process.argv[2] ?? 40);
 const DURATION_MS = Number(process.argv[3] ?? 30) * 1000;
 
@@ -36,6 +38,18 @@ function cookieHeader(jar) {
     return [...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
 }
 
+/*
+ * ⚠️ Contra PRODUCAO, use LOADTEST_SESSAO_UNICA=1.
+ *
+ * O login tem rate limit por e-mail+IP (5 tentativas). Quarenta usuarios virtuais
+ * autenticando com a mesma conta estouram o limite na hora e o teste mede 40 respostas
+ * 422, nao a aplicacao — foi o que aconteceu na primeira execucao contra producao, em
+ * 2026-08-29. Nao e defeito do sistema: e o controle de seguranca funcionando.
+ *
+ * Com sessao unica, autenticamos UMA vez e os 40 workers reusam o mesmo cookie. Mede
+ * concorrencia de requisicao, que e o objetivo; o que deixa de exercitar e contencao de
+ * sessoes distintas no Redis, que aqui e barato (um GET por request).
+ */
 async function loginVirtualUser(id) {
     const jar = new Map();
 
@@ -78,8 +92,21 @@ async function hitRoute(jar, path) {
     }
 }
 
+// Sessao compartilhada quando LOADTEST_SESSAO_UNICA=1 (obrigatorio contra producao).
+const SESSAO_UNICA = process.env.LOADTEST_SESSAO_UNICA === '1';
+// ⚠️ Guarda a PROMESSA, nao o resultado. Os 40 workers chamam isto ao mesmo tempo; se o
+// slot comecasse nulo e so fosse preenchido depois do await, todos veriam nulo e
+// disparariam 40 logins simultaneos — de volta ao rate limit que esta funcao evita.
+let sessaoCompartilhada = null;
+
+function obterSessao(id) {
+    if (!SESSAO_UNICA) return loginVirtualUser(id);
+    sessaoCompartilhada ??= loginVirtualUser(0);
+    return sessaoCompartilhada;
+}
+
 async function virtualUserLoop(id, stopAt, results) {
-    const { jar, ok, status } = await loginVirtualUser(id);
+    const { jar, ok, status } = await obterSessao(id);
     if (!ok) {
         results.push({ path: '/login', ms: 0, status, ok: false, error: 'login falhou' });
         return;
