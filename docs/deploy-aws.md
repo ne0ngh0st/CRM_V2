@@ -1105,6 +1105,57 @@ páginas subsecond no p50. Em produção deve ser melhor.
 ⚠️ **Avise antes de rodar contra produção** — 40 usuários virtuais geram carga real e
 poluem as métricas do CloudWatch.
 
+### 7.10 ✅ Resultados reais — executado em 2026-08-29
+
+**7.5 — Exportação assíncrona (5/5).** Modal na hora; job concluiu em **198 s** (a
+estimativa era ~95 s — dentro do `timeout` de 600 s, mas se a base dobrar encosta no
+limite); arquivo de 4 MiB no S3; notificação chegou **em tempo real** (badge do sino com a
+página aberta, WebSocket `connected`, sem reload); download com MIME correto; planilha com
+**91.294 linhas** = 91.293 clientes + cabeçalho, batendo com o banco. Baixar exportação de
+outro usuário deu **403 mesmo sendo admin**.
+
+**7.9 — Escopo por perfil (6/6).**
+
+| Quem | Clientes | Equipe | Páginas de gestor | Matéria-prima |
+|---|---:|---:|---|---|
+| Admin | 91.293 | 201 usuários | acessa | acessa |
+| Supervisor | 8.576 | **16** em 3 grupos | acessa | **403** |
+| Vendedor | **283** | — | redireciona ao Dashboard | 403 |
+
+Cliente próprio 200, cliente de outro vendedor **403**. Simulação entra e encerra, banner
+aparece e some, auditoria grava admin, alvo, IP e os dois horários.
+
+⚠️ O IP na auditoria é o **real do usuário**, não o do balanceador — confirma que o
+`trustProxies` funciona. Sem ele, toda a trilha registraria o IP do ALB e seria inútil.
+
+### 7.11 Teste de carga contra produção — 2026-08-29
+
+40 usuários virtuais, 45 s, escopo admin (pior caso). **2.217 requisições, ZERO erros,
+48,2 req/s** (referência local em Docker: 27,9).
+
+| Rota | p50 | p95 | p99 |
+|---|---:|---:|---:|
+| /cadastros | 76 ms | 157 ms | 324 ms |
+| /dashboard | 130 ms | 211 ms | 352 ms |
+| /leads | 134 ms | 234 ms | 378 ms |
+| /pedidos-abertos | 141 ms | 216 ms | 389 ms |
+| /carteira | 142 ms | 259 ms | 543 ms |
+| /metas | 147 ms | 242 ms | 488 ms |
+| /orcamentos | 162 ms | 297 ms | 569 ms |
+| /equipe | 184 ms | 387 ms | 688 ms |
+
+**Todo p95 dentro do orçamento de 400 ms.** Nenhum alarme disparou; o ALB registrou pico
+de 291 ms de média por minuto.
+
+⚠️ **Rodar com usuário DEDICADO, criado e apagado em volta do teste.** Duas razões: o
+login tem rate limit por e-mail+IP (5 tentativas), e 40 workers autenticando com a mesma
+conta estouram na hora — a primeira execução mediu 40 respostas 422, não a aplicação. E o
+teste faz centenas de requisições e mexe no `last_login_at` de quem emprestou a conta.
+
+```bash
+LOADTEST_BASE_URL=https://crm.autopel.online LOADTEST_EMAIL=... LOADTEST_PASSWORD=... LOADTEST_SESSAO_UNICA=1   node docker/loadtest.mjs 40 45
+```
+
 ### 7.9 Escopo por perfil (segurança de dados)
 
 Com 200 usuários e 6 perfis, um erro de escopo expõe carteira alheia:
@@ -1121,6 +1172,43 @@ Com 200 usuários e 6 perfis, um erro de escopo expõe carteira alheia:
 ---
 
 ## 8. Monitoramento
+
+### 8.0 ✅ Alarmes ativos — 2026-08-29
+
+Doze alarmes no tópico SNS `crm-v2-alertas`. Scripts em `infra/monitoramento/`.
+
+**Nove de infraestrutura**: 5xx, nó fora do rodízio, latência, CPU das duas EC2, memória e
+CPU do RDS, evictions e memória do Redis.
+
+**Três da aplicação** (`crm-v2-fila-travada`, `crm-v2-cache-esfriando`,
+`crm-v2-jobs-falhando`), alimentados por `metricas:publicar`, agendado a cada minuto.
+
+⚠️ **Os nove nativos NÃO teriam pego o incidente de 29/08.** Durante as seis horas de fila
+travada, a AWS via CPU em 0,4%, memória sobrando, ALB saudável e zero 5xx. O que estava
+quebrado era um número que só a aplicação conhece — daí as três métricas customizadas.
+
+⚠️ **`treat-missing-data=breaching` nos alarmes da aplicação**, ao contrário dos nativos.
+A diferença é entre "não houve erro" e "ninguém está reportando": nos nativos, dado ausente
+significa que nada de ruim aconteceu; nos da aplicação significa que o scheduler parou de
+publicar, ou seja, o próprio detector morreu. **Silêncio não pode ser lido como saúde.**
+
+**Um alarme tem três formas de estar quebrado, e nenhuma aparece olhando se ele existe.**
+Verifique as três:
+
+1. **Métrica sem dado** → fica em `INSUFFICIENT_DATA` para sempre.
+   `aws cloudwatch get-metric-statistics ...` tem que devolver pontos.
+2. **Dimensão errada** → aponta para recurso inexistente, mesmo sintoma do item 1.
+3. **Entrega** → a assinatura de e-mail nasce em `PendingConfirmation`, e nesse estado os
+   alarmes disparam e **ninguém recebe**. Confirme no link da AWS e depois force um
+   disparo real:
+
+```bash
+aws cloudwatch set-alarm-state --alarm-name crm-v2-no-fora-do-rodizio   --state-value ALARM --state-reason "teste de entrega"
+aws cloudwatch describe-alarm-history --alarm-name crm-v2-no-fora-do-rodizio --max-records 4
+```
+
+⚠️ `Successfully executed action` prova que o CloudWatch **publicou no SNS** — não que o
+e-mail chegou. O último salto só o destinatário confirma.
 
 ### 8.1 Alarmes mínimos (CloudWatch → SNS → seu e-mail)
 
@@ -1415,12 +1503,14 @@ a fila (jobs perdidos) junto com o cache.
 | 16 fotos de perfil com caminho do legado | Usuários caem no avatar padrão | Migrar ou limpar a coluna |
 | ~~Carga inicial de dados~~ | Feita em 2026-08-28 — ver 6.1.1 | ✅ |
 | Senhas dos beta testers | 200 usuários com senha inutilizável de propósito | Liberar sob demanda (6.4) |
-| Trocar `MAIL_MAILER` de `log` para `smtp` | Nenhum e-mail de Cadastros sai | Ao abrir o beta, não antes |
-| Alarmes do CloudWatch (seção 8) | Sem aviso de 5XX, latência ou fila parada | Semana 1 |
+| ~~Trocar `MAIL_MAILER` para `smtp`~~ | Feito em 2026-08-29. Os e-mails de Cadastros estão **redirecionados** para o Tony via `CADASTROS_REDIRECIONAR_PARA`; esvaziar essa variável é o que os solta para o PCP e o Cadastro | ⚠️ decisão pendente |
+| ~~Alarmes do CloudWatch~~ | Feito em 2026-08-29: 12 alarmes, entrega comprovada ponta a ponta — ver 8.1 | ✅ |
 | Access logs do ALB no S3 | Sem diagnóstico de latência por rota | Semana 1 |
 | ~~Uploads para o S3~~ | Feito em 2026-08-27 | ✅ |
 | Sincronização automática com o TOTVS | Dado envelhece entre cargas manuais | Depende do Adriano |
-| SES para e-mail transacional | Sem "esqueci minha senha" | Antes de abrir para todos |
+| ~~"Esqueci minha senha"~~ | Feito em 2026-08-29 (SMTP relay, não SES): e-mail em pt_BR com a marca, sem enumeração de usuário, inativo bloqueado | ✅ |
+| Paginação por cursor na Carteira | Hoje há um TETO de 30 páginas (`perf.max_paginas`), não uma correção | Se alguém reclamar de não alcançar registro |
+| 23 usuários com e-mail `@placeholder.sistema` | 16 ativos; não conseguem recuperar senha sozinhos | Antes vale trocar a chave do `import-usuarios` de `email` para `username`, senão a correção cria duplicados |
 | Laravel Pulse | Menos visibilidade de slow queries | Semana 1 |
 | Deferred props no Dashboard (Fase 4) | Só importa se o p99 mostrar picos | Quando houver evidência |
 | Recalibrar o prefetch | Política decidida sem métrica de produção | Após 1 semana de dados |
