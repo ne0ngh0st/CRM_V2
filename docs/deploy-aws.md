@@ -6,6 +6,10 @@
 >
 > **Este documento é para ser seguido de cima para baixo, num dia dedicado.** A ordem
 > importa: cada seção assume que a anterior foi concluída.
+>
+> ⚠️ **O deploy já foi feito** (2026-08-28) e o sistema está no ar. Antes de seguir
+> qualquer passo daqui, leia a **§0.0 (Estado atual)** logo abaixo: boa parte das seções
+> descreve o que já está pronto, e executá-las de novo às cegas refaria trabalho.
 
 ---
 
