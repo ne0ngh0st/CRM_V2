@@ -37,19 +37,23 @@ class PasswordResetTest extends TestCase
         $this->post('/forgot-password', ['email' => $user->email]);
 
         Notification::assertSentTo($user, RedefinirSenhaNotification::class, function ($n) use ($user) {
-            $mail = $n->toMail($user);
-            $texto = $mail->subject.' '.implode(' ', array_merge(
-                $mail->introLines,
-                $mail->outroLines,
-                [$mail->greeting, $mail->salutation, $mail->actionText]
-            ));
+            $html = $n->toMail($user)->render();
+            $texto = strip_tags($html);
 
             $this->assertStringContainsString('Redefinição de senha', $texto);
             $this->assertStringContainsString('FULANO DE TAL', $texto);
-            $this->assertStringContainsString('Autopel', $texto);
-            // O que denuncia a notificação padrão do Laravel:
+            $this->assertStringContainsString('Autopel Soluções', $texto);
+            $this->assertStringContainsString('Criar nova senha', $texto);
+            $this->assertStringContainsString('Se o botão não funcionar', $texto);
+
+            /*
+             * As frases que o template padrão do Laravel injeta. Foram exatamente elas
+             * que sobraram em inglês na primeira versão desta tela, então ficam travadas
+             * aqui: se alguém voltar a usar MailMessage, o teste acusa.
+             */
             $this->assertStringNotContainsString('Regards', $texto);
-            $this->assertStringNotContainsString('Reset Password', $texto);
+            $this->assertStringNotContainsString('having trouble clicking', $texto);
+            $this->assertStringNotContainsString('All rights reserved', $texto);
 
             return true;
         });

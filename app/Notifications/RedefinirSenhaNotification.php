@@ -2,10 +2,9 @@
 
 namespace App\Notifications;
 
+use App\Mail\RedefinirSenhaMail;
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\Lang;
 
 /**
  * E-mail de "esqueci minha senha".
@@ -31,7 +30,7 @@ class RedefinirSenhaNotification extends Notification
         return ['mail'];
     }
 
-    public function toMail(object $notifiable): MailMessage
+    public function toMail(object $notifiable): RedefinirSenhaMail
     {
         $url = url(route('password.reset', [
             'token' => $this->token,
@@ -41,15 +40,12 @@ class RedefinirSenhaNotification extends Notification
         // O tempo de validade vem da configuração, não de um número escrito à mão:
         // se alguém mudar 'expire' no config/auth.php, o texto acompanha em vez de
         // passar a mentir para o usuário.
-        $minutos = config('auth.passwords.'.config('auth.defaults.passwords').'.expire');
+        $minutos = (int) config('auth.passwords.'.config('auth.defaults.passwords').'.expire');
 
-        return (new MailMessage)
-            ->subject('Redefinição de senha — PALMA CRM')
-            ->greeting('Olá, '.($notifiable->display_name ?: $notifiable->name).'!')
-            ->line('Recebemos um pedido para redefinir a senha da sua conta no PALMA CRM.')
-            ->action('Redefinir minha senha', $url)
-            ->line("Por segurança, este link vale por {$minutos} minutos e só pode ser usado uma vez.")
-            ->line('Se você não pediu isso, ignore este e-mail — sua senha continua a mesma.')
-            ->salutation('Autopel Soluções');
+        return (new RedefinirSenhaMail(
+            url: $url,
+            nome: $notifiable->display_name ?: $notifiable->name,
+            minutos: $minutos,
+        ))->to($notifiable->getEmailForPasswordReset());
     }
 }

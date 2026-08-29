@@ -23,12 +23,15 @@ const submit = () => {
 
 <template>
     <GuestLayout>
-        <Head title="Forgot Password" />
+        <Head title="Esqueci minha senha" />
+
+        <h2 class="mb-1 text-lg font-semibold text-gray-900">
+            Esqueceu sua senha?
+        </h2>
 
         <div class="mb-4 text-sm text-gray-600">
-            Forgot your password? No problem. Just let us know your email
-            address and we will email you a password reset link that will allow
-            you to choose a new one.
+            Sem problema. Informe o e-mail cadastrado e enviamos um link para
+            você criar uma senha nova.
         </div>
 
         <div
@@ -40,7 +43,7 @@ const submit = () => {
 
         <form @submit.prevent="submit">
             <div>
-                <InputLabel for="email" value="Email" />
+                <InputLabel for="email" value="E-mail" />
 
                 <TextInput
                     id="email"
@@ -60,7 +63,7 @@ const submit = () => {
                     :class="{ 'opacity-25': form.processing }"
                     :disabled="form.processing"
                 >
-                    Email Password Reset Link
+                    Enviar link de redefinição
                 </PrimaryButton>
             </div>
         </form>
