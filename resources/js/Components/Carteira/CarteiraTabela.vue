@@ -50,10 +50,10 @@ function criarOrcamento(cliente) {
             <thead>
                 <tr class="tbl-head-row">
                     <SortableTh campo="nome" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Cliente</SortableTh>
-                    <SortableTh campo="grupo" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Grupo</SortableTh>
+                    <th class="tbl-th">Grupo</th>
                     <SortableTh campo="vendedor" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Vendedor</SortableTh>
                     <SortableTh campo="estado" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Estado</SortableTh>
-                    <SortableTh campo="segmento" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Segmento</SortableTh>
+                    <th class="tbl-th">Segmento</th>
                     <SortableTh campo="status" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Status</SortableTh>
                     <SortableTh campo="ultima_compra" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Última Compra</SortableTh>
                     <th class="tbl-th">Ações</th>

@@ -86,20 +86,57 @@ class CarteiraOrdenacaoTest extends TestCase
         );
     }
 
-    public function test_ordena_por_nome_do_grupo_e_nao_pelo_codigo(): void
+    /**
+     * Ordenar por grupo e por segmento foi REMOVIDO em 2026-08-29 (decisão do Tony).
+     *
+     * O nome dos dois mora em outra tabela, então ordenar exigia LEFT JOIN, e o join
+     * forçava filesort: 596 ms e 603 ms medidos em produção, contra 106 ms da ordenação
+     * padrão — fora do orçamento de 400 ms da Regra de ouro nº 9.
+     *
+     * Estes testes ficam para proteger a decisão: se alguém devolver os campos à
+     * whitelist de ORDENACOES, a suíte acusa.
+     *
+     * ⚠️ Os testes anteriores, que afirmavam ordenar por grupo/segmento, passavam por
+     * COINCIDÊNCIA: com três clientes chamados ALFA, MEIO e ZETA, a ordem por nome do
+     * grupo era a mesma que por razão social, então as asserções eram verdadeiras nos
+     * dois casos. Eles continuaram verdes depois da remoção da feature — não protegiam
+     * nada. Por isso agora a asserção é sobre a ordem COMPLETA, não sobre as pontas.
+     */
+    public function test_grupo_nao_e_campo_ordenavel_e_cai_no_nome(): void
     {
-        // DROGARAIA (cód. 13) antes de GRUPO CARREFOUR (cód. 279) — mesma ordem
-        // por código e por nome seria coincidência; aqui elas divergem.
-        $ordem = $this->ordemPara('grupo_asc');
-
-        $this->assertSame('ZETA COMERCIO', end($ordem), 'o grupo CARREFOUR deveria vir por último');
-        $this->assertContains($ordem[0], ['ALFA DISTRIBUIDORA', 'MEIO LTDA']);
+        $this->assertSame(
+            $this->ordemPara('nome_asc'),
+            $this->ordemPara('grupo_asc'),
+            'grupo saiu da whitelist: deve cair no padrão (nome), não ordenar por grupo'
+        );
     }
 
-    public function test_ordena_por_nome_do_segmento(): void
+    public function test_segmento_nao_e_campo_ordenavel_e_cai_no_nome(): void
     {
-        // DROGARIAS (109) antes de SUPERMERCADISTA (101): por código seria o inverso.
-        $this->assertSame('ALFA DISTRIBUIDORA', $this->ordemPara('segmento_asc')[0]);
+        $this->assertSame(
+            $this->ordemPara('nome_asc'),
+            $this->ordemPara('segmento_asc'),
+            'segmento saiu da whitelist: deve cair no padrão (nome)'
+        );
+    }
+
+    /**
+     * O OFFSET do MySQL fica caro com a distância: 93 ms na página 1 e 2.462 ms na 3000,
+     * medidos em produção com 91.293 clientes. Acima de 2 s a Regra nº 9 manda tornar
+     * assíncrono — e era alcançável num clique, porque a paginação linka a última página.
+     */
+    public function test_pagina_muito_profunda_e_limitada_ao_teto(): void
+    {
+        config(['perf.max_paginas' => 2]);
+
+        $resposta = $this->actingAs($this->admin)->get(route('carteira.index', ['page' => 9999]));
+        $resposta->assertOk();
+
+        $this->assertSame(
+            2,
+            $resposta->viewData('page')['props']['clientes']['current_page'],
+            'a página pedida deveria ter sido limitada ao teto de perf.max_paginas'
+        );
     }
 
     public function test_ultima_compra_desc_joga_quem_nunca_comprou_pro_fim(): void

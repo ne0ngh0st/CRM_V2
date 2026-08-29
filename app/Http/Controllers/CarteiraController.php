@@ -160,16 +160,17 @@ class CarteiraController extends Controller
         $kpis = $this->aderencia($request, $codVendedores);
 
         /*
-         * O total é contado por `filtradaQuery()`, que NÃO tem o join de ordenação.
-         * Ordenar por nome de grupo/segmento faz um LEFT JOIN, e sem isso o COUNT da
-         * paginação pagaria o join também: medido em ~450ms dos ~610ms totais.
-         * O join é num campo `unique` (`grupos_cliente.codigo`, `segmentos.codigo`),
-         * então é 1:1 no máximo e não muda a contagem — a conta continua correta.
-         * Se algum dia entrar aqui um join que possa multiplicar linha, este atalho
-         * deixa de valer e o total sai errado.
+         * O total vem de `filtradaQuery()`, sem a camada de ordenação. Continua valendo
+         * como separação de responsabilidade — contar não precisa ordenar —, embora o
+         * ganho original tenha sumido junto com os joins de grupo/segmento (removidos em
+         * 2026-08-29, ver ORDENACOES).
+         *
+         * ⚠️ `paginaSegura()` limita a profundidade. Sem isso, `?page=3044` custava
+         * 2,5 s: o MySQL lê e descarta todas as linhas do OFFSET antes de devolver 30.
+         * E era alcançável num clique — a paginação renderiza link para a última página.
          */
         $clientes = $this->listaQuery($request)
-            ->paginate(perPage: 30, total: $this->filtradaQuery($request)->count())
+            ->paginate(perPage: 30, total: $this->filtradaQuery($request)->count(), page: $this->paginaSegura($request))
             ->withQueryString();
 
         $codVendedoresPresentes = $clientes->getCollection()->pluck('cod_vendedor')->filter()->unique()->values();
@@ -358,10 +359,25 @@ class CarteiraController extends Controller
      */
     private const ORDENACOES = [
         'nome' => ['coluna' => 'clientes.razao_social'],
-        'grupo' => ['coluna' => 'grp_ord.nome', 'join' => 'grupo'],
         'vendedor' => ['coluna' => 'clientes.cod_vendedor'],
         'estado' => ['coluna' => 'clientes.estado'],
-        'segmento' => ['coluna' => 'seg_ord.nome', 'join' => 'segmento'],
+        /*
+         * ⚠️ NÃO reintroduzir 'grupo' e 'segmento' aqui.
+         *
+         * O nome dos dois mora em outra tabela (grupos_cliente / segmentos), então
+         * ordenar por eles exige LEFT JOIN, e o join força filesort: medido em produção,
+         * 596 ms (grupo) e 603 ms (segmento) no escopo admin, contra 106 ms da ordenação
+         * padrão — acima do orçamento de 400 ms da Regra de ouro nº 9.
+         *
+         * Removidos por decisão do Tony em 2026-08-29: ordenar por essas duas colunas não
+         * tem uso real. Quem precisa recortar por grupo ou segmento usa o FILTRO, que é
+         * barato porque compara o código na própria tabela `clientes` (138 ms medidos) em
+         * vez de ordenar pelo nome que veio do join.
+         *
+         * Se algum dia voltar a fazer falta, a saída já medida é o "deferred id":
+         * ordenar só `id` num subselect e buscar as linhas depois (501 ms → 135 ms em
+         * desenvolvimento). Não foi feito porque não compõe bem com `paginate()`.
+         */
         // Status é derivado de data_ultima_compra por faixas, então ordenar por
         // um é ordenar pelo outro. Só inverte o sentido: "status asc" é
         // Ativo -> Inativo, que é compra mais RECENTE primeiro.
@@ -416,6 +432,35 @@ class CarteiraController extends Controller
      * `ordenar` chega como "<campo>_<asc|desc>" (ex.: "grupo_desc"). Campo fora da
      * whitelist ou direção inválida cai no padrão, sem erro pro usuário.
      */
+    /**
+     * Limita a profundidade da paginação.
+     *
+     * O custo do `OFFSET` do MySQL cresce com a distância, porque ele lê e descarta todas
+     * as linhas anteriores antes de devolver as 30 da página. Medido em produção, com os
+     * 91.293 clientes do escopo admin:
+     *
+     *   página    1 →    93 ms
+     *   página   10 →    87 ms
+     *   página   50 →   719 ms
+     *   página  100 → 1.600 ms
+     *   página 3000 → 2.462 ms
+     *
+     * Acima de 2 s a Regra de ouro nº 9 diz que não pode ser síncrono — e isto era
+     * alcançável num clique, porque a paginação renderiza link para a última página
+     * (3043 e 3044, com 91 mil clientes).
+     *
+     * ⚠️ Isto é um TETO, não uma correção. Quem precisa chegar longe na lista deveria
+     * usar busca ou filtro, que continuam baratos (138-244 ms medidos). A correção de
+     * verdade seria paginação por cursor (keyset), que não tem esse custo — mas ela
+     * remove a navegação por número de página, que é o que a tela usa hoje.
+     */
+    protected function paginaSegura(Request $request): int
+    {
+        $pedida = max(1, (int) $request->integer('page', 1));
+
+        return min($pedida, (int) config('perf.max_paginas', 40));
+    }
+
     protected function aplicarOrdenacao(Builder $query, string $ordenar): Builder
     {
         preg_match('/^(.*)_(asc|desc)$/', $ordenar, $partes);
@@ -428,14 +473,6 @@ class CarteiraController extends Controller
         if (($config['inverter'] ?? false)) {
             $direcao = $direcao === 'asc' ? 'desc' : 'asc';
         }
-
-        // Aliases: `listaQuery` já pode ter dado join em `segmentos` pro filtro de
-        // aderência — sem alias o segundo join quebra com "Not unique table/alias".
-        match ($config['join'] ?? null) {
-            'grupo' => $query->leftJoin('grupos_cliente as grp_ord', 'grp_ord.codigo', '=', 'clientes.cod_grupo'),
-            'segmento' => $query->leftJoin('segmentos as seg_ord', 'seg_ord.codigo', '=', 'clientes.cod_segmento'),
-            default => null,
-        };
 
         /*
          * ⚠️ Sem `data_ultima_compra IS NULL` na frente, que é como isto era escrito.

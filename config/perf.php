@@ -103,6 +103,22 @@ return [
     'ttl_lookup_minutos' => 360,
 
     /*
+     * Teto de profundidade da paginação.
+     *
+     * O custo do OFFSET do MySQL cresce com a distância: com os 91.293 clientes do escopo
+     * admin, a página 1 responde em 93 ms e a 3000 em 2.462 ms — acima dos 2 s que a Regra
+     * de ouro nº 9 manda tornar assíncrono. E era alcançável num clique, porque a
+     * paginação renderiza link para a última página.
+     *
+     * 40 páginas × 30 por página = 1.200 registros, ~600 ms no pior caso medido. Quem
+     * precisa ir além disso deveria usar busca ou filtro, que continuam baratos.
+     *
+     * ⚠️ Vale para QUALQUER listagem que chame `paginaSegura()`. Aumentar este número
+     * traz de volta o custo do OFFSET — reler a tabela de medição acima antes de mexer.
+     */
+    'max_paginas' => 40,
+
+    /*
      * Quais escopos o job de warming aquece.
      *
      * ⚠️ 'vendedores' => false é DELIBERADO, não esquecimento. São ~200 vendedores e o
