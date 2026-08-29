@@ -498,7 +498,8 @@ O mesmo vale para `--matcher HttpCode=200,404`, que o CLI le como lista — use 
 |---|---|---|
 | `crm-alb` | 80, 443 | `0.0.0.0/0` |
 | `crm-app` | 80 | SG `crm-alb` |
-| `crm-app` | 8080 | SG `crm-alb` (Reverb) |
+| `crm-app` | 8080 | SG `crm-alb` (Reverb — tráfego do navegador) |
+| `crm-app` | 8080 | **SG `crm-app` (ele mesmo)** ⚠️ sem esta, a fila trava — ver 9.18 |
 | `crm-app` | 22 | **seu IP fixo**, não `0.0.0.0/0` |
 | `crm-db` | 3306 | SG `crm-app` |
 | `crm-redis` | 6379 | SG `crm-app` |
@@ -1236,6 +1237,40 @@ tempo com essa hipótese de novo; se um dia divergirem de verdade, aí sim o sin
 saída **anuncia sucesso com o sistema quebrado** — foi o que o `ativar-s3.sh` fez na
 primeira execução, imprimindo "S3 ATIVO NOS DOIS NÓS" com a prova falhando. Conferir o
 TEXTO da saída, e exigir a contagem esperada de "OK".
+
+### 9.18 🔴 SG sem regra de 8080 para si mesmo trava a FILA INTEIRA
+**Incidente real, 2026-08-29, 6 horas de fila parada.** O SG `crm-v2-app` liberava a porta
+8080 apenas a partir do SG do ALB. Isso cobre o navegador chegando ao Reverb — e **não**
+cobre o PHP do app-2 chegando ao Reverb do app-1, que é o outro caminho, pelo IP privado.
+
+O estrago não fica no sino, fica na fila:
+
+1. Às 07:00 os jobs diários criaram **2.792 notificações**.
+2. Cada uma enfileira um `BroadcastEvent`, que tenta `POST` no Reverb e **pendura 10 s** até
+   o timeout do cURL (`cURL error 28`).
+3. Com um worker só, 2.792 × 10 s ≈ **7,7 horas** de fila ocupada.
+4. O `AquecerCacheDashboardJob` ficou atrás disso e **não rodou por 6 horas** — o cache
+   esfriou e as páginas voltaram a pagar a agregação fria.
+
+⚠️ **O sintoma que aparece primeiro é "o cache está frio", não "o sino não funciona".** Se o
+warming parar, olhe a fila antes de suspeitar do scheduler: `queue:failed` e o log do worker
+contam a história em segundos.
+
+**A regra que faltava** (auto-referência ao próprio SG):
+
+```bash
+aws ec2 authorize-security-group-ingress --group-id <sg-crm-v2-app> \
+  --ip-permissions 'IpProtocol=tcp,FromPort=8080,ToPort=8080,UserIdGroupPairs=[{GroupId=<sg-crm-v2-app>}]'
+```
+
+⚠️ Descrição de regra de SG **não aceita `>`** — a AWS devolve `InvalidParameterValue` sem
+dizer qual caractere ofendeu.
+
+⚠️ **Por que o teste 7.7 não pegou:** ele verifica o WebSocket conectando pelo navegador,
+que passa pelo ALB — um caminho que sempre funcionou. O caminho servidor→Reverb nunca foi
+testado. Mais um caso do padrão da 5.4.1: **verificar um caminho e concluir sobre outro.**
+Teste que vale: `bash -c 'cat < /dev/null > /dev/tcp/<ip-privado-app-1>/8080'` **a partir do
+app-2**.
 
 ---
 
