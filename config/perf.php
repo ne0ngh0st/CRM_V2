@@ -105,18 +105,35 @@ return [
     /*
      * Teto de profundidade da paginação.
      *
-     * O custo do OFFSET do MySQL cresce com a distância: com os 91.293 clientes do escopo
-     * admin, a página 1 responde em 93 ms e a 3000 em 2.462 ms — acima dos 2 s que a Regra
-     * de ouro nº 9 manda tornar assíncrono. E era alcançável num clique, porque a
-     * paginação renderiza link para a última página.
+     * ⚠️ O motivo NÃO é o custo do OFFSET crescer aos poucos — foi o que eu supus, e o
+     * EXPLAIN desmentiu. É uma TROCA DE PLANO do otimizador do MySQL, e ela é um
+     * penhasco, não uma rampa. Medido em produção, com os 91.293 clientes do escopo
+     * admin, ordenando por `razao_social`:
      *
-     * 40 páginas × 30 por página = 1.200 registros, ~600 ms no pior caso medido. Quem
-     * precisa ir além disso deveria usar busca ou filtro, que continuam baratos.
+     *   página 30 (offset  870) → type=index, usa clientes_razao_social_index,
+     *                             lê    900 linhas →   96 ms
+     *   página 37 (offset 1080) → ainda pelo índice, lê 1.110 linhas
+     *   página 40 (offset 1170) → type=ALL, key=NULL, Using filesort,
+     *                             lê 90.770 linhas → 1.084 ms
      *
-     * ⚠️ Vale para QUALQUER listagem que chame `paginaSegura()`. Aumentar este número
-     * traz de volta o custo do OFFSET — reler a tabela de medição acima antes de mexer.
+     * Passado esse ponto o otimizador conclui que varrer a tabela inteira e ordenar sai
+     * mais barato que caminhar o índice — e o tempo salta 10x de uma página para a outra.
+     * Sem teto, a última página (3.044, alcançável num clique) custava 2,5 s, acima do
+     * limite de 2 s que a Regra de ouro nº 9 manda tornar assíncrono.
+     *
+     * 30 páginas × 30 por página = 900 registros, todos abaixo de 150 ms medidos, com
+     * margem confortável até a virada. Um vendedor com 283 clientes tem 10 páginas e
+     * nunca encosta nisto; quem precisa ir além usa busca ou filtro, que seguem baratos
+     * (138-244 ms).
+     *
+     * ⚠️ O ponto da virada depende do tamanho da tabela e das estatísticas do MySQL,
+     * então ele se move. A margem existe para absorver isso — mas se `clientes` crescer
+     * muito, vale refazer o EXPLAIN em vez de confiar neste número.
+     *
+     * ⚠️ É um TETO, não uma correção. A correção seria paginação por cursor (keyset), que
+     * não tem esse comportamento — mas ela remove a navegação por número de página.
      */
-    'max_paginas' => 40,
+    'max_paginas' => 30,
 
     /*
      * Quais escopos o job de warming aquece.

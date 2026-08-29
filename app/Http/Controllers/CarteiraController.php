@@ -165,9 +165,9 @@ class CarteiraController extends Controller
          * ganho original tenha sumido junto com os joins de grupo/segmento (removidos em
          * 2026-08-29, ver ORDENACOES).
          *
-         * ⚠️ `paginaSegura()` limita a profundidade. Sem isso, `?page=3044` custava
-         * 2,5 s: o MySQL lê e descarta todas as linhas do OFFSET antes de devolver 30.
-         * E era alcançável num clique — a paginação renderiza link para a última página.
+         * ⚠️ `paginaSegura()` limita a profundidade. Sem isso, `?page=3044` custava 2,5 s
+         * — não por o OFFSET encarecer aos poucos, mas porque o otimizador do MySQL troca
+         * de plano e passa a varrer a tabela inteira com filesort. Ver `paginaSegura()`.
          */
         $clientes = $this->listaQuery($request)
             ->paginate(perPage: 30, total: $this->filtradaQuery($request)->count(), page: $this->paginaSegura($request))
@@ -435,19 +435,18 @@ class CarteiraController extends Controller
     /**
      * Limita a profundidade da paginação.
      *
-     * O custo do `OFFSET` do MySQL cresce com a distância, porque ele lê e descarta todas
-     * as linhas anteriores antes de devolver as 30 da página. Medido em produção, com os
-     * 91.293 clientes do escopo admin:
+     * ⚠️ A causa NÃO é o OFFSET encarecendo aos poucos — foi o que supus, e o EXPLAIN
+     * desmentiu. É uma troca de plano do otimizador do MySQL, e ela é um penhasco:
      *
-     *   página    1 →    93 ms
-     *   página   10 →    87 ms
-     *   página   50 →   719 ms
-     *   página  100 → 1.600 ms
-     *   página 3000 → 2.462 ms
+     *   página 30 (offset  870) → type=index, lê    900 linhas →    96 ms
+     *   página 40 (offset 1170) → type=ALL + filesort, lê 90.770 → 1.084 ms
      *
-     * Acima de 2 s a Regra de ouro nº 9 diz que não pode ser síncrono — e isto era
-     * alcançável num clique, porque a paginação renderiza link para a última página
-     * (3043 e 3044, com 91 mil clientes).
+     * Páginas 1 a 37 ficam todas entre 90 e 150 ms; da 40 em diante o otimizador conclui
+     * que varrer a tabela inteira sai mais barato que caminhar o índice. Sem teto, a
+     * última página (3.044, alcançável num clique) custava 2,5 s — acima dos 2 s que a
+     * Regra de ouro nº 9 manda tornar assíncrono.
+     *
+     * O teto e o raciocínio completo estão em `config/perf.php`, chave `max_paginas`.
      *
      * ⚠️ Isto é um TETO, não uma correção. Quem precisa chegar longe na lista deveria
      * usar busca ou filtro, que continuam baratos (138-244 ms medidos). A correção de
