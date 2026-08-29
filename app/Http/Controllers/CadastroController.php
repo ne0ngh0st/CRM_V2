@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ExportaPlanilha;
+use App\Mail\CadastroSolicitacaoMail;
 use App\Models\ClienteParaCadastro;
 use App\Models\Lead;
 use App\Models\SolicitacaoBobina;
@@ -10,12 +11,14 @@ use App\Models\SolicitacaoEtiqueta;
 use App\Models\User;
 use App\Services\Cadastros\SolicitacaoTituloResolver;
 use App\Services\Solicitacoes\BobinaPdfPresenter;
+use App\Services\Solicitacoes\EtiquetaPdfPresenter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -36,10 +39,15 @@ class CadastroController extends Controller
         'Automotivo', 'Industrial', 'Comercial', 'Logística', 'Residencial', 'Agrícola', 'Outros',
     ];
 
+    /**
+     * Destravado em 2026-08-28 depois do Tony confirmar o SMTP validado.
+     * `cadastroCliente` é `cadastro.geral@autopel.com` — mudou recentemente,
+     * não é mais `cadastro.cliente@autopel.com`.
+     */
     private const EMAILS = [
         'pcp' => 'pcp.sp@autopel.com',
         'cadastro' => 'cadastro@autopel.com',
-        'cadastroCliente' => 'cadastro.cliente@autopel.com',
+        'cadastroCliente' => 'cadastro.geral@autopel.com',
     ];
 
     public function __construct(
@@ -87,7 +95,7 @@ class CadastroController extends Controller
                 'codVendedor' => $codVendedor,
                 'emails' => self::EMAILS,
             ],
-            'flashMailto' => $request->session()->get('flashMailto'),
+            'flashEnvio' => $request->session()->get('flashEnvio'),
         ]);
     }
 
@@ -107,6 +115,24 @@ class CadastroController extends Controller
 
         $pdf = Pdf::loadView('solicitacoes.bobina-pdf', app(BobinaPdfPresenter::class)->montar($bobina));
         $nomeArquivo = "solicitacao-bobina-{$bobina->id}.pdf";
+
+        return $request->boolean('download')
+            ? $pdf->download($nomeArquivo)
+            : $pdf->stream($nomeArquivo);
+    }
+
+    /** Ficha da solicitação de etiqueta em PDF — mesmo padrão da bobina. */
+    public function pdfEtiqueta(Request $request, SolicitacaoEtiqueta $etiqueta): HttpResponse
+    {
+        $user = $request->user();
+        $isGestor = in_array($user->getRoleNames()->first(), ['admin', 'diretor', 'supervisor'], true);
+
+        abort_unless($isGestor || $etiqueta->user_id === $user->id, 403);
+
+        $etiqueta->load('enviadoPor');
+
+        $pdf = Pdf::loadView('solicitacoes.etiqueta-pdf', app(EtiquetaPdfPresenter::class)->montar($etiqueta));
+        $nomeArquivo = "solicitacao-etiqueta-{$etiqueta->id}.pdf";
 
         return $request->boolean('download')
             ? $pdf->download($nomeArquivo)
@@ -251,14 +277,17 @@ class CadastroController extends Controller
             'gramatura' => ['nullable', Rule::in(['44', '48', '55', '72', '105', '167'])],
             'largura' => ['nullable', Rule::in(['50', '55', '57', '58', '60', '69', '76', '80', '82', '88', '100', '104', '105', '110', '111', '112', '210', '400'])],
             'metragem' => ['nullable', 'numeric', 'min:0'],
-            'diametro_tubete' => ['nullable', 'numeric', 'min:0'],
+            'tubete_obrigatorio' => ['nullable', Rule::in(['sim', 'nao'])],
+            'diametro_tubete' => ['nullable', 'numeric', 'min:0', 'required_if:tubete_obrigatorio,sim'],
             'estoque_seguranca_sn' => ['nullable', Rule::in(['sim', 'nao'])],
             'estoque_seguranca' => ['nullable', 'integer', 'min:0', 'required_if:estoque_seguranca_sn,sim'],
-            'impressao' => ['nullable', Rule::in(['verso', 'frente_lado_termico', 'frente_verso'])],
-            'rebobinamento' => ['nullable', Rule::in(['lado_termico_fora', 'lado_termico_dentro'])],
             'observacoes' => ['nullable', 'string'],
             'nf_pedido_tipo' => ['nullable', Rule::in(['venda', 'servico'])],
         ]);
+
+        if (($data['tubete_obrigatorio'] ?? '') !== 'sim') {
+            $data['diametro_tubete'] = null;
+        }
 
         $titulo = $this->tituloResolver->bobina(
             $data['nomenclatura'],
@@ -277,7 +306,9 @@ class CadastroController extends Controller
             'status' => 'pendente',
         ]);
 
-        return back()->with('flashMailto', $this->mailtoBobina($solicitacao));
+        $this->enviarEmailBobina($solicitacao);
+
+        return back()->with('flashEnvio', $this->flashEnvio($this->mailtoBobina($solicitacao)));
     }
 
     public function enviarBobina(Request $request, SolicitacaoBobina $bobina): RedirectResponse
@@ -290,7 +321,10 @@ class CadastroController extends Controller
             'enviado_em' => now(),
         ]);
 
-        return back()->with('flashMailto', $this->mailtoBobina($bobina->fresh()));
+        $bobina = $bobina->fresh();
+        $this->enviarEmailBobina($bobina);
+
+        return back()->with('flashEnvio', $this->flashEnvio($this->mailtoBobina($bobina)));
     }
 
     public function destroyBobina(Request $request, SolicitacaoBobina $bobina): RedirectResponse
@@ -339,7 +373,9 @@ class CadastroController extends Controller
             'status' => 'pendente',
         ]);
 
-        return back()->with('flashMailto', $this->mailtoEtiqueta($solicitacao));
+        $this->enviarEmailEtiqueta($solicitacao);
+
+        return back()->with('flashEnvio', $this->flashEnvio($this->mailtoEtiqueta($solicitacao)));
     }
 
     public function enviarEtiqueta(Request $request, SolicitacaoEtiqueta $etiqueta): RedirectResponse
@@ -352,7 +388,10 @@ class CadastroController extends Controller
             'enviado_em' => now(),
         ]);
 
-        return back()->with('flashMailto', $this->mailtoEtiqueta($etiqueta->fresh()));
+        $etiqueta = $etiqueta->fresh();
+        $this->enviarEmailEtiqueta($etiqueta);
+
+        return back()->with('flashEnvio', $this->flashEnvio($this->mailtoEtiqueta($etiqueta)));
     }
 
     public function destroyEtiqueta(Request $request, SolicitacaoEtiqueta $etiqueta): RedirectResponse
@@ -451,7 +490,9 @@ class CadastroController extends Controller
             'status' => 'pendente',
         ]);
 
-        return back()->with('flashMailto', $this->mailtoCliente($cliente));
+        $this->enviarEmail($this->mailtoCliente($cliente));
+
+        return back()->with('flashEnvio', $this->flashEnvio($this->mailtoCliente($cliente)));
     }
 
     public function destroyCliente(Request $request, ClienteParaCadastro $cliente): RedirectResponse
@@ -552,6 +593,7 @@ class CadastroController extends Controller
             'gramatura' => $s->gramatura,
             'largura' => $s->largura,
             'metragem' => $s->metragem !== null ? (float) $s->metragem : null,
+            'tubeteObrigatorio' => $s->tubete_obrigatorio,
             'diametroTubete' => $s->diametro_tubete !== null ? (float) $s->diametro_tubete : null,
             'estoqueSeguranca' => $s->estoque_seguranca,
             'impressao' => $s->impressao,
@@ -624,80 +666,272 @@ class CadastroController extends Controller
         ];
     }
 
-    /** @return array{to: string, cc: ?string, subject: string, body: string} */
+    /**
+     * Envia (enfileirado) o e-mail de notificação pro setor responsável.
+     * O solicitante SEMPRE vai em cópia (pedido do Tony, 2026-08-28) — além
+     * do `cc` fixo do setor (quando houver), nunca no lugar dele.
+     */
+    private function enviarEmail(array $dados, ?string $anexoConteudo = null, ?string $anexoNome = null): void
+    {
+        $ccs = array_values(array_unique(array_filter([
+            $dados['cc'] ?? null,
+            $dados['solicitanteEmail'] ?? null,
+        ])));
+
+        $mail = Mail::to($dados['to']);
+        if ($ccs !== []) {
+            $mail = $mail->cc($ccs);
+        }
+
+        $mail->queue(new CadastroSolicitacaoMail($dados['subject'], $dados['body'], $anexoConteudo, $anexoNome));
+    }
+
+    /** Bobina tem ficha em PDF (mesma usada em `pdfBobina`) — vai anexada no e-mail. */
+    private function enviarEmailBobina(SolicitacaoBobina $bobina): void
+    {
+        $bobina->loadMissing('user', 'enviadoPor');
+        $pdfBinario = Pdf::loadView('solicitacoes.bobina-pdf', app(BobinaPdfPresenter::class)->montar($bobina))->output();
+
+        $this->enviarEmail($this->mailtoBobina($bobina), $pdfBinario, "solicitacao-bobina-{$bobina->id}.pdf");
+    }
+
+    /** Etiqueta tem ficha em PDF (mesma usada em `pdfEtiqueta`) — vai anexada no e-mail. */
+    private function enviarEmailEtiqueta(SolicitacaoEtiqueta $etiqueta): void
+    {
+        $etiqueta->loadMissing('user', 'enviadoPor');
+        $pdfBinario = Pdf::loadView('solicitacoes.etiqueta-pdf', app(EtiquetaPdfPresenter::class)->montar($etiqueta))->output();
+
+        $this->enviarEmail($this->mailtoEtiqueta($etiqueta), $pdfBinario, "solicitacao-etiqueta-{$etiqueta->id}.pdf");
+    }
+
+    /** @param array{to: string, cc: ?string, solicitanteEmail?: ?string, subject: string, body: string} $dados */
+    private function flashEnvio(array $dados): array
+    {
+        $ccs = array_values(array_unique(array_filter([$dados['cc'] ?? null, $dados['solicitanteEmail'] ?? null])));
+        $destino = $dados['to'].($ccs !== [] ? ' (cc: '.implode(', ', $ccs).')' : '');
+
+        return [
+            'mensagem' => "E-mail enviado para {$destino}.",
+        ];
+    }
+
+    /**
+     * Cabeçalho de seção no padrão "TÍTULO\n======\n\n" — formato do legado
+     * (`pages/SISTEMA/cadastro.php::montarCorpoEmailCadastro`), unificado aqui
+     * pros 3 tipos de e-mail em vez das duas convenções que coexistiam lá
+     * (cabeçalho sublinhado pro cliente, "— TÍTULO —" pra bobina/etiqueta).
+     */
+    private function cabecalhoSecao(string $titulo): string
+    {
+        return $titulo."\n".str_repeat('=', mb_strlen($titulo))."\n\n";
+    }
+
+    /** @param array<string, mixed> $pares rótulo => valor (null/vazio vira "-") */
+    private function linhas(array $pares): string
+    {
+        $corpo = '';
+        foreach ($pares as $rotulo => $valor) {
+            $corpo .= $rotulo.': '.($valor === null || $valor === '' ? '-' : $valor)."\n";
+        }
+
+        return $corpo;
+    }
+
+    /** @param array<string, mixed> $pares */
+    private function secao(string $titulo, array $pares): string
+    {
+        return $this->cabecalhoSecao($titulo).$this->linhas($pares)."\n";
+    }
+
+    private function blocoTexto(string $titulo, string $texto): string
+    {
+        return $this->cabecalhoSecao($titulo).$texto."\n\n";
+    }
+
+    private function assinaturaEmail(): string
+    {
+        return "Atenciosamente,\nSistema de Gestão Comercial Autopel\n© ".now()->year.' Autopel - Todos os direitos reservados';
+    }
+
+    private function simNao(?string $valor): string
+    {
+        return match (mb_strtolower(trim((string) $valor))) {
+            'sim' => 'Sim',
+            'nao', 'não' => 'Não',
+            default => '-',
+        };
+    }
+
+    /**
+     * @return array{to: string, cc: ?string, solicitanteEmail: ?string, subject: string, body: string}
+     */
     private function mailtoBobina(SolicitacaoBobina $s): array
     {
-        $linhas = [
-            'Há uma nova solicitação de cadastro de bobina registrada no sistema.',
-            '',
-            'Título TOTVS: '.$s->titulo_padronizado,
-            'Nomenclatura: '.$s->nomenclatura,
-            'Solicitante: '.$s->solicitante_nome,
-            'Papel: '.($s->papel ?: '—'),
-            'Largura: '.($s->largura ?: '—'),
-            'Metragem: '.($s->metragem !== null ? (string) $s->metragem : '—'),
-            'Observações: '.($s->observacoes ?: '—'),
-        ];
+        $s->loadMissing('user');
+        $presenter = app(BobinaPdfPresenter::class)->montar($s);
+
+        $corpo = "Olá equipe,\n\n";
+        $corpo .= "Há uma nova solicitação de cadastro de bobina registrada no sistema.\n\n";
+        $corpo .= "ID INTERNO: {$s->id}\n";
+        $corpo .= $this->secao('RESUMO', $presenter['resumo']);
+        $corpo .= $this->secao('INFORMAÇÕES COMERCIAIS', $presenter['comerciais']);
+        $corpo .= $this->secao('CARACTERÍSTICAS TÉCNICAS', $presenter['tecnicas']);
+
+        if ($s->observacoes) {
+            $corpo .= $this->blocoTexto('OBSERVAÇÕES', $s->observacoes);
+        }
+
+        $corpo .= "A ficha completa em PDF está anexada a este e-mail.\n\n";
+        $corpo .= $this->assinaturaEmail();
 
         return [
             'to' => self::EMAILS['pcp'],
             'cc' => self::EMAILS['cadastro'],
+            'solicitanteEmail' => $s->user?->email,
             'subject' => '[Cadastro de Bobina] '.$s->titulo_padronizado,
-            'body' => implode("\n", $linhas),
+            'body' => $corpo,
         ];
     }
 
-    /** @return array{to: string, cc: ?string, subject: string, body: string} */
+    /**
+     * @return array{to: string, cc: ?string, solicitanteEmail: ?string, subject: string, body: string}
+     */
     private function mailtoEtiqueta(SolicitacaoEtiqueta $s): array
     {
-        $linhas = [
-            'Há uma nova solicitação de cadastro de etiqueta registrada no sistema.',
-            '',
-            'Título TOTVS: '.$s->titulo_padronizado,
-            'Nomenclatura: '.$s->nomenclatura,
-            'Solicitante: '.$s->solicitante_nome,
-            'Medidas: '.($s->medidas ?: '—'),
-            'Adesivo: '.($s->tipo_adesivo ?: '—'),
-            'Saída: '.strtoupper($s->saida_rolo ?? 'f1'),
-            'Observações: '.($s->observacoes ?: '—'),
-        ];
+        $s->loadMissing('user');
+
+        $corpo = "Olá equipe,\n\n";
+        $corpo .= "Há uma nova solicitação de cadastro de etiqueta registrada no sistema.\n\n";
+        $corpo .= "ID INTERNO: {$s->id}\n";
+        $corpo .= $this->secao('RESUMO', [
+            'Título TOTVS' => $s->titulo_padronizado,
+            'Solicitante' => $s->solicitante_nome,
+            'Código vendedor' => $s->cod_vendedor,
+            'Data de criação' => $s->created_at?->format('d/m/Y H:i'),
+        ]);
+        $corpo .= $this->secao('INFORMAÇÕES COMERCIAIS', [
+            'Nomenclatura' => $s->nomenclatura,
+            'Medidas (L x A)' => $s->medidas,
+            'Metragem total (m)' => $s->metragem !== null ? (string) $s->metragem : null,
+            'Possui estoque de segurança?' => $this->simNao($s->estoque_seguranca_sn),
+            'Estoque de segurança' => $s->estoque_seguranca !== null ? (string) $s->estoque_seguranca : null,
+        ]);
+        $corpo .= $this->secao('CARACTERÍSTICAS TÉCNICAS', [
+            'Personalização' => match ($s->personalizacao) {
+                'impresso' => 'Impresso',
+                'sem_impressao' => 'Sem impressão',
+                default => null,
+            },
+            'Unidade de venda' => match ($s->unidade_venda) {
+                'caixa' => 'Caixa',
+                'unidade' => 'Unidade',
+                'pacote_manual' => 'Pacote (manual)',
+                default => null,
+            },
+            'Quantidade por caixa' => $s->quantidade_caixa !== null ? (string) $s->quantidade_caixa : null,
+            'Diâmetro do tubete' => $s->diametro_tubete,
+            'Aplicação' => $s->aplicacao,
+            'Tipo de adesivo' => $s->tipo_adesivo,
+        ]);
+
+        if ($s->observacoes) {
+            $corpo .= $this->blocoTexto('OBSERVAÇÕES', $s->observacoes);
+        }
+
+        $corpo .= "A ficha completa em PDF está anexada a este e-mail.\n\n";
+        $corpo .= $this->assinaturaEmail();
 
         return [
             'to' => self::EMAILS['pcp'],
             'cc' => self::EMAILS['cadastro'],
+            'solicitanteEmail' => $s->user?->email,
             'subject' => '[Cadastro de Etiqueta] '.$s->titulo_padronizado,
-            'body' => implode("\n", $linhas),
+            'body' => $corpo,
         ];
     }
 
-    /** @return array{to: string, cc: ?string, subject: string, body: string} */
+    /**
+     * Corpo no formato do legado (`pages/SISTEMA/cadastro.php::montarCorpoEmailCadastro`)
+     * — o Tony pediu explicitamente "igual ao legado" depois de ver o e-mail real de lá.
+     * Não portamos o bloco de "raiz de CNPJ já na carteira" (matriz/filial): depende de
+     * detectar duplicata por raiz de CNPJ, proibido pela Regra de ouro nº 3.
+     *
+     * @return array{to: string, cc: ?string, solicitanteEmail: ?string, subject: string, body: string}
+     */
     private function mailtoCliente(ClienteParaCadastro $c): array
     {
-        $linhas = [
-            'Solicitação de cadastro de cliente no TOTVS.',
-            '',
-            'CNPJ: '.$c->cnpj_faturamento,
-            'Razão social: '.($c->razao_social ?: '—'),
-            'Fantasia: '.($c->nome_fantasia ?: '—'),
-            'IE: '.$c->inscricao_estadual,
-            'Segmento: '.$c->segmento_atuacao,
-            'Condição pagamento: '.$c->condicao_pagamento,
-            'Endereço: '.$c->endereco.', '.$c->bairro.' — '.$c->municipio.'/'.$c->estado.' CEP '.$c->cep,
-            'Telefone: '.$c->telefone,
-            'E-mail: '.$c->email,
-            'Solicitante: '.$c->nome_solicitante,
-            'Observações: '.($c->observacoes ?: '—'),
-        ];
+        $c->loadMissing('user');
+
+        $corpo = "Olá!\n\n";
+        $corpo .= "Um novo cliente foi cadastrado no sistema e precisa ser processado.\n\n";
+        $corpo .= "ID INTERNO: {$c->id}\n";
+        $corpo .= $this->secao('DADOS DO CLIENTE', array_filter([
+            'CNPJ de Faturamento' => $c->cnpj_faturamento,
+            'Vendedor Autopel' => $c->vendedor_autopel,
+            'Código do Vendedor' => $c->cod_vendedor_carteira,
+        ], fn ($valor) => $valor !== null && $valor !== ''));
+
+        $corpo .= $this->cabecalhoSecao('DADOS EMPRESARIAIS');
+        $corpo .= $this->linhas([
+            'Razão Social' => $c->razao_social ?: 'Não informado',
+            'Nome Fantasia' => $c->nome_fantasia ?: 'Não informado',
+            'Inscrição Estadual' => $c->inscricao_estadual,
+            'Segmento de Atuação' => $c->segmento_atuacao,
+        ]);
+        $corpo .= "\n";
+        $corpo .= $this->linhas([
+            'Condição de Pagamento' => $c->condicao_pagamento,
+            'Grupo de Vendas' => $c->grupo_vendas === 'sim'
+                ? 'SIM — Código: '.($c->grupo_vendas_codigo ?: '-')
+                : 'NÃO',
+            'Tabela de Preço' => $c->tabela_preco === 'sim'
+                ? 'SIM — '.($c->tabela_preco_codigo ?: '-')
+                : 'NÃO',
+        ]);
+        $corpo .= "\n";
+
+        $corpo .= $this->secao('ENDEREÇO DE COBRANÇA / FATURAMENTO', [
+            'Endereço' => $c->endereco,
+            'Complemento' => $c->complemento ?: 'Não informado',
+            'CEP' => $c->cep,
+            'Bairro' => $c->bairro,
+            'Município' => $c->municipio,
+            'Estado' => $c->estado,
+        ]);
 
         if ($c->entrega_endereco) {
-            $linhas[] = 'Entrega: '.$c->entrega_endereco.', '.$c->entrega_bairro.' — '.$c->entrega_municipio.'/'.$c->entrega_estado;
+            $corpo .= $this->secao('ENDEREÇO DE ENTREGA', [
+                'Endereço' => $c->entrega_endereco,
+                'Complemento' => $c->entrega_complemento ?: 'Não informado',
+                'CEP' => $c->entrega_cep,
+                'Bairro' => $c->entrega_bairro,
+                'Município' => $c->entrega_municipio,
+                'Estado' => $c->entrega_estado,
+            ]);
         }
+
+        $corpo .= $this->secao('CONTATO', [
+            'Telefone' => $c->telefone,
+            'E-mail' => $c->email,
+        ]);
+
+        if ($c->observacoes) {
+            $corpo .= $this->blocoTexto('OBSERVAÇÕES', $c->observacoes);
+        }
+
+        $corpo .= $this->secao('INFORMAÇÕES DO CADASTRO', [
+            'Data/Hora' => $c->created_at?->format('d/m/Y H:i'),
+            'Cadastrado por' => $c->nome_solicitante,
+        ]);
+
+        $corpo .= $this->assinaturaEmail();
 
         return [
             'to' => self::EMAILS['cadastroCliente'],
             'cc' => null,
+            'solicitanteEmail' => $c->user?->email,
             'subject' => '[Cadastro de Cliente] '.($c->razao_social ?: $c->cnpj_faturamento),
-            'body' => implode("\n", $linhas),
+            'body' => $corpo,
         ];
     }
 }

@@ -6,7 +6,6 @@ import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
 import FilterField from '@/Components/FilterField.vue';
 import Pagination from '@/Components/Pagination.vue';
-import MailtoPanel from '@/Components/Cadastros/MailtoPanel.vue';
 import CadastroBobinaForm from '@/Components/Cadastros/CadastroBobinaForm.vue';
 import CadastroBobinaTabela from '@/Components/Cadastros/CadastroBobinaTabela.vue';
 import CadastroEtiquetaForm from '@/Components/Cadastros/CadastroEtiquetaForm.vue';
@@ -29,7 +28,7 @@ const props = defineProps({
     filtros: Object,
     opcoes: Object,
     meta: Object,
-    flashMailto: { type: Object, default: null },
+    flashEnvio: { type: Object, default: null },
 });
 
 const filtros = reactive({
@@ -37,8 +36,8 @@ const filtros = reactive({
     status: props.filtros.status || '',
 });
 
-const mailtoLocal = ref(props.flashMailto);
-watch(() => props.flashMailto, (v) => { mailtoLocal.value = v; });
+const envioLocal = ref(props.flashEnvio);
+watch(() => props.flashEnvio, (v) => { envioLocal.value = v; });
 
 const prefillBobina = ref(null);
 const prefillEtiqueta = ref(null);
@@ -89,7 +88,7 @@ function navegar(extra = {}, only = null) {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: only || ['bobinas', 'etiquetas', 'clientesFila', 'leads', 'filtros', 'aba', 'subAbaClientes', 'flashMailto'],
+        only: only || ['bobinas', 'etiquetas', 'clientesFila', 'leads', 'filtros', 'aba', 'subAbaClientes', 'flashEnvio'],
     });
 }
 
@@ -176,7 +175,12 @@ const tabBtn = (ativo) =>
                     </template>
                 </PageHero>
 
-                <MailtoPanel v-if="mailtoLocal" :mailto="mailtoLocal" @dismiss="mailtoLocal = null" />
+                <div v-if="envioLocal" class="flex items-start justify-between gap-3 rounded border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900">
+                    <p>{{ envioLocal.mensagem }}</p>
+                    <button type="button" class="shrink-0 font-medium text-emerald-700 hover:text-emerald-900" @click="envioLocal = null">
+                        Fechar
+                    </button>
+                </div>
 
                 <div class="flex flex-wrap gap-1 border-b border-gray-300">
                     <button

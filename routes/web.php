@@ -83,6 +83,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/cadastros/bobinas/{bobina}/enviar', [CadastroController::class, 'enviarBobina'])->name('cadastros.bobinas.enviar');
     Route::delete('/cadastros/bobinas/{bobina}', [CadastroController::class, 'destroyBobina'])->name('cadastros.bobinas.destroy');
     Route::post('/cadastros/etiquetas', [CadastroController::class, 'storeEtiqueta'])->name('cadastros.etiquetas.store');
+    Route::get('/cadastros/etiquetas/{etiqueta}/pdf', [CadastroController::class, 'pdfEtiqueta'])->name('cadastros.etiquetas.pdf');
     Route::post('/cadastros/etiquetas/{etiqueta}/enviar', [CadastroController::class, 'enviarEtiqueta'])->name('cadastros.etiquetas.enviar');
     Route::delete('/cadastros/etiquetas/{etiqueta}', [CadastroController::class, 'destroyEtiqueta'])->name('cadastros.etiquetas.destroy');
     Route::post('/cadastros/clientes', [CadastroController::class, 'storeCliente'])->name('cadastros.clientes.store');

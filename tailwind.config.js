@@ -14,6 +14,10 @@ export default {
         extend: {
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+                // `font-doc` é só pro documento de orçamento (folha na tela + PDF).
+                // Fica separada da interface de propósito: a folha tem que parecer
+                // papel, não tela, e o PDF usa exatamente estes mesmos arquivos.
+                doc: ['Inter', ...defaultTheme.fontFamily.sans],
             },
             colors: {
                 navy: '#0F3A69',

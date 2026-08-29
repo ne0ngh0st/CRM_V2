@@ -1,9 +1,21 @@
 <script setup>
+/**
+ * Tabela de itens da folha de orçamento.
+ *
+ * ⚠️ A linha principal reproduz coluna por coluna a tabela de itens do PDF
+ * (resources/views/orcamentos/pdf.blade.php) — mesma ordem, mesmos rótulos,
+ * mesmo alinhamento. É o que sustenta a promessa de que a tela é o documento.
+ *
+ * O que o cliente NÃO vê (preço de tabela, desconto apurado, chave de IPI,
+ * calculadora de etiqueta) fica numa linha de apoio abaixo, marcada como tal —
+ * em vez de virar coluna e descaracterizar o documento.
+ */
 import { ref } from 'vue';
 import axios from 'axios';
 import InputError from '@/Components/InputError.vue';
 import ItemTipoModal from '@/Components/Orcamentos/ItemTipoModal.vue';
 import EtiquetaCalculadora from '@/Components/Etiquetas/EtiquetaCalculadora.vue';
+import { formatBRL, formatNumero } from '@/utils/formato.js';
 
 const props = defineProps({
     modelValue: { type: Array, required: true },
@@ -91,14 +103,10 @@ function descontoInfo(item) {
 
     const pct = (1 - base / precoTabela) * 100;
 
-    if (pct > 0.01) return { tipo: 'desconto', label: `Desconto ${pct.toFixed(1)}%`, cor: 'text-amber' };
-    if (pct < -0.01) return { tipo: 'margem', label: `Margem ${(-pct).toFixed(1)}%`, cor: 'text-teal' };
+    if (pct > 0.01) return { label: `Desconto ${pct.toFixed(1)}%`, cor: 'text-amber-dark' };
+    if (pct < -0.01) return { label: `Margem ${(-pct).toFixed(1)}%`, cor: 'text-teal' };
 
-    return { tipo: 'na_tabela', label: 'Na tabela', cor: 'text-gray-500' };
-}
-
-function formatBRL(valor) {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
+    return { label: 'Na tabela', cor: 'text-gray-500' };
 }
 
 function toggleCalcIpi(idx, item) {
@@ -155,174 +163,220 @@ function selecionarProduto(idx, produto) {
     painelAberto.value = null;
     resultadosProduto.value = [];
 }
+
+function numeroLinha(idx) {
+    return String(idx + 1).padStart(2, '0');
+}
+
+const thBase = 'px-2 py-2 text-[0.65rem] font-semibold uppercase tracking-[0.02em] text-white';
+const tdBase = 'px-2 py-1.5 align-middle';
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
-        <div v-for="(item, idx) in itens()" :key="idx" class="rounded border border-gray-200 p-3">
-            <div class="mb-2 flex items-center justify-between">
-                <span class="rounded bg-gray-100 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">
-                    {{ ROTULOS_TIPO[item.tipo_item] ?? item.tipo_item }}
-                </span>
-                <button
-                    v-if="itens().length > 1"
-                    type="button"
-                    class="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                    @click="removerItem(idx)"
-                >
-                    Remover
-                </button>
-            </div>
+    <div>
+        <div class="overflow-x-auto border border-gray-200">
+            <table class="w-full min-w-[900px] border-collapse">
+                <thead>
+                    <tr class="bg-navy">
+                        <th :class="thBase" class="w-[4%] text-left">Nº</th>
+                        <th :class="thBase" class="w-[11%] text-left">Código</th>
+                        <th :class="thBase" class="text-left">Descrição</th>
+                        <th :class="thBase" class="w-[9%] text-right">Qtd.</th>
+                        <template v-if="tipoProdutoServico === 'produto'">
+                            <th :class="thBase" class="w-[12%] text-right">Unit. s/IPI</th>
+                            <th :class="thBase" class="w-[12%] text-right">Unit. c/IPI</th>
+                            <th :class="thBase" class="w-[12%] text-right">Total s/IPI</th>
+                            <th :class="thBase" class="w-[12%] text-right">Total c/IPI</th>
+                        </template>
+                        <template v-else>
+                            <th :class="thBase" class="w-[15%] text-right">Vlr. unitário</th>
+                            <th :class="thBase" class="w-[15%] text-right">Vlr. total</th>
+                        </template>
+                    </tr>
+                </thead>
 
-            <div class="grid gap-3 sm:grid-cols-12">
-                <div class="relative sm:col-span-2">
-                    <label class="text-xs font-medium text-gray-600">Código</label>
-                    <input
-                        :value="item.cod_produto"
-                        type="text"
-                        class="mt-1 block w-full rounded border-gray-300 text-sm"
-                        @input="buscarProduto(idx, $event.target.value)"
-                    />
-                    <div
-                        v-if="painelAberto === `busca-${idx}` && resultadosProduto.length"
-                        class="absolute left-0 top-full z-10 mt-1 w-64 rounded border border-gray-200 bg-white shadow-lg"
-                    >
-                        <button
-                            v-for="produto in resultadosProduto"
-                            :key="produto.codProduto"
-                            type="button"
-                            class="block w-full border-b border-gray-100 px-2 py-1.5 text-left text-xs last:border-0 hover:bg-gray-50"
-                            @click="selecionarProduto(idx, produto)"
-                        >
-                            <strong>{{ produto.codProduto }}</strong> — {{ produto.descricao }}
-                        </button>
-                    </div>
-                </div>
+                <tbody>
+                    <template v-for="(item, idx) in itens()" :key="idx">
+                        <tr class="border-b border-gray-100" :class="idx % 2 === 1 ? 'bg-[#FAFBFC]' : ''">
+                            <td :class="tdBase" class="text-[0.75rem] text-gray-400">{{ numeroLinha(idx) }}</td>
 
-                <div class="sm:col-span-4">
-                    <label class="text-xs font-medium text-gray-600">Descrição *</label>
-                    <input
-                        :value="item.descricao"
-                        type="text"
-                        required
-                        class="mt-1 block w-full rounded border-gray-300 text-sm"
-                        @input="atualizarItem(idx, 'descricao', $event.target.value)"
-                    />
-                </div>
+                            <td :class="tdBase" class="relative">
+                                <input
+                                    :value="item.cod_produto"
+                                    type="text"
+                                    class="doc-campo"
+                                    placeholder="buscar"
+                                    @input="buscarProduto(idx, $event.target.value)"
+                                />
+                                <div
+                                    v-if="painelAberto === `busca-${idx}` && resultadosProduto.length"
+                                    class="absolute left-0 top-full z-20 mt-1 w-72 border border-gray-200 bg-white shadow-lg"
+                                >
+                                    <button
+                                        v-for="produto in resultadosProduto"
+                                        :key="produto.codProduto"
+                                        type="button"
+                                        class="block w-full border-b border-gray-100 px-2 py-1.5 text-left text-xs last:border-0 hover:bg-gray-50"
+                                        @click="selecionarProduto(idx, produto)"
+                                    >
+                                        <strong>{{ produto.codProduto }}</strong> — {{ produto.descricao }}
+                                    </button>
+                                </div>
+                            </td>
 
-                <div class="sm:col-span-1">
-                    <label class="text-xs font-medium text-gray-600">Qtd. *</label>
-                    <input
-                        :value="item.quantidade"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        required
-                        class="mt-1 block w-full rounded border-gray-300 text-sm"
-                        @input="atualizarItem(idx, 'quantidade', $event.target.value)"
-                    />
-                </div>
+                            <td :class="tdBase">
+                                <input
+                                    :value="item.descricao"
+                                    type="text"
+                                    required
+                                    class="doc-campo"
+                                    placeholder="Descrição do item"
+                                    @input="atualizarItem(idx, 'descricao', $event.target.value)"
+                                />
+                            </td>
 
-                <template v-if="tipoProdutoServico === 'produto'">
-                    <div class="sm:col-span-2">
-                        <label class="text-xs font-medium text-gray-600" title="Valor unitário com IPI embutido">Vlr Unit. c/IPI *</label>
-                        <input
-                            :value="item.valor_unitario"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            required
-                            class="mt-1 block w-full rounded border-gray-300 text-sm"
-                            @input="atualizarItem(idx, 'valor_unitario', $event.target.value)"
-                        />
-                    </div>
-                    <div class="sm:col-span-2">
-                        <label class="text-xs font-medium text-gray-600">Vlr Unit. s/IPI</label>
-                        <input
-                            :value="formatBRL(valorUnitarioSemIpi(item))"
-                            type="text"
-                            disabled
-                            class="mt-1 block w-full rounded border-gray-200 bg-gray-50 text-sm text-gray-500"
-                        />
-                    </div>
-                    <div class="flex items-end gap-1 sm:col-span-1">
-                        <label class="flex items-center gap-1 text-xs text-gray-600">
-                            <input
-                                type="checkbox"
-                                :checked="item.calcula_ipi"
-                                :disabled="item.tipo_item === 'etiqueta'"
-                                class="rounded border-gray-300 text-cyan focus:ring-cyan"
-                                @change="toggleCalcIpi(idx, item)"
-                            />
-                            IPI
-                        </label>
-                    </div>
-                </template>
-                <template v-else>
-                    <div class="sm:col-span-2">
-                        <label class="text-xs font-medium text-gray-600">Vlr Unitário *</label>
-                        <input
-                            :value="item.valor_unitario"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            required
-                            class="mt-1 block w-full rounded border-gray-300 text-sm"
-                            @input="atualizarItem(idx, 'valor_unitario', $event.target.value)"
-                        />
-                    </div>
-                </template>
+                            <td :class="tdBase">
+                                <input
+                                    :value="item.quantidade"
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    required
+                                    class="doc-campo text-right"
+                                    @input="atualizarItem(idx, 'quantidade', $event.target.value)"
+                                />
+                            </td>
 
-                <div class="sm:col-span-2">
-                    <label class="text-xs font-medium text-gray-600">Preço Tabela</label>
-                    <input
-                        :value="item.preco_tabela"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        class="mt-1 block w-full rounded border-gray-300 text-sm"
-                        @input="atualizarItem(idx, 'preco_tabela', $event.target.value)"
-                    />
-                </div>
+                            <template v-if="tipoProdutoServico === 'produto'">
+                                <td :class="tdBase" class="text-right text-[0.8rem] text-gray-500">
+                                    {{ formatNumero(valorUnitarioSemIpi(item)) }}
+                                </td>
+                                <td :class="tdBase">
+                                    <input
+                                        :value="item.valor_unitario"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        required
+                                        class="doc-campo text-right"
+                                        @input="atualizarItem(idx, 'valor_unitario', $event.target.value)"
+                                    />
+                                </td>
+                                <td :class="tdBase" class="text-right text-[0.8rem] text-gray-500">
+                                    {{ formatNumero(valorTotal(item, false)) }}
+                                </td>
+                                <td :class="tdBase" class="text-right text-[0.8rem] font-semibold text-navy">
+                                    {{ formatNumero(valorTotal(item, true)) }}
+                                </td>
+                            </template>
+                            <template v-else>
+                                <td :class="tdBase">
+                                    <input
+                                        :value="item.valor_unitario"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        required
+                                        class="doc-campo text-right"
+                                        @input="atualizarItem(idx, 'valor_unitario', $event.target.value)"
+                                    />
+                                </td>
+                                <td :class="tdBase" class="text-right text-[0.8rem] font-semibold text-navy">
+                                    {{ formatNumero(valorTotal(item, true)) }}
+                                </td>
+                            </template>
+                        </tr>
 
-                <div class="flex flex-col justify-end gap-1 text-xs sm:col-span-2">
-                    <span v-if="descontoInfo(item)" :class="descontoInfo(item).cor" class="font-semibold">
-                        {{ descontoInfo(item).label }}
-                    </span>
-                    <span class="text-gray-500">Total: <strong>{{ formatBRL(valorTotal(item, true)) }}</strong></span>
-                    <span v-if="tipoProdutoServico === 'produto' && participaIpi(item)" class="text-gray-400">
-                        (s/IPI: {{ formatBRL(valorTotal(item, false)) }})
-                    </span>
-                </div>
-            </div>
+                        <!-- Linha de apoio: some do documento impresso, existe só pra precificar. -->
+                        <tr class="border-b border-gray-200 bg-slate-50/70">
+                            <td class="px-2 pb-2 text-[0.6rem] uppercase tracking-wide text-gray-300">&mdash;</td>
+                            <td class="px-2 pb-2" :colspan="tipoProdutoServico === 'produto' ? 8 : 5">
+                                <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[0.7rem] text-gray-500">
+                                    <span class="rounded-sm bg-gray-200 px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-gray-600">
+                                        {{ ROTULOS_TIPO[item.tipo_item] ?? item.tipo_item }}
+                                    </span>
 
-            <InputError :message="errors[`itens.${idx}.descricao`]" class="mt-1" />
-            <InputError :message="errors[`itens.${idx}.quantidade`]" class="mt-1" />
-            <InputError :message="errors[`itens.${idx}.valor_unitario`]" class="mt-1" />
+                                    <label class="flex items-center gap-1.5">
+                                        Preço tabela
+                                        <input
+                                            :value="item.preco_tabela"
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            class="w-24 border-0 border-b border-dashed border-gray-300 bg-transparent px-0 py-0.5 text-[0.7rem] focus:border-solid focus:border-cyan focus:ring-0"
+                                            @input="atualizarItem(idx, 'preco_tabela', $event.target.value)"
+                                        />
+                                    </label>
 
-            <div v-if="item.tipo_item === 'etiqueta' && isAdmin">
-                <button type="button" class="mt-2 text-xs font-medium text-teal underline" @click="toggleCalculadora(idx)">
-                    {{ painelAberto === `calc-${idx}` ? 'Fechar calculadora' : 'Abrir calculadora de precificação' }}
-                </button>
-                <EtiquetaCalculadora
-                    v-if="painelAberto === `calc-${idx}`"
-                    :materias-primas="materiasPrimas"
-                    :etiqueta-calc="item.etiqueta_calc"
-                    @aplicar="(resultado) => aplicarCalculadora(idx, resultado)"
-                />
-            </div>
-            <p v-else-if="item.tipo_item === 'etiqueta' && item.etiqueta_calc" class="mt-2 text-xs text-gray-400">
-                Precificado via calculadora ({{ item.etiqueta_calc.materiaPrimaDesc ?? 'matéria-prima removida' }}).
-            </p>
+                                    <span v-if="descontoInfo(item)" :class="descontoInfo(item).cor" class="font-semibold">
+                                        {{ descontoInfo(item).label }}
+                                    </span>
+
+                                    <label v-if="tipoProdutoServico === 'produto'" class="flex items-center gap-1">
+                                        <input
+                                            type="checkbox"
+                                            :checked="item.calcula_ipi"
+                                            :disabled="item.tipo_item === 'etiqueta'"
+                                            class="rounded border-gray-300 text-cyan focus:ring-cyan"
+                                            @change="toggleCalcIpi(idx, item)"
+                                        />
+                                        IPI
+                                    </label>
+
+                                    <span class="text-gray-400">Total do item {{ formatBRL(valorTotal(item, true)) }}</span>
+
+                                    <button
+                                        v-if="item.tipo_item === 'etiqueta' && isAdmin"
+                                        type="button"
+                                        class="font-medium text-teal underline"
+                                        @click="toggleCalculadora(idx)"
+                                    >
+                                        {{ painelAberto === `calc-${idx}` ? 'Fechar calculadora' : 'Calculadora de precificação' }}
+                                    </button>
+                                    <span v-else-if="item.tipo_item === 'etiqueta' && item.etiqueta_calc" class="text-gray-400">
+                                        Precificado via calculadora ({{ item.etiqueta_calc.materiaPrimaDesc ?? 'matéria-prima removida' }})
+                                    </span>
+
+                                    <button
+                                        v-if="itens().length > 1"
+                                        type="button"
+                                        class="tbl-acao tbl-acao-danger ml-auto"
+                                        title="Remover item"
+                                        @click="removerItem(idx)"
+                                    >
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" stroke-linecap="round" stroke-linejoin="round" />
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <InputError :message="errors[`itens.${idx}.descricao`]" class="mt-1" />
+                                <InputError :message="errors[`itens.${idx}.quantidade`]" class="mt-1" />
+                                <InputError :message="errors[`itens.${idx}.valor_unitario`]" class="mt-1" />
+
+                                <EtiquetaCalculadora
+                                    v-if="painelAberto === `calc-${idx}`"
+                                    :materias-primas="materiasPrimas"
+                                    :etiqueta-calc="item.etiqueta_calc"
+                                    @aplicar="(resultado) => aplicarCalculadora(idx, resultado)"
+                                />
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
         </div>
 
-        <button
-            type="button"
-            class="self-start rounded bg-teal px-3 py-1.5 text-xs font-medium text-white hover:bg-teal/90"
-            @click="mostrarTipoModal = true"
-        >
-            + Adicionar Item
-        </button>
+        <div class="mt-2 flex items-center justify-between">
+            <button
+                type="button"
+                class="bg-teal px-3 py-1.5 text-xs font-medium text-white hover:bg-teal/90"
+                @click="mostrarTipoModal = true"
+            >
+                + Adicionar item
+            </button>
+            <p class="text-[0.68rem] text-gray-400">Valores em reais (R$).</p>
+        </div>
 
         <ItemTipoModal :show="mostrarTipoModal" @close="mostrarTipoModal = false" @escolher="adicionarItem" />
     </div>

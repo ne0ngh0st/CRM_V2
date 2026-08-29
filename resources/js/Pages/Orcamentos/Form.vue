@@ -1,12 +1,14 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import OrcamentoSheet from '@/Components/Orcamentos/OrcamentoSheet.vue';
+import DocPainel from '@/Components/Orcamentos/DocPainel.vue';
+import DocLinha from '@/Components/Orcamentos/DocLinha.vue';
 import ClienteBuscaBar from '@/Components/Orcamentos/ClienteBuscaBar.vue';
 import ItensTabela from '@/Components/Orcamentos/ItensTabela.vue';
 import {
@@ -30,6 +32,14 @@ const props = defineProps({
 // Editar usa props.orcamento (PATCH); copiar usa props.copiaDe (POST, documento novo).
 // Ambos têm a mesma estrutura de campos, só o modo de submissão muda.
 const fonte = props.orcamento ?? props.copiaDe;
+
+const usuario = usePage().props.auth.user;
+const vendedor = {
+    nome: usuario?.display_name || usuario?.name || '',
+    telefone: usuario?.telefone || '',
+    email: usuario?.email || '',
+};
+const emitidoEm = new Date().toLocaleDateString('pt-BR');
 
 function itemVazio() {
     return {
@@ -130,10 +140,6 @@ const resumo = computed(() => {
     };
 });
 
-function formatBRL(valor) {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
-}
-
 function salvar() {
     if (props.orcamento) {
         form.patch(route('orcamentos.update', props.orcamento.id));
@@ -176,87 +182,101 @@ function salvar() {
                     </div>
                 </div>
 
+                <!--
+                    Nota de bastidor: fica FORA da folha de propósito. Tudo que está dentro
+                    da folha é exatamente o que o cliente recebe; aprovação é assunto interno.
+                -->
+                <p class="mx-auto w-full max-w-[1180px] border-l-2 border-gray-300 bg-gray-50 px-3 py-1.5 text-[0.7rem] text-gray-500">
+                    Uso interno: o nível de aprovação (nenhum / supervisor / diretor) é sempre recalculado pelo servidor
+                    com base no desconto sem IPI, e não aparece no documento enviado ao cliente.
+                </p>
+
                 <form id="form-orcamento" @submit.prevent="salvar">
-                    <OrcamentoSheet :orcamento-id="orcamento?.id" :emitido-em="new Date().toLocaleDateString('pt-BR')">
+                    <OrcamentoSheet
+                        :orcamento-id="orcamento?.id"
+                        :emitido-em="emitidoEm"
+                        :vendedor="vendedor"
+                        :resumo="resumo"
+                        :tipo-produto-servico="form.tipo_produto_servico"
+                    >
                         <template #cliente-busca>
                             <ClienteBuscaBar @selecionar="selecionarCliente" />
                         </template>
 
                         <template #info-cliente>
-                            <div class="flex flex-col gap-2 text-sm">
-                                <div>
-                                    <label class="text-xs text-gray-500">Nome / Razão Social *</label>
-                                    <input v-model="form.cliente_nome" type="text" required class="mt-0.5 block w-full rounded border-gray-300 text-sm" />
+                            <DocPainel titulo="Dados do cliente">
+                                <DocLinha rotulo="Razão social">
+                                    <input v-model="form.cliente_nome" type="text" required class="doc-campo" placeholder="Nome ou razão social" />
                                     <InputError :message="form.errors.cliente_nome" />
-                                </div>
-                                <div class="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <label class="text-xs text-gray-500">CNPJ</label>
-                                        <input v-model="form.cliente_cnpj" type="text" class="mt-0.5 block w-full rounded border-gray-300 text-sm" />
-                                        <InputError :message="form.errors.cliente_cnpj" />
-                                    </div>
-                                    <div>
-                                        <label class="text-xs text-gray-500">Contato / Telefone</label>
-                                        <input v-model="form.cliente_contato" type="text" class="mt-0.5 block w-full rounded border-gray-300 text-sm" />
-                                        <InputError :message="form.errors.cliente_contato" />
-                                    </div>
-                                </div>
-                            </div>
+                                </DocLinha>
+                                <DocLinha rotulo="CNPJ">
+                                    <input v-model="form.cliente_cnpj" type="text" class="doc-campo" placeholder="00.000.000/0000-00" />
+                                    <InputError :message="form.errors.cliente_cnpj" />
+                                </DocLinha>
+                                <DocLinha rotulo="Contato">
+                                    <input v-model="form.cliente_contato" type="text" class="doc-campo" placeholder="Telefone ou e-mail" />
+                                    <InputError :message="form.errors.cliente_contato" />
+                                </DocLinha>
+                            </DocPainel>
                         </template>
 
-                        <template #info-orcamento>
-                            <div class="flex flex-col gap-2 text-sm">
-                                <div>
-                                    <label class="text-xs text-gray-500">Forma de Pagamento</label>
+                        <template #info-proposta>
+                            <DocPainel titulo="Dados da proposta">
+                                <DocLinha rotulo="Emissão">
+                                    <span class="doc-valor">{{ emitidoEm }}</span>
+                                </DocLinha>
+                                <DocLinha rotulo="Validade">
+                                    <input v-model="form.data_validade" type="date" class="doc-campo" />
+                                    <InputError :message="form.errors.data_validade" />
+                                </DocLinha>
+                                <DocLinha rotulo="Forma de pagamento">
                                     <select
                                         v-if="!modoFormaPagamentoLivre"
                                         :value="form.forma_pagamento"
-                                        class="mt-0.5 block w-full rounded border-gray-300 text-sm"
+                                        class="doc-campo"
                                         @change="selecionarFormaPagamento($event.target.value)"
                                     >
                                         <option value="">Selecione</option>
                                         <option v-for="opcao in OPCOES_FIXAS" :key="opcao" :value="opcao">{{ opcao }}</option>
                                         <option value="__livre__">Outros</option>
                                     </select>
-                                    <div v-else class="mt-0.5 flex gap-2">
-                                        <input v-model="form.forma_pagamento" type="text" placeholder="Descreva a forma de pagamento" class="block w-full rounded border-gray-300 text-sm" />
-                                        <button type="button" class="whitespace-nowrap text-xs text-gray-500 underline" @click="modoFormaPagamentoLivre = false; form.forma_pagamento = ''">voltar</button>
+                                    <div v-else class="flex items-center gap-2">
+                                        <input v-model="form.forma_pagamento" type="text" placeholder="Descreva a forma de pagamento" class="doc-campo" />
+                                        <button type="button" class="whitespace-nowrap text-[0.65rem] text-gray-400 underline" @click="modoFormaPagamentoLivre = false; form.forma_pagamento = ''">
+                                            voltar
+                                        </button>
                                     </div>
                                     <InputError :message="form.errors.forma_pagamento" />
-                                </div>
-
-                                <div>
-                                    <label class="text-xs text-gray-500">Frete</label>
-                                    <div class="mt-0.5 flex gap-4">
-                                        <label v-for="(rotulo, valor) in ROTULOS_TIPO_FRETE" :key="valor" class="flex items-center gap-1.5 text-sm">
+                                </DocLinha>
+                                <DocLinha rotulo="Frete">
+                                    <div class="flex flex-col gap-1">
+                                        <label v-for="(rotulo, valor) in ROTULOS_TIPO_FRETE" :key="valor" class="flex items-center gap-1.5 text-[0.8rem]">
                                             <input v-model="form.tipo_frete" type="radio" :value="valor" class="border-gray-300 text-cyan focus:ring-cyan" />
                                             {{ rotulo }}
                                         </label>
                                     </div>
                                     <InputError :message="form.errors.tipo_frete" />
-                                </div>
-
-                                <div>
-                                    <label class="text-xs text-gray-500">Faturamento</label>
-                                    <div class="mt-0.5 flex gap-4">
-                                        <label class="flex items-center gap-1.5 text-sm">
+                                </DocLinha>
+                                <DocLinha rotulo="Faturamento">
+                                    <div class="flex flex-col gap-1">
+                                        <label class="flex items-center gap-1.5 text-[0.8rem]">
                                             <input v-model="form.tipo_produto_servico" type="radio" value="produto" class="border-gray-300 text-cyan focus:ring-cyan" />
                                             {{ ROTULOS_TIPO_PRODUTO_SERVICO.produto }}
                                         </label>
-                                        <label class="flex items-center gap-1.5 text-sm">
+                                        <label class="flex items-center gap-1.5 text-[0.8rem]">
                                             <input v-model="form.tipo_produto_servico" type="radio" value="servico" class="border-gray-300 text-cyan focus:ring-cyan" />
                                             {{ ROTULOS_TIPO_PRODUTO_SERVICO.servico }}
                                         </label>
                                     </div>
                                     <InputError :message="form.errors.tipo_produto_servico" />
-                                </div>
-
-                                <div>
-                                    <label class="text-xs text-gray-500">Validade</label>
-                                    <input v-model="form.data_validade" type="date" class="mt-0.5 block w-full rounded border-gray-300 text-sm" />
-                                    <InputError :message="form.errors.data_validade" />
-                                </div>
-                            </div>
+                                </DocLinha>
+                                <DocLinha rotulo="Vendedor">
+                                    <span class="doc-valor">{{ vendedor.nome || '—' }}</span>
+                                    <p v-if="vendedor.telefone || vendedor.email" class="text-[0.7rem] font-normal text-gray-500">
+                                        {{ [vendedor.telefone, vendedor.email].filter(Boolean).join(' · ') }}
+                                    </p>
+                                </DocLinha>
+                            </DocPainel>
                         </template>
 
                         <template #itens>
@@ -268,54 +288,36 @@ function salvar() {
                                 :errors="form.errors"
                             />
                             <InputError :message="form.errors.itens" class="mt-1" />
-
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <div class="min-w-[140px] flex-1 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-center">
-                                    <p class="text-xs uppercase text-gray-400">Subtotal s/IPI</p>
-                                    <p class="font-bold text-navy">{{ formatBRL(resumo.subtotalProdutosSemIpi) }}</p>
-                                </div>
-                                <div v-if="form.tipo_produto_servico === 'produto'" class="min-w-[140px] flex-1 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-center">
-                                    <p class="text-xs uppercase text-gray-400">Subtotal c/IPI</p>
-                                    <p class="font-bold text-navy">{{ formatBRL(resumo.subtotalProdutosComIpi) }}</p>
-                                </div>
-                                <div v-if="resumo.subtotalEtiquetas > 0" class="min-w-[140px] flex-1 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-center">
-                                    <p class="text-xs uppercase text-gray-400">Subtotal etiquetas</p>
-                                    <p class="font-bold text-navy">{{ formatBRL(resumo.subtotalEtiquetas) }}</p>
-                                </div>
-                                <div class="min-w-[140px] flex-1 rounded border border-cyan/40 bg-cyan/5 px-3 py-2 text-center">
-                                    <p class="text-xs uppercase text-gray-500">Valor Total</p>
-                                    <p class="text-lg font-bold text-navy">{{ formatBRL(resumo.totalGeral) }}</p>
-                                </div>
-                            </div>
-                            <p class="mt-1 text-xs text-gray-400">
-                                O nível de aprovação (nenhum / supervisor / diretor) é sempre recalculado pelo servidor, com base no desconto sem IPI.
-                            </p>
                         </template>
 
                         <template #observacoes>
-                            <textarea v-model="form.observacoes" rows="2" class="block w-full rounded border-gray-300 text-sm" />
+                            <textarea
+                                v-model="form.observacoes"
+                                rows="2"
+                                class="doc-campo-bloco"
+                                placeholder="Texto livre que sai impresso para o cliente. Em branco, a seção não aparece no PDF."
+                            />
                         </template>
 
-                        <template #outras-informacoes>
-                            <div class="flex flex-col gap-2 text-sm">
-                                <div>
-                                    <label class="text-xs text-gray-500">Variação nos produtos Personalizados</label>
-                                    <input v-model="form.variacao_producao_personalizado" type="text" class="mt-0.5 block w-full rounded border-gray-300 text-sm" />
+                        <template #condicoes>
+                            <div class="space-y-2">
+                                <div class="grid grid-cols-1 items-center gap-x-2 gap-y-1 sm:grid-cols-[34%_1fr]">
+                                    <span class="doc-rotulo">Variação em produtos personalizados</span>
+                                    <input v-model="form.variacao_producao_personalizado" type="text" class="doc-campo" />
                                 </div>
-                                <div class="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <label class="text-xs text-gray-500">Prazo de PRODUÇÃO</label>
-                                        <input v-model="form.prazo_producao" type="text" class="mt-0.5 block w-full rounded border-gray-300 text-sm" />
-                                    </div>
-                                    <div>
-                                        <label class="text-xs text-gray-500">Garantia de Imagem</label>
-                                        <input v-model="form.garantia_imagem" type="text" class="mt-0.5 block w-full rounded border-gray-300 text-sm" />
-                                    </div>
+                                <div class="grid grid-cols-1 items-center gap-x-2 gap-y-1 sm:grid-cols-[34%_1fr]">
+                                    <span class="doc-rotulo">Prazo de produção</span>
+                                    <input v-model="form.prazo_producao" type="text" class="doc-campo" />
                                 </div>
-                                <div class="rounded border border-amber/40 bg-amber/5 p-2">
-                                    <label class="text-xs font-bold uppercase text-amber">Importante</label>
-                                    <textarea v-model="form.texto_importante" rows="2" class="mt-0.5 block w-full rounded border-amber/30 text-sm" />
+                                <div class="grid grid-cols-1 items-center gap-x-2 gap-y-1 sm:grid-cols-[34%_1fr]">
+                                    <span class="doc-rotulo">Garantia de imagem</span>
+                                    <input v-model="form.garantia_imagem" type="text" class="doc-campo" />
                                 </div>
+                            </div>
+
+                            <div class="mt-3 border border-amber/60 bg-amber/5 px-3 py-2">
+                                <p class="text-[0.65rem] font-bold uppercase tracking-[0.08em] text-amber-dark">Importante</p>
+                                <textarea v-model="form.texto_importante" rows="2" class="doc-campo-bloco mt-1 border-amber/40" />
                             </div>
                         </template>
                     </OrcamentoSheet>

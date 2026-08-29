@@ -1,19 +1,15 @@
 {{--
-    Réplica do PDF de solicitação de bobina do legado
-    (includes/pdf/solicitacao_bobina_pdf.php + solicitacao_pdf_layout.php).
-
-    Decisão do Tony (2026-08-10, reiterada em 2026-08-28): "o PDF deve ficar
-    igualzinho o legado". Por isso as cores aqui são as do legado (navy #101521 +
-    verde #2E7D32), NÃO a paleta oficial Autopel usada no PDF de orçamento.
-
-    Medidas em mm copiam o FPDF: margem 12, banda 24 de altura começando em y=10,
-    faixa verde 1.4 abaixo da banda, conteúdo em y=41, reserva de rodapé 18.
+    Réplica do PDF de solicitação de etiqueta do legado
+    (includes/pdf/solicitacao_etiqueta_pdf.php + solicitacao_pdf_layout.php).
+    Mesmo template visual do PDF de bobina (bobina-pdf.blade.php) — Regra de ouro
+    nº 8, um estilo só pros dois. Só a seção "Saída de rolo" (com imagem F1-F4) é
+    exclusiva daqui.
 --}}
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8">
-    <title>Solicitação de Cadastro de Bobina #{{ $bobina->id }}</title>
+    <title>Solicitação de Cadastro de Etiqueta #{{ $etiqueta->id }}</title>
     <style>
         @page { size: A4; margin: 41mm 12mm 18mm 12mm; }
 
@@ -75,9 +71,9 @@
            dompdf perder a conta da altura da página (11 páginas em branco). */
         footer td { vertical-align: middle; }
         footer td.dir { text-align: right; }
-        /* Numeração real via CSS paged media — nunca hardcodear "Página 1 de 1":
-           a bobina hoje sempre cabe numa página, mas se algum campo novo empurrar
-           o conteúdo, o rodapé teria uma mentira impressa.
+        /* Numeração real via CSS paged media — diferente da bobina, a etiqueta
+           tem uma seção a mais (saída de rolo) e pode legitimamente virar 2
+           páginas quando também tem observações longas. Nunca hardcodear.
            ⚠️ `counter(pages)` (total) NÃO é confiável neste dompdf (voltou "de 0"
            num teste real) — só `counter(page)` (página atual). Por isso só isso. */
         .pagenum::after { content: counter(page); }
@@ -137,6 +133,10 @@
         .envio-grade td { width: 50%; padding: 0 2mm 0 0; }
         .envio-grade td:last-child { padding-right: 0; }
 
+        .saida-rolo-cartao { text-align: center; padding: 1.5mm 3mm; }
+        .saida-rolo-cartao img { max-height: 13mm; margin-bottom: 1mm; }
+        .saida-rolo-cartao .valor { display: block; }
+
         .bloco-texto {
             background: #F9FAFB;
             border: 0.2mm solid #E2E8F0;
@@ -160,8 +160,8 @@
                 </td>
                 <td class="header-texto">
                     <div class="empresa">Autopel Soluções</div>
-                    <div class="subtitulo">Solicitação de Cadastro de Bobina</div>
-                    <div class="protocolo">Protocolo #{{ $bobina->id }}&nbsp;&nbsp;|&nbsp;&nbsp;Emitido em {{ $emitidoEm }}</div>
+                    <div class="subtitulo">Solicitação de Cadastro de Etiqueta</div>
+                    <div class="protocolo">Protocolo #{{ $etiqueta->id }}&nbsp;&nbsp;|&nbsp;&nbsp;Emitido em {{ $emitidoEm }}</div>
                 </td>
                 <td class="header-selo-td">
                     <span class="selo">{{ $statusRotulo }}</span>
@@ -174,7 +174,7 @@
     <footer>
         <table>
             <tr>
-                <td>Autopel Soluções&nbsp;&nbsp;|&nbsp;&nbsp;Solicitação de Cadastro de Bobina</td>
+                <td>Autopel Soluções&nbsp;&nbsp;|&nbsp;&nbsp;Solicitação de Cadastro de Etiqueta</td>
                 <td class="dir">Página <span class="pagenum"></span></td>
             </tr>
         </table>
@@ -230,6 +230,22 @@
                 @endforeach
             </table>
         </div>
+
+        @if ($saidaRolo)
+            <div class="secao">
+                <div class="secao-barra">Saída de rolo</div>
+                <table class="envio-grade">
+                    <tr>
+                        <td style="width: 40mm;">
+                            <div class="cartao saida-rolo-cartao">
+                                <img src="{{ $saidaRolo['imagemPath'] }}" alt="{{ $saidaRolo['rotulo'] }}" />
+                                <span class="valor">{{ $saidaRolo['rotulo'] }}</span>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        @endif
 
         <div class="secao">
             <div class="secao-barra">Envio</div>

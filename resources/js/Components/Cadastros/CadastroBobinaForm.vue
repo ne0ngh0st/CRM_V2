@@ -21,6 +21,7 @@ const form = useForm({
     gramatura: '',
     largura: '',
     metragem: '',
+    tubete_obrigatorio: '',
     diametro_tubete: '',
     estoque_seguranca_sn: '',
     estoque_seguranca: '',
@@ -42,6 +43,7 @@ watch(
         form.gramatura = p.gramatura || '';
         form.largura = p.largura || '';
         form.metragem = p.metragem != null ? String(p.metragem) : '';
+        form.tubete_obrigatorio = p.tubeteObrigatorio || '';
         form.diametro_tubete = p.diametroTubete != null ? String(p.diametroTubete) : '';
         form.estoque_seguranca_sn = p.estoqueSegurancaSn || '';
         form.estoque_seguranca = p.estoqueSeguranca != null ? String(p.estoqueSeguranca) : '';
@@ -67,6 +69,13 @@ const GRAMATURA_PARA_PAPEL = {
 function sugerirPapelPelaGramatura() {
     const sugerido = GRAMATURA_PARA_PAPEL[form.gramatura];
     if (sugerido) form.papel = sugerido;
+}
+
+// O servidor descarta o diâmetro quando o tubete não é obrigatório; limpar aqui
+// evita o campo continuar preenchido na tela mostrando um valor que não será gravado.
+// Ligado ao @change do radio, não a um watch, pelo mesmo motivo do mapa de gramatura.
+function limparDiametroTubete() {
+    if (form.tubete_obrigatorio !== 'sim') form.diametro_tubete = '';
 }
 
 function submit() {
@@ -171,20 +180,31 @@ const fieldClass = 'mt-1 block w-full rounded border-gray-300 text-xs focus:bord
                     </div>
                     <div class="grid gap-3 sm:grid-cols-2">
                         <div>
-                            <InputLabel value="Diâmetro do tubete (mm)" class="!text-xs" />
-                            <TextInput v-model="form.diametro_tubete" type="number" min="0" step="0.1" class="mt-1 block w-full text-xs" />
+                            <InputLabel value="Uso obrigatório de tubete" class="!text-xs" />
+                            <div class="mt-1 flex gap-4 text-xs text-gray-700">
+                                <label class="inline-flex items-center gap-1.5"><input v-model="form.tubete_obrigatorio" type="radio" value="sim" class="border-gray-300 text-cyan focus:ring-cyan" @change="limparDiametroTubete" /> Sim</label>
+                                <label class="inline-flex items-center gap-1.5"><input v-model="form.tubete_obrigatorio" type="radio" value="nao" class="border-gray-300 text-cyan focus:ring-cyan" @change="limparDiametroTubete" /> Não</label>
+                            </div>
+                            <InputError :message="form.errors.tubete_obrigatorio" />
+                        </div>
+                        <div v-if="form.tubete_obrigatorio === 'sim'">
+                            <InputLabel value="Diâmetro do tubete (mm) *" class="!text-xs" />
+                            <TextInput v-model="form.diametro_tubete" type="number" min="0" step="0.1" class="mt-1 block w-full text-xs" required />
+                            <InputError :message="form.errors.diametro_tubete" />
+                        </div>
+                    </div>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <InputLabel value="Estoque de segurança (S/N)" class="!text-xs" />
+                            <div class="mt-1 flex gap-4 text-xs text-gray-700">
+                                <label class="inline-flex items-center gap-1.5"><input v-model="form.estoque_seguranca_sn" type="radio" value="sim" class="border-gray-300 text-cyan focus:ring-cyan" /> Sim</label>
+                                <label class="inline-flex items-center gap-1.5"><input v-model="form.estoque_seguranca_sn" type="radio" value="nao" class="border-gray-300 text-cyan focus:ring-cyan" /> Não</label>
+                            </div>
                         </div>
                         <div v-if="form.estoque_seguranca_sn === 'sim'">
                             <InputLabel value="Estoque de segurança *" class="!text-xs" />
                             <TextInput v-model="form.estoque_seguranca" type="number" min="0" class="mt-1 block w-full text-xs" required />
                             <InputError :message="form.errors.estoque_seguranca" />
-                        </div>
-                    </div>
-                    <div>
-                        <InputLabel value="Estoque de segurança (S/N)" class="!text-xs" />
-                        <div class="mt-1 flex gap-4 text-xs text-gray-700">
-                            <label class="inline-flex items-center gap-1.5"><input v-model="form.estoque_seguranca_sn" type="radio" value="sim" class="border-gray-300 text-cyan focus:ring-cyan" /> Sim</label>
-                            <label class="inline-flex items-center gap-1.5"><input v-model="form.estoque_seguranca_sn" type="radio" value="nao" class="border-gray-300 text-cyan focus:ring-cyan" /> Não</label>
                         </div>
                     </div>
                     <div class="grid gap-3 sm:grid-cols-2">

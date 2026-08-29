@@ -1,223 +1,360 @@
+{{--
+    Documento de orçamento — versão do CLIENTE.
+
+    ⚠️ Este arquivo tem um par: resources/js/Components/Orcamentos/OrcamentoSheet.vue.
+    A folha na tela é o mesmo documento em modo editável, então QUALQUER mudança de
+    estrutura, ordem de seção, rótulo ou cor tem que ser feita nos dois. Se divergirem,
+    o vendedor preenche uma coisa e o cliente recebe outra.
+
+    ⚠️ Só entra aqui o que o cliente pode ver. O fluxo interno de aprovação
+    (nível exigido, quem aprovou, motivo da rejeição, status do gestor) NÃO é
+    impresso — é informação de bastidor.
+
+    ⚠️ Restrições do dompdf que ditam o desenho: sem flexbox, sem grid, sem sombra.
+    Layout é tabela; separação entre caixas é coluna espaçadora, não `gap`.
+    E nunca usar `float` dentro de `position: fixed` — quebra a contagem de páginas.
+--}}
+@php
+    $fontes = public_path('fonts/inter');
+    $logo = public_path('images/autopel-logo.png');
+    $ehProduto = $orcamento->tipo_produto_servico === 'produto';
+    $vendedor = $orcamento->user->display_name ?: $orcamento->user->name;
+    $contatoVendedor = collect([$orcamento->user->telefone, $orcamento->user->email])->filter()->implode(' · ');
+    $moeda = fn ($v) => number_format((float) $v, 2, ',', '.');
+@endphp
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8">
-    <title>Orçamento #{{ $orcamento->id }}</title>
+    <title>Orçamento nº {{ $orcamento->id }} — Autopel Soluções</title>
     <style>
-        @page { size: A4; margin: 30px 36px 95px 36px; }
-        body { font-family: 'Helvetica', sans-serif; font-size: 11.5px; color: #1a1a1a; }
+        /* Inter embarcado do próprio repositório (public/fonts/inter). Nada de CDN:
+           `enable_remote` é false no dompdf, então fonte remota simplesmente não carrega. */
+        @font-face { font-family: 'Inter'; font-weight: 400; font-style: normal; src: url('{{ $fontes }}/Inter-Regular.ttf') format('truetype'); }
+        @font-face { font-family: 'Inter'; font-weight: 500; font-style: normal; src: url('{{ $fontes }}/Inter-Medium.ttf') format('truetype'); }
+        @font-face { font-family: 'Inter'; font-weight: 600; font-style: normal; src: url('{{ $fontes }}/Inter-SemiBold.ttf') format('truetype'); }
+        @font-face { font-family: 'Inter'; font-weight: 700; font-style: normal; src: url('{{ $fontes }}/Inter-Bold.ttf') format('truetype'); }
+
+        @page { size: A4; margin: 14mm 13mm 20mm 13mm; }
+
+        /* O dompdf não tem regra padrão pra elemento HTML5. */
+        header, footer, main, section { display: block; }
+
+        body { font-family: 'Inter', sans-serif; font-size: 9.5pt; color: #111827; margin: 0; }
         table { border-collapse: collapse; width: 100%; }
-        .topbar { height: 6px; background: #0F3A69; margin-bottom: 16px; }
-        .header-table td { vertical-align: top; }
-        .empresa-nome { font-size: 15px; font-weight: bold; color: #0F3A69; margin: 6px 0 3px; }
-        .empresa-info { font-size: 10px; color: #555; line-height: 1.5; }
-        .doc-box { border: 1px solid #00A9CE; background: #f0fbfd; padding: 12px 16px; text-align: right; }
-        .doc-box .titulo { font-size: 16px; font-weight: bold; color: #0F3A69; text-transform: uppercase; margin: 0; letter-spacing: 0.5px; }
-        .doc-box .meta { font-size: 10px; color: #666; margin: 3px 0 0; }
-        .secao { margin-top: 20px; }
-        .secao-titulo { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; font-weight: bold; margin: 0 0 7px; border-bottom: 1px solid #e0e0e0; padding-bottom: 5px; }
-        table.dados td { padding: 3.5px 0; vertical-align: top; font-size: 10.5px; }
-        table.dados td.label { width: 125px; color: #666; }
-        table.info-grid > tr > td { width: 50%; vertical-align: top; padding-right: 20px; }
-        table.itens { margin-top: 6px; }
-        table.itens th { background: #1a1a1a; color: #fff; text-align: left; padding: 7px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.3px; }
-        table.itens th.num, table.itens td.num { text-align: right; }
-        table.itens td { padding: 7px 8px; border-bottom: 1px solid #e5e5e5; font-size: 10.5px; }
-        table.itens tr:nth-child(even) td { background: #fafbfc; }
-        .totais-card { border: 1px solid #e0e0e0; background: #fafbfc; margin-top: 10px; padding: 10px 16px; }
-        .totais-table td { padding: 4px 8px; font-size: 10.5px; }
-        .totais-table .total-final td { border-top: 2px solid #1a1a1a; font-weight: bold; font-size: 13px; padding-top: 8px; color: #0F3A69; }
-        .badge { display: inline-block; padding: 3px 9px; border-radius: 10px; font-size: 9.5px; font-weight: bold; text-transform: uppercase; }
-        .badge-aprovado { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
-        .badge-pendente { background: #fffbeb; color: #b45309; border: 1px solid #fcd34d; }
-        .badge-rejeitado { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
-        .importante-box { border: 1px solid #ff8f00; background: #fff8ec; padding: 11px 14px; margin-top: 10px; font-size: 10px; line-height: 1.5; }
-        .importante-box .rotulo { color: #ff8f00; font-weight: bold; text-transform: uppercase; font-size: 9px; }
-        .rodape-fixo { position: fixed; bottom: -80px; left: 0; right: 0; }
-        .footer-table { border-top: 2px solid #1a1a1a; padding-top: 10px; }
-        .footer-table td { width: 33.33%; vertical-align: top; font-size: 9.5px; color: #666; padding-top: 10px; line-height: 1.5; }
-        .footer-table .rotulo { text-transform: uppercase; color: #999; font-weight: bold; font-size: 8.5px; }
-        .rodape-geracao { margin-top: 8px; font-size: 8.5px; color: #999; text-align: center; }
+        td, th { vertical-align: top; }
+        p { margin: 0; }
+
+        /* ---------- Cabeçalho ---------- */
+        .marca-nome { font-size: 12.5pt; font-weight: 700; color: #0F3A69; letter-spacing: -0.2px; }
+        .marca-doc { font-size: 8pt; color: #6B7280; padding-top: 2px; }
+
+        /* ---------- Barra de título ---------- */
+        .barra-titulo { background: #0F3A69; }
+        .barra-titulo td { padding: 9px 12px; vertical-align: middle; }
+        .barra-titulo .rotulo { color: #FFFFFF; font-size: 13pt; font-weight: 700; letter-spacing: 1.6px; }
+        .barra-titulo .numero { color: #FFFFFF; font-size: 11pt; font-weight: 600; text-align: right; }
+        .barra-regua { height: 2.5px; background: #00A9CE; }
+
+        /* ---------- Legenda de seção ---------- */
+        /* `page-break-inside: avoid` é o que impede a legenda ficar no pé de uma
+           página e a caixa dela começar na seguinte (aconteceu com o aceite). */
+        .secao { margin-top: 12px; page-break-inside: avoid; }
+        .legenda {
+            background: #F1F5F9;
+            border-left: 3px solid #005A6F;
+            padding: 5px 10px;
+            font-size: 8pt;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #0F3A69;
+        }
+
+        /* ---------- Painéis lado a lado ---------- */
+        .painel { border: 1px solid #E5E7EB; }
+        .painel .cabeca {
+            background: #F1F5F9;
+            border-bottom: 1px solid #E5E7EB;
+            padding: 5px 10px;
+            font-size: 8pt;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #0F3A69;
+        }
+        .painel .rotulo { width: 40%; padding: 3.5px 10px; font-size: 8.5pt; color: #6B7280; }
+        .painel .valor { padding: 3.5px 10px 3.5px 0; font-size: 9.5pt; font-weight: 500; }
+        .painel .destaque { color: #0F3A69; font-weight: 600; }
+
+        /* ---------- Itens ---------- */
+        table.itens { margin-top: 6px; border: 1px solid #E5E7EB; }
+        table.itens th {
+            background: #0F3A69;
+            color: #FFFFFF;
+            font-size: 7.5pt;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            text-transform: uppercase;
+            text-align: left;
+            padding: 7px 6px;
+        }
+        table.itens td { padding: 5px 8px; font-size: 9pt; border-bottom: 1px solid #EEF2F6; }
+        table.itens tr:nth-child(even) td { background: #FAFBFC; }
+        table.itens .num { text-align: right; }
+        table.itens .meio { text-align: center; color: #6B7280; }
+        table.itens .cod { color: #6B7280; font-size: 8.5pt; }
+
+        /* ---------- Resumo financeiro ---------- */
+        .resumo { border: 1px solid #E5E7EB; }
+        .resumo td { padding: 5px 12px; font-size: 9.5pt; }
+        .resumo td.num { text-align: right; font-weight: 500; }
+        .resumo .rot { color: #6B7280; }
+        .resumo .total td { background: #0F3A69; color: #FFFFFF; font-size: 11.5pt; font-weight: 700; padding: 9px 12px; }
+
+        /* ---------- Blocos de texto ---------- */
+        .caixa { border: 1px solid #E5E7EB; border-top: 0; padding: 8px 11px; font-size: 9pt; line-height: 1.5; }
+        .info-linha td { padding: 3px 0; font-size: 9pt; }
+        .info-linha td.rot { width: 34%; color: #6B7280; }
+        .importante { border: 1px solid #ff8f00; background: #FFF8EC; padding: 9px 11px; margin-top: 8px; font-size: 8.8pt; line-height: 1.5; }
+        .importante .tag { color: #B36400; font-weight: 700; text-transform: uppercase; font-size: 7.5pt; letter-spacing: 0.8px; }
+
+        /* ---------- Aceite ---------- */
+        .aceite td { padding: 0 14px 0 0; }
+        .aceite .espaco { height: 26px; }
+        .aceite .linha { border-top: 1px solid #9CA3AF; padding-top: 4px; font-size: 8pt; color: #6B7280; }
+
+        /* ---------- Rodapé ---------- */
+        footer {
+            position: fixed;
+            bottom: -15mm;
+            left: 0;
+            right: 0;
+            border-top: 1px solid #E5E7EB;
+            padding-top: 6px;
+            font-size: 7.5pt;
+            color: #9CA3AF;
+        }
+        /* ⚠️ Nada de `float` aqui dentro: `float` em `position: fixed` faz o dompdf
+           perder a conta da altura da página (o PDF sai com N páginas em branco). */
+        footer td { vertical-align: middle; }
+        footer td.dir { text-align: right; }
+        /* Numeração real. ⚠️ `counter(pages)` (total) não é confiável neste dompdf —
+           voltou "de 0" em teste real —, então só a página atual. */
+        .pagenum::after { content: counter(page); }
     </style>
 </head>
 <body>
-    <div class="topbar"></div>
 
-    <table class="header-table">
-        <tr>
-            <td style="width: 60%;">
-                @php($logoPath = public_path('images/autopel-logo.png'))
-                @if (file_exists($logoPath))
-                    <img src="{{ $logoPath }}" alt="Autopel" style="height: 50px;" />
-                @endif
-                <p class="empresa-nome">Autopel Soluções</p>
-                <p class="empresa-info">
-                    CNPJ 06.698.091/0005-90<br>
-                    {{ $orcamento->user->display_name ?: $orcamento->user->name }}
-                </p>
-            </td>
-            <td style="width: 40%;">
-                <div class="doc-box">
-                    <p class="titulo">Orçamento</p>
-                    <p class="meta">Nº {{ $orcamento->id }}</p>
-                    <p class="meta">Emitido em {{ $orcamento->created_at->format('d/m/Y') }}</p>
-                </div>
-            </td>
-        </tr>
-    </table>
+<table>
+    <tr>
+        <td style="width: 52%;">
+            @if (file_exists($logo))
+                <img src="{{ $logo }}" alt="Autopel Soluções" style="height: 42px;">
+            @else
+                <p class="marca-nome">Autopel Soluções</p>
+            @endif
+        </td>
+        <td style="width: 48%; text-align: right;">
+            <p class="marca-nome">Autopel Soluções</p>
+            <p class="marca-doc">CNPJ 06.698.091/0005-90</p>
+        </td>
+    </tr>
+</table>
 
-    <table class="info-grid secao">
-        <tr>
-            <td>
-                <p class="secao-titulo">Dados do Cliente</p>
-                <table class="dados">
-                    <tr><td class="label">Razão Social</td><td>{{ $orcamento->cliente_nome }}</td></tr>
-                    <tr><td class="label">CNPJ</td><td>{{ $orcamento->cliente_cnpj ?? '—' }}</td></tr>
-                    <tr><td class="label">Contato</td><td>{{ $orcamento->cliente_contato ?? '—' }}</td></tr>
-                </table>
-            </td>
-            <td>
-                <p class="secao-titulo">Informações do Orçamento</p>
-                <table class="dados">
-                    <tr><td class="label">Status</td><td>
-                        <span class="badge badge-{{ $orcamento->status_gestor }}">
-                            {{ ['pendente' => 'Pendente', 'aprovado' => 'Aprovado', 'rejeitado' => 'Rejeitado'][$orcamento->status_gestor] }}
-                        </span>
-                    </td></tr>
-                    <tr><td class="label">Forma de Pagamento</td><td>{{ $orcamento->forma_pagamento ?? '—' }}</td></tr>
-                    <tr><td class="label">Frete</td><td>{{ $orcamento->tipo_frete ?? '—' }}</td></tr>
-                    <tr><td class="label">Faturamento</td><td>{{ $orcamento->tipo_produto_servico === 'produto' ? 'Produto (IPI 3,25%)' : 'Serviço (sem IPI)' }}</td></tr>
-                    <tr><td class="label">Validade</td><td>{{ optional($orcamento->data_validade)->format('d/m/Y') ?? '—' }}</td></tr>
-                </table>
-            </td>
-        </tr>
-    </table>
+<table class="barra-titulo" style="margin-top: 12px;">
+    <tr>
+        <td class="rotulo">ORÇAMENTO</td>
+        <td class="numero">Nº {{ str_pad((string) $orcamento->id, 4, '0', STR_PAD_LEFT) }}</td>
+    </tr>
+</table>
+<div class="barra-regua"></div>
 
-    <div class="secao">
-        <p class="secao-titulo">Produto/Serviço</p>
-        <table class="itens">
-            <thead>
-                @if ($orcamento->tipo_produto_servico === 'produto')
-                    <tr>
-                        <th>Item</th>
-                        <th class="num">Qtd.</th>
-                        <th class="num">Vlr Unit. s/IPI</th>
-                        <th class="num">Vlr Unit. c/IPI</th>
-                        <th class="num">Vlr Total s/IPI</th>
-                        <th class="num">Vlr Total c/IPI</th>
-                    </tr>
-                @else
-                    <tr>
-                        <th>Item</th>
-                        <th class="num">Qtd.</th>
-                        <th class="num">Vlr Unitário</th>
-                        <th class="num">Vlr Total</th>
-                    </tr>
-                @endif
-            </thead>
-            <tbody>
-                @foreach ($itensCalculados as $item)
-                    <tr>
-                        <td>@if($item['codProduto']){{ $item['codProduto'] }} · @endif{{ $item['descricao'] }}</td>
-                        <td class="num">{{ number_format($item['quantidade'], 2, ',', '.') }}</td>
-                        @if ($orcamento->tipo_produto_servico === 'produto')
-                            <td class="num">R$ {{ number_format($item['valorUnitarioSemIpi'], 2, ',', '.') }}</td>
-                            <td class="num">R$ {{ number_format($item['valorUnitarioComIpi'], 2, ',', '.') }}</td>
-                            <td class="num">R$ {{ number_format($item['valorTotalSemIpi'], 2, ',', '.') }}</td>
-                            <td class="num">R$ {{ number_format($item['valorTotalComIpi'], 2, ',', '.') }}</td>
-                        @else
-                            <td class="num">R$ {{ number_format($item['valorUnitarioComIpi'], 2, ',', '.') }}</td>
-                            <td class="num">R$ {{ number_format($item['valorTotalComIpi'], 2, ',', '.') }}</td>
-                        @endif
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-
-        <div class="totais-card">
-            <table class="totais-table" style="width: 45%; margin-left: 55%;">
+<table style="margin-top: 14px;">
+    <tr>
+        <td style="width: 49%;">
+            <table class="painel">
+                <tr><td class="cabeca" colspan="2">Dados do cliente</td></tr>
                 <tr>
-                    <td>Subtotal s/IPI</td>
-                    <td class="num">R$ {{ number_format($resumo['subtotalProdutosSemIpi'], 2, ',', '.') }}</td>
+                    <td class="rotulo">Razão social</td>
+                    <td class="valor destaque">{{ $orcamento->cliente_nome }}</td>
                 </tr>
-                @if ($orcamento->tipo_produto_servico === 'produto')
+                <tr>
+                    <td class="rotulo">CNPJ</td>
+                    <td class="valor">{{ $orcamento->cliente_cnpj ?: '—' }}</td>
+                </tr>
+                <tr>
+                    <td class="rotulo">Contato</td>
+                    <td class="valor">{{ $orcamento->cliente_contato ?: '—' }}</td>
+                </tr>
+            </table>
+        </td>
+        <td style="width: 2%;"></td>
+        <td style="width: 49%;">
+            <table class="painel">
+                <tr><td class="cabeca" colspan="2">Dados da proposta</td></tr>
+                <tr>
+                    <td class="rotulo">Emissão</td>
+                    <td class="valor">{{ $orcamento->created_at->format('d/m/Y') }}</td>
+                </tr>
+                <tr>
+                    <td class="rotulo">Validade</td>
+                    <td class="valor destaque">{{ optional($orcamento->data_validade)->format('d/m/Y') ?: '—' }}</td>
+                </tr>
+                <tr>
+                    <td class="rotulo">Forma de pagamento</td>
+                    <td class="valor">{{ $orcamento->forma_pagamento ?: '—' }}</td>
+                </tr>
+                <tr>
+                    <td class="rotulo">Frete</td>
+                    <td class="valor">{{ $orcamento->tipo_frete ?: '—' }}</td>
+                </tr>
+                <tr>
+                    <td class="rotulo">Faturamento</td>
+                    <td class="valor">{{ $ehProduto ? 'Produto (IPI 3,25% embutido)' : 'Serviço (sem IPI)' }}</td>
+                </tr>
+                <tr>
+                    <td class="rotulo">Vendedor</td>
+                    <td class="valor">
+                        {{ $vendedor }}
+                        @if ($contatoVendedor)
+                            <br><span style="font-weight: 400; color: #6B7280; font-size: 8.5pt;">{{ $contatoVendedor }}</span>
+                        @endif
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
+
+<div class="secao">
+    <div class="legenda">Itens do orçamento</div>
+    <table class="itens">
+        <thead>
+            <tr>
+                <th style="width: 3.5%;">Nº</th>
+                <th style="width: 8.5%;">Código</th>
+                <th style="width: {{ $ehProduto ? '29.5%' : '46%' }};">Descrição</th>
+                <th class="num" style="width: 7%;">Qtd.</th>
+                @if ($ehProduto)
+                    <th class="num" style="width: 12.5%;">Unit. s/IPI</th>
+                    <th class="num" style="width: 12.5%;">Unit. c/IPI</th>
+                    <th class="num" style="width: 12.5%;">Total s/IPI</th>
+                    <th class="num" style="width: 14%;">Total c/IPI</th>
+                @else
+                    <th class="num" style="width: 17%;">Vlr. unitário</th>
+                    <th class="num" style="width: 18%;">Vlr. total</th>
+                @endif
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($itensCalculados as $i => $item)
+                <tr>
+                    <td class="meio">{{ str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT) }}</td>
+                    <td class="cod">{{ $item['codProduto'] ?: '—' }}</td>
+                    <td>{{ $item['descricao'] }}</td>
+                    <td class="num">{{ $moeda($item['quantidade']) }}</td>
+                    @if ($ehProduto)
+                        <td class="num">{{ $moeda($item['valorUnitarioSemIpi']) }}</td>
+                        <td class="num">{{ $moeda($item['valorUnitarioComIpi']) }}</td>
+                        <td class="num">{{ $moeda($item['valorTotalSemIpi']) }}</td>
+                        <td class="num">{{ $moeda($item['valorTotalComIpi']) }}</td>
+                    @else
+                        <td class="num">{{ $moeda($item['valorUnitarioComIpi']) }}</td>
+                        <td class="num">{{ $moeda($item['valorTotalComIpi']) }}</td>
+                    @endif
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+    <p style="margin-top: 5px; font-size: 7.5pt; color: #9CA3AF;">Valores em reais (R$).</p>
+</div>
+
+<table style="margin-top: 10px;">
+    <tr>
+        <td style="width: 54%;"></td>
+        <td style="width: 46%;">
+            <table class="resumo">
+                <tr>
+                    <td class="rot">Subtotal s/ IPI</td>
+                    <td class="num">R$ {{ $moeda($resumo['subtotalProdutosSemIpi']) }}</td>
+                </tr>
+                @if ($ehProduto)
                     <tr>
-                        <td>Subtotal c/IPI</td>
-                        <td class="num">R$ {{ number_format($resumo['subtotalProdutosComIpi'], 2, ',', '.') }}</td>
+                        <td class="rot">Subtotal c/ IPI</td>
+                        <td class="num">R$ {{ $moeda($resumo['subtotalProdutosComIpi']) }}</td>
                     </tr>
                 @endif
                 @if ($resumo['subtotalEtiquetas'] > 0)
                     <tr>
-                        <td>Subtotal etiquetas</td>
-                        <td class="num">R$ {{ number_format($resumo['subtotalEtiquetas'], 2, ',', '.') }}</td>
+                        <td class="rot">Subtotal etiquetas</td>
+                        <td class="num">R$ {{ $moeda($resumo['subtotalEtiquetas']) }}</td>
                     </tr>
                 @endif
-                <tr class="total-final">
-                    <td>Valor Total</td>
-                    <td class="num">R$ {{ number_format($resumo['totalGeral'], 2, ',', '.') }}</td>
+                <tr class="total">
+                    <td>VALOR TOTAL</td>
+                    <td class="num" style="color: #FFFFFF;">R$ {{ $moeda($resumo['totalGeral']) }}</td>
                 </tr>
             </table>
-        </div>
-    </div>
+        </td>
+    </tr>
+</table>
 
-    @if ($orcamento->observacoes)
-        <div class="secao">
-            <p class="secao-titulo">Observações</p>
-            <p style="font-size: 10.5px; line-height: 1.5;">{{ $orcamento->observacoes }}</p>
-        </div>
-    @endif
-
+@if ($orcamento->observacoes)
     <div class="secao">
-        <p class="secao-titulo">Outras Informações</p>
-        <table class="dados">
-            <tr><td class="label">Variação produção personalizada</td><td>{{ $orcamento->variacao_producao_personalizado ?? '—' }}</td></tr>
-            <tr><td class="label">Prazo de produção</td><td>{{ $orcamento->prazo_producao ?? '—' }}</td></tr>
-            <tr><td class="label">Garantia de imagem</td><td>{{ $orcamento->garantia_imagem ?? '—' }}</td></tr>
+        <div class="legenda">Observações</div>
+        <div class="caixa">{{ $orcamento->observacoes }}</div>
+    </div>
+@endif
+
+<div class="secao">
+    <div class="legenda">Condições de fornecimento</div>
+    <div class="caixa">
+        <table class="info-linha">
+            <tr>
+                <td class="rot">Variação em produtos personalizados</td>
+                <td>{{ $orcamento->variacao_producao_personalizado ?: '—' }}</td>
+            </tr>
+            <tr>
+                <td class="rot">Prazo de produção</td>
+                <td>{{ $orcamento->prazo_producao ?: '—' }}</td>
+            </tr>
+            <tr>
+                <td class="rot">Garantia de imagem</td>
+                <td>{{ $orcamento->garantia_imagem ?: '—' }}</td>
+            </tr>
         </table>
         @if ($orcamento->texto_importante)
-            <div class="importante-box">
-                <p class="rotulo">Importante</p>
-                <p>{{ $orcamento->texto_importante }}</p>
+            <div class="importante">
+                <p class="tag">Importante</p>
+                <p style="margin-top: 3px;">{{ $orcamento->texto_importante }}</p>
             </div>
         @endif
     </div>
+</div>
 
-    <div class="secao">
-        <p class="secao-titulo">Aprovação</p>
-        <table class="dados">
-            <tr><td class="label">Nível exigido</td><td>{{ ucfirst($orcamento->nivel_aprovacao) }}</td></tr>
-            @if ($orcamento->aprovadoPor)
-                <tr><td class="label">Decidido por</td><td>{{ $orcamento->aprovadoPor->display_name ?: $orcamento->aprovadoPor->name }} em {{ optional($orcamento->aprovado_em)->format('d/m/Y H:i') }}</td></tr>
-            @endif
-            @if ($orcamento->motivo_rejeicao)
-                <tr><td class="label">Motivo da rejeição</td><td>{{ $orcamento->motivo_rejeicao }}</td></tr>
-            @endif
-        </table>
-    </div>
-
-    <div class="rodape-fixo">
-        <table class="footer-table">
+<div class="secao">
+    <div class="legenda">Aceite do cliente</div>
+    <div class="caixa">
+        <table class="aceite">
             <tr>
-                <td>
-                    <p class="rotulo">Vendedor Responsável</p>
-                    <p>{{ $orcamento->user->display_name ?: $orcamento->user->name }}</p>
-                </td>
-                <td>
-                    <p class="rotulo">Condições</p>
-                    <p>Validade: {{ optional($orcamento->data_validade)->format('d/m/Y') ?? '—' }}<br>
-                    Pagamento: {{ $orcamento->forma_pagamento ?? '—' }} · Frete: {{ $orcamento->tipo_frete ?? '—' }}<br>
-                    Prazo de entrega: a combinar</p>
-                </td>
-                <td>
-                    <p class="rotulo">Autopel</p>
-                    <p>Autopel Soluções<br>CNPJ 06.698.091/0005-90</p>
-                </td>
+                <td style="width: 46%;"><div class="espaco"></div><div class="linha">Nome do responsável</div></td>
+                <td style="width: 20%;"><div class="espaco"></div><div class="linha">Data</div></td>
+                <td style="width: 34%; padding-right: 0;"><div class="espaco"></div><div class="linha">Assinatura e carimbo</div></td>
             </tr>
         </table>
-
-        <p class="rodape-geracao">
-            Documento gerado automaticamente pelo sistema PALMA em {{ now()->format('d/m/Y \à\s H:i') }} — sem valor fiscal.
-        </p>
     </div>
+</div>
+
+<footer>
+    <table>
+        <tr>
+            <td>Autopel Soluções · CNPJ 06.698.091/0005-90 · Orçamento nº {{ str_pad((string) $orcamento->id, 4, '0', STR_PAD_LEFT) }}</td>
+            <td class="dir">Página <span class="pagenum"></span></td>
+        </tr>
+    </table>
+    <p style="margin-top: 3px;">Documento gerado pelo sistema PALMA em {{ now()->format('d/m/Y \à\s H:i') }} — sem valor fiscal.</p>
+</footer>
+
 </body>
 </html>

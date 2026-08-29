@@ -52,6 +52,9 @@ function tone(status) {
                             <button type="button" title="Copiar para formulário" class="tbl-acao tbl-acao-teal" @click="emit('copiar', item)">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="8" width="12" height="12" rx="1"/><path d="M4 16V4h12" stroke-linecap="round"/></svg>
                             </button>
+                            <a :href="route('cadastros.etiquetas.pdf', item.id)" target="_blank" rel="noopener" title="Ficha em PDF" class="tbl-acao tbl-acao-navy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3H7a1 1 0 00-1 1v16a1 1 0 001 1h10a1 1 0 001-1V7z" stroke-linejoin="round"/><path d="M14 3v4h4" stroke-linejoin="round"/><path d="M9 13h6M9 16h4" stroke-linecap="round"/></svg>
+                            </a>
                             <button v-if="item.status === 'pendente'" type="button" title="Enviar p/ Cadastro" class="tbl-acao tbl-acao-amber" @click="emit('enviar', item)">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 12l16-7-7 16-2-6-7-3z" stroke-linejoin="round"/></svg>
                             </button>

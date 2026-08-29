@@ -22,6 +22,7 @@ class SolicitacaoBobina extends Model
         'gramatura',
         'largura',
         'metragem',
+        'tubete_obrigatorio',
         'diametro_tubete',
         'estoque_seguranca',
         'estoque_seguranca_sn',

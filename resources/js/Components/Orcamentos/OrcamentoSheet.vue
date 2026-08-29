@@ -1,78 +1,123 @@
 <script setup>
-defineProps({
+/**
+ * A folha de orçamento na tela — o mesmo documento que o cliente recebe, só que
+ * editável. O vendedor preenche o que vai sair impresso, na posição em que vai sair.
+ *
+ * ⚠️ Este arquivo tem um par: resources/views/orcamentos/pdf.blade.php.
+ * Ordem de seção, rótulo, cor e proporção têm que bater nos dois. Se divergirem,
+ * a promessa da tela ("é o PDF") deixa de ser verdade.
+ *
+ * ⚠️ O que NÃO entra aqui, porque não entra no PDF do cliente: status do gestor,
+ * nível de aprovação exigido, quem aprovou e motivo de rejeição. Isso é bastidor
+ * interno e vive no cabeçalho da página (Form.vue), fora da folha.
+ */
+import DocSecao from '@/Components/Orcamentos/DocSecao.vue';
+import { formatBRL } from '@/utils/formato.js';
+
+const props = defineProps({
     orcamentoId: { type: [Number, String], default: null },
     emitidoEm: { type: String, default: '' },
     vendedor: { type: Object, default: () => ({}) },
+    tipoProdutoServico: { type: String, default: 'produto' },
+    resumo: {
+        type: Object,
+        default: () => ({
+            subtotalProdutosSemIpi: 0,
+            subtotalProdutosComIpi: 0,
+            subtotalEtiquetas: 0,
+            totalGeral: 0,
+        }),
+    },
 });
+
+// Mesmo tratamento do PDF: número curto fica pobre num documento comercial.
+const numeroFormatado = () => (props.orcamentoId ? String(props.orcamentoId).padStart(4, '0') : '—');
 </script>
 
 <template>
-    <div class="overflow-hidden rounded border border-gray-300 bg-white shadow-sm">
-        <div class="h-1 bg-gradient-to-r from-navy via-teal to-cyan" />
-
-        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200 px-6 py-5">
-            <div class="flex items-start gap-3">
-                <img src="/images/autopel-logo.png" alt="Autopel" class="h-12 w-auto shrink-0" />
-                <div class="text-xs leading-snug text-gray-600">
-                    <p class="text-sm font-bold text-navy">Autopel Soluções</p>
-                    <p>CNPJ 06.698.091/0005-90</p>
-                    <p v-if="vendedor?.nome">{{ vendedor.nome }}<span v-if="vendedor.codigo"> · Cód. {{ vendedor.codigo }}</span></p>
-                    <p v-if="vendedor?.telefone || vendedor?.email">
-                        {{ vendedor.telefone }}<span v-if="vendedor.telefone && vendedor.email"> · </span>{{ vendedor.email }}
-                    </p>
-                </div>
+    <article class="mx-auto w-full max-w-[1180px] border border-gray-300 bg-white px-8 py-7 font-doc shadow-sm">
+        <header class="flex items-start justify-between gap-6">
+            <img src="/images/autopel-logo.png" alt="Autopel Soluções" class="h-11 w-auto shrink-0" />
+            <div class="text-right">
+                <p class="text-[0.95rem] font-bold leading-tight text-navy">Autopel Soluções</p>
+                <p class="text-[0.7rem] text-gray-500">CNPJ 06.698.091/0005-90</p>
             </div>
+        </header>
 
-            <div class="rounded border border-cyan/30 bg-cyan/5 px-4 py-2.5 text-right">
-                <p class="text-sm font-bold uppercase tracking-wide text-navy">Orçamento</p>
-                <p class="text-xs text-gray-500">Nº {{ orcamentoId ?? '—' }}</p>
-                <p class="text-xs text-gray-500">Emitido em {{ emitidoEm }}</p>
-            </div>
+        <div class="mt-4 flex items-center justify-between bg-navy px-4 py-2.5">
+            <span class="text-[1.05rem] font-bold tracking-[0.16em] text-white">ORÇAMENTO</span>
+            <span class="text-[0.9rem] font-semibold text-white">Nº {{ numeroFormatado() }}</span>
         </div>
+        <div class="h-[3px] bg-cyan" />
 
-        <div v-if="$slots['cliente-busca']" class="border-b border-dashed border-gray-300 bg-gray-50 px-6 py-3">
+        <!-- Só existe na tela: é a ferramenta de preenchimento, não conteúdo do documento. -->
+        <div v-if="$slots['cliente-busca']" class="mt-4 border border-dashed border-gray-300 bg-gray-50 px-3 py-2.5">
             <slot name="cliente-busca" />
         </div>
 
-        <div class="grid gap-4 border-b border-gray-200 px-6 py-5 sm:grid-cols-2">
-            <div>
-                <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Dados do Cliente</h3>
-                <slot name="info-cliente" />
-            </div>
-            <div>
-                <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Informações do Orçamento</h3>
-                <slot name="info-orcamento" />
-            </div>
+        <div class="mt-4 grid gap-4 md:grid-cols-2">
+            <slot name="info-cliente" />
+            <slot name="info-proposta" />
         </div>
 
-        <div class="border-b border-gray-200 px-6 py-5">
-            <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Produto/Serviço</h3>
+        <DocSecao titulo="Itens do orçamento" :com-caixa="false">
             <slot name="itens" />
+        </DocSecao>
+
+        <div class="mt-3 flex justify-end">
+            <table class="w-full max-w-[380px] border border-gray-200">
+                <tbody>
+                    <tr>
+                        <td class="px-3 py-1.5 text-[0.78rem] text-gray-500">Subtotal s/ IPI</td>
+                        <td class="px-3 py-1.5 text-right text-[0.82rem] font-medium">{{ formatBRL(resumo.subtotalProdutosSemIpi) }}</td>
+                    </tr>
+                    <tr v-if="tipoProdutoServico === 'produto'">
+                        <td class="px-3 py-1.5 text-[0.78rem] text-gray-500">Subtotal c/ IPI</td>
+                        <td class="px-3 py-1.5 text-right text-[0.82rem] font-medium">{{ formatBRL(resumo.subtotalProdutosComIpi) }}</td>
+                    </tr>
+                    <tr v-if="resumo.subtotalEtiquetas > 0">
+                        <td class="px-3 py-1.5 text-[0.78rem] text-gray-500">Subtotal etiquetas</td>
+                        <td class="px-3 py-1.5 text-right text-[0.82rem] font-medium">{{ formatBRL(resumo.subtotalEtiquetas) }}</td>
+                    </tr>
+                    <tr class="bg-navy text-white">
+                        <td class="px-3 py-2.5 text-[0.9rem] font-bold tracking-wide">VALOR TOTAL</td>
+                        <td class="px-3 py-2.5 text-right text-[0.95rem] font-bold">{{ formatBRL(resumo.totalGeral) }}</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
 
-        <div class="border-b border-gray-200 px-6 py-5">
-            <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Observações</h3>
+        <DocSecao titulo="Observações">
             <slot name="observacoes" />
-        </div>
+        </DocSecao>
 
-        <div class="border-b border-gray-200 px-6 py-5">
-            <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Outras Informações</h3>
-            <slot name="outras-informacoes" />
-        </div>
+        <DocSecao titulo="Condições de fornecimento">
+            <slot name="condicoes" />
+        </DocSecao>
 
-        <div class="grid gap-4 px-6 py-4 text-xs text-gray-500 sm:grid-cols-3">
-            <div>
-                <p class="font-semibold uppercase tracking-wide text-gray-400">Vendedor Responsável</p>
-                <p class="mt-0.5 text-gray-700">{{ vendedor?.nome ?? '—' }}</p>
+        <DocSecao titulo="Aceite do cliente">
+            <div class="grid grid-cols-1 gap-6 pt-1 sm:grid-cols-[46%_20%_1fr]">
+                <div>
+                    <div class="h-7" />
+                    <p class="border-t border-gray-400 pt-1 text-[0.7rem] text-gray-500">Nome do responsável</p>
+                </div>
+                <div>
+                    <div class="h-7" />
+                    <p class="border-t border-gray-400 pt-1 text-[0.7rem] text-gray-500">Data</p>
+                </div>
+                <div>
+                    <div class="h-7" />
+                    <p class="border-t border-gray-400 pt-1 text-[0.7rem] text-gray-500">Assinatura e carimbo</p>
+                </div>
             </div>
-            <div>
-                <p class="font-semibold uppercase tracking-wide text-gray-400">Condições</p>
-                <p class="mt-0.5 text-gray-700">Prazo de entrega: a combinar</p>
+        </DocSecao>
+
+        <footer class="mt-5 border-t border-gray-200 pt-2 text-[0.68rem] text-gray-400">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <span>Autopel Soluções · CNPJ 06.698.091/0005-90 · Orçamento nº {{ numeroFormatado() }}</span>
+                <span v-if="vendedor?.nome">Vendedor: {{ vendedor.nome }}</span>
             </div>
-            <div>
-                <p class="font-semibold uppercase tracking-wide text-gray-400">Autopel</p>
-                <p class="mt-0.5 text-gray-700">Autopel Soluções · CNPJ 06.698.091/0005-90</p>
-            </div>
-        </div>
-    </div>
+            <p class="mt-0.5">Documento gerado pelo sistema PALMA em {{ emitidoEm }} — sem valor fiscal.</p>
+        </footer>
+    </article>
 </template>

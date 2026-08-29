@@ -2,7 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Inter é a fonte do DOCUMENTO (folha de orçamento na tela + PDF gerado), não da
+ * interface — a interface segue em Figtree, carregada no app.blade.php.
+ *
+ * ⚠️ Self-hosted de propósito, a partir de `public/fonts/inter`: são exatamente os
+ * mesmos arquivos que o dompdf embarca no PDF. O dompdf roda com `enable_remote`
+ * desligado, então fonte de CDN simplesmente não carrega lá — servir a tela por CDN
+ * faria documento na tela e documento impresso usarem fontes diferentes, que é
+ * justamente o que este redesenho existe pra evitar.
+ */
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/inter/Inter-Regular.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('/fonts/inter/Inter-Medium.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/inter/Inter-SemiBold.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/inter/Inter-Bold.woff2') format('woff2');
+}
+
 @layer components {
+    /*
+     * Tokens do DOCUMENTO de orçamento (a "folha" editável na tela).
+     *
+     * ⚠️ O par impresso é `resources/views/orcamentos/pdf.blade.php`. Os dois têm que
+     * bater: o vendedor preenche a folha achando que está preenchendo o PDF, então
+     * qualquer mudança de cor, espessura ou espaçamento aqui precisa de mudança lá.
+     *
+     * Por que token de CSS e não componente Vue (critério da Regra de ouro nº 8):
+     * o que se repete aqui é sequência de utilities, não estrutura de marcação. O que
+     * é estrutura — a legenda de seção e o painel — virou componente (`DocSecao.vue`,
+     * `DocPainel.vue`).
+     */
+    .doc-legenda {
+        @apply border-l-[3px] border-teal bg-slate-100 px-3 py-1.5 text-[0.7rem] font-bold uppercase tracking-[0.1em] text-navy;
+    }
+
+    .doc-caixa {
+        @apply border border-t-0 border-gray-200 px-4 py-3;
+    }
+
+    .doc-rotulo {
+        @apply text-[0.72rem] leading-tight text-gray-500;
+    }
+
+    .doc-valor {
+        @apply text-[0.82rem] font-medium text-gray-900;
+    }
+
+    /* Campo editável dentro da folha: sublinhado tracejado em vez de caixa de
+       formulário. Precisa parecer papel preenchível e ainda assim anunciar que é
+       editável — daí o tracejado, que vira sólido/cyan no foco. */
+    .doc-campo {
+        @apply w-full border-0 border-b border-dashed border-gray-300 bg-transparent px-0 py-1 text-[0.82rem] font-medium text-gray-900 placeholder:font-normal placeholder:text-gray-300 focus:border-solid focus:border-cyan focus:ring-0;
+    }
+
+    .doc-campo-bloco {
+        @apply w-full border border-dashed border-gray-300 bg-transparent px-2 py-1.5 text-[0.82rem] text-gray-900 placeholder:text-gray-300 focus:border-solid focus:border-cyan focus:ring-0;
+    }
+
     /*
      * Tokens de tabela de dados — implementação da Regra de ouro nº 5 (ver CLAUDE.md).
      * A densidade das ~16 tabelas do sistema mora AQUI, não copiada por arquivo:

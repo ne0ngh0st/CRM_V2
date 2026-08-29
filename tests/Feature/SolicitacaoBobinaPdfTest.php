@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\SolicitacaoBobina;
 use App\Models\User;
+use App\Services\Cadastros\SolicitacaoTituloResolver;
 use App\Services\Solicitacoes\BobinaPdfPresenter;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -43,6 +44,7 @@ class SolicitacaoBobinaPdfTest extends TestCase
             'estoque_seguranca' => 100,
             'impressao' => 'frente_lado_termico',
             'rebobinamento' => 'lado_termico_fora',
+            'tubete_obrigatorio' => 'sim',
             'nf_pedido_tipo' => 'venda',
             'observacoes' => 'Cliente pediu urgência.',
             'status' => 'pendente',
@@ -89,16 +91,27 @@ class SolicitacaoBobinaPdfTest extends TestCase
     public function test_rotulos_seguem_o_legado(): void
     {
         $dono = $this->usuario('vendedor');
-        $dados = app(BobinaPdfPresenter::class)->montar($this->solicitacao($dono));
+        $bobina = $this->solicitacao($dono);
+        $dados = app(BobinaPdfPresenter::class)->montar($bobina);
 
         // NCM faz parte do rótulo no legado — o Cadastro usa isso pra abrir o item.
         $this->assertSame('Venda – NCM 48119010', $dados['comerciais']['NF pedido tipo']);
         $this->assertSame('Térmico', $dados['tecnicas']['Papel']);
         $this->assertSame('48 g/m²', $dados['tecnicas']['Gramatura']);
-        $this->assertSame('Frente (lado térmico)', $dados['tecnicas']['Impressão']);
-        $this->assertSame('Lado térmico para fora', $dados['tecnicas']['Rebobinamento']);
+        $this->assertSame('Sim', $dados['tecnicas']['Uso obrigatório de tubete']);
         $this->assertSame('Sim', $dados['comerciais']['Possui estoque de segurança?']);
-        $this->assertSame('TERMICO 80X40 T12', $dados['tituloDestaque']);
+
+        // O PDF recalcula o título na hora (igual `bobina_titulo_da_solicitacao()` do
+        // legado), não confia só no `titulo_padronizado` gravado — por isso o esperado
+        // aqui vem do próprio resolver, não de uma string fixa.
+        $tituloEsperado = app(SolicitacaoTituloResolver::class)->bobina(
+            $bobina->nomenclatura,
+            $bobina->papel,
+            (string) $bobina->largura,
+            (float) $bobina->metragem,
+            $bobina->gramatura,
+        );
+        $this->assertSame($tituloEsperado, $dados['tituloDestaque']);
 
         // Número inteiro sem casas; decimal sem zero à direita — regra do legado.
         $this->assertSame('80', $dados['tecnicas']['Largura (mm)']);
@@ -111,6 +124,7 @@ class SolicitacaoBobinaPdfTest extends TestCase
         $bobina = $this->solicitacao($dono, [
             'papel' => null,
             'impressao' => null,
+            'tubete_obrigatorio' => null,
             'metragem' => null,
             'estoque_seguranca_sn' => null,
             'observacoes' => null,
@@ -118,7 +132,7 @@ class SolicitacaoBobinaPdfTest extends TestCase
 
         $dados = app(BobinaPdfPresenter::class)->montar($bobina);
         $this->assertSame('-', $dados['tecnicas']['Papel']);
-        $this->assertSame('-', $dados['tecnicas']['Impressão']);
+        $this->assertSame('-', $dados['tecnicas']['Uso obrigatório de tubete']);
         $this->assertSame('-', $dados['tecnicas']['Metragem (m)']);
         $this->assertSame('-', $dados['comerciais']['Possui estoque de segurança?']);
 

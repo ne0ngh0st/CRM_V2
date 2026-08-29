@@ -44,4 +44,10 @@ class SolicitacaoEtiqueta extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /** Quem despachou a ficha pro Cadastro/PCP (coluna `enviado_por`). */
+    public function enviadoPor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'enviado_por');
+    }
 }
