@@ -9,6 +9,56 @@
 
 ---
 
+## 0.0 Estado atual — atualizado em 2026-08-28
+
+**A aplicação está no ar em https://crm.autopel.online**, provisionada por SSH.
+
+| Seção | Estado |
+|---|---|
+| 1-3 Arquitetura, inventário, custos | ✅ decidido |
+| 4.1 Rede (VPC, subnets, SGs) | ✅ `vpc-0c3d9a668fc84f036` |
+| 4.2 RDS | ✅ `crm-v2-prod`, MySQL 8.0.46, Multi-AZ, senha no Secrets Manager |
+| 4.3 ElastiCache | ✅ `crm-v2-redis`, 7.1.0, `volatile-lru` confirmado |
+| 4.4 S3 | ✅ bucket `crm-v2-arquivos-890615325644`, acesso por IAM role — ver 5.4.1 |
+| 4.5 ACM + Route 53 | ✅ certificado ISSUED, `crm.autopel.online` → ALB |
+| 4.6 ALB | ✅ listeners 80→443, `idle_timeout` 300, ambos os TGs `healthy` |
+| 4.7 EC2 | ✅ 2× `m7g.large`, Ubuntu 24.04, provisionadas por `infra/provisionar-servidor.sh` |
+| 4.8 Daemons | ✅ Reverb no app-1; worker + scheduler no app-2 |
+| 5 Configuração | ✅ `.env` nos dois nós, caches de produção ativos |
+| 6 Carga de dados | ✅ 91.293 clientes, 1.032.099 faturamentos, 201 usuários — ver 6.1.1 |
+| 7 Testes | ✅ 7.1, 7.2, 7.3, 7.4, 7.6, 7.8 · ⏸ 7.5, 7.7, 7.9 |
+| 8 Monitoramento | ❌ nenhum alarme criado |
+
+### ⚠️ Não usamos o Laravel Forge — por ora
+
+Decisão de 2026-08-28: o Forge depende de cartão corporativo, que ainda não saiu.
+Provisionamento e deploy são feitos por três scripts versionados em `infra/`:
+
+| Script | Roda como | O que faz |
+|---|---|---|
+| `provisionar-servidor.sh` | root, uma vez por máquina | PHP 8.3, nginx, Composer, Node 22, pool do FPM |
+| `deploy.sh` | ubuntu, a cada release | git, composer, build, migrations, caches, reload |
+| `configurar-daemons.sh` | root, ao definir o papel | supervisor (Reverb ou worker) + cron do scheduler |
+
+**O Forge não foi descartado.** Se a assinatura sair, ele substitui os scripts sem
+mudar nada da arquitetura — os três fazem exatamente o que ele faria.
+
+### Endereços reais (substituem os `xxxxx` da seção 5.1)
+
+```
+RDS    crm-v2-prod.c3mguim6agp4.sa-east-1.rds.amazonaws.com
+Redis  crm-v2-redis.jgy4wl.0001.sae1.cache.amazonaws.com
+app-1  15.229.96.223  (privado 10.0.1.59)  — Reverb
+app-2  54.94.163.16   (privado 10.0.2.74)  — worker + scheduler
+ALB    crm-v2-alb-40682473.sa-east-1.elb.amazonaws.com
+```
+
+Acesso: `ssh -i ~/.ssh/crm-v2 ubuntu@<ip>`. A porta 22 é liberada por IP no SG
+`crm-v2-app` (escritório e casa do Tony) — **se o SSH der timeout, o primeiro suspeito é
+IP novo**, não máquina fora do ar.
+
+---
+
 ## 0. Como usar este documento
 
 | Parte | O quê | Quando |
@@ -498,22 +548,46 @@ O mesmo vale para `--matcher HttpCode=200,404`, que o CLI le como lista — use 
 6. **Atributos:** `idle_timeout.timeout_seconds` = **300** ⚠️
 7. **Access logs** → bucket S3, prefixo `alb-logs/`
 
-### 4.7 EC2 via Forge (40 min)
+### 4.7 EC2 via SSH (40 min)
 
-1. Conectar a conta AWS no Forge
-2. Provisionar **2 servidores** `m7g.large` na VPC/subnets públicas, SG `crm-app`
-3. PHP **8.3**, MySQL client, Redis client (`php8.3-redis` vem no recipe)
-4. Registrar as instâncias nos target groups
-5. **Confirmar extensões**: `php -m` deve listar
-   `pdo_mysql bcmath gd zip exif opcache intl pcntl redis`
+1. Lançar **2 instâncias** `m7g.large`, Ubuntu 24.04 **ARM**, nas subnets públicas, SG
+   `crm-v2-app`, key pair `crm-v2`
+2. Registrar as instâncias nos target groups (`tg-web` as duas, `tg-reverb` só o app-1)
+3. Provisionar cada uma:
 
-### 4.8 Daemons no Forge
+```bash
+scp -i ~/.ssh/crm-v2 infra/provisionar-servidor.sh ubuntu@<ip>:/tmp/
+ssh -i ~/.ssh/crm-v2 ubuntu@<ip> 'sudo bash /tmp/provisionar-servidor.sh'
+```
 
-| Servidor | Comando | Observação |
+O script confere as extensões obrigatórias e **aborta** se faltar alguma — não é decoração,
+foi ele que pegou o `opcache` ausente no provisionamento real (ver 9.11).
+
+### 4.8 Deploy e daemons
+
+```bash
+# .env primeiro — o deploy aborta sem ele
+scp -i ~/.ssh/crm-v2 env-producao ubuntu@<ip>:/tmp/
+ssh -i ~/.ssh/crm-v2 ubuntu@<ip> 'mkdir -p /var/www/crm && mv /tmp/env-producao /var/www/crm/.env && chmod 600 /var/www/crm/.env'
+
+# deploy — --migrar em UM nó só
+ssh -i ~/.ssh/crm-v2 ubuntu@<app-1> 'bash /tmp/deploy.sh --migrar'
+ssh -i ~/.ssh/crm-v2 ubuntu@<app-2> 'bash /tmp/deploy.sh'
+
+# daemons — o papel decide o que roda
+ssh -i ~/.ssh/crm-v2 ubuntu@<app-1> 'sudo bash /tmp/configurar-daemons.sh app-1'
+ssh -i ~/.ssh/crm-v2 ubuntu@<app-2> 'sudo bash /tmp/configurar-daemons.sh app-2'
+```
+
+| Servidor | Processo | Observação |
 |---|---|---|
-| app-2 | `php artisan queue:work redis --tries=1 --timeout=700` | ⚠️ timeout > 600 do job |
-| app-1 | `php artisan reverb:start --host=0.0.0.0 --port=8080` | Só neste nó |
-| app-2 | **Scheduler** (toggle na UI do Forge) | Sem ele o cache esfria |
+| app-2 | `queue:work redis --tries=1 --timeout=700` | ⚠️ timeout > 600 do job |
+| app-1 | `reverb:start --host=0.0.0.0 --port=8080` | Só neste nó |
+| app-2 | cron `schedule:run` a cada minuto | Sem ele o cache esfria |
+
+⚠️ **O target group do Reverb leva ~1 min para virar `healthy`** (intervalo 30 s × 2
+sucessos). `unhealthy` logo após subir o daemon não é defeito — é o health check ainda
+contando. Só investigue se persistir depois de 2 minutos.
 
 ---
 
@@ -581,8 +655,23 @@ LEGADO_DB_DATABASE=
 LEGADO_DB_USERNAME=
 LEGADO_DB_PASSWORD=
 
-# E-mail (quando o SES entrar)
-MAIL_MAILER=ses
+# E-mail — SMTP relay dedicado (smtplw.com.br), NÃO o SES. O plano original previa SES,
+# mas em 2026-08-28 o Tony recebeu credenciais deste relay e é o que o projeto usa.
+#
+# ⚠️ MAIL_MAILER=log no primeiro deploy, de propósito: os destinos de Cadastros são os
+# setores REAIS (pcp.sp@, cadastro.geral@). Uma solicitação de teste dispararia e-mail de
+# verdade para o time — já aconteceu uma vez. Trocar para `smtp` só ao abrir o beta.
+MAIL_MAILER=log
+MAIL_HOST=smtplw.com.br
+MAIL_PORT=587
+MAIL_USERNAME=autopel
+MAIL_PASSWORD=
+MAIL_FROM_ADDRESS="no-reply.crm@solucoes.autopel.com"
+
+# ⚠️ Sem isto o título de toda aba do navegador vira "... - Laravel": o Inertia lê o nome
+# do app do VITE_APP_NAME embutido no BUILD, não do config do servidor. Mudar o valor
+# exige `npm run build` de novo — config:cache não alcança asset já compilado.
+VITE_APP_NAME="${APP_NAME}"
 ```
 
 ### 5.2 ⚠️ `APP_DEBUG=false` é requisito de segurança, não de performance
@@ -649,6 +738,81 @@ de clientes de alguém. O bucket deve manter "bloquear acesso público" ligado.
 ⚠️ **As imagens em `public/images/facas/` não mudam** — são versionadas no git e vêm do
 legado. Só o que o usuário envia vai para o S3.
 
+### 5.4.1 ✅ S3 ativo em produção (2026-08-28) — e os quatro defeitos do caminho
+
+`UPLOADS_DISK=s3` e `EXPORTS_DISK=s3` nos dois nós, com credencial vinda de **IAM role**
+(`crm-v2-app`), não de chave no `.env`. Scripts: `infra/iam/criar-role-s3.sh` (precisa de
+admin, roda uma vez) e `infra/ativar-s3.sh`. Ver `infra/iam/LEIA-ME.md`.
+
+Marcar isto como pronto custou quatro correções, e **três delas eram do mesmo tipo: teste
+que não percorre o caminho real**. Vale ler antes de dar qualquer outra coisa por concluída.
+
+| # | O que quebrou | Por que passou despercebido |
+|---|---|---|
+| 1 | `league/flysystem-aws-s3-v3` **nunca foi instalado** | A migração de 27/08 escreveu o `Disco`, o config e a documentação, e foi marcada ✅ por inspeção de código. Nunca falou com o S3 uma vez. |
+| 2 | Política IAM liberava `uploads/*`, prefixo que **o código não usa** | O teste de ativação escrevia justamente em `uploads/`. Passava com folga enquanto `facas/` e `perfis/` davam AccessDenied. |
+| 3 | `Storage::url()` em bucket privado responde **403** | Não há erro no log: para o PHP, gerar a URL funcionou. Só aparece como imagem quebrada. |
+| 4 | `php -r class_exists(...)` sem `require vendor/autoload.php` | Falso negativo: dizia "adapter ausente" com o pacote instalado. A guarda teria bloqueado a ativação para sempre. |
+
+⚠️ **O modo de falha do nº 1 é o mais perigoso da lista:** o Laravel aceita
+`FILESYSTEM_DISK=s3` sem reclamar e só quebra na primeira gravação. Como o accessor
+`User::foto_url` roda no layout, isso derrubaria **toda** página, não só o upload.
+
+⚠️ **Prefixos que a aplicação realmente usa** — a política precisa cobrir os três:
+
+| Recurso | Prefixo | Onde no código |
+|---|---|---|
+| Imagem de faca | `facas/` | `CatalogoFacaController::186` |
+| Foto de perfil | `perfis/` | `ProfileController::65` |
+| Planilha | `exports/{id}/` | `GerarExportacaoCarteiraJob::64` |
+
+**URL de imagem é assinada** (`Disco::urlUpload()`, TTL 1 h) porque o bucket é privado e
+tem que continuar sendo — as planilhas de `exports/` contêm a carteira inteira de um
+vendedor. Efeito colateral aceito: a URL muda a cada renderização, então o navegador não
+reaproveita a imagem entre páginas. Pesa pouco hoje (as 166 imagens do catálogo são assets
+versionados em `public/images/` e nem passam por ali). Se pesar, a saída é **CloudFront com
+Origin Access Control** — URL estável e cacheável sem abrir o bucket.
+
+**Fotos de perfil herdadas do legado:** 16 usuários têm `foto_perfil` no formato
+`assets/img/perfis/...`, que é caminho do sistema **antigo** — o arquivo nunca existiu no
+CRM-V2. O accessor devolve `null` para esse formato, então esses usuários caem no avatar
+padrão em vez de imagem quebrada. Decisão pendente: migrar as fotos do legado ou limpar a
+coluna.
+
+### 5.4.2 Histórico: como era antes de 28/08
+
+Em produção o `.env` está com `UPLOADS_DISK=public` e `EXPORTS_DISK=local` — **disco
+local**, não S3. Com dois nós isso é um bug de verdade: a foto enviada no app-1 dá 404
+em ~50% dos carregamentos, porque o ALB pode mandar o próximo request para o app-2.
+
+**Por que não foi resolvido junto com o resto:** criar identidade IAM exige permissão de
+IAM, e o usuário `crm-v2-deploy` **não tem** — de propósito, é o isolamento descrito em
+4.0. Só o profile admin da conta consegue.
+
+⚠️ **Não resolver reaproveitando as chaves do `crm-v2-deploy` no servidor.** Elas criam
+EC2, RDS e ALB; guardá-las no `.env` de uma máquina exposta à internet significa que um
+comprometimento da aplicação vira comprometimento da infraestrutura inteira. A conveniência
+não paga esse risco.
+
+**As duas saídas, em ordem de preferência:**
+
+| | Como | Vantagem |
+|---|---|---|
+| **A — IAM role na instância** *(recomendada)* | Criar role com política restrita ao bucket e anexar às duas EC2 (`ec2:AssociateIamInstanceProfile`) | **Nenhuma chave em disco.** Credencial rotaciona sozinha; o SDK da AWS a encontra pelo metadata service sem nenhuma variável no `.env` |
+| B — Usuário IAM dedicado | Criar `crm-v2-s3` com política só deste bucket; chaves no `.env` | É o que a seção 4.4 previu; funciona, mas cria segredo de vida longa em disco |
+
+Com a opção A, o `.env` precisa apenas de:
+
+```dotenv
+UPLOADS_DISK=s3
+EXPORTS_DISK=s3
+AWS_BUCKET=crm-v2-arquivos-890615325644
+AWS_DEFAULT_REGION=sa-east-1
+```
+
+(sem `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` — a ausência delas é o que faz o SDK
+buscar a credencial da role.)
+
 **Três formatos convivem na coluna `faca_recursos.imagem`**, e `urlDaImagem()` resolve os
 três sem migration:
 
@@ -712,6 +876,54 @@ mysqldump -h 127.0.0.1 -P 3306 -u root -p palma_v2 \
 
 # Enviar e importar (via bastion ou do próprio app server)
 mysql -h <endpoint-rds> -u palma -p palma_v2 < espelho.sql
+```
+
+### 6.1.1 ✅ Como a carga foi feita de verdade (2026-08-28)
+
+O `mysqldump` da 6.1 lista **8 tabelas**, e isso não basta: sem `users`, `vendedor_perfis`
+e `segmentos_vendedor`, ninguém além do admin consegue entrar e a aderência fica zerada.
+Foram carregadas **19 tabelas**:
+
+```
+clientes faturamentos pedidos pedido_itens produtos leads
+segmentos grupos_cliente segmentos_vendedor
+users vendedor_perfis roles model_has_roles
+orcamentos orcamento_itens facas faca_recursos
+etiquetas_materia_prima data_sync_status
+```
+
+⚠️ **Quatro tabelas ficaram DE FORA de propósito, porque contêm dado de seed, não dado
+real:** `observacoes` e `sugestoes` são **Lorem Ipsum** gerado pelo Faker; `ligacoes` (6.743)
+e `metas_mensais` (4.320) vêm de seeders de demonstração. Meta de venda inventada e ligação
+que ninguém fez são **piores que vazio** num sistema que o vendedor usa para se avaliar.
+
+⚠️ Também de fora: `migrations` (o RDS tem o seu próprio estado), `sessions`/`cache`/`jobs`
+(agora no Redis) e `notificacoes`/`exportacoes`/`simulacoes_usuario` (artefatos de dev).
+
+**Antes de repetir esta carga, conferir se alguma tabela nova entrou numa dessas duas
+categorias** — a lista acima é um retrato de 28/08, não uma regra permanente.
+
+O caminho foi dump local → gzip (29 MB) → `scp` para o app-1 → `mysql` para o RDS.
+**54 segundos** de import. Rodar de dentro da VPC importa: da máquina do Tony levaria muito
+mais, pela latência por statement.
+
+### 6.1.2 ⚠️ O cast `hashed` re-hasheia hash que você mesmo gerou
+
+`$u->password = Hash::make($senha)` gravado via Eloquent pode virar **bcrypt do bcrypt** —
+o valor no banco é um hash bcrypt válido de 60 caracteres, `password_get_info()` confirma
+"bcrypt", e mesmo assim o login falha com "E-mail ou senha inválidos". Não há sintoma que
+aponte para a causa.
+
+Para definir senha em massa, contornar o cast:
+
+```php
+DB::table('users')->where('id', $id)->update(['password' => Hash::make($senha)]);
+```
+
+E **verificar antes de entregar a senha para alguém**:
+
+```php
+Hash::check($senha, DB::table('users')->where('id',$id)->value('password'));  // tem que ser true
 ```
 
 ### 6.2 Ordem de restauração completa (se precisar do zero)
@@ -975,6 +1187,54 @@ mais lenta. Ao criar tela nova com listagem ordenável, verificar o índice.
 
 ---
 
+> As quatro abaixo saíram do provisionamento real de 2026-08-28, feito por SSH.
+
+### 9.11 `php8.3-opcache` é pacote separado e não vem por dependência
+Instalar `php8.3-fpm`/`php8.3-cli` **não** traz o OPcache no Ubuntu. Sem ele nada quebra:
+o site sobe, tudo funciona — e cada requisição recompila o PHP inteiro. É o pior tipo de
+falha para a Regra nº 9, porque é invisível. O `provisionar-servidor.sh` instala explícito
+e confere depois.
+
+### 9.12 O OPcache não se chama `opcache` no `php -m`
+Ele sai como **`Zend OPcache`**, na seção `[Zend Modules]`. Qualquer verificação escrita
+como `php -m | grep "^opcache$"` dá falso negativo mesmo com a extensão ativa. O script
+normaliza (minúsculas + remove o prefixo `zend `) antes de comparar.
+
+### 9.13 `crontab -l` com `set -e` instala um crontab VAZIO
+`( crontab -l | grep -v X; echo "$NOVO" ) | crontab -` parece idempotente, mas numa máquina
+**sem** crontab o `crontab -l` sai com erro e — sob `set -e` + `pipefail` — mata o subshell
+antes do `echo`. Resultado: crontab vazio instalado em silêncio, ou seja, **scheduler
+desligado sem ninguém perceber** (que é exatamente a 9.7). Montar a lista numa variável com
+`|| true` antes de canalizar.
+
+### 9.14 `VITE_APP_NAME` ausente deixa "Laravel" no título de toda aba
+O Inertia lê o nome do app de `import.meta.env.VITE_APP_NAME`, embutido no **build**.
+`APP_NAME` no `.env` corrige o lado servidor mas não o título do navegador, e `config:cache`
+não alcança asset compilado — é preciso `npm run build` de novo.
+
+### 9.15 Medir latência sem `X-Inertia-Version` mede resposta 409, não página
+O Inertia responde **409** quando a versão de assets do cliente não bate — é o sinal para o
+cliente recarregar. Um `fetch` feito à mão com `X-Inertia: true` mas **sem**
+`X-Inertia-Version` recebe 409 sempre. A resposta é rápida e o teste parece ótimo: foi assim
+que um benchmark desta sessão reportou "83-134 ms, tudo dentro do orçamento" medindo
+respostas vazias. **Confira o status e o tamanho do payload**, nunca só o tempo. A versão
+correta sai de `JSON.parse(document.getElementById('app').dataset.page).version`.
+
+### 9.16 Build do Vite é determinístico — assets divergentes NÃO são a causa
+Ao investigar os 409 acima, a hipótese natural foi "cada nó rodou seu próprio `npm run
+build`, logo os hashes divergem". **Medido: não divergem** — os dois nós produziram
+`manifest.json` com md5 idêntico e o mesmo `app-12X8Sh2q.js`. Vale saber para não perder
+tempo com essa hipótese de novo; se um dia divergirem de verdade, aí sim o sintoma seria
+409 em produção e 404 nos chunks.
+
+### 9.17 `artisan tinker` sai com código 0 mesmo lançando exceção
+`set -e` não pega. Um script que roda uma verificação por `tinker` e confia no código de
+saída **anuncia sucesso com o sistema quebrado** — foi o que o `ativar-s3.sh` fez na
+primeira execução, imprimindo "S3 ATIVO NOS DOIS NÓS" com a prova falhando. Conferir o
+TEXTO da saída, e exigir a contagem esperada de "OK".
+
+---
+
 ## 10. Rollback
 
 | Situação | Ação |
@@ -1111,6 +1371,14 @@ a fila (jobs perdidos) junto com o cache.
 
 | Item | Impacto | Quando |
 |---|---|---|
+| ~~Credencial de S3 para a aplicação~~ | Feito em 2026-08-28 via IAM role — ver 5.4.1 | ✅ |
+| CloudFront na frente do bucket | URL de imagem assinada muda a cada render, sem cache de navegador | Quando o volume de upload crescer |
+| 16 fotos de perfil com caminho do legado | Usuários caem no avatar padrão | Migrar ou limpar a coluna |
+| ~~Carga inicial de dados~~ | Feita em 2026-08-28 — ver 6.1.1 | ✅ |
+| Senhas dos beta testers | 200 usuários com senha inutilizável de propósito | Liberar sob demanda (6.4) |
+| Trocar `MAIL_MAILER` de `log` para `smtp` | Nenhum e-mail de Cadastros sai | Ao abrir o beta, não antes |
+| Alarmes do CloudWatch (seção 8) | Sem aviso de 5XX, latência ou fila parada | Semana 1 |
+| Access logs do ALB no S3 | Sem diagnóstico de latência por rota | Semana 1 |
 | ~~Uploads para o S3~~ | Feito em 2026-08-27 | ✅ |
 | Sincronização automática com o TOTVS | Dado envelhece entre cargas manuais | Depende do Adriano |
 | SES para e-mail transacional | Sem "esqueci minha senha" | Antes de abrir para todos |
