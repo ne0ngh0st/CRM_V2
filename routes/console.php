@@ -50,3 +50,23 @@ Schedule::job(new AquecerCacheDashboardJob)
     ->onOneServer()
     ->withoutOverlapping(15)
     ->name('aquecer-cache-dashboard');
+
+/*
+ * Publica no CloudWatch os números que só a aplicação conhece — profundidade da fila,
+ * idade do último aquecimento e jobs falhados.
+ *
+ * ⚠️ POR QUE A CADA MINUTO, e não a cada dez: isto é detecção de incidente, não relatório.
+ * No incidente de 2026-08-29 a fila travou às 07:00 e só foi notada às 13:00, porque
+ * nenhum alarme nativo da AWS enxerga fila — CPU, memória e ALB ficaram verdes as seis
+ * horas inteiras. Com um minuto de granularidade, o alarme sai às 07:03.
+ *
+ * Custo: três métricas customizadas (~US$ 0,90/mês) mais as chamadas de API (~US$ 0,43).
+ * Menos de um dólar e meio por mês para não repetir seis horas de fila parada.
+ *
+ * `onOneServer()` porque a fila é compartilhada: os dois nós publicariam o mesmo número.
+ */
+Schedule::command(\App\Console\Commands\PublicarMetricas::class)
+    ->everyMinute()
+    ->onOneServer()
+    ->withoutOverlapping()
+    ->name('publicar-metricas');
