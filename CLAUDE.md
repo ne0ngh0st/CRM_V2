@@ -488,7 +488,7 @@ Tony recebeu credenciais de um SMTP relay dedicado (**smtplw.com.br**, usuário 
 - Sem teste automatizado novo pra esse fluxo especificamente (validado manualmente via `tinker`, ponta a ponta, com o PDF real). Se for mexer de novo aqui, vale um `Mail::fake()` em feature test.
 
 **🔓 Destravado em 2026-08-28 — `CadastroController::EMAILS` aponta pros e-mails reais.** Depois de um teste ponta a ponta ter mandado e-mail real pro `pcp.sp@autopel.com`/`cadastro@autopel.com` de verdade (Tony reagiu: *"Nunca teste nada com os emails de produção ta loco kkk"* — ver [[feedback-never-test-with-production-emails]] na memória), os destinos foram temporariamente redirecionados pra `antonio.barbosa@autopel.com` via uma constante (`EMAIL_DESTINO_TESTE`, já removida) até o Tony confirmar. Confirmado no mesmo dia — a partir de agora, toda solicitação de bobina/etiqueta/cliente vai de verdade pro setor: `pcp.sp@autopel.com` (bobina/etiqueta, cc `cadastro@autopel.com`) e **`cadastro.geral@autopel.com`** (cliente — mudou recentemente, não é mais `cadastro.cliente@autopel.com`). Validado só estaticamente (reflection na constante + suíte de testes, que usa `MAIL_MAILER=array`) — **de propósito, não disparei nenhum e-mail real pra confirmar**, pra não repetir o erro anterior.
-  - ⚠️ **Superado em 2026-08-29**: os destinos acima continuam sendo os corretos, mas hoje existe um interruptor que os intercepta — `CADASTROS_REDIRECIONAR_PARA` (ver seção "Beta liberado" abaixo). Enquanto ele tiver valor, NADA chega ao PCP nem ao Cadastro. A constante `EMAIL_DESTINO_TESTE` não existe mais.
+  - ⚠️ **Superado em 2026-08-29**: os destinos acima continuam sendo os corretos, mas hoje existe um interruptor que os intercepta — `CADASTROS_REDIRECIONAR_PARA` (ver seção "Beta liberado" abaixo). Enquanto ele tiver valor, NADA chega ao PCP nem ao Cadastro (esvaziado em 2026-08-31, então hoje chega). A constante `EMAIL_DESTINO_TESTE` não existe mais.
 
 **Reformulação do corpo do e-mail + cc do solicitante — mesma data, pedido do Tony depois de ver como o legado formata.** Fonte real: `pages/SISTEMA/cadastro.php::montarCorpoEmailCadastro` (cliente) e `includes/solicitacoes/solicitacao_email_lib.php::montar_corpo_email_bobina/etiqueta` (bobina/etiqueta), ambos no `CRM-AUTOPEL-COMERCIAL`.
 - Corpo estruturado em seções `TÍTULO\n======\n` (unificado — o legado tinha duas convenções diferentes entre cliente e bobina/etiqueta, aqui virou uma só). Helpers novos no `CadastroController`: `cabecalhoSecao()`, `linhas()`, `secao()`, `blocoTexto()`, `assinaturaEmail()` — Regra de ouro nº 8, pra não repetir a formatação 3 vezes.
@@ -513,14 +513,29 @@ Tony recebeu credenciais de um SMTP relay dedicado (**smtplw.com.br**, usuário 
 Rodada que fechou o checklist de pré-beta. Detalhe completo em `docs/deploy-aws.md`
 (§7.10, §7.11, §8.0 e armadilhas 9.15-9.18); aqui fica só o que muda decisão futura.
 
-**🔴 Interruptor operacional que precisa de decisão: `CADASTROS_REDIRECIONAR_PARA`.**
-Preenchido (hoje aponta pro Tony), TODA solicitação de bobina/etiqueta/cliente vai só pra
-esse endereço, sem cc, com o destino real no prefixo do assunto (`[TESTE → pcp.sp@...]`).
-Vazio, vai pros setores de verdade. Mora em `config/cadastros.php` e é lido por `config()`,
-nunca `env()` — com o config cacheado em produção, `env()` devolveria null e a proteção
-sumiria justamente onde protege. Substituiu a constante `EMAIL_DESTINO_TESTE`, que era
-editada no código e revertida na mão. **Se o beta abrir com isso preenchido, o time de
-Cadastro não recebe nada e ninguém percebe.**
+**Interruptor operacional `CADASTROS_REDIRECIONAR_PARA` — ✅ ESVAZIADO em 2026-08-31.**
+Preenchido, TODA solicitação de bobina/etiqueta/cliente vai só pra esse endereço, sem cc,
+com o destino real no prefixo do assunto (`[TESTE → pcp.sp@...]`). Vazio, vai pros setores
+de verdade. Mora em `config/cadastros.php` e é lido por `config()`, nunca `env()` — com o
+config cacheado em produção, `env()` devolveria null e a proteção sumiria justamente onde
+protege. Substituiu a constante `EMAIL_DESTINO_TESTE`, que era editada no código e
+revertida na mão.
+
+O aviso que estava aqui — "se o beta abrir com isso preenchido, o time de Cadastro não
+recebe nada e ninguém percebe" — **aconteceu**: uma beta tester enviou uma solicitação e
+ela caiu só na caixa do Tony. Esvaziado nos dois nós em 2026-08-31; a partir daí bobina e
+etiqueta vão pra `pcp.sp@autopel.com` (cc `cadastro@autopel.com`) e cliente pra
+`cadastro.geral@autopel.com`, sempre com o solicitante em cópia.
+- ⚠️ **Mexer no `.env` não basta, e são TRÊS passos, não um.** `php artisan config:cache`
+  (o config está cacheado em produção), `systemctl reload php8.3-fpm` (com
+  `opcache.validate_timestamps=0` o FPM não vê o config novo sozinho) e
+  `php artisan queue:restart` — este último é o que realmente importa, porque quem envia é
+  o worker (`Mail::queue`), processo de vida longa que leu a config no boot. Sem ele o
+  redirecionamento continua valendo com o `.env` já corrigido.
+- ⚠️ **Validado só estaticamente** (config resolvendo vazia nos dois nós + worker com 19s
+  de uptime), de propósito: disparar um teste pra confirmar mandaria e-mail pro PCP e pro
+  Cadastro de verdade — ver [[feedback_never_test_with_production_emails]]. A prova de
+  fogo é a próxima solicitação real de um beta tester.
 
 **"Esqueci minha senha" funciona.** O Breeze já trazia o fluxo inteiro; faltavam três
 coisas: o e-mail saía em inglês assinado "Laravel", o controller vazava quais contas
@@ -612,7 +627,7 @@ importá-lo faria a badge mentir logo depois de cada import).
 - ~~🔴 **BLOQUEADOR DE BETA — `ImportUsuariosLegado` reseta a senha de quem já existe.**~~ **Resolvido em 2026-08-27.** Trocado por `firstOrNew` + bloco de *primeira carga*. Auditando o resto do comando, o problema era maior que a senha: o import sobrescrevia **tudo** a cada rodada, inclusive o que o próprio usuário edita no CRM — `display_name` e `telefone` (via `ProfileUpdateRequest`) e `foto_perfil` (via `ProfileController::updateFoto`). Com beta testers, cada reimportação apagaria a foto e o nome de exibição de todo mundo. Também saíram do update `last_login_at`/`last_activity_at`: quem escreve isso é o login no CRM-V2, e o valor do legado é o login no sistema *antigo*. Continuam vindo do legado (que é dono): `name`, `username`, `tipo_usuario`, `is_active`, `estado` e as cores de UI. Os outros 5 imports já eram seguros (`import-leads` deleta só `origem = 'sistema'`; clientes/produtos usam `upsert`; faturamento/pedidos são espelho puro).
   - ⚠️ **Fica um risco não resolvido**: a chave do import é o `email`, e o usuário pode trocar o próprio e-mail em `/profile`. Se um beta tester fizer isso, a próxima importação não o reconhece e **cria um usuário duplicado**. Resolver quando incomodar — provavelmente chaveando por `username`, que o CRM não deixa editar.
 - **Deploy AWS: FEITO em 2026-08-28** — o sistema está no ar em `https://crm.autopel.online` com dados reais (91.293 clientes, 1.032.099 faturamentos, 201 usuários) e latência de 83-204 ms nas páginas core, dentro do orçamento da Regra nº 9. Provisionado por SSH via `infra/provisionar-servidor.sh`, `infra/deploy.sh` e `infra/configurar-daemons.sh`; S3 por IAM role (`infra/iam/`). **Estado atual, endereços reais e armadilhas: `docs/deploy-aws.md` §0.0 e §9.11-9.17.**
-  - ~~**Falta para abrir o beta**: alarmes, testes 7.5/7.9 e `MAIL_MAILER`.~~ **Tudo feito em 2026-08-29** — 12 alarmes com entrega comprovada, 7.5 (5/5) e 7.9 (6/6) passando, SMTP ligado. O que sobrou é decisão, não trabalho: esvaziar `CADASTROS_REDIRECIONAR_PARA` para os e-mails chegarem aos setores.
+  - ~~**Falta para abrir o beta**: alarmes, testes 7.5/7.9 e `MAIL_MAILER`.~~ **Tudo feito em 2026-08-29** — 12 alarmes com entrega comprovada, 7.5 (5/5) e 7.9 (6/6) passando, SMTP ligado. ~~O que sobrou é decisão, não trabalho: esvaziar `CADASTROS_REDIRECIONAR_PARA` para os e-mails chegarem aos setores.~~ **Esvaziado em 2026-08-31** — ver a seção "Beta liberado" acima.
   - ⚠️ **Lição que vale além do deploy**: quatro defeitos apareceram no caminho e três eram o mesmo erro — *verificação que não percorre o caminho real*. O pior: este guia marcava "uploads no S3 ✅ feito em 27/08" e o pacote `league/flysystem-aws-s3-v3` nunca tinha sido instalado — marcado como pronto **por inspeção de código, não por execução**. Antes de marcar qualquer coisa ✅, perguntar se a verificação passa pelo mesmo código, prefixo, header e credencial que a produção usa.
 - **Performance: ver `docs/performance.md`** (Regra de ouro nº 9) — catálogo do que é caro e do que é barato, com checklist de produção. ⚠️ **A lista de pendências mora lá, não aqui**: a cópia que existia nesta linha ficou desatualizada (listava Redis, cache warming e export em fila como pendentes muito depois de estarem prontos) e mandava otimizar coisa já otimizada. Regra de ouro nº 8 — decisão que se repete mora em um lugar só. Medição real em produção (2026-08-28): páginas core entre **83 e 204 ms**, dentro do orçamento de 400 ms.
 - ~~**Validar `ini_set(memory_limit/max_execution_time)` dos exports Excel no pool PHP-FPM real**~~ **Validado em produção em 2026-08-28**: `ini_set` sobe o `memory_limit` de 512M para 1024M e `set_time_limit` vai de 60 para 300, via FPM. Funciona porque o `infra/provisionar-servidor.sh` põe esses valores num `.ini` normal — **se algum dia virarem `php_admin_value` no pool, os exports voltam a dar 500 silencioso**.
