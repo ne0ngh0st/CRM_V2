@@ -34,3 +34,6 @@ Desktop.ini
 
 # IDs dos recursos AWS provisionados (nao versionar)
 .aws-crm-v2-ids.txt
+
+# CSVs de carga historica de faturamento (arquivos grandes, gerados por scripts/)
+/storage/app/import-faturamento
