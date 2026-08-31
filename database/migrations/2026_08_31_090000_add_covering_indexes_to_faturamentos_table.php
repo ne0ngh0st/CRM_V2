@@ -34,16 +34,11 @@ use Illuminate\Support\Facades\Schema;
  * 1,7x MAIS RAPIDA do que era -- o custo passou a ser proporcional a janela
  * consultada, nao ao tamanho da tabela.
  *
- * OS DOIS INDICES ANTIGOS SAO REMOVIDOS AQUI, e nao e faxina: cada um e prefixo
- * exato de um dos novos -- `(data_emissao)` de `(data_emissao, valor_total)`, e
- * `(cod_vendedor, data_emissao)` de `(cod_vendedor, data_emissao, valor_total)`.
- * Todo acesso que usava os antigos e atendido pelos novos, o que foi confirmado
- * por EXPLAIN depois do drop (o plano continua `range` + `Using index`).
- *
- * Medido: sao 266 MB dos 624 MB de indice -- 106 MB do `data_emissao` e 160 MB do
- * `cod_vendedor_data_emissao`. Alem do espaco, todo INSERT mantinha quatro indices
- * em vez de dois, e a carga historica ja mostrou que isso pesa: recarregar um ano
- * com os indices presentes levou 10m40s contra 66s sem eles.
+ * ⚠️ `faturamentos_data_emissao_index` ficou REDUNDANTE: `(data_emissao)` e prefixo
+ * de `(data_emissao, valor_total)`, entao qualquer consulta que usava o primeiro e
+ * atendida pelo segundo. Nao foi removido aqui de proposito -- e uma decisao a
+ * parte, que economiza espaco e acelera INSERT (relevante nos imports em lote), mas
+ * que merece ser tomada e medida por si, nao de carona nesta migration.
  */
 return new class extends Migration
 {
@@ -59,23 +54,10 @@ return new class extends Migration
             // porque so precisa estar presente, nunca e filtrado.
             $table->index(['cod_vendedor', 'data_emissao', 'valor_total'], 'fat_vend_data_valor_idx');
         });
-
-        // Só depois de os substitutos existirem. Na ordem inversa haveria uma janela,
-        // ainda que curta, em que consulta nenhuma teria índice para usar.
-        Schema::table('faturamentos', function (Blueprint $table) {
-            $table->dropIndex('faturamentos_data_emissao_index');
-            $table->dropIndex('faturamentos_cod_vendedor_data_emissao_index');
-        });
     }
 
     public function down(): void
     {
-        // Recria os antigos antes de remover os novos, pelo mesmo motivo.
-        Schema::table('faturamentos', function (Blueprint $table) {
-            $table->index('data_emissao', 'faturamentos_data_emissao_index');
-            $table->index(['cod_vendedor', 'data_emissao'], 'faturamentos_cod_vendedor_data_emissao_index');
-        });
-
         Schema::table('faturamentos', function (Blueprint $table) {
             $table->dropIndex('fat_data_valor_idx');
             $table->dropIndex('fat_vend_data_valor_idx');
