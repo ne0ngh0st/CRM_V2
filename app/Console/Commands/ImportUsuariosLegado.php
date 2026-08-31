@@ -53,8 +53,10 @@ class ImportUsuariosLegado extends Command
                  *   configurado), isso é perda total de acesso.
                  * - display_name, telefone, foto_perfil: editáveis pelo próprio usuário em
                  *   /profile (ProfileUpdateRequest + ProfileController::updateFoto).
-                 * - last_login_at, last_activity_at: quem escreve isso é o login no CRM-V2.
-                 *   O valor do legado é o login no sistema ANTIGO e não interessa aqui.
+                 * - last_login_at, last_activity_at: NÃO entram nem na primeira carga.
+                 *   Quem escreve é o CRM-V2 (o login e o middleware RegistrarAtividade);
+                 *   o valor do legado é a atividade no sistema ANTIGO, e importá-lo faria
+                 *   a badge "online agora" da Equipe mentir logo depois de um import.
                  */
                 if (! $user->exists) {
                     $user->fill([
@@ -63,8 +65,6 @@ class ImportUsuariosLegado extends Command
                         'display_name' => $row['NOME_EXIBICAO'],
                         'telefone' => $row['TELEFONE'],
                         'foto_perfil' => $row['FOTO_PERFIL'],
-                        'last_login_at' => $row['ULTIMO_LOGIN'],
-                        'last_activity_at' => $row['ULTIMA_ATIVIDADE'],
                     ]);
                 }
 

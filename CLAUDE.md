@@ -563,6 +563,44 @@ faltar o header `X-Inertia-Version`; e dois testes de ordenação que passavam p
 coincidência e continuaram verdes depois da feature ser removida. Antes de marcar algo como
 pronto, perguntar por qual caminho aquilo foi comprovado.
 
+### Badge "online agora" da Equipe nunca contou ninguém — corrigido em 2026-08-31
+
+Reportado pelo Tony sobre produção. Não era erro de contagem: **`users.last_activity_at`
+não era escrita por nenhum caminho do sistema**, então a coluna era NULL para os 201
+usuários, a badge dizia "0 online agora" com o sistema em pleno uso e o filtro "Presença
+→ Online agora" nunca devolvia ninguém. O `EquipeController` (leitura, janela de 5 min)
+estava correto desde sempre — faltava a fonte do dado.
+
+**Por que passou despercebido tanto tempo**: o `ImportUsuariosLegado` *parecia* popular a
+coluna (havia `'last_activity_at' => $row['ULTIMA_ATIVIDADE']` num `fill()` de primeira
+carga), mas ela não está no `$fillable` do `User` — o Eloquent descartava em silêncio.
+Duas linhas de código morto que descreviam uma funcionalidade inexistente. Mesmo caso de
+`last_login_at` e `email_verified_at` no mesmo `fill()`, ambos igualmente ignorados; as
+duas de `last_*` foram removidas (o valor do legado é atividade no sistema *antigo*, e
+importá-lo faria a badge mentir logo depois de cada import).
+
+**`App\Http\Middleware\RegistrarAtividade`** (registrado no `web(append:)` do
+`bootstrap/app.php`) é o **único** lugar que escreve presença — Regra de ouro nº 8.
+- ⚠️ **Escreve em `terminate()`, não em `handle()`**: a resposta já saiu para o cliente
+  quando o UPDATE roda (Regra de ouro nº 9). Consequência visível e travada por teste:
+  quem abre a Equipe **não** aparece na própria contagem naquele request, só no seguinte
+  — a tela recarrega sozinha a cada 45s, então some em segundos. Não é defeito.
+- ⚠️ **Trinco `Cache::add("presenca:{id}", …, 60)`**: sem ele seria um UPDATE por página
+  aberta por usuário. Com ele, o custo dentro do request é um comando do Redis e o banco
+  leva no máximo um UPDATE por usuário por minuto. Chave com TTL, nunca `Cache::forever`.
+- ⚠️ **Durante simulação marca o ADMIN, não o alvo.** O guard devolve o alvo, mas quem
+  está usando o sistema é o admin — marcar o alvo mostraria "online agora", para a equipe
+  inteira, um vendedor que pode estar em casa. Presença segue a pessoa, não o guard.
+- Usa `DB::table` e não o model, de propósito: presença não é edição de cadastro, não deve
+  mexer em `users.updated_at` nem disparar evento de model.
+- **Sair do sistema não zera a coluna**, de propósito: quem desloga para de gerar atividade
+  e cai da lista quando a janela de `EquipeController::MINUTOS_ONLINE` (5 min) expira.
+- Testado: `tests/Feature/PresencaOnlineTest.php` (6 casos). O primeiro afirma que a coluna
+  começa NULL — sem isso, um teste que só olhasse a badge voltaria a passar se a escrita
+  sumisse de novo. Suíte inteira verde (160 testes) depois da mudança.
+- **Validado pelo caminho real, não só por teste** (lição de 2026-08-29): request de browser
+  de verdade contra o app, conferindo a coluna no banco antes (NULL para 201) e depois.
+
 ## Pendências
 - Adicionar campo "tubete obrigatório" no `CadastroBobinaForm.vue` (backend já trata; formulário nunca ganhou o input — ver seção "E-mail transacional de Cadastros" acima).
 - Popular `etiquetas_materia_prima` com dados reais de custo (Tony faz pela tela `/orcamentos/materia-prima`).

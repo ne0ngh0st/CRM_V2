@@ -16,6 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+            // Presença ("N online agora" da Equipe). Só age em terminate(), depois de a
+            // resposta sair — ver App\Http\Middleware\RegistrarAtividade.
+            \App\Http\Middleware\RegistrarAtividade::class,
         ]);
 
         /*
