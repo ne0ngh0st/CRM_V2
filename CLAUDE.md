@@ -39,7 +39,9 @@ Não existe "essa página é lenta porque é pesada". Existe página que ainda n
 
 **Relação com a nº 6:** a nº 6 diz *meça com volume real antes de dar por concluído*. A nº 9 diz *qual número é aceitável*. A nº 6 é o método; a nº 9 é a meta.
 
-**Corolário — não confundir com comprar hardware.** Máquina maior compra latência estável e headroom de concorrência; não compra uma agregação de 2 s virar 200 ms. Neste projeto o banco inteiro tem 337 MB e cabe em RAM em qualquer instância: overprovisionar o RDS não rende nada. O que rende está catalogado, com custo e ganho medidos, em **`docs/performance.md`** — consultar antes de otimizar qualquer coisa, e antes de gastar dinheiro em infra.
+**Corolário — não confundir com comprar hardware.** Máquina maior compra latência estável e headroom de concorrência; não compra uma agregação de 2 s virar 200 ms. O que rende está catalogado, com custo e ganho medidos, em **`docs/performance.md`** — consultar antes de otimizar qualquer coisa, e antes de gastar dinheiro em infra.
+
+> ⚠️ **Este corolário dizia "o banco inteiro tem 337 MB e cabe em RAM em qualquer instância: overprovisionar o RDS não rende nada". Isso valeu até 2026-08-31 e deixou de valer.** Com a carga do histórico de faturamento (2018-2025), o banco foi para **1,66 GB** numa `db.t4g.small` de 2 GB. A frase sobrevive como princípio — hardware não conserta agregação cara —, mas não como diagnóstico: hoje existe um caso real neste projeto em que RAM é exatamente o recurso que falta. Ver "Carga do histórico de faturamento" mais abaixo, e **medir antes de decidir** (`FreeableMemory`, `SwapUsage`, `ReadIOPS`, `ReadLatency`), nunca repetir de cabeça nenhuma das duas versões desta linha.
 
 ## Stack e convenções
 - Backend: **Laravel 11** (travado em v11.55.0, não v12+; o `composer` precisou de `--no-security-blocking` por advisories abertos na branch 11.x — XSS refletido só com `APP_DEBUG=true`, então **`APP_DEBUG=false` é crítico antes de qualquer deploy real**).
@@ -221,6 +223,7 @@ O que **continua legitimamente inline** (varia por tabela, não é gambiarra): `
 - **Como aplicar**: toda vez que um seed mockado for substituído por import de dado real (ver `docs/importacao-dados-legado.md`), ou toda vez que uma query nova for escrita sobre tabela que vai ter volume real (`faturamentos`, `pedidos`, `clientes`, etc.), rodar `EXPLAIN` na query e medir tempo real (`microtime()`/tinker) **antes** de considerar a tarefa concluída — não confiar que "funcionou rápido com o seed" significa que vai continuar rápido com 900k linhas.
 - **Sintomas a procurar no `EXPLAIN`**: `type: ALL` (table scan), `key: NULL` (nenhum índice usado), `Using filesort`/`Using temporary` em query que devia ser coberta por índice. Primeiro instinto: nunca envolver a coluna de data/filtro numa função no `WHERE` (`YEAR(col)`, `DATE(col)`, etc.) — usar intervalo direto (`col BETWEEN ... AND ...`) e criar índice cobrindo o caso "sem filtro de vendedor", não só o caso "com filtro de vendedor".
 - **Mas isso pode não ser suficiente — index não é bala de prata.** No caso real: troquei `whereYear()` por `whereBetween()` e criei o índice em `data_emissao` sozinha, e o tempo só caiu de 1,3s pra 862ms — o `EXPLAIN` continuou mostrando `type: ALL`, índice ignorado. Motivo: **100% das 910 mil linhas importadas são do mesmo ano** (só existe um ano de histórico no espelho hoje), então o intervalo `BETWEEN` não filtra nada — o MySQL corretamente prefere ler a tabela inteira em vez de ficar saltando pelo índice pra "filtrar" 100% das linhas. Índice só ajuda quando a condição corta uma fração real da tabela.
+  - ⚠️ **Atualização de 2026-08-31, e o desfecho é mais interessante que a lição original.** Com o histórico carregado (5,85 M de linhas, 2018-2026), o ano corrente virou ~18% da tabela — a seletividade que faltava passou a existir. **E o índice continuou sendo ignorado.** A causa não era mais seletividade: era o índice não **cobrir** a coluna somada. Sem `valor_total` nele, o MySQL teria que ir na tabela linha a linha para somar, e de novo concluiu que varrer tudo saía mais barato. Com `(data_emissao, valor_total)` a leitura acontece inteira dentro do índice (`Using index`) e a mesma consulta caiu de 4.074 ms para 660 ms. **Sempre olhar `Extra:` no EXPLAIN, não só `key:`** — índice escolhido e índice suficiente são coisas diferentes, e a diferença aqui foi 6x.
 - **Fix de verdade nesse caso**: como é um KPI de dashboard (não precisa de frescor ao segundo), envolvi a agregação em `Cache::remember(..., now()->addMinutes(15), ...)` — primeira chamada continua ~880ms, mas todo mundo que abrir o Home nos 15 minutos seguintes (mesmo escopo/ano) pega do cache (~2ms). Lição: quando o índice não resolve porque a query genuinamente precisa varrer quase tudo, a resposta costuma ser reduzir **quantas vezes** isso roda (cache, ou uma tabela de rollup pré-agregada), não insistir em indexar uma coluna de baixa seletividade.
 
 ## Estado atual (2026-07-24)
@@ -615,6 +618,62 @@ importá-lo faria a badge mentir logo depois de cada import).
   sumisse de novo. Suíte inteira verde (160 testes) depois da mudança.
 - **Validado pelo caminho real, não só por teste** (lição de 2026-08-29): request de browser
   de verdade contra o app, conferindo a coluna no banco antes (NULL para 201) e depois.
+
+### Carga do histórico de faturamento (2018-2025) — 2026-08-31
+
+O `faturamentos` deixou de ser "só o ano corrente". Foram carregados **oito anos** vindos
+dos Excels do TOTVS em `RELATORIOS TOTVS\Legacy`, em dev e em produção:
+
+| | Antes | Depois |
+|---|---:|---:|
+| Linhas | 1.032.099 | **5.853.279** |
+| Período | 2026 | **2018-01-15 → 2026-08-04** |
+| Acumulado | R$ 478 mi | **R$ 4,71 bi** |
+| Banco | 337 MB | **1,66 GB** |
+
+**Duas peças novas**, e a separação entre elas é deliberada:
+- **`scripts/faturamento_xlsx_para_csv.py`** — lê o xlsx em streaming e normaliza para CSV.
+  É Python porque o PhpSpreadsheet mantém toda célula como objeto em memória (o mesmo
+  motivo do estouro já documentado nos exports); o arquivo de 2025 tem 285 MB.
+  ⚠️ **Mapeia por NOME de coluna, nunca por posição** — as abas do 2025 têm ordem
+  diferente das dos outros anos, e um mapeamento posicional corromperia 1,1 M de linhas
+  em silêncio, porque os tipos ainda "cabem" nas colunas erradas. Absorve também
+  cabeçalho em L1/L2/L3, `EMISSAO` ora texto ora datetime, número ora float ora
+  texto brasileiro.
+- **`legado:import-faturamento-arquivo`** — importa esse CSV. **Nunca trunca**; com
+  `--ano` apaga só aquele ano, o que torna a carga repetível sem duplicar.
+
+**⚠️ A ordem entre carga e índice não é detalhe: é 10x.** Recarregar um ano com os quatro
+índices presentes levou **10m40s**; com dois, **66s**. Carga histórica sempre antes de
+criar índice.
+
+**⚠️ Risco novo, aceito conscientemente pelo Tony (2026-08-31): `legado:import-faturamento`
+sem `--desde` faz TRUNCATE e apaga os oito anos.** Até esta carga isso era recuperável — o
+espelho tinha tudo que produção tinha. **Agora não**: o espelho só tem 2026, e o histórico
+existe apenas no RDS e nos CSVs da máquina do Tony. Foi proposta uma trava no comando e o
+Tony optou por não criá-la. Não adicionar sem ele pedir; apenas não rodar esse comando sem
+`--desde` contra um banco com histórico.
+
+**Série mista, de propósito:** só 2024 e 2025 vieram dos arquivos "final (com negativos)",
+que descontam devoluções (11.026 e 22.232 linhas negativas). De 2018 a 2023 não há nenhuma.
+Por isso 2024 (R$ 742,5 mi) aparece **abaixo** de 2023 (R$ 815,3 mi) — parte dessa queda é
+artefato, não mercado. O Tony vai gerar os anos antigos com devolução depois; é só rodar de
+novo com `--ano`.
+
+**⚠️ Memória do RDS virou o recurso escasso** (ver o aviso na Regra nº 9). Medido em
+produção após a carga: `FreeableMemory` caiu de 445 MB para ~90 MB e `SwapUsage` subiu para
+320 MB e continua crescendo. Não há degradação hoje — `ReadIOPS` 1,4 e `ReadLatency` 0,5 ms
+provam que o working set está em memória, e o p95 do ALB ficou em **143 ms** —, mas a folga
+acabou. **Antes de carregar o histórico de pedidos (+380 MB projetados), subir para
+`db.t4g.medium`.** Aqui o upgrade compra o recurso certo: a CPU está em 6-16%, é RAM que
+falta. (`small` e `medium` têm 2 vCPU as duas — se algum dia o gargalo for CPU, esse
+upgrade não resolve nada.)
+
+**Lição de processo que custou um deploy:** a migration `090000` foi editada depois de já
+ter rodado em produção. Migration aplicada não roda de novo, então a edição não teve efeito
+lá e o banco ficou com quatro índices enquanto o arquivo dizia dois. **Migration já
+aplicada nunca se edita — a correção é sempre uma migration nova** (foi a `110000`, feita
+idempotente porque dev e produção chegaram nela em estados diferentes).
 
 ## Pendências
 - Adicionar campo "tubete obrigatório" no `CadastroBobinaForm.vue` (backend já trata; formulário nunca ganhou o input — ver seção "E-mail transacional de Cadastros" acima).

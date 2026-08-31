@@ -173,10 +173,27 @@ Forge provisiona `arm64` normalmente. Se algo falhar no provisionamento, o plano
 | `users` | 201 | |
 | **Total do banco** | | **337 MB** |
 
-⚠️ **NÃO superdimensione o RDS.** O banco inteiro tem 337 MB e cabe folgado no buffer pool
-de uma `t4g.small` (2 GB). RAM além disso **não é usada** — o dataset já está 100% em
-memória. Toda vez que a tentação de subir a instância aparecer, reler esta linha e a
-Parte 3 do `docs/performance.md`.
+⚠️ **Os volumes acima são de 2026-08-27 e ficaram desatualizados em 2026-08-31**, quando o
+histórico de faturamento (2018-2025) foi carregado. Números atuais:
+
+| Tabela | Linhas | Tamanho |
+|---|---:|---|
+| `faturamentos` | **5.853.279** | **1,55 GB** (1,20 GB de dados + 349 MB de índice) |
+| **Total do banco** | | **1,66 GB** |
+
+⚠️ **A orientação de "não superdimensionar o RDS" também deixou de valer, e isto inverteu.**
+Ela dizia que o banco cabia folgado no buffer pool da `t4g.small` e que RAM além disso não
+seria usada. Com 1,66 GB numa instância de 2 GB isso acabou: medido logo após a carga,
+`FreeableMemory` caiu de 445 MB para ~90 MB e `SwapUsage` subiu para 320 MB, crescendo.
+
+**Não há degradação hoje** — `ReadIOPS` 1,4 e `ReadLatency` 0,5 ms mostram que o working
+set está em memória (as agregações são index-only e nunca tocam a tabela), e o p95 do ALB
+ficou em 143 ms. Mas não sobra margem. **Antes da carga do histórico de pedidos
+(+380 MB projetados), subir para `db.t4g.medium`.**
+
+Aqui o upgrade compra o recurso certo: a CPU fica em 6-16%, é RAM que falta. Note que
+`small` e `medium` têm **2 vCPU as duas** — se um dia o gargalo for CPU, esse upgrade não
+resolve nada, e aí a resposta volta a ser a Parte 3 do `docs/performance.md`.
 
 **Multi-AZ é obrigatório aqui**, e a razão mudou recentemente: o dado passou a **nascer**
 na AWS (observações, orçamentos, agendamentos, solicitações de cadastro, exportações). Não
