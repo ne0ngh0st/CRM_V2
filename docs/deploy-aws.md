@@ -888,15 +888,33 @@ Os comandos `legado:import-*` leem o espelho `autopel01_homolog`, que hoje roda 
 do Tony. **Na AWS esse espelho não existe.** A automação depende da refatoração das bases
 do Adriano, que ainda não veio.
 
-**Para o beta, use carga pontual:**
+> 🔴 **NÃO USE MAIS O `mysqldump` LOGO ABAIXO. Use `infra/sincronizar-dados.sh`.**
+> Ele foi escrito para um banco VAZIO, em 28/08. Desde então a produção passou a ter
+> dado que nasceu lá e não existe em lugar nenhum aqui: orçamentos criados na tela
+> (7 em 01/09), observações, ligações, agendamentos, solicitações de cadastro, senhas
+> e fotos dos beta testers. Rodar o comando abaixo hoje apaga tudo isso.
+>
+> ⚠️ E não basta trocar o dump por `REPLACE INTO`: **REPLACE é DELETE + INSERT e
+> dispara os FKs.** Conferido no schema real — `observacoes.cliente_id`,
+> `ligacoes.cliente_id` e `agendamentos_ligacoes.cliente_id` são `ON DELETE SET NULL`,
+> e `carteira_motivos_inatividade.cliente_id` é `ON DELETE CASCADE`. Um REPLACE em
+> `clientes` desligaria as 6.885 observações dos seus clientes e apagaria os motivos
+> de inatividade, sem erro nenhum. Por isso o script usa staging +
+> `INSERT ... ON DUPLICATE KEY UPDATE`, que nunca apaga linha.
+>
+> ⚠️ `leads` está **fora** do script de propósito: o `legado:import-leads` apaga e
+> reinsere as linhas `origem='sistema'`, então os ids mudam a cada import e um upsert
+> por id religaria observação ao lead errado — e sobrescreveria lead do WordPress
+> criado na produção. Precisa de chave estável antes de entrar.
+
+**Procedimento histórico (28/08) — mantido só como registro:**
 
 ```bash
-# Na máquina local — só as tabelas espelho
+# ⚠️ DESTRUTIVO hoje. Não rode.
 mysqldump -h 127.0.0.1 -P 3306 -u root -p palma_v2 \
   clientes faturamentos pedidos pedido_itens produtos leads segmentos grupos_cliente \
   > espelho.sql
 
-# Enviar e importar (via bastion ou do próprio app server)
 mysql -h <endpoint-rds> -u palma -p palma_v2 < espelho.sql
 ```
 
