@@ -7,14 +7,72 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use PDO;
 
+/**
+ * ⚠️ Sem `--desde`, este comando faz TRUNCATE em `faturamentos` antes de recarregar.
+ * Isso foi inofensivo enquanto a tabela era só o espelho do ano corrente: o que fosse
+ * apagado voltava na mesma execução.
+ *
+ * Deixou de ser em 2026-08-31, com a carga do histórico 2018-2025 (5,85 milhões de
+ * linhas). O espelho do TOTVS só tem o ano corrente — os outros oito anos vieram de
+ * planilhas e existem apenas no banco e nos CSVs da máquina do Tony. Rodar sem `--desde`
+ * contra um banco com histórico apaga tudo isso, e nenhuma reimportação traz de volta.
+ *
+ * Daí a trava em `fonteCobreOHistorico()`.
+ */
 class ImportFaturamentoLegado extends Command
 {
     protected $signature = 'legado:import-faturamento
         {--fonte=homolog : homolog ou producao}
         {--desde= : reimporta só a partir dessa data (Y-m-d, period_merge); sem isso, recarrega o histórico inteiro}
+        {--apagar-historico : autoriza o truncate mesmo quando a fonte não cobre todo o período já gravado}
         {--chunk=2000 : tamanho do lote de insert}';
 
     protected $description = 'Import do faturamento (linha de nota fiscal) do TOTVS pro CRM-V2';
+
+    /**
+     * Recusa o truncate quando o destino guarda período que a fonte não sabe repor.
+     *
+     * A comparação é entre a data mais antiga já gravada e a mais antiga que a origem
+     * oferece: se o banco tem 2018 e o espelho começa em 2026, recarregar apaga oito anos
+     * que ninguém consegue trazer de volta. Compara data, não contagem de linhas — o que
+     * importa é a cobertura do período, não o volume.
+     */
+    private function fonteCobreOHistorico(PDO $pdo): bool
+    {
+        $maisAntigoNoDestino = DB::table('faturamentos')->min('data_emissao');
+
+        if ($maisAntigoNoDestino === null) {
+            return true;
+        }
+
+        $maisAntigoNaFonte = $pdo->query('SELECT MIN(emissao_date) FROM FATURAMENTO')->fetchColumn();
+
+        if ($maisAntigoNaFonte === false || $maisAntigoNaFonte === null) {
+            $maisAntigoNaFonte = '9999-12-31';
+        }
+
+        if ($maisAntigoNoDestino >= $maisAntigoNaFonte) {
+            return true;
+        }
+
+        $emRisco = DB::table('faturamentos')->where('data_emissao', '<', $maisAntigoNaFonte)->count();
+
+        if ($this->option('apagar-historico')) {
+            $this->warn("--apagar-historico informado: seguindo mesmo com {$emRisco} linhas anteriores a {$maisAntigoNaFonte} sendo descartadas.");
+
+            return true;
+        }
+
+        $this->error('Recusando o truncate: a fonte não cobre todo o período já gravado.');
+        $this->line("  Mais antigo no banco : {$maisAntigoNoDestino}");
+        $this->line("  Mais antigo na fonte : {$maisAntigoNaFonte}");
+        $this->line("  Linhas que sumiriam  : {$emRisco}");
+        $this->newLine();
+        $this->line('Para atualizar só o período que a fonte tem, use --desde='.$maisAntigoNaFonte.'.');
+        $this->line('Se a intenção é mesmo descartar o histórico, repita com --apagar-historico.');
+
+        return false;
+    }
 
     public function handle(): int
     {
@@ -28,6 +86,12 @@ class ImportFaturamentoLegado extends Command
             return self::FAILURE;
         }
 
+        $pdo = LegadoConexao::pdo($fonte);
+
+        if ($desde === null && ! $this->fonteCobreOHistorico($pdo)) {
+            return self::FAILURE;
+        }
+
         if ($desde !== null) {
             $apagados = DB::table('faturamentos')->where('data_emissao', '>=', $desde)->delete();
             $this->info("Removidas {$apagados} linhas de faturamentos a partir de {$desde} (period_merge).");
@@ -36,7 +100,6 @@ class ImportFaturamentoLegado extends Command
             $this->info('Tabela faturamentos zerada — recarga completa do histórico.');
         }
 
-        $pdo = LegadoConexao::pdo($fonte);
         // Sem isso, o driver bufferiza o resultado inteiro no cliente antes de devolver
         // a primeira linha — inviável pra 900k+ linhas.
         $pdo->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, false);
