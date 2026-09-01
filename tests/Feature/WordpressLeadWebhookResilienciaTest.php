@@ -46,6 +46,101 @@ class WordpressLeadWebhookResilienciaTest extends TestCase
         $this->assertSame(1, Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->count());
     }
 
+    /**
+     * O formulário REAL do site (CF7 id 83 em /fale-conosco), com os nomes de
+     * campo lidos do HTML dele — não inventados.
+     *
+     * ⚠️ Este é o teste que pega o defeito que quase passou: o telefone se
+     * chama `mc4wp-PHONE` (o Mailchimp prefixa o que controla) e não batia com
+     * nenhum alias. O lead nascia sem telefone, sem CNPJ, sem estado e sem
+     * segmento — com nome e e-mail e mais nada, e o vendedor sem como ligar.
+     */
+    public function test_formulario_real_do_site_mapeia_todos_os_campos(): void
+    {
+        $this->comSegredo();
+
+        $this->post('/webhooks/wordpress-leads?token='.self::SEGREDO, [
+            'name' => 'Joana Prado',
+            'empresa' => 'Mercado Bom Preço LTDA',
+            'segmento' => 'Supermercados',
+            'cnpj' => '12.345.678/0001-90',
+            'estado' => 'São Paulo',
+            'cidade' => 'Guarulhos',
+            'endereco' => 'Rua das Palmeiras, 100',
+            'email' => 'joana@bompreco.com.br',
+            'mc4wp-PHONE' => '(11) 98888-7777',
+            'assunto' => 'Orçamentos',
+            'itens' => ['Bobinas', 'Etiquetas'],
+            'mensagem' => 'Gostaria de um orçamento de bobinas térmicas.',
+        ])->assertCreated();
+
+        $lead = Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->firstOrFail();
+
+        $this->assertSame('Joana Prado', $lead->nome);
+        $this->assertSame('Mercado Bom Preço LTDA', $lead->razao_social);
+        $this->assertSame('joana@bompreco.com.br', $lead->email);
+        $this->assertSame('(11) 98888-7777', $lead->telefone, 'o mc4wp-PHONE tem que virar telefone');
+        $this->assertSame('12.345.678/0001-90', $lead->cnpj);
+        $this->assertSame('SP', $lead->estado, '"São Paulo" tem que virar sigla, nunca "Sã"');
+        $this->assertSame('Guarulhos', $lead->cidade);
+        $this->assertSame('Rua das Palmeiras, 100', $lead->endereco);
+        $this->assertSame('Supermercados', $lead->segmento);
+        $this->assertSame('010617', $lead->cod_vendedor);
+
+        // A mensagem e os itens não têm coluna, mas não podem sumir.
+        $envelope = MarketingWpLeadRaw::query()->firstOrFail()->payload_json;
+        $this->assertStringContainsString('bobinas térmicas', $envelope);
+        $this->assertStringContainsString('Etiquetas', $envelope);
+    }
+
+    /** UF já em sigla passa direto; texto que não é estado não vira sigla errada. */
+    public function test_estado_invalido_fica_nulo_em_vez_de_truncado(): void
+    {
+        $this->comSegredo();
+
+        $this->post('/webhooks/wordpress-leads?token='.self::SEGREDO, [
+            'name' => 'Teste UF',
+            'email' => 'uf@empresa.com',
+            'estado' => 'nao sei',
+        ])->assertCreated();
+
+        $this->assertNull(Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->value('estado'));
+    }
+
+    /** Regra de ouro nº 2: SAC e Licitação têm sistema próprio, não são do CRM-V2. */
+    public function test_assunto_nao_comercial_fica_na_staging_sem_virar_lead(): void
+    {
+        $this->comSegredo();
+
+        $resposta = $this->post('/webhooks/wordpress-leads?token='.self::SEGREDO, [
+            'name' => 'Reclamante',
+            'email' => 'reclamacao@cliente.com',
+            'mc4wp-PHONE' => '11988887777',
+            'assunto' => 'SAC',
+        ])->assertCreated();
+
+        $staging = MarketingWpLeadRaw::query()->find($resposta->json('staging_id'));
+        $this->assertNull($staging->lead_id);
+        $this->assertStringContainsString('assunto_nao_comercial', $staging->erro);
+        $this->assertSame(0, Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->count());
+
+        // Guardado inteiro: se um dia mudar de ideia, o dado está lá.
+        $this->assertStringContainsString('reclamacao@cliente.com', $staging->payload_json);
+    }
+
+    /** Formulário sem campo de assunto (a newsletter do rodapé) não pode nascer bloqueado. */
+    public function test_formulario_sem_assunto_continua_virando_lead(): void
+    {
+        $this->comSegredo();
+
+        $this->post('/webhooks/wordpress-leads?token='.self::SEGREDO, [
+            'your-name' => 'Sem Assunto',
+            'your-email' => 'sem.assunto@empresa.com',
+        ])->assertCreated();
+
+        $this->assertSame(1, Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->count());
+    }
+
     public function test_token_errado_na_query_string_devolve_401(): void
     {
         $this->comSegredo();

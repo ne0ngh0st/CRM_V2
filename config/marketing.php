@@ -24,4 +24,30 @@ return [
 
     'wp_webhook_secret' => env('WP_LEADS_WEBHOOK_SECRET', ''),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Assuntos do formulário que viram lead comercial
+    |--------------------------------------------------------------------------
+    |
+    | O "Fale Conosco" do site (CF7 id 83) é geral: o select `assunto` oferece
+    | Orçamentos, SAC, Compras, Licitação, Ouvidoria e Outros. O CRM-V2 é SÓ
+    | comercial (Regra de ouro nº 2) — SAC e Licitação têm sistema próprio, e
+    | jogá-los no funil do vendedor é poluir a carteira com chamado de suporte.
+    |
+    | O que fica de fora NÃO se perde: a captura continua guardada inteira em
+    | marketing_wp_leads_raw com o motivo na coluna `erro`, e o e-mail do site
+    | para o marketing sai para todos os assuntos de qualquer jeito — ele nem
+    | passa pelo CRM.
+    |
+    | Comparação normalizada (minúsculas, sem acento), então 'orcamentos' casa
+    | com "Orçamentos". Lista vazia = não filtra nada, tudo vira lead.
+    |
+    | ⚠️ O filtro só age quando o formulário TEM campo de assunto. Form sem
+    | esse campo (a newsletter do rodapé, por exemplo) passa direto — senão
+    | qualquer formulário novo nasceria bloqueado sem ninguém entender por quê.
+    |
+    */
+
+    'assuntos_comerciais' => ['orcamentos', 'compras'],
+
 ];

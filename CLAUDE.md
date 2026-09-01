@@ -717,6 +717,31 @@ com o erro contabilizado na própria linha (`tentativas`, `erro`).
   `whereIn('cod_vendedor', …)`, **nenhum vendedor o vê** — entra e some. A
   migration insere a linha, mas migration roda uma vez só; o seeder é a rede.
 
+**O formulário real do site, lido do HTML dele (não suposto):** `/fale-conosco`
+tem DOIS forms CF7 — o **f96** é só a newsletter do rodapé (campo `email`), e o
+**f83** é o "Fale Conosco" de verdade: `name`, `empresa`, `segmento`, `cnpj`,
+`estado`, `cidade`, `endereco`, `email`, `mc4wp-PHONE`, `assunto`, `itens[]`,
+`mensagem`. **Cada form precisa do webhook configurado na própria aba** — o
+painel do plugin é por formulário, não global. Foi por isso que o primeiro envio
+real não chegou: o webhook estava no f96.
+
+⚠️ **`mc4wp-PHONE`**: o Mailchimp for WordPress prefixa os campos que controla, e
+o telefone é um deles. Sem tirar esse prefixo em `normalizarChave()`, nenhum alias
+bate e o lead nasce **sem telefone** — o único dado que o vendedor usa para agir.
+O mesmo descuido perdia `cnpj`, `estado`, `cidade`, `endereco` e `segmento`, que
+têm coluna em `leads` e alimentam os filtros da tela.
+
+⚠️ **`leads.estado` é varchar(2)** e o campo do site é texto livre. "São Paulo"
+passa por `normalizarUf()` e vira `SP`; o que não é estado vira **null**. Truncar
+daria `Sã` e o filtro de estado passaria a mentir.
+
+**Assunto filtra o que vira lead** (`config('marketing.assuntos_comerciais')`, hoje
+`orcamentos` + `compras`). O f83 é um Fale Conosco geral que também roteia SAC,
+Licitação e Ouvidoria — Regra de ouro nº 2, esses têm sistema próprio e não podem
+cair no funil do vendedor. Ficam na staging com o motivo em `erro`, e o e-mail do
+site para o marketing sai para todos de qualquer jeito (não passa pelo CRM).
+Formulário SEM campo de assunto passa direto, senão form novo nasceria mudo.
+
 **Se o mapeamento estiver errado no dia 1** (o plugin posta num formato que o
 `WpLeadPayloadParser` ainda não conhece), a captura entra, o envelope é
 guardado e a promoção marca `payload_sem_campos_comerciais` sem retentar — de

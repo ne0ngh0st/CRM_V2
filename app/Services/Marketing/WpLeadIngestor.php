@@ -210,6 +210,16 @@ class WpLeadIngestor
                 return $this->registrarFalha($staging, 'payload_sem_campos_comerciais', definitiva: true);
             }
 
+            // SAC / Licitação / Ouvidoria não são do CRM-V2 (Regra de ouro nº 2).
+            // O envelope fica guardado; só não vira lead na carteira do vendedor.
+            if (! $this->assuntoEhComercial($extraidos['assunto'] ?? null)) {
+                return $this->registrarFalha(
+                    $staging,
+                    'assunto_nao_comercial: '.($extraidos['assunto'] ?? '-'),
+                    definitiva: true,
+                );
+            }
+
             // Resolvido na promoção, não na captura: se a linha `*` de
             // marketing_wp_formularios for cadastrada depois, o retry acerta o dono.
             $formulario = $this->formularios->resolver($campos, $rotuloCsv);
@@ -278,17 +288,56 @@ class WpLeadIngestor
     }
 
     /**
-     * @param  array{nome: ?string, email: ?string, telefone: ?string, empresa: ?string}  $extraidos
+     * ⚠️ Olha SÓ os campos que identificam alguém para contatar. Assunto,
+     * estado ou segmento preenchidos sozinhos não fazem um lead: seriam um
+     * formulário sem nome, sem e-mail e sem telefone, ou seja, nada acionável.
+     *
+     * @param  array<string, ?string>  $extraidos
      */
     private function tudoVazio(array $extraidos): bool
     {
-        foreach ($extraidos as $valor) {
+        foreach (['nome', 'email', 'telefone', 'empresa'] as $campo) {
+            $valor = $extraidos[$campo] ?? null;
             if ($valor !== null && trim($valor) !== '') {
                 return false;
             }
         }
 
         return true;
+    }
+
+    /**
+     * Formulário SEM campo de assunto passa direto — o filtro só existe para o
+     * "Fale Conosco" geral, que mistura comercial com SAC/Licitação/Ouvidoria.
+     * Bloquear por ausência faria todo formulário novo nascer mudo.
+     */
+    private function assuntoEhComercial(?string $assunto): bool
+    {
+        $assunto = $assunto !== null ? trim($assunto) : '';
+        if ($assunto === '') {
+            return true;
+        }
+
+        /** @var list<string> $permitidos */
+        $permitidos = (array) config('marketing.assuntos_comerciais', []);
+        if ($permitidos === []) {
+            return true;
+        }
+
+        return in_array($this->normalizarAssunto($assunto), array_map(
+            fn ($p) => $this->normalizarAssunto((string) $p),
+            $permitidos,
+        ), true);
+    }
+
+    private function normalizarAssunto(string $valor): string
+    {
+        $valor = mb_strtolower(trim($valor));
+
+        return strtr($valor, [
+            'á' => 'a', 'à' => 'a', 'ã' => 'a', 'â' => 'a', 'é' => 'e', 'ê' => 'e',
+            'í' => 'i', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ú' => 'u', 'ç' => 'c',
+        ]);
     }
 
     /** Mesmo e-mail, mesma origem, últimas 24h: é a mesma pessoa insistindo, não um lead novo. */
@@ -319,7 +368,7 @@ class WpLeadIngestor
     }
 
     /**
-     * @param  array{nome: ?string, email: ?string, telefone: ?string, empresa: ?string}  $extraidos
+     * @param  array<string, ?string>  $extraidos
      */
     private function criarLeadComercial(array $extraidos, ?string $codVendedor): Lead
     {
@@ -342,6 +391,12 @@ class WpLeadIngestor
             'nome_fantasia' => $extraidos['empresa'] ? Str::limit($extraidos['empresa'], 255, '') : null,
             'email' => $email ? Str::limit($email, 255, '') : null,
             'telefone' => $extraidos['telefone'] ? Str::limit($extraidos['telefone'], 30, '') : null,
+            'cnpj' => $extraidos['cnpj'] ? Str::limit($extraidos['cnpj'], 18, '') : null,
+            // Já vem como sigla ou null do parser — nunca truncado (varchar(2)).
+            'estado' => $extraidos['estado'] ?: null,
+            'cidade' => $extraidos['cidade'] ? Str::limit($extraidos['cidade'], 255, '') : null,
+            'endereco' => $extraidos['endereco'] ? Str::limit($extraidos['endereco'], 255, '') : null,
+            'segmento' => $extraidos['segmento'] ? Str::limit($extraidos['segmento'], 255, '') : null,
             'status' => 'ativo',
         ]);
     }
