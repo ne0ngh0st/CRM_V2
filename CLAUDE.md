@@ -735,12 +735,28 @@ têm coluna em `leads` e alimentam os filtros da tela.
 passa por `normalizarUf()` e vira `SP`; o que não é estado vira **null**. Truncar
 daria `Sã` e o filtro de estado passaria a mentir.
 
-**Assunto filtra o que vira lead** (`config('marketing.assuntos_comerciais')`, hoje
-`orcamentos` + `compras`). O f83 é um Fale Conosco geral que também roteia SAC,
+**A mensagem do cliente vira observação no lead.** `mensagem`, `itens[]` e
+`local_conhecimento` não têm coluna em `leads` e são o conteúdo do pedido — sem
+isso o vendedor teria que abrir o payload cru para saber o que a pessoa quer.
+⚠️ A observação nasce com **`user_id` NULO** (a coluna virou nullable na migration
+`180000`): quem escreveu foi o cliente, não um usuário do CRM, e atribuir ao
+vendedor seria autoria falsa — além de contar como atividade dele na Visão do
+Gestor, que agrega por `user_id`. Quem exibe autor usa **`Observacao::nomeAutor()`**,
+que cai para "Formulário do site"; os quatro pontos que faziam
+`$o->user->display_name` direto quebrariam com property on null.
+
+**O filtro de assunto existe mas está DESLIGADO** (`assuntos_nao_comerciais` vazia). O f83 é um Fale Conosco geral que também roteia SAC,
 Licitação e Ouvidoria — Regra de ouro nº 2, esses têm sistema próprio e não podem
 cair no funil do vendedor. Ficam na staging com o motivo em `erro`, e o e-mail do
 site para o marketing sai para todos de qualquer jeito (não passa pelo CRM).
 Formulário SEM campo de assunto passa direto, senão form novo nasceria mudo.
+
+⚠️ **Por que desligado**: o primeiro envio real do site chegou com assunto
+"Outros" — escolhido pelo próprio Tony ao testar. Isso respondeu na prática a
+dúvida que a lista tentava resolver: quem preenche classifica de qualquer jeito,
+então filtrar por aí descartaria orçamento de verdade. O mecanismo continua no
+código e travado por teste; é só preencher `assuntos_nao_comerciais` se um dia o
+ruído de SAC/Ouvidoria incomodar mais que perder lead.
 
 **Se o mapeamento estiver errado no dia 1** (o plugin posta num formato que o
 `WpLeadPayloadParser` ainda não conhece), a captura entra, o envelope é
