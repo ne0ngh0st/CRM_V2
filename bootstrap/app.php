@@ -4,6 +4,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -11,6 +12,13 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         channels: __DIR__.'/../routes/channels.php',
         health: '/up',
+        then: function () {
+            // Entrada de sistemas externos. Fica FORA do grupo `web` (sem
+            // sessão, sem CSRF) mas dentro de routes/, que é onde se procura
+            // rota. TrustProxies continua global, então $request->ip() ainda
+            // lê o X-Forwarded-For do ALB — o throttle depende disso.
+            Route::group([], base_path('routes/webhooks.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [

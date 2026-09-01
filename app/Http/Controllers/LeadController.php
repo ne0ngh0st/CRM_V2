@@ -10,7 +10,10 @@ use App\Models\VendedorPerfil;
 use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Dashboard\DashboardScopeResolver;
+use App\Services\Marketing\WpLeadCapturaStatus;
+use App\Services\Marketing\WpLeadIngestor;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -25,6 +28,8 @@ class LeadController extends Controller
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly CacheDeAgregacao $cache,
+        private readonly WpLeadCapturaStatus $wpCaptura,
+        private readonly WpLeadIngestor $wpIngestor,
     ) {
     }
 
@@ -68,7 +73,7 @@ class LeadController extends Controller
         $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
         $aba = (string) $request->string('aba') ?: 'leads';
 
-        if (! in_array($origem, ['sistema', 'manual'], true)) {
+        if (! in_array($origem, Lead::ORIGENS, true)) {
             $origem = '';
         }
         if (! in_array($status, ['ativo', 'inativo', 'convertido'], true)) {
@@ -95,6 +100,7 @@ class LeadController extends Controller
             ->selectRaw('COUNT(*) as total')
             ->selectRaw("SUM(origem = 'sistema') as sistema")
             ->selectRaw("SUM(origem = 'manual') as manual")
+            ->selectRaw("SUM(origem = 'wordpress') as wordpress")
             ->selectRaw("SUM(status = 'ativo') as ativos")
             ->first();
 
@@ -102,10 +108,18 @@ class LeadController extends Controller
             'total' => (int) ($contagem->total ?? 0),
             'sistema' => (int) ($contagem->sistema ?? 0),
             'manual' => (int) ($contagem->manual ?? 0),
+            'wordpress' => (int) ($contagem->wordpress ?? 0),
             'ativos' => (int) ($contagem->ativos ?? 0),
         ];
 
-        $leads = $this->listaQuery($request)->paginate(30)->withQueryString();
+        // Só paga as 2 queries do eager load se existir lead do site no escopo.
+        // A maioria das carteiras não tem nenhum, e esta página é das mais abertas.
+        $leadsQuery = $this->listaQuery($request);
+        if ($kpis['wordpress'] > 0) {
+            $leadsQuery->with(['stagingWordpress.formulario:id,nome,identificador']);
+        }
+
+        $leads = $leadsQuery->paginate(30)->withQueryString();
 
         $codigos = $leads->getCollection()->pluck('cod_vendedor')->filter()->unique()->values();
         $nomesPorCod = VendedorPerfil::query()
@@ -132,6 +146,8 @@ class LeadController extends Controller
             'codVendedor' => $lead->cod_vendedor,
             'vendedorNome' => $nomesPorCod[$lead->cod_vendedor] ?? $lead->cod_vendedor,
             'atualizadoEm' => $lead->updated_at?->format('d/m/Y'),
+            'formularioNome' => $lead->stagingWordpress?->formulario?->nome,
+            'temCaptura' => $lead->stagingWordpress !== null,
         ]);
 
         return Inertia::render('Leads/Index', [
@@ -170,6 +186,9 @@ class LeadController extends Controller
                 'visaoSupervisor' => $scope['visaoSupervisor'],
                 'visaoVendedor' => $scope['visaoVendedor'],
             ],
+            'wordpressCaptura' => $this->wpCaptura->resumir(
+                podeTestar: in_array($role, ['admin', 'diretor'], true),
+            ),
         ]);
     }
 
@@ -182,6 +201,38 @@ class LeadController extends Controller
             new \App\Exports\LeadExport($this->listaQuery($request)),
             'leads-'.now()->format('Y-m-d-His').'.xlsx',
         );
+    }
+
+    public function enviarTesteWordpress(Request $request): RedirectResponse
+    {
+        $role = $request->user()->getRoleNames()->first();
+        abort_unless(in_array($role, ['admin', 'diretor'], true), 403);
+
+        $this->wpIngestor->ingerirTesteInterno($request->user()->id);
+
+        // Sem isto o resultado só apareceria depois do TTL do cache do status,
+        // e o botão pareceria não ter feito nada.
+        $this->wpCaptura->esquecer();
+
+        return redirect()->route('leads.index', ['origem' => Lead::ORIGEM_WORDPRESS]);
+    }
+
+    public function capturaWordpress(Request $request, Lead $lead): JsonResponse
+    {
+        $this->autorizarLead($request, $lead);
+        abort_unless($lead->origem === Lead::ORIGEM_WORDPRESS, 404);
+
+        $staging = $lead->stagingWordpress()->with('formulario:id,nome')->first();
+        abort_unless($staging, 404);
+
+        $envelope = json_decode($staging->payload_json, true);
+
+        return response()->json([
+            'fonte' => $staging->fonte,
+            'recebidoEm' => $staging->recebido_em?->format('d/m/Y H:i:s'),
+            'formulario' => $staging->formulario?->nome,
+            'payload' => $envelope ?? $staging->payload_json,
+        ]);
     }
 
     /** Escopo (cod_vendedor, via Lead::visivel()) puro, sem filtros. */
@@ -209,7 +260,7 @@ class LeadController extends Controller
         $segmento = (string) $request->string('segmento');
         $status = (string) $request->string('status');
         $origem = (string) $request->string('origem');
-        if (! in_array($origem, ['sistema', 'manual'], true)) {
+        if (! in_array($origem, Lead::ORIGENS, true)) {
             $origem = '';
         }
         if (! in_array($status, ['ativo', 'inativo', 'convertido'], true)) {

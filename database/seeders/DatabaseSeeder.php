@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             SegmentoSeeder::class,
             FacaSeeder::class,
+            MarketingWpFormularioSeeder::class,
         ]);
 
         // Os seeders abaixo dependem dos usuários reais já estarem importados

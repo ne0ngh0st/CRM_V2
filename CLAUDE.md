@@ -267,7 +267,7 @@ A página `/carteira` (`resources/js/Pages/Carteira/Index.vue` + `CarteiraContro
 
 ### Leads, Cadastros e demais páginas — construído em 2026-07-27 à noite (sessão à parte, revisado em 2026-07-28)
 Rodada grande que expandiu bastante o escopo original das ~16 páginas core. Adicionado nessa rodada:
-- **Leads** (`/leads`, `LeadController`, tabela `leads`) — prospecção separada da Carteira (que é só cliente já existente no TOTVS). `origem` distingue lead vindo de importação (`sistema`) de lead cadastrado manualmente por um vendedor (`manual`). Ligação/agendamento reusam os mesmos modelos da Carteira (`Ligacao`, `AgendamentoLigacao`), agora com `lead_id` nullable ao lado de `cliente_id`. Essa feature **tinha sido cortada** na rodada anterior (ver nota acima) — reentrou em escopo por decisão do Tony nesta sessão.
+- **Leads** (`/leads`, `LeadController`, tabela `leads`) — prospecção separada da Carteira (que é só cliente já existente no TOTVS). `origem` distingue import TOTVS (`sistema`), cadastro pelo vendedor (`manual`) e form do site (`wordpress`). Ligação/agendamento reusam os mesmos modelos da Carteira (`Ligacao`, `AgendamentoLigacao`), agora com `lead_id` nullable ao lado de `cliente_id`. Essa feature **tinha sido cortada** na rodada anterior (ver nota acima) — reentrou em escopo por decisão do Tony nesta sessão. Webhook do site: ver a seção própria "Captura de leads do site (WordPress)" abaixo. CSV: `marketing:import-wp-csv`. `legado:import-leads` não mexe em `manual` nem `wordpress`.
 - **Cadastros** (`/cadastros`, `CadastroController`) — hub único com 4 tipos de "solicitação" (bobina, etiqueta, cliente novo no TOTVS, lead manual rápido), cada uma vira um `mailto:` pro setor certo (PCP, Cadastro, Cadastro Cliente). `ClienteParaCadastro` (tabela `clientes_para_cadastro`) é só essa fila de solicitação — **não** é a tabela `clientes` real nem quebra a Regra nº 4 (não cria/edita cliente de verdade, só pede pro time de Cadastros criar no TOTVS).
 - **Metas** (`/metas`, `MetaController` + `MetaRankingResolver`) — ranking de metas vs. realizado, só gestor (admin/diretor/supervisor), com edição de meta escopada (supervisor só edita quem é `cod_super` dele).
 - **Visão do Gestor** (`/visao-gestor`) — painel gerencial de observações/ligações da equipe.
@@ -386,7 +386,7 @@ Cruzamento das ~90 páginas do legado (pelo menu real, `includes/components/side
 ### Varredura profunda do legado + PDF de bobina — 2026-08-10
 Segunda passada de gap analysis, agora no que está **escondido dentro** das páginas (87 endpoints em `includes/ajax/`, 31 em `includes/api/`, 24 em `includes/crud/`, mais `management/`/`reports/`/`pdf/`). Matriz completa em **`docs/gap-legado.md`** — consultar de lá antes de reabrir qualquer discussão de escopo.
 
-Técnica que se mostrou útil e vale repetir: **contar linhas da tabela no espelho `autopel01_homolog` antes de decidir portar.** Foi o que separou feature viva de código morto — `RESPOSTAS_LIGACAO` tem 19.188 linhas (muito usada), enquanto `observacoes_categorias` tem 0 e `MARKETING_WP_LEADS_RAW` nem existe. Tamanho de código não diz nada; volume de dado diz.
+Técnica que se mostrou útil e vale repetir: **contar linhas da tabela no espelho `autopel01_homolog` antes de decidir portar.** Foi o que separou feature viva de código morto — `RESPOSTAS_LIGACAO` tem 19.188 linhas (muito usada), enquanto `observacoes_categorias` tem 0 e `MARKETING_WP_LEADS_RAW` nem existia no espelho do v1 (o webhook do site nunca ligou lá; no v2 a staging é `marketing_wp_leads_raw`). Tamanho de código não diz nada; volume de dado diz.
 
 **Decisões do Tony nesta data** (não reabrir): ligação é **só contagem de chamadas**, sem roteiro de perguntas; observação continua **mão única** (sem resposta/exclusão/categorias); **transferência de leads não entra**; PDF de bobina **entra e deve ficar igual ao legado**. Em aberto: edição de lead e simular usuário (análise em `docs/gap-legado.md`).
 
@@ -674,6 +674,68 @@ ter rodado em produção. Migration aplicada não roda de novo, então a ediçã
 lá e o banco ficou com quatro índices enquanto o arquivo dizia dois. **Migration já
 aplicada nunca se edita — a correção é sempre uma migration nova** (foi a `110000`, feita
 idempotente porque dev e produção chegaram nela em estados diferentes).
+
+### Captura de leads do site (WordPress) — endurecida em 2026-09-01
+
+`POST /webhooks/wordpress-leads`. O form do site vira captura crua
+(`marketing_wp_leads_raw`) e depois lead comercial (`origem=wordpress`) na
+`/leads`. Dono em `marketing_wp_formularios` (fallback `*` = 010617; form novo
+= nova linha). Rota em `routes/webhooks.php`, fora do grupo `web`.
+
+**⚠️ O TOKEN VIAJA NA QUERY STRING (`?token=…`) e isso NÃO é para "consertar".**
+O plugin de webhook do site tem UM campo: a URL. Não existe onde pôr header.
+Header continua aceito (`Authorization: Bearer`, `X-Webhook-Token`) para o dia
+em que a origem mudar, mas quem funciona hoje é a URL. Trocar isso por
+"header, que é o certo" desliga a integração em produção sem erro nenhum
+aparecer — o site simplesmente para de mandar lead e ninguém percebe.
+Consequência assumida: o token aparece no access log do nginx e do ALB. O
+estrago é limitado de propósito — o endpoint só INSERE, não lê nem apaga.
+
+**⚠️ Staging e lead NÃO compartilham transação, e esse é o ponto do desenho.**
+O WordPress dispara uma vez e nunca reenvia. A versão anterior gravava os dois
+dentro de um `DB::transaction`: qualquer falha ao criar o lead (campo estourando
+tamanho, deadlock, `*` não cadastrado) fazia rollback e levava o envelope junto
+— o lead do cliente sumia sem deixar rastro, justamente o que a staging existia
+para impedir. Hoje o envelope é commitado sozinho e a promoção é best-effort,
+com o erro contabilizado na própria linha (`tentativas`, `erro`).
+
+**O que sustenta o "funciona sem ninguém cuidar":**
+- `PromoverCapturasWpPendentesJob` — a cada minuto, promove o que ficou com
+  `lead_id` nulo. É a rede de segurança; desligar o agendamento não quebra nada
+  de forma visível (o webhook segue respondendo 201), só congela em silêncio o
+  que falhou. A barra da `/leads` passa a ser o único aviso.
+- `ExpurgarCapturasWpJob` — diário. Envelope > 180 dias sai; lead comercial
+  **nunca** é apagado. A exceção é o lead de TESTE, apagado com 24h — é o que
+  permite o botão "Enviar lead de teste" existir sem sujar a carteira de ninguém.
+- Idempotência por `payload_hash` em janela de 10 min: retry do WP devolve 200
+  com o mesmo `staging_id`, não um segundo lead. Mesmo e-mail em 24h reaproveita
+  o lead existente (o envelope novo é guardado do mesmo jeito).
+- `throttle:120,1` na rota. Não é contra o uso normal, é contra o token vazado.
+  Junto com o teto de 256 KB por corpo, evita enchimento de disco num longText.
+- `MarketingWpFormularioSeeder` garante a linha `*`. Sem ela o lead nasce com
+  `cod_vendedor` nulo e, como `LeadController::scopeQuery` filtra por
+  `whereIn('cod_vendedor', …)`, **nenhum vendedor o vê** — entra e some. A
+  migration insere a linha, mas migration roda uma vez só; o seeder é a rede.
+
+**Se o mapeamento estiver errado no dia 1** (o plugin posta num formato que o
+`WpLeadPayloadParser` ainda não conhece), a captura entra, o envelope é
+guardado e a promoção marca `payload_sem_campos_comerciais` sem retentar — de
+propósito, o mesmo parser daria o mesmo resultado. Ensine o alias novo ao
+parser e rode `php artisan marketing:repromover-wp` (tem `--dry-run`). O
+envelope cru da primeira captura real dá para inspecionar em
+`GET /leads/{lead}/captura`. **Conferir isso na primeira captura de verdade**
+— o formato exato do plugin nunca foi visto, só JSON e form-encoded genéricos.
+
+**⚠️ O token nunca é renderizado na tela.** A `/leads` é vista pelos ~200
+vendedores; a barra mostra só a URL base. O segredo mora no `.env` do servidor
+e no campo do plugin.
+
+**Testes**: `WordpressLeadWebhookTest` (caminho feliz, 13) e
+`WordpressLeadWebhookResilienciaTest` (11 — token na URL, 429 do throttle, 413,
+retry, dedupe, envelope sobrevivendo à falha, expurgo). O teste do throttle roda
+**em processo, não por rajada de curl**: contra o `artisan serve`, que atende uma
+requisição por vez, 130 chamadas levam mais que a janela de 60s e o limite nunca
+aparece — dá verde sem provar nada.
 
 ## Pendências
 - Adicionar campo "tubete obrigatório" no `CadastroBobinaForm.vue` (backend já trata; formulário nunca ganhou o input — ver seção "E-mail transacional de Cadastros" acima).

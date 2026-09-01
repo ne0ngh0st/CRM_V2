@@ -55,9 +55,10 @@ class ImportLeadsLegado extends Command
             ];
         }
 
-        // Nunca mexe em origem=manual — é dado que o vendedor cadastrou pela tela, não do TOTVS.
+        // Nunca mexe em origem=manual nem origem=wordpress — manual é dado que o
+        // vendedor cadastrou pela tela; wordpress veio do site e não é do TOTVS.
         $removidos = DB::table('leads')->where('origem', 'sistema')->delete();
-        $this->info("Leads origem=sistema removidos: {$removidos} (origem=manual preservado).");
+        $this->info("Leads origem=sistema removidos: {$removidos} (origem=manual e wordpress preservados).");
 
         $total = 0;
         foreach (array_chunk($linhas, 1000) as $lote) {

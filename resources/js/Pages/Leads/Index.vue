@@ -12,6 +12,8 @@ import LeadsTabela from '@/Components/Leads/LeadsTabela.vue';
 import AgendarLigacaoLeadModal from '@/Components/Leads/AgendarLigacaoLeadModal.vue';
 import ObservacoesModal from '@/Components/Observacoes/ObservacoesModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
+import WordpressCapturaBar from '@/Components/Leads/WordpressCapturaBar.vue';
+import ModalPadrao from '@/Components/ModalPadrao.vue';
 
 const props = defineProps({
     role: String,
@@ -22,6 +24,7 @@ const props = defineProps({
     filtros: Object,
     opcoes: Object,
     visao: Object,
+    wordpressCaptura: { type: Object, default: null },
 });
 
 const isVendedor = computed(() => ['vendedor', 'representante'].includes(props.role));
@@ -87,7 +90,10 @@ function limparFiltros() {
 
 const modalObservacao = ref(false);
 const modalAgendamento = ref(false);
+const modalCaptura = ref(false);
 const leadAtivo = ref(null);
+const capturaJson = ref(null);
+const capturaErro = ref('');
 
 function abrirObservacao(lead) {
     leadAtivo.value = lead;
@@ -97,6 +103,23 @@ function abrirObservacao(lead) {
 function abrirAgendamento(lead) {
     leadAtivo.value = lead;
     modalAgendamento.value = true;
+}
+
+async function abrirCaptura(lead) {
+    leadAtivo.value = lead;
+    capturaJson.value = null;
+    capturaErro.value = '';
+    modalCaptura.value = true;
+    try {
+        const res = await fetch(route('leads.captura', lead.id), {
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        capturaJson.value = await res.json();
+    } catch {
+        capturaErro.value = 'Não foi possível carregar o payload desta captura.';
+    }
 }
 
 const temFiltrosAtivos = computed(() =>
@@ -121,12 +144,13 @@ const temFiltrosAtivos = computed(() =>
                         </svg>
                     </template>
                     <template #subtitle>
-                        Carteira de prospects — base do sistema + leads manuais. Sem transferência (TOTVS/import cuida da atribuição).
+                        Carteira de prospects — base do sistema, leads manuais e leads do site (WordPress). Sem transferência (TOTVS/import cuida da atribuição).
                     </template>
                     <template #meta>
                         <KpiTile :value="kpis.total" label="Total" />
-                        <KpiTile :value="kpis.sistema" label="Sistema" tone="info" />
-                        <KpiTile :value="kpis.manual" label="Manuais" tone="warn" />
+                        <KpiTile :value="kpis.sistema" label="Sistema" tone="info" :href="route('leads.index', { ...filtros, origem: 'sistema', aba: 'leads' })" />
+                        <KpiTile :value="kpis.manual" label="Manuais" tone="warn" :href="route('leads.index', { ...filtros, origem: 'manual', aba: 'leads' })" />
+                        <KpiTile :value="kpis.wordpress ?? 0" label="WordPress" tone="ok" :href="route('leads.index', { ...filtros, origem: 'wordpress', aba: 'leads' })" />
                         <KpiTile :value="kpis.ativos" label="Ativos" tone="ok" />
                     </template>
                     <template #filtros>
@@ -155,6 +179,7 @@ const temFiltrosAtivos = computed(() =>
                             <option value="">Todas</option>
                             <option value="sistema">Sistema</option>
                             <option value="manual">Manual</option>
+                            <option value="wordpress">WordPress</option>
                         </FilterField>
 
                         <FilterField label="Status" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; aplicarFiltros(); }">
@@ -195,6 +220,8 @@ const temFiltrosAtivos = computed(() =>
                         </button>
                     </template>
                 </PageHero>
+
+                <WordpressCapturaBar v-if="wordpressCaptura" :captura="wordpressCaptura" />
 
                 <div class="flex gap-2">
                     <button
@@ -242,6 +269,7 @@ const temFiltrosAtivos = computed(() =>
                             :pode-excluir="true"
                             @observacao="abrirObservacao"
                             @agendar-ligacao="abrirAgendamento"
+                            @captura="abrirCaptura"
                         />
                         <p v-else class="text-sm text-gray-400">Nenhum lead encontrado com os filtros atuais.</p>
 
@@ -271,5 +299,22 @@ const temFiltrosAtivos = computed(() =>
             :lead="leadAtivo"
             @close="modalAgendamento = false"
         />
+        <ModalPadrao
+            :show="modalCaptura"
+            titulo="Captura do site"
+            :subtitulo="leadAtivo?.razaoSocial || leadAtivo?.nome || ''"
+            max-width="2xl"
+            @close="modalCaptura = false"
+        >
+            <p v-if="capturaErro" class="text-sm text-red-600">{{ capturaErro }}</p>
+            <p v-else-if="!capturaJson" class="text-sm text-gray-400">Carregando…</p>
+            <template v-else>
+                <p class="mb-2 text-xs text-gray-500">
+                    {{ capturaJson.fonte }} · {{ capturaJson.recebidoEm }}
+                    <span v-if="capturaJson.formulario"> · {{ capturaJson.formulario }}</span>
+                </p>
+                <pre class="max-h-96 overflow-auto rounded border border-gray-200 bg-gray-50 p-3 text-[0.7rem] leading-4 text-gray-700">{{ JSON.stringify(capturaJson.payload, null, 2) }}</pre>
+            </template>
+        </ModalPadrao>
     </AuthenticatedLayout>
 </template>

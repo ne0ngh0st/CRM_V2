@@ -60,6 +60,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
     Route::get('/leads/exportar', [LeadController::class, 'exportar'])->name('leads.exportar');
+    Route::post('/leads/wordpress/teste', [LeadController::class, 'enviarTesteWordpress'])->name('leads.wordpress.teste');
+    Route::get('/leads/{lead}/captura', [LeadController::class, 'capturaWordpress'])->name('leads.captura');
     Route::post('/leads/{lead}/ligacao', [LeadController::class, 'registrarLigacao'])->name('leads.ligacao');
     Route::post('/leads/{lead}/agendamento', [LeadController::class, 'registrarAgendamento'])->name('leads.agendamento');
     Route::patch('/leads/agendamentos/{agendamento}', [LeadController::class, 'atualizarAgendamento'])->name('leads.agendamentoStatus');

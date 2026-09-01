@@ -1,10 +1,12 @@
 <?php
 
 use App\Jobs\AquecerCacheDashboardJob;
+use App\Jobs\ExpurgarCapturasWpJob;
 use App\Jobs\ExpurgarExportacoesJob;
 use App\Jobs\ExpurgarNotificacoesLidasJob;
 use App\Jobs\NotificarAgendamentosDoDiaJob;
 use App\Jobs\NotificarPedidosAtencaoJob;
+use App\Jobs\PromoverCapturasWpPendentesJob;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -70,3 +72,27 @@ Schedule::command(\App\Console\Commands\PublicarMetricas::class)
     ->onOneServer()
     ->withoutOverlapping()
     ->name('publicar-metricas');
+
+/*
+ * Captura de leads do site (WordPress).
+ *
+ * A promoção roda a cada minuto porque ela é a rede de segurança da captura:
+ * o envelope é gravado sozinho e commitado (ver WpLeadIngestor), então tudo
+ * que falhar em virar lead na hora do POST fica pendente esperando este job.
+ * Um minuto é o intervalo entre "o cliente preencheu o form" e "o vendedor
+ * vê o lead" no pior caso — o caminho feliz continua sendo síncrono.
+ *
+ * ⚠️ Desligar isto não quebra nada de forma visível: o webhook continua
+ * respondendo 201 e a staging continua enchendo. O que para é a promoção do
+ * que falhou — silenciosamente. Se um dia o agendamento sair daqui, a barra
+ * da /leads passa a ser o único aviso.
+ */
+Schedule::job(new PromoverCapturasWpPendentesJob)
+    ->everyMinute()
+    ->onOneServer()
+    ->withoutOverlapping()
+    ->name('promover-capturas-wp');
+
+// Envelope cru é longText e a tabela nunca para de crescer — mesmo motivo do
+// expurgo de notificações. Também é o que apaga o lead de teste depois de 24h.
+Schedule::job(new ExpurgarCapturasWpJob)->dailyAt('03:40')->onOneServer();

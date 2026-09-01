@@ -42,7 +42,7 @@ class LeadExport implements FromQuery, WithHeadings, WithMapping, WithChunkReadi
             $this->nomesPorCodVendedor[$lead->cod_vendedor] ?? $lead->cod_vendedor,
             $lead->estado,
             $lead->segmento,
-            $lead->origem === 'manual' ? 'Manual' : 'Sistema',
+            Lead::rotuloOrigem((string) $lead->origem),
             match ($lead->status) {
                 'ativo' => 'Ativo',
                 'convertido' => 'Convertido',

@@ -15,4 +15,11 @@ export const TONS_STATUS_LEAD = {
 export const ROTULOS_ORIGEM_LEAD = {
     sistema: 'Sistema',
     manual: 'Manual',
+    wordpress: 'WordPress',
+};
+
+export const TONS_ORIGEM_LEAD = {
+    sistema: 'neutral',
+    manual: 'warn',
+    wordpress: 'ok',
 };

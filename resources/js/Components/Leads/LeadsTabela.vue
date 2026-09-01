@@ -1,7 +1,7 @@
 <script setup>
 import { router } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
-import { ROTULOS_STATUS_LEAD, TONS_STATUS_LEAD, ROTULOS_ORIGEM_LEAD } from '@/constants/leads.js';
+import { ROTULOS_STATUS_LEAD, TONS_STATUS_LEAD, ROTULOS_ORIGEM_LEAD, TONS_ORIGEM_LEAD } from '@/constants/leads.js';
 
 defineProps({
     leads: { type: Array, required: true },
@@ -12,7 +12,7 @@ defineProps({
     podeExcluir: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['observacao', 'agendar-ligacao']);
+const emit = defineEmits(['observacao', 'agendar-ligacao', 'captura']);
 
 function formatBRL(valor) {
     if (valor === null || valor === undefined) return '—';
@@ -71,6 +71,7 @@ function excluir(lead) {
                             {{ lead.razaoSocial || lead.nome }}
                         </span>
                         <span class="tbl-sub">{{ lead.cnpj || lead.email || '—' }}</span>
+                        <span v-if="lead.formularioNome" class="tbl-sub">{{ lead.formularioNome }}</span>
                     </td>
                     <td class="tbl-td">{{ lead.vendedorNome || '—' }}</td>
                     <td class="tbl-td">
@@ -79,7 +80,7 @@ function excluir(lead) {
                     </td>
                     <td class="tbl-td">{{ lead.segmento || '—' }}</td>
                     <td class="tbl-td">
-                        <StatusPill :tone="lead.origem === 'manual' ? 'warn' : 'neutral'" size="sm">
+                        <StatusPill :tone="TONS_ORIGEM_LEAD[lead.origem] || 'neutral'" size="sm">
                             {{ ROTULOS_ORIGEM_LEAD[lead.origem] || lead.origem }}
                         </StatusPill>
                     </td>
@@ -91,6 +92,17 @@ function excluir(lead) {
                     <td class="tbl-td">{{ formatBRL(lead.valorEstimado) }}</td>
                     <td class="tbl-td">
                         <div class="tbl-acoes">
+                            <button
+                                v-if="lead.temCaptura"
+                                type="button"
+                                title="Ver payload da captura"
+                                class="tbl-acao tbl-acao-neutro"
+                                @click="emit('captura', lead)"
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M4 6h16M4 12h10M4 18h16" stroke-linecap="round" />
+                                </svg>
+                            </button>
                             <button
                                 v-if="podeLigar"
                                 type="button"
