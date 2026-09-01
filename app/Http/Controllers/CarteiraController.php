@@ -519,7 +519,7 @@ class CarteiraController extends Controller
             // Os itens vêm junto (uma query a mais pra página inteira, não uma por
             // pedido) porque a linha é expansível. São só 20 pedidos por página —
             // o cliente com mais pedidos da base tem 32 no total.
-            ->with('itens:id,pedido_id,cod_produto,descricao,quantidade,quantidade_liberada,valor_unitario,valor_total')
+            ->with('itens:id,pedido_id,cod_produto,descricao,nota_fiscal,quantidade,quantidade_liberada,peso_liquido,valor_unitario,valor_total')
             ->withCount('itens')
             ->orderByDesc('data_pedido')
             ->paginate(20)
@@ -533,12 +533,31 @@ class CarteiraController extends Controller
                 'valorTotal' => (float) $p->valor_total,
                 'itensCount' => $p->itens_count,
                 'emAberto' => $p->data_faturamento === null,
+                // Campos fiscais e logísticos: vêm do RLT 232 e ficam nulos até o
+                // relatório ser ajustado. A tela só mostra o que tiver valor, então
+                // enviar null aqui não polui nada.
+                'rps' => $p->rps,
+                'tipoFaturamento' => $p->tipo_faturamento,
+                'condicaoPagamento' => $p->condicao_pagamento,
+                'dataEntregaPrevista' => optional($p->data_entrega_prevista)->format('d/m/Y'),
+                'dataPcp' => optional($p->data_pcp)->format('d/m/Y'),
+                'carga' => $p->carga,
+                // Peso do pedido = soma das linhas. `peso_liquido` é UNITÁRIO (ver a
+                // migration 120000), então cada linha pesa peso × quantidade.
+                'pesoTotal' => $p->itens->contains(fn ($i) => $i->peso_liquido !== null)
+                    ? (float) $p->itens->sum(fn ($i) => (float) ($i->peso_liquido ?? 0) * (float) $i->quantidade)
+                    : null,
                 'itens' => $p->itens->map(fn ($i) => [
                     'id' => $i->id,
                     'codProduto' => $i->cod_produto,
                     'descricao' => $i->descricao,
+                    'notaFiscal' => $i->nota_fiscal,
                     'quantidade' => (float) $i->quantidade,
                     'quantidadeLiberada' => $i->quantidade_liberada !== null ? (float) $i->quantidade_liberada : null,
+                    'pesoLiquido' => $i->peso_liquido !== null ? (float) $i->peso_liquido : null,
+                    'pesoLinha' => $i->peso_liquido !== null
+                        ? (float) $i->peso_liquido * (float) $i->quantidade
+                        : null,
                     'valorUnitario' => (float) $i->valor_unitario,
                     'valorTotal' => (float) $i->valor_total,
                 ])->all(),

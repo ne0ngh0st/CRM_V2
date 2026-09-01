@@ -13,8 +13,10 @@ class PedidoItem extends Model
         'pedido_id',
         'cod_produto',
         'descricao',
+        'nota_fiscal',
         'quantidade',
         'quantidade_liberada',
+        'peso_liquido',
         'valor_unitario',
         'valor_total',
     ];

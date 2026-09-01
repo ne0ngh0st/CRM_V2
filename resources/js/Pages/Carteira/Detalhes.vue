@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -11,9 +11,9 @@ import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carte
 // Esta página mantinha uma cópia local destes dois mapas, e a cópia não incluía
 // `pendente_totvs` — todo pedido em aberto mostrava a string crua na coluna Status.
 // (Regra de ouro nº 8: rótulo é decisão que mora num lugar só.)
-import { ROTULOS_STATUS_PEDIDO, TONS_STATUS_PEDIDO } from '@/constants/pedidos.js';
+import { ROTULOS_STATUS_PEDIDO, TONS_STATUS_PEDIDO, ROTULOS_TIPO_FATURAMENTO } from '@/constants/pedidos.js';
 
-defineProps({
+const props = defineProps({
     cliente: Object,
     kpis: Object,
     pedidos: Object,
@@ -23,6 +23,49 @@ const expandido = ref(null);
 
 function toggle(id) {
     expandido.value = expandido.value === id ? null : id;
+}
+
+/*
+ * Os campos vindos do RLT 232 (RPS, tipo de faturamento, nota fiscal, peso, e os
+ * logísticos) ficam vazios até o relatório ser ajustado no TOTVS.
+ *
+ * ⚠️ Por isso cada um só aparece quando ALGUM pedido/item da página o tem preenchido.
+ * Sem isso a tela ganharia colunas em branco para todo mundo — que é exatamente o
+ * defeito que já existe aqui: hoje 100% dos pedidos faturados têm data de entrega,
+ * PCP, carga e condição de pagamento vazias, porque o relatório não as fornece.
+ * Quando o dado começar a chegar, as colunas aparecem sozinhas, sem tocar no código.
+ */
+function algumPedidoTem(campo) {
+    return props.pedidos.data.some((p) => p[campo] !== null && p[campo] !== '');
+}
+
+function algumItemTem(campo) {
+    return props.pedidos.data.some((p) => p.itens.some((i) => i[campo] !== null && i[campo] !== ''));
+}
+
+const mostra = computed(() => ({
+    rps: algumPedidoTem('rps'),
+    tipoFaturamento: algumPedidoTem('tipoFaturamento'),
+    condicaoPagamento: algumPedidoTem('condicaoPagamento'),
+    entrega: algumPedidoTem('dataEntregaPrevista'),
+    pcp: algumPedidoTem('dataPcp'),
+    carga: algumPedidoTem('carga'),
+    peso: algumPedidoTem('pesoTotal'),
+    notaFiscal: algumItemTem('notaFiscal'),
+    pesoItem: algumItemTem('pesoLinha'),
+}));
+
+const temDadosDoPedido = computed(() =>
+    mostra.value.rps || mostra.value.tipoFaturamento || mostra.value.condicaoPagamento
+    || mostra.value.entrega || mostra.value.pcp || mostra.value.carga || mostra.value.peso,
+);
+
+function formatPeso(kg) {
+    if (kg === null || kg === undefined) {
+        return '—';
+    }
+
+    return `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(kg)} kg`;
 }
 
 function formatBRL(valor) {
@@ -141,13 +184,53 @@ const campos = [
                                     </tr>
                                     <tr v-if="expandido === pedido.id" class="bg-gray-50">
                                         <td colspan="7" class="p-4">
+                                            <!--
+                                                Bloco inteiro condicionado a `temDadosDoPedido`: enquanto o RLT 232
+                                                não fornecer estes campos, ele simplesmente não existe na tela.
+                                            -->
+                                            <div v-if="temDadosDoPedido" class="mb-4">
+                                                <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Dados do pedido</p>
+                                                <dl class="mt-2 grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                                                    <div v-if="mostra.tipoFaturamento && pedido.tipoFaturamento">
+                                                        <dt class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400">Natureza</dt>
+                                                        <dd class="mt-0.5 text-sm text-gray-800">{{ ROTULOS_TIPO_FATURAMENTO[pedido.tipoFaturamento] || pedido.tipoFaturamento }}</dd>
+                                                    </div>
+                                                    <div v-if="mostra.rps && pedido.rps">
+                                                        <dt class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400">RPS</dt>
+                                                        <dd class="mt-0.5 text-sm text-gray-800">{{ pedido.rps }}</dd>
+                                                    </div>
+                                                    <div v-if="mostra.condicaoPagamento && pedido.condicaoPagamento">
+                                                        <dt class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400">Condição de pagamento</dt>
+                                                        <dd class="mt-0.5 text-sm text-gray-800">{{ pedido.condicaoPagamento }}</dd>
+                                                    </div>
+                                                    <div v-if="mostra.peso && pedido.pesoTotal !== null">
+                                                        <dt class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400">Peso líquido</dt>
+                                                        <dd class="mt-0.5 text-sm text-gray-800">{{ formatPeso(pedido.pesoTotal) }}</dd>
+                                                    </div>
+                                                    <div v-if="mostra.entrega && pedido.dataEntregaPrevista">
+                                                        <dt class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400">Entrega prevista</dt>
+                                                        <dd class="mt-0.5 text-sm text-gray-800">{{ pedido.dataEntregaPrevista }}</dd>
+                                                    </div>
+                                                    <div v-if="mostra.pcp && pedido.dataPcp">
+                                                        <dt class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400">PCP</dt>
+                                                        <dd class="mt-0.5 text-sm text-gray-800">{{ pedido.dataPcp }}</dd>
+                                                    </div>
+                                                    <div v-if="mostra.carga && pedido.carga">
+                                                        <dt class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400">Carga</dt>
+                                                        <dd class="mt-0.5 text-sm text-gray-800">{{ pedido.carga }}</dd>
+                                                    </div>
+                                                </dl>
+                                            </div>
+
                                             <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens do pedido</p>
                                             <table v-if="pedido.itens.length" class="tbl-itens">
                                                 <thead>
                                                     <tr class="tbl-itens-head-row">
                                                         <th class="tbl-itens-th">Produto</th>
+                                                        <th v-if="mostra.notaFiscal" class="tbl-itens-th">Nota fiscal</th>
                                                         <th class="tbl-itens-th">Qtd.</th>
                                                         <th class="tbl-itens-th">Qtd. Liberada</th>
+                                                        <th v-if="mostra.pesoItem" class="tbl-itens-th">Peso</th>
                                                         <th class="tbl-itens-th">Vlr. Unit.</th>
                                                         <th class="tbl-itens-th">Vlr. Total</th>
                                                     </tr>
@@ -157,10 +240,13 @@ const campos = [
                                                         <td class="tbl-itens-td">
                                                             <span v-if="item.codProduto" class="text-gray-400">{{ item.codProduto }} · </span>{{ item.descricao }}
                                                         </td>
+                                                        <td v-if="mostra.notaFiscal" class="tbl-itens-td">{{ item.notaFiscal ?? '—' }}</td>
                                                         <td class="tbl-itens-td">{{ formatQuantidade(item.quantidade) }}</td>
                                                         <td class="tbl-itens-td">
                                                             {{ item.quantidadeLiberada !== null ? formatQuantidade(item.quantidadeLiberada) : '—' }}
                                                         </td>
+                                                        <!-- Peso da LINHA (unitário × quantidade) — ver a migration 120000. -->
+                                                        <td v-if="mostra.pesoItem" class="tbl-itens-td">{{ formatPeso(item.pesoLinha) }}</td>
                                                         <td class="tbl-itens-td">{{ formatBRL(item.valorUnitario) }}</td>
                                                         <td class="tbl-itens-td font-medium text-gray-800">{{ formatBRL(item.valorTotal) }}</td>
                                                     </tr>

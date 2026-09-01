@@ -10,6 +10,8 @@ class Pedido extends Model
 {
     protected $fillable = [
         'numero_pedido',
+        'rps',
+        'tipo_faturamento',
         'cliente_id',
         'cod_vendedor',
         'data_pedido',

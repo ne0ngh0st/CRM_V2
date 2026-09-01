@@ -90,8 +90,14 @@ class ImportPedidosLegado extends Command
                 return array_map(fn ($row) => [
                     'cod_produto' => self::valorOuNull($row['COD_PRODUTO']),
                     'descricao' => trim((string) $row['DESCRICAO_PRODUTO']),
+                    // PEDIDOS_EM_ABERTO nao tem nota nem peso: nota fiscal so existe depois
+                    // do faturamento, e o relatorio de abertos nao traz PESO_LIQ nenhum.
+                    // Explicito (e nao omitido) porque as duas rodadas gravam na mesma
+                    // tabela e o insert em lote exige o mesmo conjunto de chaves.
+                    'nota_fiscal' => null,
                     'quantidade' => $row['QUANTIDADE_VENDA'] ?? 0,
                     'quantidade_liberada' => $row['QUANTIDADE_LIBERADA'],
+                    'peso_liquido' => null,
                     'valor_unitario' => self::valorUnitario($row['VLR_TOTAL'], $row['QUANTIDADE_VENDA']),
                     'valor_total' => $row['VLR_TOTAL'] ?? 0,
                 ], $linhas);
@@ -104,12 +110,17 @@ class ImportPedidosLegado extends Command
      * CNPJ completo. Só a fatia com DT_FATURAMENTO preenchido interessa aqui: o resto da
      * tabela (~92% das linhas) é o mesmo pedido ainda em aberto, já coberto por
      * PEDIDOS_EM_ABERTO — importar tudo duplicaria quase toda a base.
+     *
+     * Campos fiscais: NUM_DOCTO e PESO_LIQ ja existem aqui e sao mapeados. `pedidos.rps`
+     * e `pedidos.tipo_faturamento` continuam sem fonte — nao ha coluna correspondente em
+     * META_VENDA ate o RLT 232 ser ajustado, entao seguem nulos (a migration
+     * 2026_08_31_120000 ja previa isso, e a tela so exibe o que tem valor).
      */
     private function importarFaturados(PDO $pdo): int
     {
         $stmt = $pdo->query(
             'SELECT CNPJ, COD_VENDEDOR, PEDIDO, DT_EMISSAO, PREV_FAT, DT_FATURAMENTO, COD_PROD, DESC_PROD, '
-            .'QTDA_VENDA, PRC_VENDA, VLR_TOTAL '
+            .'QTDA_VENDA, PRC_VENDA, VLR_TOTAL, NUM_DOCTO, PESO_LIQ '
             ."FROM META_VENDA WHERE DT_FATURAMENTO IS NOT NULL AND TRIM(DT_FATURAMENTO) <> '' "
             .'ORDER BY PEDIDO'
         );
@@ -137,8 +148,10 @@ class ImportPedidosLegado extends Command
                 return array_map(fn ($row) => [
                     'cod_produto' => self::valorOuNull($row['COD_PROD']),
                     'descricao' => trim((string) $row['DESC_PROD']),
+                    'nota_fiscal' => self::valorOuNull($row['NUM_DOCTO']),
                     'quantidade' => $row['QTDA_VENDA'] ?? 0,
                     'quantidade_liberada' => $row['QTDA_VENDA'] ?? 0,
+                    'peso_liquido' => self::pesoOuNull($row['PESO_LIQ']),
                     'valor_unitario' => $row['PRC_VENDA'],
                     'valor_total' => $row['VLR_TOTAL'] ?? 0,
                 ], $linhas);
@@ -283,6 +296,23 @@ class ImportPedidosLegado extends Command
         $data = DateTime::createFromFormat('d/m/Y', substr($valor, 0, 10));
 
         return $data ? $data->format('Y-m-d') : null;
+    }
+
+    /**
+     * PESO_LIQ e o peso UNITARIO do produto (conferido no espelho: os produtos distintos
+     * tem cada um um unico valor, que nao varia com a quantidade). O peso da linha e
+     * `peso_liquido * quantidade`, calculado na exibicao.
+     *
+     * Zero vira null de proposito: mais da metade das linhas do relatorio vem com 0,00,
+     * que significa "o TOTVS nao informou", nao "pesa zero". Gravar 0 faria a tela
+     * exibir "0,000 kg" como se fosse peso medido -- a coluna e nullable justamente
+     * pra que campo sem valor nao apareca.
+     */
+    private static function pesoOuNull(mixed $valor): ?float
+    {
+        $peso = (float) ($valor ?? 0);
+
+        return $peso > 0 ? $peso : null;
     }
 
     private static function valorUnitario(mixed $valorTotal, mixed $quantidade): float
