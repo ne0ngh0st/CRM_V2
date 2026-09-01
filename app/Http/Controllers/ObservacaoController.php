@@ -39,7 +39,7 @@ class ObservacaoController extends Controller
             ->get()
             ->map(fn (Observacao $o) => [
                 'id' => $o->id,
-                'autor' => $o->user->display_name ?: $o->user->name,
+                'autor' => $o->nomeAutor(),
                 'cnpj' => $o->cnpj,
                 'mensagem' => $o->mensagem,
                 'fixada' => $o->fixada,
@@ -71,7 +71,7 @@ class ObservacaoController extends Controller
             ->get()
             ->map(fn (Observacao $o) => [
                 'id' => $o->id,
-                'autor' => $o->user->display_name ?: $o->user->name,
+                'autor' => $o->nomeAutor(),
                 'mensagem' => $o->mensagem,
                 'fixada' => $o->fixada,
                 'podeEditar' => $o->user_id === $user->id,
@@ -95,7 +95,7 @@ class ObservacaoController extends Controller
             ->get()
             ->map(fn (Observacao $o) => [
                 'id' => $o->id,
-                'autor' => $o->user->display_name ?: $o->user->name,
+                'autor' => $o->nomeAutor(),
                 'mensagem' => $o->mensagem,
                 'fixada' => $o->fixada,
                 'podeEditar' => $o->user_id === $user->id,
@@ -139,7 +139,7 @@ class ObservacaoController extends Controller
 
         return response()->json([
             'id' => $observacao->id,
-            'autor' => $observacao->user->display_name ?: $observacao->user->name,
+            'autor' => $observacao->nomeAutor(),
             'cnpj' => $observacao->cnpj,
             'mensagem' => $observacao->mensagem,
             'fixada' => $observacao->fixada,

@@ -7,6 +7,7 @@ use App\Jobs\PromoverCapturasWpPendentesJob;
 use App\Models\Lead;
 use App\Models\MarketingWpFormulario;
 use App\Models\MarketingWpLeadRaw;
+use App\Models\Observacao;
 use App\Services\Marketing\WpLeadIngestor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -107,25 +108,78 @@ class WordpressLeadWebhookResilienciaTest extends TestCase
         $this->assertNull(Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->value('estado'));
     }
 
-    /** Regra de ouro nº 2: SAC e Licitação têm sistema próprio, não são do CRM-V2. */
-    public function test_assunto_nao_comercial_fica_na_staging_sem_virar_lead(): void
+    /**
+     * Hoje NENHUM assunto bloqueia (`assuntos_nao_comerciais` está vazia —
+     * decisão do Tony depois de ver que quem preenche classifica de qualquer
+     * jeito). O filtro continua existindo e funcionando; este teste trava que
+     * ele só age quando a lista tem conteúdo.
+     */
+    public function test_filtro_de_assunto_so_age_com_a_lista_preenchida(): void
     {
         $this->comSegredo();
 
+        // Como está em produção: lista vazia, tudo passa.
+        $this->post('/webhooks/wordpress-leads?token='.self::SEGREDO, [
+            'name' => 'Reclamante', 'email' => 'sac1@cliente.com', 'assunto' => 'SAC',
+        ])->assertCreated();
+        $this->assertSame(1, Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->count());
+
+        // Com a lista preenchida, o mesmo envio para de virar lead.
+        config(['marketing.assuntos_nao_comerciais' => ['sac']]);
+
         $resposta = $this->post('/webhooks/wordpress-leads?token='.self::SEGREDO, [
-            'name' => 'Reclamante',
-            'email' => 'reclamacao@cliente.com',
-            'mc4wp-PHONE' => '11988887777',
-            'assunto' => 'SAC',
+            'name' => 'Reclamante 2', 'email' => 'sac2@cliente.com', 'assunto' => 'SAC',
         ])->assertCreated();
 
         $staging = MarketingWpLeadRaw::query()->find($resposta->json('staging_id'));
         $this->assertNull($staging->lead_id);
         $this->assertStringContainsString('assunto_nao_comercial', $staging->erro);
-        $this->assertSame(0, Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->count());
+        $this->assertSame(1, Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->count());
 
         // Guardado inteiro: se um dia mudar de ideia, o dado está lá.
-        $this->assertStringContainsString('reclamacao@cliente.com', $staging->payload_json);
+        $this->assertStringContainsString('sac2@cliente.com', $staging->payload_json);
+    }
+
+    /**
+     * A mensagem que o cliente escreveu tem que chegar onde o vendedor lê.
+     * Sem coluna em `leads`, vira observação — com autor NULO, porque quem
+     * escreveu foi o cliente e não um usuário do CRM.
+     */
+    public function test_mensagem_do_site_vira_observacao_sem_autor(): void
+    {
+        $this->comSegredo();
+
+        $this->post('/webhooks/wordpress-leads?token='.self::SEGREDO, [
+            'name' => 'Joana Prado',
+            'email' => 'joana@bompreco.com.br',
+            'cnpj' => '12.345.678/0001-90',
+            'assunto' => 'Orçamentos',
+            'itens' => ['Bobinas', 'Etiquetas'],
+            'local_conhecimento' => 'Instagram',
+            'mensagem' => 'Preciso de 200 rolos de bobina térmica 80mm.',
+        ])->assertCreated();
+
+        $lead = Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->firstOrFail();
+        $obs = Observacao::query()->where('lead_id', $lead->id)->firstOrFail();
+
+        $this->assertNull($obs->user_id, 'a nota é do cliente, não de um usuário do CRM');
+        $this->assertSame(Observacao::AUTOR_SISTEMA, $obs->nomeAutor());
+        $this->assertStringContainsString('200 rolos de bobina térmica', $obs->mensagem);
+        $this->assertStringContainsString('Bobinas, Etiquetas', $obs->mensagem);
+        $this->assertStringContainsString('Instagram', $obs->mensagem);
+    }
+
+    /** Envio sem mensagem nem itens não deve criar observação vazia. */
+    public function test_sem_mensagem_nao_cria_observacao(): void
+    {
+        $this->comSegredo();
+
+        $this->post('/webhooks/wordpress-leads?token='.self::SEGREDO, [
+            'name' => 'Sem Recado', 'email' => 'sem.recado@empresa.com',
+        ])->assertCreated();
+
+        $lead = Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->firstOrFail();
+        $this->assertSame(0, Observacao::query()->where('lead_id', $lead->id)->count());
     }
 
     /**

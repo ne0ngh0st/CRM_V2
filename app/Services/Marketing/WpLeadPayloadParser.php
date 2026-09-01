@@ -66,6 +66,22 @@ class WpLeadPayloadParser
     /** @var list<string> */
     private const ALIASES_ASSUNTO = ['assunto', 'subject', 'motivo', 'departamento'];
 
+    /** @var list<string> */
+    private const ALIASES_MENSAGEM = [
+        'mensagem', 'message', 'msg', 'comentario', 'comentarios', 'comments',
+        'duvida', 'sua_mensagem', 'your-message',
+    ];
+
+    /** Checkbox `itens[]` do f83: Bobinas / Etiquetas / Papel / Suprimentos. */
+    /** @var list<string> */
+    private const ALIASES_ITENS = ['itens', 'items', 'produtos', 'interesse', 'produto'];
+
+    /** "Como conheceu a Autopel" — o f83 chama de `local_conhecimento`. */
+    /** @var list<string> */
+    private const ALIASES_ORIGEM_CONTATO = [
+        'local_conhecimento', 'como_conheceu', 'onde_conheceu', 'origem', 'fonte',
+    ];
+
     /**
      * `leads.estado` é varchar(2) e todos os 17.173 leads existentes usam sigla.
      * O campo do site é texto livre ("Seu estado"), então vem "São Paulo" tanto
@@ -141,7 +157,8 @@ class WpLeadPayloadParser
      * @param  array<string, mixed>  $parsed
      * @return array{nome: ?string, email: ?string, telefone: ?string, empresa: ?string,
      *               cnpj: ?string, estado: ?string, cidade: ?string, endereco: ?string,
-     *               segmento: ?string, assunto: ?string}
+     *               segmento: ?string, assunto: ?string, mensagem: ?string,
+     *               itens: ?string, origem_contato: ?string}
      */
     public function extrairCampos(array $parsed): array
     {
@@ -156,6 +173,9 @@ class WpLeadPayloadParser
             'endereco' => $this->valorPorAliases($parsed, self::ALIASES_ENDERECO),
             'segmento' => $this->valorPorAliases($parsed, self::ALIASES_SEGMENTO),
             'assunto' => $this->valorPorAliases($parsed, self::ALIASES_ASSUNTO),
+            'mensagem' => $this->valorPorAliases($parsed, self::ALIASES_MENSAGEM),
+            'itens' => $this->valorPorAliases($parsed, self::ALIASES_ITENS),
+            'origem_contato' => $this->valorPorAliases($parsed, self::ALIASES_ORIGEM_CONTATO),
         ];
     }
 

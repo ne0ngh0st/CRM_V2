@@ -67,9 +67,14 @@ return [
     | `assuntos_comerciais` passa, e o DESCONHECIDO passa (com aviso no log).
     | Perder um orçamento custa venda; deixar entrar um assunto estranho custa
     | um lead a mais para o vendedor ignorar.
+    | ⚠️ HOJE ESTA LISTA ESTÁ VAZIA — decisão do Tony em 2026-09-01, depois de
+    | ver um envio real: quem preenche o formulário classifica o assunto de
+    | qualquer jeito (o próprio teste dele saiu como "Outros"), então filtrar
+    | por aí descartaria orçamento de verdade. Lista vazia = o filtro não age
+    | e todo envio do formulário vira lead.
     |
     */
 
-    'assuntos_nao_comerciais' => ['sac', 'licitacao', 'ouvidoria', 'outros'],
+    'assuntos_nao_comerciais' => [],
 
 ];

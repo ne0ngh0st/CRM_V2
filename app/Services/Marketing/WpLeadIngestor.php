@@ -5,6 +5,7 @@ namespace App\Services\Marketing;
 use App\Models\Lead;
 use App\Models\MarketingWpFormulario;
 use App\Models\MarketingWpLeadRaw;
+use App\Models\Observacao;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -232,6 +233,8 @@ class WpLeadIngestor
             $lead = $this->leadExistentePara($extraidos['email'])
                 ?? $this->criarLeadComercial($extraidos, $formulario?->cod_vendedor);
 
+            $this->registrarObservacaoDoSite($lead, $extraidos);
+
             $staging->forceFill([
                 'lead_id' => $lead->id,
                 'formulario_id' => $formulario?->id,
@@ -361,6 +364,52 @@ class WpLeadIngestor
             'á' => 'a', 'à' => 'a', 'ã' => 'a', 'â' => 'a', 'é' => 'e', 'ê' => 'e',
             'í' => 'i', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ú' => 'u', 'ç' => 'c',
         ]);
+    }
+
+    /**
+     * O que o cliente escreveu vira observação no lead.
+     *
+     * `mensagem`, `itens[]` e "como conheceu" não têm coluna em `leads`, mas são
+     * o conteúdo do pedido — deixar só no envelope obrigaria o vendedor a
+     * clicar num botão de payload cru para saber o que a pessoa quer. Aqui a
+     * nota aparece no histórico que ele já lê.
+     *
+     * ⚠️ `user_id` fica NULO: quem escreveu foi o cliente, não um usuário do
+     * CRM. Atribuir ao vendedor que recebeu o lead seria gravar autoria falsa,
+     * e ainda contaria como atividade dele na Visão do Gestor.
+     *
+     * ⚠️ Nunca lança: um problema aqui não pode derrubar a promoção do lead,
+     * que é o que importa. Observação é acréscimo, não pré-requisito.
+     *
+     * @param  array<string, ?string>  $extraidos
+     */
+    private function registrarObservacaoDoSite(Lead $lead, array $extraidos): void
+    {
+        $partes = array_filter([
+            $extraidos['mensagem'] ?? null,
+            ($extraidos['itens'] ?? null) ? 'Interesse: '.$extraidos['itens'] : null,
+            ($extraidos['assunto'] ?? null) ? 'Assunto: '.$extraidos['assunto'] : null,
+            ($extraidos['origem_contato'] ?? null) ? 'Conheceu por: '.$extraidos['origem_contato'] : null,
+        ], fn (?string $p) => $p !== null && trim($p) !== '');
+
+        if ($partes === []) {
+            return;
+        }
+
+        try {
+            Observacao::query()->create([
+                'user_id' => null,
+                'lead_id' => $lead->id,
+                'cnpj' => Str::limit((string) $lead->cnpj, 18, ''),
+                'mensagem' => Str::limit(implode("\n\n", $partes), 60000, ''),
+                'fixada' => false,
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('wp-lead: nao consegui registrar a observacao do site', [
+                'lead_id' => $lead->id,
+                'erro' => $e->getMessage(),
+            ]);
+        }
     }
 
     /** Mesmo e-mail, mesma origem, últimas 24h: é a mesma pessoa insistindo, não um lead novo. */
