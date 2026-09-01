@@ -128,6 +128,28 @@ class WordpressLeadWebhookResilienciaTest extends TestCase
         $this->assertStringContainsString('reclamacao@cliente.com', $staging->payload_json);
     }
 
+    /**
+     * ⚠️ Assunto irreconhecível PASSA. Nasceu de um susto real: um teste mandou
+     * "Orçamentos" com o `ç` corrompido pelo encoding do terminal e o lead foi
+     * descartado como não-comercial. Naquele dia era só o meu curl, mas o
+     * mesmo aconteceria com uma opção nova no formulário — e um orçamento de
+     * verdade sumiria sem ninguém notar.
+     */
+    public function test_assunto_desconhecido_vira_lead_em_vez_de_sumir(): void
+    {
+        $this->comSegredo();
+
+        foreach (['Or', 'Assunto Novo Do Marketing', 'Orçamento Especial'] as $i => $assunto) {
+            $this->post('/webhooks/wordpress-leads?token='.self::SEGREDO, [
+                'name' => 'Desconhecido '.$i,
+                'email' => "desconhecido{$i}@empresa.com",
+                'assunto' => $assunto,
+            ])->assertCreated();
+        }
+
+        $this->assertSame(3, Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->count());
+    }
+
     /** Formulário sem campo de assunto (a newsletter do rodapé) não pode nascer bloqueado. */
     public function test_formulario_sem_assunto_continua_virando_lead(): void
     {
@@ -189,6 +211,29 @@ class WordpressLeadWebhookResilienciaTest extends TestCase
         )->assertStatus(413);
 
         $this->assertSame(0, MarketingWpLeadRaw::query()->count());
+    }
+
+    /**
+     * Dois envios DIFERENTES em sequência têm que gerar dois leads.
+     *
+     * ⚠️ Parece óbvio, mas foi bug: o hash de idempotência usava só o corpo
+     * cru, e quando ele chega vazio (algo consumiu o php://input de um POST
+     * form-encoded) o hash virava constante — do segundo lead do dia em
+     * diante, tudo seria descartado como "retry do WordPress".
+     */
+    public function test_envios_diferentes_em_sequencia_nao_viram_duplicata(): void
+    {
+        $this->comSegredo();
+
+        foreach ([['Ana', 'ana@a.com'], ['Bruno', 'bruno@b.com'], ['Carla', 'carla@c.com']] as [$nome, $email]) {
+            $this->post('/webhooks/wordpress-leads?token='.self::SEGREDO, [
+                'name' => $nome,
+                'email' => $email,
+            ])->assertCreated();
+        }
+
+        $this->assertSame(3, Lead::query()->where('origem', Lead::ORIGEM_WORDPRESS)->count());
+        $this->assertSame(3, MarketingWpLeadRaw::query()->count());
     }
 
     /** Retry do WordPress (timeout) não pode virar dois leads na carteira. */

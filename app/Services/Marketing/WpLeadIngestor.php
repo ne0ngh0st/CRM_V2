@@ -70,7 +70,12 @@ class WpLeadIngestor
             recebidoEm: $agora,
             remoteAddr: $request->ip(),
             userAgent: $this->truncarUa($request->userAgent()),
-            hashDe: self::FONTE_WEBHOOK.'|'.$raw,
+            // ⚠️ Cai para o payload já interpretado quando o corpo cru vem
+            // vazio. Isso acontece quando algo antes de nós consome o
+            // php://input de um POST form-encoded: aí `$raw` é '' para TODO
+            // envio, o hash vira uma constante e a partir do segundo lead do
+            // dia tudo seria descartado como "retry do WordPress".
+            hashDe: self::FONTE_WEBHOOK.'|'.($raw !== '' ? $raw : json_encode($parsed)),
         );
     }
 
@@ -318,16 +323,34 @@ class WpLeadIngestor
             return true;
         }
 
-        /** @var list<string> $permitidos */
-        $permitidos = (array) config('marketing.assuntos_comerciais', []);
-        if ($permitidos === []) {
+        $normalizado = $this->normalizarAssunto($assunto);
+
+        if (in_array($normalizado, $this->listaNormalizada('assuntos_comerciais'), true)) {
             return true;
         }
 
-        return in_array($this->normalizarAssunto($assunto), array_map(
-            fn ($p) => $this->normalizarAssunto((string) $p),
-            $permitidos,
-        ), true);
+        if (in_array($normalizado, $this->listaNormalizada('assuntos_nao_comerciais'), true)) {
+            return false;
+        }
+
+        // ⚠️ Desconhecido PASSA, de propósito. Antes era o contrário, e isso
+        // significava descartar em silêncio um "Orçamentos" que chegasse com o
+        // acento corrompido, ou qualquer opção nova que o marketing pusesse no
+        // formulário. Perder venda é o erro caro; um lead a mais, não.
+        Log::warning('wp-lead: assunto desconhecido, tratado como comercial', [
+            'assunto' => $assunto,
+        ]);
+
+        return true;
+    }
+
+    /** @return list<string> */
+    private function listaNormalizada(string $chave): array
+    {
+        return array_map(
+            fn ($v) => $this->normalizarAssunto((string) $v),
+            array_values((array) config("marketing.{$chave}", [])),
+        );
     }
 
     private function normalizarAssunto(string $valor): string

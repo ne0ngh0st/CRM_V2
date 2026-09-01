@@ -50,4 +50,26 @@ return [
 
     'assuntos_comerciais' => ['orcamentos', 'compras'],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Assuntos que NUNCA viram lead
+    |--------------------------------------------------------------------------
+    |
+    | ⚠️ Existe uma segunda lista, e não é redundância: ela decide o que fazer
+    | com um assunto que não está em NENHUMA das duas.
+    |
+    | Enquanto a regra era só a lista de permitidos, qualquer valor
+    | irreconhecível caía fora — inclusive um "Orçamentos" que chegasse com o
+    | `ç` corrompido, ou uma opção nova que o marketing adicionasse ao form. Um
+    | lead comercial de verdade sumia sem ninguém saber, que é o erro caro.
+    |
+    | Com as duas listas: o que está aqui é bloqueado, o que está em
+    | `assuntos_comerciais` passa, e o DESCONHECIDO passa (com aviso no log).
+    | Perder um orçamento custa venda; deixar entrar um assunto estranho custa
+    | um lead a mais para o vendedor ignorar.
+    |
+    */
+
+    'assuntos_nao_comerciais' => ['sac', 'licitacao', 'ouvidoria', 'outros'],
+
 ];
