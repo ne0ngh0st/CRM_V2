@@ -41,6 +41,7 @@ class DashboardController extends Controller
         // código de vendedor cadastrado — nos dois casos os blocos escopados ficam nulos.
         $temEscopo = $codVendedores === null || count($codVendedores) > 0;
         $mostraBlocos = $role !== 'assistente';
+        $eGestor = in_array($role, ['supervisor', 'admin', 'diretor'], true);
 
         $porVendedor = ChaveEscopo::deCodVendedores($codVendedores);
         $porUsuario = ChaveEscopo::deUsuarioIds($usuarioIds);
@@ -52,9 +53,9 @@ class DashboardController extends Controller
             // um vendedor seria jargão sem significado ocupando espaço no topo da tela.
             'statusCache' => $role === 'admin' ? $this->blocos->statusCache() : null,
             'visao' => [
-                'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
+                'mostrarSeletor' => $eGestor,
                 'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => in_array($role, ['supervisor', 'admin', 'diretor'], true)
+                'vendedores' => $eGestor
                     ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
                     : [],
                 'visaoSupervisor' => $scope['visaoSupervisor'],
@@ -67,10 +68,28 @@ class DashboardController extends Controller
                 : null,
             'ligacoesStats' => $mostraBlocos ? $this->blocos->ligacoesStats($usuarioIds) : null,
             'observacoesStats' => $mostraBlocos ? $this->blocos->observacoesStats($usuarioIds) : null,
-            'faturamentoComparacao' => $temEscopo && $mostraBlocos ? $this->blocos->faturamentoComparacao($porVendedor, $codVendedores) : null,
+            // Gestores veem o embed do Power BI no lugar do gráfico Chart.js. A agregação
+            // de faturamento (a query mais cara da Home no escopo empresa) não roda pra
+            // eles — ninguém lê esse resultado. Vendedor/representante continuam com o
+            // gráfico local, cujo escopo já é barato.
+            'faturamentoComparacao' => $temEscopo && $mostraBlocos && ! $eGestor
+                ? $this->blocos->faturamentoComparacao($porVendedor, $codVendedores)
+                : null,
+            'biEmbedUrl' => $eGestor ? $this->urlDoBi() : null,
             'carteiraSegmento' => $temEscopo && $mostraBlocos ? $this->blocos->carteiraSegmento($porVendedor, $codVendedores) : null,
             'orcamentosStats' => $mostraBlocos ? $this->blocos->orcamentosStats($porUsuario, $usuarioIds) : null,
             'pedidosAtencao' => $temEscopo && $mostraBlocos ? $this->blocos->pedidosAtencao($porVendedor, $codVendedores) : null,
         ]);
+    }
+
+    /**
+     * Recusa qualquer coisa que não seja o host oficial: a URL vai direto no `src`
+     * de um iframe, então um valor alterado no .env viraria XSS.
+     */
+    private function urlDoBi(): ?string
+    {
+        $url = (string) config('powerbi.embed_url');
+
+        return str_starts_with($url, 'https://app.powerbi.com/') ? $url : null;
     }
 }

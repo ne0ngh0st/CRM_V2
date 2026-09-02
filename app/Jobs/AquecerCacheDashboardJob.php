@@ -71,10 +71,15 @@ class AquecerCacheDashboardJob implements ShouldQueue
         $porVendedor = ChaveEscopo::deCodVendedores($escopo['codVendedores']);
         $porUsuario = ChaveEscopo::deUsuarioIds($escopo['usuarioIds']);
 
-        // Exatamente os mesmos métodos que o DashboardController chama — só que em modo
-        // forçado. É isso que impede o job de gravar numa chave que ninguém lê.
+        // Exatamente os mesmos métodos que o DashboardController chama nestes escopos —
+        // só que em modo forçado. É isso que impede o job de gravar numa chave que
+        // ninguém lê.
+        //
+        // faturamentoComparacao saiu daqui de propósito: na Home dos gestores (único
+        // público dos escopos aquecidos — empresa e equipes) o gráfico Chart.js foi
+        // trocado pelo embed do Power BI. Vendedor/representante ainda chamam o método,
+        // mas o escopo individual não é aquecido (config escopos_aquecidos.vendedores).
         $frios->metaGauge($porVendedor, $escopo['codVendedores']);
-        $frios->faturamentoComparacao($porVendedor, $escopo['codVendedores']);
         $frios->carteiraSegmento($porVendedor, $escopo['codVendedores']);
         $frios->pedidosAtencao($porVendedor, $escopo['codVendedores']);
         $frios->orcamentosStats($porUsuario, $escopo['usuarioIds']);
