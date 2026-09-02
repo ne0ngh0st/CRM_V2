@@ -66,6 +66,11 @@ services:
     volumes:
       - .:/var/www
       - vendor_data:/var/www/vendor
+      # Relatórios do TOTVS, lidos pelos comandos `totvs:import-*`. Ficam FORA do
+      # projeto (são ~250 MB de CSV que não podem entrar no git) e o container não
+      # enxerga o disco do Windows sozinho — sem este mount o comando não acha nada.
+      # Read-only de propósito: o v2 lê o relatório, nunca escreve nele.
+      - "${TOTVS_RELATORIOS_PATH:-./storage/app/totvs}:/relatorios:ro"
     depends_on:
       mysql:
         condition: service_healthy
