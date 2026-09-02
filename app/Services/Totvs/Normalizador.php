@@ -43,6 +43,38 @@ class Normalizador
         return ctype_digit($valor) ? (string) ((int) $valor) : $valor;
     }
 
+    /**
+     * Chave de comparação de cliente, imune a zero à esquerda.
+     *
+     * ⚠️ Só serve para COMPARAR, nunca para gravar. O espelho do v1 e o relatório do
+     * TOTVS escrevem a mesma loja de formas diferentes — `001209` lá, `1209` aqui — e
+     * o cadastro do cliente é idêntico nos dois. Medido sobre a base inteira: 7.976 dos
+     * 92.163 clientes só casam depois de normalizar, e NENHUM caso é ambíguo.
+     *
+     * Sem isso, o upsert por (cod_cliente, loja) não encontra o cliente existente e
+     * insere um segundo — foi exatamente o que aconteceu na primeira execução deste
+     * import, que criou 8.846 duplicatas antes de ser revertida.
+     *
+     * `cod_cliente` entra junto por simetria, ainda que hoje ele nunca divirja: se um
+     * dia divergir, o sintoma seria o mesmo e igualmente silencioso.
+     */
+    public static function chaveCliente(mixed $codCliente, mixed $loja): string
+    {
+        return self::semZeroAEsquerda($codCliente).'|'.self::semZeroAEsquerda($loja);
+    }
+
+    private static function semZeroAEsquerda(mixed $valor): string
+    {
+        $valor = trim((string) $valor);
+
+        // Loja pode ser "E001"/"X001" na base real — não é número, fica como está.
+        if (! ctype_digit($valor)) {
+            return $valor;
+        }
+
+        return ltrim($valor, '0') ?: '0';
+    }
+
     /** O TOTVS usa "." para e-mail vazio em alguns cadastros. */
     public static function email(mixed $valor): ?string
     {
