@@ -24,10 +24,13 @@ const props = defineProps({
     filtros: Object,
     opcoes: Object,
     visao: Object,
+    somenteWordpress: { type: Boolean, default: false },
     wordpressCaptura: { type: Object, default: null },
 });
 
-const isVendedor = computed(() => ['vendedor', 'representante'].includes(props.role));
+const podeAgirNoLead = computed(() =>
+    ['vendedor', 'representante'].includes(props.role) || props.somenteWordpress,
+);
 
 const filtros = reactive({
     busca: props.filtros.busca || '',
@@ -82,7 +85,8 @@ function onBuscaInput() {
 
 function limparFiltros() {
     Object.assign(filtros, {
-        busca: '', estado: '', segmento: '', status: '', origem: '',
+        busca: '', estado: '', segmento: '', status: '',
+        origem: props.somenteWordpress ? 'wordpress' : '',
         ordenar: 'nome_asc', visao_supervisor: '', visao_vendedor: '',
     });
     aplicarFiltros();
@@ -122,11 +126,16 @@ async function abrirCaptura(lead) {
     }
 }
 
-const temFiltrosAtivos = computed(() =>
-    ['busca', 'estado', 'segmento', 'status', 'origem'].some((k) => filtros[k] !== '')
-    || !!filtros.visao_supervisor
-    || !!filtros.visao_vendedor,
-);
+const temFiltrosAtivos = computed(() => {
+    const campos = ['busca', 'estado', 'segmento', 'status'];
+    if (!props.somenteWordpress) {
+        campos.push('origem');
+    }
+
+    return campos.some((k) => filtros[k] !== '')
+        || !!filtros.visao_supervisor
+        || !!filtros.visao_vendedor;
+});
 </script>
 
 <template>
@@ -144,12 +153,17 @@ const temFiltrosAtivos = computed(() =>
                         </svg>
                     </template>
                     <template #subtitle>
-                        Carteira de prospects — base do sistema, leads manuais e leads do site (WordPress). Sem transferência (TOTVS/import cuida da atribuição).
+                        <template v-if="somenteWordpress">
+                            Leads capturados pelo site (WordPress). Sem transferência — a atribuição continua no TOTVS/import.
+                        </template>
+                        <template v-else>
+                            Carteira de prospects — base do sistema, leads manuais e leads do site (WordPress). Sem transferência (TOTVS/import cuida da atribuição).
+                        </template>
                     </template>
                     <template #meta>
                         <KpiTile :value="kpis.total" label="Total" />
-                        <KpiTile :value="kpis.sistema" label="Sistema" tone="info" :href="route('leads.index', { ...filtros, origem: 'sistema', aba: 'leads' })" />
-                        <KpiTile :value="kpis.manual" label="Manuais" tone="warn" :href="route('leads.index', { ...filtros, origem: 'manual', aba: 'leads' })" />
+                        <KpiTile v-if="!somenteWordpress" :value="kpis.sistema" label="Sistema" tone="info" :href="route('leads.index', { ...filtros, origem: 'sistema', aba: 'leads' })" />
+                        <KpiTile v-if="!somenteWordpress" :value="kpis.manual" label="Manuais" tone="warn" :href="route('leads.index', { ...filtros, origem: 'manual', aba: 'leads' })" />
                         <KpiTile :value="kpis.wordpress ?? 0" label="WordPress" tone="ok" :href="route('leads.index', { ...filtros, origem: 'wordpress', aba: 'leads' })" />
                         <KpiTile :value="kpis.ativos" label="Ativos" tone="ok" />
                     </template>
@@ -175,7 +189,7 @@ const temFiltrosAtivos = computed(() =>
                             <option v-for="s in opcoes.segmentos" :key="s" :value="s">{{ s }}</option>
                         </FilterField>
 
-                        <FilterField label="Origem" :model-value="filtros.origem" @update:model-value="(v) => { filtros.origem = v; aplicarFiltros(); }">
+                        <FilterField v-if="!somenteWordpress" label="Origem" :model-value="filtros.origem" @update:model-value="(v) => { filtros.origem = v; aplicarFiltros(); }">
                             <option value="">Todas</option>
                             <option value="sistema">Sistema</option>
                             <option value="manual">Manual</option>
@@ -262,9 +276,9 @@ const temFiltrosAtivos = computed(() =>
                         <LeadsTabela
                             v-if="leads.data.length"
                             :leads="leads.data"
-                            :pode-ligar="isVendedor"
-                            :pode-agendar="isVendedor"
-                            :pode-orcamento="isVendedor"
+                            :pode-ligar="podeAgirNoLead"
+                            :pode-agendar="podeAgirNoLead"
+                            :pode-orcamento="podeAgirNoLead"
                             :pode-observar="true"
                             :pode-excluir="true"
                             @observacao="abrirObservacao"

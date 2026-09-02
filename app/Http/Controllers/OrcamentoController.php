@@ -50,14 +50,10 @@ class OrcamentoController extends Controller
     ) {
     }
 
-    public function index(Request $request): Response|RedirectResponse
+    public function index(Request $request): Response
     {
         $user = $request->user();
         $role = $user->getRoleNames()->first();
-
-        if ($role === 'assistente') {
-            return redirect()->route('dashboard');
-        }
 
         $scope = $this->scopeResolver->resolve(
             $user,

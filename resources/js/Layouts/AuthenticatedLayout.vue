@@ -169,7 +169,17 @@ const catalogoAtivo = computed(() =>
                                 </div>
 
                                 <NavLink
-                                    v-if="!isAssistente"
+                                    v-if="isAssistente"
+                                    :href="route('leads.index')"
+                                    :active="route().current('leads.*')"
+                                    prefetch="hover"
+                                    class="!text-white/80 hover:!text-white"
+                                    :class="route().current('leads.*') ? '!border-cyan !text-white' : '!border-transparent'"
+                                >
+                                    Leads
+                                </NavLink>
+
+                                <NavLink
                                     :href="route('orcamentos.index')"
                                     :active="route().current('orcamentos.index')"
                                     prefetch="click"
@@ -188,7 +198,6 @@ const catalogoAtivo = computed(() =>
                                     Cadastros
                                 </NavLink>
                                 <div
-                                    v-if="!isAssistente"
                                     class="relative inline-flex items-center"
                                 >
                                     <Dropdown align="left" width="48">
@@ -395,7 +404,13 @@ const catalogoAtivo = computed(() =>
                             </ResponsiveNavLink>
                         </template>
                         <ResponsiveNavLink
-                            v-if="!isAssistente"
+                            v-if="isAssistente"
+                            :href="route('leads.index')"
+                            :active="route().current('leads.*')"
+                        >
+                            Leads
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
                             :href="route('orcamentos.index')"
                             :active="route().current('orcamentos.index')"
                         >
@@ -408,14 +423,12 @@ const catalogoAtivo = computed(() =>
                             Cadastros
                         </ResponsiveNavLink>
                         <ResponsiveNavLink
-                            v-if="!isAssistente"
                             :href="route('tabela-precos.index')"
                             :active="route().current('tabela-precos.*')"
                         >
                             Catálogo · Tabela de Preços
                         </ResponsiveNavLink>
                         <ResponsiveNavLink
-                            v-if="!isAssistente"
                             :href="route('catalogo-facas.index')"
                             :active="route().current('catalogo-facas.*')"
                         >

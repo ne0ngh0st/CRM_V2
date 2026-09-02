@@ -206,7 +206,7 @@ class CatalogoFacaCrudTest extends TestCase
     {
         $faca = $this->faca();
 
-        foreach (['vendedor', 'supervisor', 'diretor'] as $role) {
+        foreach (['vendedor', 'supervisor', 'diretor', 'assistente'] as $role) {
             $this->actingAs($this->usuario($role))
                 ->post(route('catalogo-facas.store'), ['tipo' => 'tags', 'item' => 50])
                 ->assertForbidden();

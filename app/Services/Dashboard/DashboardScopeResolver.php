@@ -165,9 +165,10 @@ class DashboardScopeResolver
      */
     private function calcularUsuarioIds(User $user, array $scope): array
     {
-        // Vendedor/representante agrega só o próprio histórico, mesmo que o código de
-        // vendedor seja compartilhado com outra conta (acontece no legado).
-        if (in_array($this->roleDe($user), ['vendedor', 'representante'], true)) {
+        // Vendedor/representante/assistente agrega só o próprio histórico, mesmo que o
+        // código de vendedor seja compartilhado com outra conta (acontece no legado).
+        // Assistente não tem carteira, mas cria orçamento no próprio user_id.
+        if (in_array($this->roleDe($user), ['vendedor', 'representante', 'assistente'], true)) {
             return [$user->id];
         }
 
