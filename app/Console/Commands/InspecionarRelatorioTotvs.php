@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Services\Totvs\LeitorRelatorio;
+use App\Services\Totvs\Relatorios;
 use Illuminate\Console\Command;
 use RuntimeException;
 
@@ -42,7 +42,7 @@ class InspecionarRelatorioTotvs extends Command
             $this->line("<fg=cyan>── {$chave}</>");
 
             try {
-                $this->inspecionar($cfg);
+                $this->inspecionar($chave, $cfg);
             } catch (RuntimeException $e) {
                 $falhou = true;
                 $this->error('   '.$e->getMessage());
@@ -54,20 +54,28 @@ class InspecionarRelatorioTotvs extends Command
         return $falhou ? self::FAILURE : self::SUCCESS;
     }
 
-    private function inspecionar(array $cfg): void
+    private function inspecionar(string $dominio, array $cfg): void
     {
-        $caminho = rtrim((string) config('totvs.diretorio'), '/').'/'.$cfg['arquivo'];
-        $leitor = LeitorRelatorio::abrir($caminho);
+        $caminho = Relatorios::caminho($dominio);
 
-        $this->line('   arquivo : '.$cfg['arquivo'].'  ('.$this->tamanho($caminho).')');
+        if ($caminho === null) {
+            $this->warn('   ainda não gerado — nenhum destes está na pasta: '
+                .implode(', ', (array) $cfg['arquivo']));
+
+            return;
+        }
+
+        // Passa pelo Relatorios (e não direto pelo leitor) de propósito: é ele que
+        // valida o título contra o RLT esperado, que é a checagem que pega arquivo
+        // trocado antes de qualquer import.
+        $leitor = Relatorios::abrir($dominio);
+
+        $this->line('   arquivo : '.basename($caminho).'  ('.$this->tamanho($caminho).')');
+        $this->line('   gerado  : '.date('d/m/Y H:i', filemtime($caminho) ?: 0));
         $this->line('   título  : '.($leitor->titulo() ?? '(sem linha de título)'));
         $this->line('   período : '.$cfg['periodo']);
         $this->line('   colunas : '.count($leitor->cabecalho()));
         $this->line('             '.implode(', ', $leitor->cabecalho()));
-
-        if (($cfg['rlt'] ?? null) !== null && ! str_contains((string) $leitor->titulo(), $cfg['rlt'])) {
-            $this->warn('   ⚠️ o título não bate com o RLT esperado ('.$cfg['rlt'].') — arquivo trocado?');
-        }
 
         $colunaData = $cfg['coluna_data'] ?? null;
         $total = 0;

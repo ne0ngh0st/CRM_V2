@@ -27,7 +27,11 @@ return [
     |---------------------------------------------------------------------------
     |
     | O nome do arquivo é escolha do Tony ao exportar, então mora aqui e não chumbado
-    | no comando. `periodo` diz como o import trata o que já existe:
+    | no comando. `arquivo` aceita uma LISTA de nomes aceitos, tentados em ordem: o
+    | nome do export muda de vez em quando (o "META VENDA" está virando
+    | "pedidos_emitidos"), e uma renomeação não pode quebrar o import nem exigir deploy.
+    |
+    | `periodo` diz como o import trata o que já existe:
     |
     |   'completo'  → o arquivo é o retrato inteiro; upsert, nunca apaga linha.
     |   'recorte'   → o arquivo traz só uma faixa de datas (o Tony gera o mês vigente).
@@ -40,13 +44,13 @@ return [
     'arquivos' => [
 
         'clientes' => [
-            'arquivo' => 'Clientes - SQL.csv',
+            'arquivo' => ['Clientes - SQL.csv'],
             'rlt' => '210 - CADASTRO DE CLIENTES',
             'periodo' => 'completo',
         ],
 
         'ultimo_faturamento' => [
-            'arquivo' => 'Ultimo faturamento - SQL.csv',
+            'arquivo' => ['Ultimo faturamento - SQL.csv'],
             'rlt' => '199 - ULTIMO FATURAMENTO CLIENTE',
             'periodo' => 'completo',
             // É daqui que saem `segmentos` e `grupos_cliente`: o código mora em
@@ -54,7 +58,7 @@ return [
         ],
 
         'pedidos_abertos' => [
-            'arquivo' => 'Pedidos abertos - SQL.csv',
+            'arquivo' => ['Pedidos abertos - SQL.csv'],
             'rlt' => '200 - PEDIDOS EM ABERTO COM STATUS',
             'periodo' => 'completo',
             // "Completo" aqui quer dizer "tudo que está em aberto agora" — pedido
@@ -62,21 +66,25 @@ return [
         ],
 
         'faturamento' => [
-            'arquivo' => 'FAT - SQL.csv',
+            'arquivo' => ['FAT - SQL.csv'],
             'rlt' => '198 - FATURAMENTO EQUIPE',
             'periodo' => 'recorte',
             'coluna_data' => 'EMISSAO',
         ],
 
         'pedidos_emitidos' => [
-            'arquivo' => 'META VENDA - SQL.csv',
+            'arquivo' => [
+                'pedidos_emitidos - SQL.csv',
+                'Pedidos emitidos - SQL.csv',
+                'META VENDA - SQL.csv',
+            ],
             'rlt' => '232 - CONSULTA DE PEDIDOS EMITIDOS META DE VENDAS',
             'periodo' => 'recorte',
             'coluna_data' => 'DT_EMISSAO',
         ],
 
         'leads' => [
-            'arquivo' => 'base_marco - SQL.csv',
+            'arquivo' => ['base_marco - SQL.csv'],
             'rlt' => null, // não é relatório do TOTVS: é a base de prospecção (ABRAS)
             'periodo' => 'completo',
         ],
