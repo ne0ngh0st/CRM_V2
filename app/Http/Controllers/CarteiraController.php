@@ -22,6 +22,7 @@ use App\Services\Dashboard\DashboardScopeResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Maatwebsite\Excel\Facades\Excel;
@@ -208,6 +209,7 @@ class CarteiraController extends Controller
                 'nomeFantasia' => $cliente->nome_fantasia,
                 'cnpj' => $cliente->cnpj,
                 'telefone' => $cliente->telefone,
+                'email' => $cliente->email,
                 'estado' => $cliente->estado,
                 'segmento' => $cliente->cod_segmento ? ($nomePorCodigo[$cliente->cod_segmento] ?? $cliente->cod_segmento) : null,
                 'grupo' => $cliente->cod_grupo ? ($nomePorGrupo[$cliente->cod_grupo] ?? $cliente->cod_grupo) : null,
@@ -215,6 +217,16 @@ class CarteiraController extends Controller
                 'vendedorNome' => $nomesPorCodVendedor[$cliente->cod_vendedor] ?? $cliente->cod_vendedor,
                 'status' => $this->statusResolver->statusPara($cliente->data_ultima_compra, $hoje),
                 'dataUltimaCompra' => optional($cliente->data_ultima_compra)->format('d/m/Y'),
+                /*
+                 * Vem da própria linha do cliente (coluna desnormalizada, mantida por
+                 * `UltimoContatoSincronizador`). Antes era uma consulta agregada em
+                 * `ligacoes` por página; virar coluna eliminou essa consulta E tornou a
+                 * ordenação viável — ver a migration `2026_09_02_110000`.
+                 */
+                'ultimoContato' => $cliente->data_ultimo_contato ? [
+                    'data' => $cliente->data_ultimo_contato->format('d/m/Y'),
+                    'canal' => $cliente->canal_ultimo_contato,
+                ] : null,
                 'motivoInatividade' => $motivo ? [
                     'motivo' => $motivo->motivo,
                     'observacao' => $motivo->observacao,
@@ -383,6 +395,14 @@ class CarteiraController extends Controller
         // Ativo -> Inativo, que é compra mais RECENTE primeiro.
         'status' => ['coluna' => 'clientes.data_ultima_compra', 'inverter' => true],
         'ultima_compra' => ['coluna' => 'clientes.data_ultima_compra'],
+        /*
+         * Ordenável porque `data_ultimo_contato` é coluna INDEXADA da própria
+         * `clientes` — 1,2 ms. Não confundir com o caso de 'grupo'/'segmento' acima:
+         * ali o valor mora em outra tabela e o join força filesort. Ordenar por
+         * `MAX(data_ligacao)` direto em `ligacoes` foi medido em 987 ms e é exatamente
+         * o que a desnormalização existe pra evitar.
+         */
+        'ultimo_contato' => ['coluna' => 'clientes.data_ultimo_contato'],
     ];
 
     /** baseQuery() + aderência + ordenação. Usado por index() (lista) e exportar(). */
@@ -615,15 +635,27 @@ class CarteiraController extends Controller
         return back();
     }
 
+    /**
+     * Registra um contato com o cliente — telefone, WhatsApp, e-mail ou presencial.
+     *
+     * ⚠️ O canal vem do front e NÃO é confiável: `Rule::in` contra a constante do
+     * model é o que impede um valor arbitrário de chegar ao enum do MySQL. A rota
+     * continua se chamando `carteira.ligacao` de propósito (link e teste antigos
+     * seguem válidos); o que mudou é que a ligação virou um caso de contato.
+     */
     public function registrarLigacao(Request $request, Cliente $cliente): RedirectResponse
     {
         $this->autorizarCliente($request, $cliente);
+
+        $tipo = $request->validate([
+            'tipo' => ['nullable', Rule::in(Ligacao::TIPOS_CONTATO)],
+        ])['tipo'] ?? 'telefonica';
 
         Ligacao::create([
             'usuario_id' => $request->user()->id,
             'cliente_id' => $cliente->id,
             'cliente_nome' => $cliente->razao_social,
-            'tipo_contato' => 'telefonica',
+            'tipo_contato' => $tipo,
             'status' => 'finalizada',
             'data_ligacao' => now(),
         ]);

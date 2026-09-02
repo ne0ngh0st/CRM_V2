@@ -778,7 +778,187 @@ retry, dedupe, envelope sobrevivendo à falha, expurgo). O teste do throttle rod
 requisição por vez, 130 chamadas levam mais que a janela de 60s e o limite nunca
 aparece — dá verde sem provar nada.
 
+### Contato por canal: WhatsApp, e-mail e "último contato" — 2026-09-02
+
+A Carteira e os Leads passaram a ter três botões de contato no lugar de um (ligar,
+WhatsApp, e-mail), a Carteira ganhou a coluna **Último contato**, e o Painel e a Visão
+do Gestor passaram a mostrar quantos contatos vieram de cada canal.
+
+**A coluna `ligacoes.tipo_contato` já existia** com o enum certo (`telefonica`,
+`whatsapp`, `email`, `presencial`) desde a migration original — só que os dois
+controllers gravavam `'telefonica'` chumbado e nada nunca lia a quebra. Não foi preciso
+migration de schema para a feature; a única migration é de índice (abaixo).
+
+**Definição de "último contato" (decisão do Tony):** só contato registrado em
+`ligacoes` — ligação, WhatsApp, e-mail, presencial. **Observação NÃO conta**: é nota
+interna, e incluí-la faria o indicador subir quando alguém só anota algo sem falar com
+o cliente.
+
+#### Onde cada decisão mora (Regra de ouro nº 8)
+| O que se repete | Onde mora |
+|---|---|
+| Lista de canais válidos (validação) | `Ligacao::TIPOS_CONTATO` |
+| Quebra por canal numa agregação | `Ligacao::somarPorCanal()` / `lerPorCanal()` |
+| "Último contato" (coluna desnormalizada) | `UltimoContatoSincronizador` |
+| Rótulos e ordem dos canais no front | `resources/js/constants/contatos.js` |
+| Normalização de telefone e links | `resources/js/utils/contato.js` |
+| Os três botões de contato | `Components/Contato/BotoesContato.vue` |
+
+`normalizarTelefone` estava **copiada linha a linha** em `CarteiraTabela.vue` e
+`LeadsTabela.vue` — com Leads entrando no escopo seriam três cópias. Foi extraída.
+
+- **`BotoesContato.vue` NÃO registra o contato**: emite `contato` com o canal e quem
+  chama decide a rota (`carteira.ligacao` ou `leads.ligacao`). É o que permite a
+  marcação viver num lugar só sem o componente conhecer rotas.
+- ⚠️ **O POST sai ANTES de abrir o discador/WhatsApp/e-mail.** Inverter a ordem faz a
+  navegação cancelar a requisição e o contato não entra na métrica.
+- WhatsApp abre em **aba nova** (`window.open`), diferente do `tel:`: o WhatsApp Web
+  abriria por cima do CRM e o vendedor perderia a página e os filtros.
+
+#### Validação do canal — é segurança, não organização
+⚠️ O canal chega pela requisição e vira valor de um **enum do MySQL**. Sem o
+`Rule::in(Ligacao::TIPOS_CONTATO)`, um valor arbitrário grava **string vazia em
+silêncio** fora do modo estrito, e a métrica por canal passa a mentir sem erro nenhum
+aparecer. Mesmo tipo de risco da whitelist de ordenação da Carteira. Coberto por teste,
+inclusive nos Leads.
+
+O escopo por vendedor (`autorizarCliente`/`autorizarLead`) continua valendo para os
+canais novos — WhatsApp e e-mail não podem virar porta lateral para registrar atividade
+em cliente alheio. Também coberto por teste.
+
+#### Cores dos botões (Regra de ouro nº 5)
+Mapa novo, com uma cor nova no `tailwind.config.js`:
+
+| Função | Modificador | Cor |
+|---|---|---|
+| ligar | `.tbl-acao-verde` | green-700 (inalterado) |
+| WhatsApp | **`.tbl-acao-whats`** | `#128C7E`, verde da **marca WhatsApp** |
+| e-mail | `.tbl-acao-teal` | teal da Autopel (compartilha com "editar") |
+
+⚠️ **`whats` não é cor da Autopel** — existe só para o botão ser reconhecido de
+relance. O verde vivo da logo (`#25D366`) dá **1,98:1** sobre branco e sumiria como
+ícone; `#128C7E` dá 4,14:1. Mesmo raciocínio dos tons `-dark` de cyan/âmbar.
+
+⚠️ O ícone do WhatsApp é **preenchido** (`fill="currentColor"`), não traçado como
+todos os outros — é o glifo da marca. Trocar por um contorno genérico tira exatamente
+o que faz o botão ser identificado sem ler o tooltip.
+
+Os três canais ficam numa progressão verde → verde-azulado → teal: leem-se como uma
+família na mesma linha, e o ícone diz qual é qual.
+
+#### Botão desabilitado em vez de link quebrado
+- **WhatsApp exige DDD**: `wa.me` precisa de DDI+DDD+número. Telefone de 8-9 dígitos
+  (**~5,6 mil clientes da base**) abriria o WhatsApp num número errado, sem erro. O
+  botão fica desabilitado.
+- **E-mail**: 85.111 dos 92.209 clientes têm e-mail; sem e-mail, desabilitado.
+
+#### `min-w` da tabela subiu de 1000 para 1200px
+Entraram uma coluna e dois botões. Com 1000 a coluna Ações espremia e os 7 botões
+empilhavam um por linha, triplicando a altura da linha em tela média. A 1500px de
+viewport a linha fica em **42px**, sem scroll horizontal.
+
+#### `clientes.data_ultimo_contato` — desnormalização deliberada, e por quê
+A coluna "Último contato" é **ordenável**, igual a "Última Compra". Isso só é possível
+porque o valor virou **coluna indexada da própria `clientes`** (migration
+`2026_09_02_110000`). Medido no escopo admin (92k clientes, 281k contatos):
+
+| Ordenar a Carteira por | Tempo |
+|---|---:|
+| `data_ultima_compra` (referência, coluna indexada daqui) | 1,2 ms |
+| `MAX(data_ligacao)` via LEFT JOIN agregado | **987 ms** |
+| `MAX(data_ligacao)` via subconsulta correlata | **1.179 ms** |
+| `data_ultimo_contato` desnormalizada | **0,9 ms** |
+
+Quase 1 s só na ordenação estoura sozinho o orçamento de 400 ms — mesmo motivo que
+tirou 'grupo'/'segmento' da whitelist em 2026-08-29. **O precedente estava ao lado o
+tempo todo**: `data_ultima_compra` também é valor derivado (vem de `faturamentos`) e
+mora em `clientes` exatamente por isso.
+
+Ganho extra: a listagem **deixou de fazer uma consulta por página** em `ligacoes` — o
+dado já vem na linha do cliente.
+
+⚠️ **O preço da desnormalização é drift, e o antídoto é dono único.** Três travas:
+1. **Um só ponto de escrita**: `App/Services/Carteira/UltimoContatoSincronizador.php`,
+   chamado pelo hook `Ligacao::created()`. É hook de model, e não código nos
+   controllers (ao contrário das notificações deste projeto), porque notificação
+   esquecida é notificação a menos, mas coluna desnormalizada esquecida é **dado
+   errado na tela** — silencioso, e usado pela ordenação. Já são dois pontos que criam
+   contato (Carteira e Leads) e qualquer tela nova seria um terceiro.
+2. **Fora do `$fillable` do `Cliente`**, de propósito: é assim que um import ou seeder
+   acabaria gravando ali um valor que não veio de `ligacoes`.
+3. **`php artisan carteira:recalcular-ultimo-contato`** reconstrói tudo a partir de
+   `ligacoes`. Seguro rodar sempre (valor derivado, logo idempotente); ~17 s para 92k
+   clientes. A migration usa **o mesmo serviço**, não uma cópia do SQL.
+
+⚠️ **A regra de desempate tem que ser idêntica no hook e na reconstrução**: mais
+recente vence; em empate de `data_ligacao` (WhatsApp e e-mail no mesmo segundo), vence
+o registrado por último. Se divergirem, a coluna muda de valor toda vez que alguém
+rodar a manutenção, e ninguém liga uma coisa na outra. **Há teste comparando os dois
+caminhos** — é o teste mais importante deste conjunto.
+
+⚠️ **Contato retroativo não sobrescreve** um mais recente (o `WHERE` do sincronizador),
+senão um registro antigo lançado depois faria o cliente "voltar no tempo" na ordenação.
+
+#### Performance (Regra de ouro nº 6 e nº 9) — medido com 281-289 mil contatos
+Arco completo em `docs/performance.md` §1.12 ("os três degraus"). O que muda decisão:
+
+- ⚠️ **A primeira versão da coluna custava 215 ms** — trazia TODOS os contatos dos 30
+  clientes da página (8.130 linhas para exibir 30) e ficava com o primeiro de cada
+  grupo em PHP. Uma janela (`ROW_NUMBER`) baixou para 25 ms; a desnormalização zerou.
+  Em página típica as três empatam em ~5 ms — **por isso a forma ingênua passa
+  despercebida sem medir com volume**.
+- **A quebra por canal é de graça**: entra como coluna `SUM(tipo_contato = ?)` na
+  agregação que já existia. Painel **+0,53 ms**; Visão do Gestor **+1,84 ms**.
+- Ordenar por "Último contato" ficou indistinguível das outras ordenações na página
+  real (tudo no piso do `artisan serve`, ~185-240 ms mesmo em página trivial).
+
+#### 🔴 Achado colateral: a Visão do Gestor já estava lenta e ninguém tinha medido
+`VisaoGestorController::ultimaLigacao()` (`MAX(data_ligacao) GROUP BY usuario_id`, sem
+filtro de data) levava **1.025 ms** com 289 mil contatos — sozinha, era 2 s da página.
+Não é regressão desta feature; é dívida que só apareceu porque a tabela foi populada
+com volume realista.
+
+Causa: `status <> 'excluida'` não estava no índice, então o MySQL varria as 294 mil
+entradas e ia à tabela linha a linha. **Índice ESCOLHIDO ≠ índice SUFICIENTE** — o
+`key:` já apontava certo; quem denunciava era o `Extra:`. Mesma lição de 2026-08-31.
+
+**Migration `2026_09_02_100000`** estende `(usuario_id, data_ligacao)` com `status`:
+**969 ms → 154 ms** (6,3x). Não é índice novo — mesmo prefixo, o antigo é removido.
+
+⚠️ **Criar o novo ANTES de dropar o antigo**: `usuario_id` tem chave estrangeira e o
+MySQL recusa remover o único índice que a sustenta.
+
+⚠️ **A migration é idempotente** (checa `SHOW INDEX` antes de criar/dropar) porque dev
+e produção podem chegar nela em estados diferentes — mesmo cuidado da `110000` de
+agosto.
+
+⚠️ Entrou nesta leva, e não "depois", porque os botões de WhatsApp e e-mail
+**multiplicam as linhas desta tabela**: o que hoje é um contato por cliente vira três.
+(Próximo passo já medido, se 154 ms incomodar: trocar o `GROUP BY` por subconsulta
+correlata por vendedor — 102 ms. Não feito: 1,5x contra os 6,3x do índice.)
+
+#### Testes
+`tests/Feature/ContatoPorCanalTest.php` (18 casos): canal gravado por WhatsApp/e-mail,
+default telefônico, canal inválido recusado sem gravar nada, escopo por vendedor,
+Leads com o mesmo contrato, `ultimoContato` exposto com data e canal, contato
+`excluida` ignorado, empate de data, hook atualizando a coluna, contato retroativo não
+sobrescrevendo, **reconstrução batendo com o hook**, reconstrução zerando cliente sem
+contato, ordenação nos dois sentidos, quebra por canal no Painel e na Visão do Gestor,
+e canal zerado vindo como 0 e não ausente. Suíte inteira verde: **244 testes**.
+
+⚠️ O teste do desempate foi verificado **por mutação** (removida a regra, ele falha) —
+teste que passa não prova que pega o erro, e já houve dois testes de ordenação passando
+por coincidência neste projeto em 2026-08-29.
+
+#### O que ficou de fora
+- **Export Excel da Carteira não ganhou a coluna "Último contato"** — hoje seria fácil
+  (o valor virou coluna de `clientes`), mas o export já leva ~95 s e não foi medido de
+  novo. Se fizer falta, é o próximo item e agora é barato.
+- A ficha do cliente (`/carteira/{id}/detalhes`) não lista o histórico de contatos —
+  só a Carteira mostra o último.
+
 ## Pendências
+- Avaliar coluna "Último contato" no export Excel da Carteira (ficou de fora em 2026-09-02; ficou barato depois da desnormalização — é só mais uma coluna de `clientes`).
 - Adicionar campo "tubete obrigatório" no `CadastroBobinaForm.vue` (backend já trata; formulário nunca ganhou o input — ver seção "E-mail transacional de Cadastros" acima).
 - Popular `etiquetas_materia_prima` com dados reais de custo (Tony faz pela tela `/orcamentos/materia-prima`).
 - Revisitar a fórmula de "margem bruta %" da calculadora de etiqueta se o quirk herdado do legado (unidade por-etiqueta vs. custo-do-rolo) incomodar no uso real.

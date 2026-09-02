@@ -75,7 +75,8 @@ class VisaoGestorController extends Controller
                 'nome' => $u->display_name ?: $u->name,
                 'perfil' => $u->getRoleNames()->first(),
                 'codVendedor' => $u->vendedorPerfil?->cod_vendedor,
-                'ligacoesMes' => (int) ($ligMes[$u->id] ?? 0),
+                'ligacoesMes' => (int) ($ligMes[$u->id]['total'] ?? 0),
+                'ligacoesPorCanal' => $ligMes[$u->id]['porCanal'] ?? Ligacao::lerPorCanal(null),
                 'observacoesMes' => (int) ($obsMes[$u->id] ?? 0),
                 'ultimaLigacao' => $ultimaLigAt?->toIso8601String(),
                 'ultimaObservacao' => $ultimaObsAt?->toIso8601String(),
@@ -94,6 +95,14 @@ class VisaoGestorController extends Controller
             'ligacoesMes' => (int) $linhas->sum('ligacoesMes'),
             'observacoesMes' => (int) $linhas->sum('observacoesMes'),
             'atencao' => $linhas->filter(fn (array $l) => $l['atencao'])->count(),
+            // Somado em PHP sobre as linhas já carregadas: são ~200 vendedores no maior
+            // escopo, e uma segunda agregação no banco só pra repetir esta conta seria
+            // uma query a mais por request. Fecha com a soma das colunas da tabela.
+            'ligacoesPorCanal' => collect(Ligacao::TIPOS_CONTATO)
+                ->mapWithKeys(fn (string $canal) => [
+                    $canal => (int) $linhas->sum(fn (array $l) => $l['ligacoesPorCanal'][$canal] ?? 0),
+                ])
+                ->all(),
         ];
 
         if ($soAtencao) {
@@ -155,8 +164,14 @@ class VisaoGestorController extends Controller
     }
 
     /**
+     * Contatos do mês por vendedor, já quebrados por canal.
+     *
+     * ⚠️ Continua sendo UMA query com um GROUP BY — a quebra por canal entra como
+     * coluna (`Ligacao::somarPorCanal`), não como uma consulta por canal. Quatro canais
+     * viraria quatro varreduras da mesma faixa de datas por nada.
+     *
      * @param  list<int>  $ids
-     * @return array<int, int>
+     * @return array<int, array{total: int, porCanal: array<string, int>}>
      */
     private function agregarLigacoesMes(array $ids, string $inicio, string $fim): array
     {
@@ -166,12 +181,16 @@ class VisaoGestorController extends Controller
 
         return Ligacao::query()
             ->selectRaw('usuario_id, COUNT(*) as total')
+            ->tap(fn ($q) => Ligacao::somarPorCanal($q))
             ->whereIn('usuario_id', $ids)
             ->where('status', '!=', 'excluida')
             ->whereBetween('data_ligacao', [$inicio, $fim])
             ->groupBy('usuario_id')
-            ->pluck('total', 'usuario_id')
-            ->map(fn ($v) => (int) $v)
+            ->get()
+            ->mapWithKeys(fn ($linha) => [(int) $linha->usuario_id => [
+                'total' => (int) $linha->total,
+                'porCanal' => Ligacao::lerPorCanal($linha),
+            ]])
             ->all();
     }
 

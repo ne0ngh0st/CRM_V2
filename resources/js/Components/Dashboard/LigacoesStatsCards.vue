@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import axios from 'axios';
 import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
+import { CANAIS_CONTATO, ROTULOS_CANAL_CONTATO } from '@/constants/contatos.js';
 
 const props = defineProps({
     ligacoesStats: {
@@ -34,6 +35,24 @@ const mesAno = computed(() => {
 });
 
 const podeEscrever = computed(() => ['vendedor', 'representante'].includes(props.role));
+
+/*
+ * Quebra dos contatos do mês por canal. Vem pronta do backend (colunas na mesma
+ * query agregada), então aqui é só apresentação.
+ *
+ * `porCanal` pode não existir se o front rodar contra um backend antigo — cai pra
+ * lista vazia em vez de estourar, porque este card é o topo do Painel.
+ */
+const canais = computed(() => {
+    const dados = props.ligacoesStats?.porCanal;
+    if (!dados) return [];
+
+    return CANAIS_CONTATO.map((canal) => ({
+        canal,
+        rotulo: ROTULOS_CANAL_CONTATO[canal] ?? canal,
+        total: dados[canal] ?? 0,
+    }));
+});
 
 const observacoes = ref([]);
 const carregando = ref(true);
@@ -97,6 +116,13 @@ watch(() => [props.visaoSupervisor, props.visaoVendedor], carregar);
                 <KpiTile :value="observacoesStats.esteMes" label="Obs. no mês" />
                 <KpiTile :value="observacoesStats.clientesUnicos" label="Clientes únicos" tone="info" />
             </template>
+        </div>
+
+        <div v-if="canais.length" class="mt-3">
+            <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Contatos por canal</p>
+            <div class="flex flex-wrap gap-2">
+                <KpiTile v-for="c in canais" :key="c.canal" :value="c.total" :label="c.rotulo" />
+            </div>
         </div>
 
         <div class="mt-4 border-t border-gray-100 pt-4">

@@ -147,11 +147,19 @@
      *
      * Mapa função -> modificador (ver Regra de ouro nº 5 no CLAUDE.md):
      *   ver detalhes .......... .tbl-acao-neutro
-     *   editar / ligar ........ .tbl-acao-teal
+     *   editar / e-mail ....... .tbl-acao-teal
+     *   ligar ................. .tbl-acao-verde
+     *   WhatsApp .............. .tbl-acao-whats
      *   agendar ............... .tbl-acao-cyan
      *   orçamento / documento . .tbl-acao-navy
      *   observação / toggle ... .tbl-acao-amber
      *   excluir ............... .tbl-acao-danger
+     *
+     * Os três canais de contato (ligar, WhatsApp, e-mail) ficam propositalmente
+     * numa progressão verde -> verde-azulado -> teal: lêem-se como uma família na
+     * mesma linha, e o ícone é o que diz qual é qual. Dar a mesma cor aos três
+     * traria de volta o problema que a coloração resolveu — caçar o botão certo
+     * passando o mouse por cima de todos.
      */
     /*
      * Sub-tabela de itens da linha expandida (Orçamentos, Pedidos, Pedidos Emitidos
@@ -229,6 +237,11 @@
     /* Ligação é verde por convenção universal de telefonia (o "atender" do celular). */
     .tbl-acao-verde {
         @apply border-green-300 text-green-700 hover:border-green-500 hover:bg-green-50;
+    }
+
+    /* Verde da marca WhatsApp, não da Autopel — ver tailwind.config.js. */
+    .tbl-acao-whats {
+        @apply border-whats/30 text-whats hover:border-whats hover:bg-whats/10;
     }
 
     .tbl-acao-danger {

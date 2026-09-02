@@ -28,6 +28,11 @@ export default {
                 // fino precisa. Não são cores novas da marca — são tons de apoio.
                 cyan: { DEFAULT: '#00A9CE', dark: '#00728B' },
                 amber: { DEFAULT: '#ff8f00', dark: '#B36400' },
+                // Verde escuro do WhatsApp (#128C7E, cor da própria marca deles). NÃO
+                // é cor da Autopel: existe só pro botão de WhatsApp ser reconhecido de
+                // relance. O verde vivo da logo (#25D366) dá 1,98:1 sobre branco e
+                // sumiria como ícone; este dá 4,14:1.
+                whats: '#128C7E',
                 'brand-gray': '#C8C9C7',
                 'corp-black': '#1a1a1a',
                 'corp-dark': '#2d2d2d',

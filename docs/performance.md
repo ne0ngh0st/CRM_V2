@@ -364,6 +364,94 @@ Já documentado no `CLAUDE.md` e vale repetir porque é sutil:
 - Desempate com direção divergente (`orderBy(col,'desc')->orderBy('id')` com id ASC) força filesort — 80 ms contra 0,39 ms.
 - Ordenar por coluna de outra tabela força join + filesort. Já medido: 510-655 ms no escopo admin. Solução conhecida e medida ("deferred id": 501 ms → 135 ms), ainda não aplicada porque não compõe bem com `paginate()`.
 
+## 1.11 🔴 Índice ESCOLHIDO não é índice SUFICIENTE — olhar o `Extra:`, não o `key:`
+
+Terceira vez que este mesmo erro custa tempo neste projeto (faturamentos em 2026-08-31,
+e mais duas em 2026-09-02). O padrão é sempre igual e é traiçoeiro justamente porque o
+`EXPLAIN` *parece* bom: o `key:` aponta para o índice certo, e a consulta continua cara.
+
+**O que denuncia é o `Extra:`**, não o `key:`:
+
+| `Extra:` | Significa | Custo |
+|---|---|---|
+| `Using index` | leitura inteira dentro do índice | barato |
+| `Using index condition` | usou o índice e ainda foi à tabela ler colunas | caro |
+| `Using where` (com `type=index`) | varreu o índice todo e foi à tabela por linha | muito caro |
+
+**Regra prática:** toda coluna que aparece no `SELECT`, no `WHERE` ou no `ORDER BY`
+precisa estar NO índice — não basta a coluna do filtro. Um `<> 'valor'` numa coluna de
+fora do índice obriga o MySQL a ir à tabela linha a linha, e ele frequentemente conclui
+que varrer tudo sai mais barato.
+
+Medido em `ligacoes` (289 mil linhas sintéticas), em 2026-09-02:
+
+| Consulta | Índice antes | Índice depois | Antes | Depois |
+|---|---|---|---:|---:|
+| "Última ligação" da Visão do Gestor | `(usuario_id, data_ligacao)` | `+ status` | 969 ms | **154 ms** |
+
+⚠️ O segundo caso **já estava lento antes de qualquer feature nova** e ninguém tinha
+medido — só apareceu porque a tabela foi populada com volume realista. Regra de ouro
+nº 6: o dado pequeno esconde o problema, não o resolve.
+
+⚠️ **Estender índice não é criar índice.** O índice novo tem o mesmo PREFIXO do
+antigo, então o antigo foi removido — não houve aumento de índices na tabela, só de
+colunas no fim. Custo de escrita praticamente igual.
+
+⚠️ **Ordem obrigatória: criar o novo ANTES de dropar o antigo.** `usuario_id` tem
+chave estrangeira, e o MySQL recusa remover o único índice que a sustenta
+(`Cannot drop index ...: needed in a foreign key constraint`).
+
+## 1.12 🔴 "O mais recente de cada X" numa listagem — os três degraus
+
+Caso real da coluna "Último contato" da Carteira, em 2026-09-02. O pedido parece
+trivial e passou por três desenhos, cada um derrubado por medição. Vale como receita
+porque **qualquer** "último/maior de cada item" numa tela paginada cai aqui.
+
+**Degrau 1 — a forma ingênua: trazer tudo e filtrar em PHP.**
+`get()` + `groupBy()->map(first)` traz TODOS os registros dos 30 itens da página e usa
+30. Com uma página cujos 30 clientes tinham 271 contatos cada (8.130 linhas lidas para
+exibir 30): **215 ms**. Em página típica (~3 por cliente): 6 ms — por isso passa
+despercebido até alguém medir com volume.
+
+**Degrau 2 — janela no banco.** `ROW_NUMBER() OVER (PARTITION BY x ORDER BY data DESC,
+id DESC)` devolve exatamente 30 linhas: **25 ms** no mesmo pior caso, ~5 ms no típico.
+
+**Degrau 3 — a pergunta que muda tudo: precisa ORDENAR por isso?**
+Se sim, os dois degraus anteriores não servem, porque ordenar exige o valor de TODAS as
+linhas, não das 30 da página. Medido no escopo admin (92k clientes, 281k contatos):
+
+| Ordenar a Carteira por | Tempo |
+|---|---:|
+| `data_ultima_compra` (coluna indexada da própria `clientes`) | 1,2 ms |
+| `MAX(data_ligacao)` via LEFT JOIN agregado | **987 ms** |
+| `MAX(data_ligacao)` via subconsulta correlata | **1.179 ms** |
+| `data_ultimo_contato` **desnormalizada em `clientes`** | **0,9 ms** |
+
+Quase 1 s só na ordenação — estoura sozinho o orçamento de 400 ms. A saída foi
+**desnormalizar**: `clientes.data_ultimo_contato` + `canal_ultimo_contato`, indexadas.
+Ordenar voltou a custar 0,9 ms (`Backward index scan`, 30 linhas) **e** a consulta por
+página sumiu de vez.
+
+O precedente estava ao lado o tempo todo: `data_ultima_compra` também é valor derivado
+(vem de `faturamentos`) e mora em `clientes` exatamente por isso.
+
+**Quando desnormalizar vale:** valor lido em toda listagem, escrito raramente (aqui,
+alguns milhares de contatos por mês → um UPDATE por contato), e que se quer ordenar.
+
+⚠️ **O preço é drift, e o antídoto é dono único.** Um só ponto de escrita
+(`UltimoContatoSincronizador`, chamado pelo hook `Ligacao::created()`), colunas fora do
+`$fillable` para import/seeder não gravarem por acidente, e um comando de reconstrução
+(`carteira:recalcular-ultimo-contato`).
+
+⚠️ **A regra de desempate tem que ser a MESMA no hook e na reconstrução.** Se
+divergirem, a coluna muda de valor toda vez que alguém roda a manutenção — bug que
+aparece semanas depois e parece "a tela mudou sozinha". Há teste comparando os dois
+caminhos.
+
+⚠️ **Desempatar sempre.** `ORDER BY data DESC` sozinho devolve linha arbitrária quando
+duas têm a mesma data (acontece: WhatsApp e e-mail no mesmo segundo). Aqui a regra é
+"mais recente vence; em empate, o registrado por último".
+
 ---
 
 # Parte 2 — O que é BARATO

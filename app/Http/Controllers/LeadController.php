@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Maatwebsite\Excel\Facades\Excel;
@@ -325,15 +326,23 @@ class LeadController extends Controller
         return $query;
     }
 
+    /**
+     * Registra um contato com o lead. Mesmo contrato do `CarteiraController` —
+     * o canal vem do front e é validado contra `Ligacao::TIPOS_CONTATO`.
+     */
     public function registrarLigacao(Request $request, Lead $lead): RedirectResponse
     {
         $this->autorizarLead($request, $lead);
+
+        $tipo = $request->validate([
+            'tipo' => ['nullable', Rule::in(Ligacao::TIPOS_CONTATO)],
+        ])['tipo'] ?? 'telefonica';
 
         Ligacao::create([
             'usuario_id' => $request->user()->id,
             'lead_id' => $lead->id,
             'cliente_nome' => $lead->razao_social ?: $lead->nome,
-            'tipo_contato' => 'telefonica',
+            'tipo_contato' => $tipo,
             'status' => 'finalizada',
             'data_ligacao' => now(),
         ]);

@@ -7,6 +7,7 @@ import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import FilterField from '@/Components/FilterField.vue';
 import StatusPill from '@/Components/StatusPill.vue';
+import { CANAIS_CONTATO, ROTULOS_CANAL_CONTATO, ROTULOS_CANAL_CURTO } from '@/constants/contatos.js';
 
 const props = defineProps({
     role: String,
@@ -16,6 +17,25 @@ const props = defineProps({
     opcoes: { type: Object, required: true },
     alertas: { type: Object, required: true },
 });
+
+/*
+ * Quebra por canal para os KPIs do topo. Vem pronta do backend.
+ */
+const canais = CANAIS_CONTATO.map((canal) => ({ canal, rotulo: ROTULOS_CANAL_CONTATO[canal] ?? canal }));
+
+/**
+ * "12 Tel. · 5 Whats" — resumo do canal na própria célula de "Lig. mês", em vez de
+ * quatro colunas novas numa tabela que já tem oito. Canal zerado não aparece: o que
+ * o gestor procura aqui é quem só usa um canal, e linha cheia de "0" esconde isso.
+ */
+function resumoCanais(porCanal) {
+    if (!porCanal) return '';
+
+    return CANAIS_CONTATO
+        .filter((canal) => (porCanal[canal] ?? 0) > 0)
+        .map((canal) => `${porCanal[canal]} ${ROTULOS_CANAL_CURTO[canal] ?? canal}`)
+        .join(' · ');
+}
 
 const filtros = reactive({
     busca: props.filtros.busca || '',
@@ -111,6 +131,18 @@ function formatData(iso) {
                 <KpiTile :value="kpis.atencao" label="Precisam atenção" :tone="kpis.atencao > 0 ? 'danger' : 'ok'" />
             </div>
 
+            <div v-if="kpis.ligacoesPorCanal" class="mb-4">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Contatos do mês por canal</p>
+                <div class="flex flex-wrap gap-2">
+                    <KpiTile
+                        v-for="c in canais"
+                        :key="c.canal"
+                        :value="kpis.ligacoesPorCanal[c.canal] ?? 0"
+                        :label="c.rotulo"
+                    />
+                </div>
+            </div>
+
             <DarkCard title="Equipe" :subtitle="`${linhas.length} na listagem`">
                 <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-4 w-4">
@@ -151,7 +183,12 @@ function formatData(iso) {
                                         {{ linha.motivoAtencao }}
                                     </div>
                                 </td>
-                                <td class="tbl-td">{{ linha.ligacoesMes }}</td>
+                                <td class="tbl-td">
+                                    <span class="tbl-main">{{ linha.ligacoesMes }}</span>
+                                    <span v-if="resumoCanais(linha.ligacoesPorCanal)" class="tbl-sub">
+                                        {{ resumoCanais(linha.ligacoesPorCanal) }}
+                                    </span>
+                                </td>
                                 <td class="tbl-td">{{ linha.observacoesMes }}</td>
                                 <td class="tbl-td">{{ formatData(linha.ultimaLigacao) }}</td>
                                 <td class="tbl-td">{{ formatData(linha.ultimaObservacao) }}</td>

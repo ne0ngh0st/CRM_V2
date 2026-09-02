@@ -1,6 +1,7 @@
 <script setup>
 import { router } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
+import BotoesContato from '@/Components/Contato/BotoesContato.vue';
 import { ROTULOS_STATUS_LEAD, TONS_STATUS_LEAD, ROTULOS_ORIGEM_LEAD, TONS_ORIGEM_LEAD } from '@/constants/leads.js';
 
 defineProps({
@@ -19,20 +20,9 @@ function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
 }
 
-function formatarTelefone(telefone) {
-    let numero = String(telefone).replace(/\D/g, '').replace(/^0+/, '');
-    if ((numero.length === 10 || numero.length === 11) && !numero.startsWith('0')) {
-        numero = `0${numero}`;
-    }
-    return numero;
-}
-
-function ligar(lead) {
-    if (!lead.telefone) return;
-    router.post(route('leads.ligacao', lead.id), {}, { preserveScroll: true, preserveState: true });
-    const numero = formatarTelefone(lead.telefone);
-    const ehMobile = /Mobi|Android/i.test(navigator.userAgent);
-    window.location.href = ehMobile ? `tel:${numero}` : `callto:${numero}`;
+/* Mesmo contrato da Carteira: o canal vem do BotoesContato e a rota é a dos leads. */
+function registrarContato(lead, tipo) {
+    router.post(route('leads.ligacao', lead.id), { tipo }, { preserveScroll: true, preserveState: true });
 }
 
 function criarOrcamento(lead) {
@@ -103,18 +93,12 @@ function excluir(lead) {
                                     <path d="M4 6h16M4 12h10M4 18h16" stroke-linecap="round" />
                                 </svg>
                             </button>
-                            <button
+                            <BotoesContato
                                 v-if="podeLigar"
-                                type="button"
-                                title="Realizar ligação"
-                                class="tbl-acao tbl-acao-verde"
-                                :disabled="!lead.telefone"
-                                @click="ligar(lead)"
-                            >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                    <path d="M5 4h4l2 5-2.5 1.5a12 12 0 006 6L16 14l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z" stroke-linejoin="round" />
-                                </svg>
-                            </button>
+                                :telefone="lead.telefone"
+                                :email="lead.email"
+                                @contato="registrarContato(lead, $event)"
+                            />
                             <button
                                 v-if="podeAgendar"
                                 type="button"

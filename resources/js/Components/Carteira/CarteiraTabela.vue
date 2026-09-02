@@ -2,7 +2,9 @@
 import { router, Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import SortableTh from '@/Components/Tabela/SortableTh.vue';
+import BotoesContato from '@/Components/Contato/BotoesContato.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira.js';
+import { ROTULOS_CANAL_CURTO } from '@/constants/contatos.js';
 
 defineProps({
     clientes: { type: Array, required: true },
@@ -16,23 +18,13 @@ defineProps({
 
 const emit = defineEmits(['motivo-inatividade', 'observacao', 'agendar-ligacao', 'ordenar']);
 
-function formatarTelefone(telefone) {
-    let numero = telefone.replace(/\D/g, '').replace(/^0+/, '');
-    if ((numero.length === 10 || numero.length === 11) && !numero.startsWith('0')) {
-        numero = `0${numero}`;
-    }
-
-    return numero;
-}
-
-function ligar(cliente) {
-    if (!cliente.telefone) return;
-
-    router.post(route('carteira.ligacao', cliente.id), {}, { preserveScroll: true, preserveState: true });
-
-    const numero = formatarTelefone(cliente.telefone);
-    const ehMobile = /Mobi|Android/i.test(navigator.userAgent);
-    window.location.href = ehMobile ? `tel:${numero}` : `callto:${numero}`;
+/*
+ * Registra o contato no canal escolhido. `preserveState` mantém os filtros e a
+ * página atual; o POST sai ANTES de o browser abrir o discador/WhatsApp/e-mail,
+ * senão a navegação cancelaria a requisição e o contato não entraria na métrica.
+ */
+function registrarContato(cliente, tipo) {
+    router.post(route('carteira.ligacao', cliente.id), { tipo }, { preserveScroll: true, preserveState: true });
 }
 
 function criarOrcamento(cliente) {
@@ -46,7 +38,10 @@ function criarOrcamento(cliente) {
 
 <template>
     <div class="tbl-wrap">
-        <table class="tbl min-w-[1000px]">
+        <!-- 1200px, não 1000: entraram a coluna "Último contato" e mais dois botões de
+             ação. Com 1000 a coluna Ações espremia e os 7 botões empilhavam um por
+             linha, triplicando a altura da linha em tela média. -->
+        <table class="tbl min-w-[1200px]">
             <thead>
                 <tr class="tbl-head-row">
                     <SortableTh campo="nome" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Cliente</SortableTh>
@@ -56,6 +51,7 @@ function criarOrcamento(cliente) {
                     <th class="tbl-th">Segmento</th>
                     <SortableTh campo="status" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Status</SortableTh>
                     <SortableTh campo="ultima_compra" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Última Compra</SortableTh>
+                    <SortableTh campo="ultimo_contato" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Último contato</SortableTh>
                     <th class="tbl-th">Ações</th>
                 </tr>
             </thead>
@@ -94,6 +90,13 @@ function criarOrcamento(cliente) {
                     </td>
                     <td class="tbl-td">{{ cliente.dataUltimaCompra ?? 'Nunca' }}</td>
                     <td class="tbl-td">
+                        <template v-if="cliente.ultimoContato">
+                            <span class="tbl-main">{{ cliente.ultimoContato.data }}</span>
+                            <span class="tbl-sub">{{ ROTULOS_CANAL_CURTO[cliente.ultimoContato.canal] ?? cliente.ultimoContato.canal }}</span>
+                        </template>
+                        <span v-else class="text-gray-400">Nunca</span>
+                    </td>
+                    <td class="tbl-td">
                         <div class="tbl-acoes">
                             <Link
                                 v-if="podeVerDetalhes"
@@ -106,18 +109,12 @@ function criarOrcamento(cliente) {
                                     <circle cx="12" cy="12" r="3" />
                                 </svg>
                             </Link>
-                            <button
+                            <BotoesContato
                                 v-if="podeLigar"
-                                type="button"
-                                :disabled="!cliente.telefone"
-                                :title="cliente.telefone ? 'Realizar ligação' : 'Telefone não cadastrado'"
-                                class="tbl-acao tbl-acao-verde"
-                                @click="ligar(cliente)"
-                            >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                    <path d="M4 5c0 8.284 6.716 15 15 15 1-1.5 1.5-3 1.5-4.5l-4-1.5-1.5 2A11.5 11.5 0 0 1 9 10.5l2-1.5-1.5-4C8 5 6.5 5.5 5 6.5 4.5 5.5 4 5.5 4 5Z" stroke-linecap="round" stroke-linejoin="round" />
-                                </svg>
-                            </button>
+                                :telefone="cliente.telefone"
+                                :email="cliente.email"
+                                @contato="registrarContato(cliente, $event)"
+                            />
                             <button
                                 v-if="podeAgendar"
                                 type="button"

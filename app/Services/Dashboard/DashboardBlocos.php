@@ -128,12 +128,14 @@ class DashboardBlocos
             ->selectRaw('COUNT(*) as total')
             ->selectRaw("SUM(status = 'finalizada') as finalizadas")
             ->selectRaw("SUM(status = 'cancelada') as canceladas")
+            ->tap(fn ($q) => Ligacao::somarPorCanal($q))
             ->first();
 
         return [
             'total' => (int) ($contagem->total ?? 0),
             'finalizadas' => (int) ($contagem->finalizadas ?? 0),
             'canceladas' => (int) ($contagem->canceladas ?? 0),
+            'porCanal' => Ligacao::lerPorCanal($contagem),
         ];
     }
 
