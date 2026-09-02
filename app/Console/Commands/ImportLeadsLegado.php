@@ -7,6 +7,19 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use PDO;
 
+/**
+ * ⚠️ PREFIRA `totvs:import-leads`. Este comando APAGA todos os leads `origem=sistema` e
+ * reinsere, o que troca o `id` de cada um. Como `observacoes.lead_id` e
+ * `agendamentos_ligacoes.lead_id` são ON DELETE SET NULL, cada execução desgarra as
+ * observações dos seus leads em silêncio — hoje são 575 apontando para lead.
+ *
+ * Também traz a base sem deduplicar (20.568 linhas para 17.154 CNPJs, então o vendedor
+ * vê a mesma empresa duas vezes) e reescreve o `status`, devolvendo para "ativo" o lead
+ * que alguém marcou como convertido ou excluído.
+ *
+ * Fica porque o espelho do v1 ainda é a fonte de alguns domínios; o substituto lê o
+ * arquivo direto e adota o lead pelo CNPJ, preservando o id.
+ */
 class ImportLeadsLegado extends Command
 {
     protected $signature = 'legado:import-leads {--fonte=homolog : homolog ou producao}';
