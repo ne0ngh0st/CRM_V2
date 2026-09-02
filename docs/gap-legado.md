@@ -150,9 +150,22 @@ delete+insert, e isso é outra tarefa.
 
 ## 8. Webhook de leads do site (WordPress)
 
-`includes/api/webhook_leads_wordpress.php` — recebe lead do site/marketing numa fila de
-staging (`MARKETING_WP_LEADS_RAW`). **A tabela não existe no espelho**, então nunca foi ligado
-de verdade. Fica registrado como intenção, não como feature a portar.
+Portado em 2026-09-01. O v1 nunca ligou de verdade (tabela ausente no espelho; GET
+ainda responde 405 em produção). No v2:
+
+- `POST /webhooks/wordpress-leads` — mesmo contrato HTTP do v1 (Bearer ou
+  `X-Webhook-Token`, envelope JSON cru em staging).
+- Staging em `marketing_wp_leads_raw` (nada do form é descartado) — é a prova de
+  captura (último recebimento na `/leads`).
+- Lead comercial `origem = wordpress`. Dono em `marketing_wp_formularios`
+  (identificador `*` = 010617; form específico = nova linha, não env).
+- A `/leads` mostra se o webhook está ligado (segredo), a URL, o último POST e
+  um botão admin de lead de teste. O WordPress em si ainda precisa ser apontado
+  para essa URL.
+- `legado:import-leads` continua apagando só `origem = sistema`.
+- CSV histórico: `php artisan marketing:import-wp-csv`.
+
+Desligar: esvaziar `WP_LEADS_WEBHOOK_SECRET` (503 `webhook_not_configured`).
 
 ## 9. Os "menores" — revisados em 2026-08-10
 

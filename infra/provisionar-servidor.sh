@@ -171,6 +171,10 @@ server {
         fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
         fastcgi_param DOCUMENT_ROOT $realpath_root;
         include fastcgi_params;
+        # PHP-FPM/fastcgi_params não passa Authorization. Sem isto o Bearer do
+        # webhook de leads do WordPress chega vazio. X-Webhook-Token continua
+        # como fallback (não depende desta linha).
+        fastcgi_param HTTP_AUTHORIZATION $http_authorization;
 
         # Precisa acomodar os exports síncronos, que podem passar de 60s.
         fastcgi_read_timeout 300;
