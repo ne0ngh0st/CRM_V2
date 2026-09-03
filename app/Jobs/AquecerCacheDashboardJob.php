@@ -75,10 +75,14 @@ class AquecerCacheDashboardJob implements ShouldQueue
         // só que em modo forçado. É isso que impede o job de gravar numa chave que
         // ninguém lê.
         //
-        // faturamentoComparacao saiu daqui de propósito: na Home dos gestores (único
-        // público dos escopos aquecidos — empresa e equipes) o gráfico Chart.js foi
-        // trocado pelo embed do Power BI. Vendedor/representante ainda chamam o método,
-        // mas o escopo individual não é aquecido (config escopos_aquecidos.vendedores).
+        // vendaComparacao e faturamentoComparacao ficam de fora de propósito: na Home dos
+        // gestores (único público dos escopos aquecidos — empresa e equipes) o card
+        // Chart.js foi trocado pelo embed do Power BI. Vendedor/representante ainda chamam
+        // os dois métodos, mas o escopo individual não é aquecido (config
+        // escopos_aquecidos.vendedores) porque já é naturalmente barato.
+        //
+        // ⚠️ Se um dia o card voltar a aparecer para gestor, os DOIS blocos precisam
+        // entrar aqui — não só o de faturamento.
         $frios->metaGauge($porVendedor, $escopo['codVendedores']);
         $frios->carteiraSegmento($porVendedor, $escopo['codVendedores']);
         $frios->pedidosAtencao($porVendedor, $escopo['codVendedores']);

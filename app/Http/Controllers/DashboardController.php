@@ -68,10 +68,22 @@ class DashboardController extends Controller
                 : null,
             'ligacoesStats' => $mostraBlocos ? $this->blocos->ligacoesStats($usuarioIds) : null,
             'observacoesStats' => $mostraBlocos ? $this->blocos->observacoesStats($usuarioIds) : null,
-            // Gestores veem o embed do Power BI no lugar do gráfico Chart.js. A agregação
-            // de faturamento (a query mais cara da Home no escopo empresa) não roda pra
-            // eles — ninguém lê esse resultado. Vendedor/representante continuam com o
-            // gráfico local, cujo escopo já é barato.
+            /*
+             * Gestores veem o embed do Power BI no lugar do gráfico Chart.js. As agregações
+             * (as queries mais caras da Home no escopo empresa) não rodam pra eles —
+             * ninguém leria o resultado. Vendedor/representante continuam com o gráfico
+             * local, cujo escopo já é barato.
+             *
+             * ⚠️ VENDA é a aba padrão do card, e faturamento a segunda. A troca é
+             * deliberada: venda (pedido emitido) é o que o vendedor consegue influenciar
+             * hoje; faturamento é consequência, e chega depois. Os dois blocos vêm juntos
+             * porque o card alterna sem ida ao servidor — cada um custa duas agregações
+             * cacheadas, e ir buscar a outra aba no clique tornaria o alternador lento
+             * justamente para quem alterna.
+             */
+            'vendaComparacao' => $temEscopo && $mostraBlocos && ! $eGestor
+                ? $this->blocos->vendaComparacao($porVendedor, $codVendedores)
+                : null,
             'faturamentoComparacao' => $temEscopo && $mostraBlocos && ! $eGestor
                 ? $this->blocos->faturamentoComparacao($porVendedor, $codVendedores)
                 : null,

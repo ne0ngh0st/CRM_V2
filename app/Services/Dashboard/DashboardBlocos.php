@@ -2,19 +2,20 @@
 
 namespace App\Services\Dashboard;
 
+use App\Jobs\AquecerCacheDashboardJob;
 use App\Models\Cliente;
 use App\Models\DataSyncStatus;
 use App\Models\Faturamento;
 use App\Models\Ligacao;
 use App\Models\Observacao;
 use App\Models\Orcamento;
-use App\Jobs\AquecerCacheDashboardJob;
 use App\Models\Pedido;
 use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Metas\MetaRankingResolver;
 use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -187,6 +188,87 @@ class DashboardBlocos
     }
 
     /**
+     * Comparação de VENDA (pedido emitido) ano vs. ano, mês a mês.
+     *
+     * "Venda" aqui é a convenção já estabelecida no projeto: toda linha de `pedidos`,
+     * aberta ou faturada, datada por `data_pedido` — a mesma base de `pedidosEmitidos()`,
+     * de `/pedidos-emitidos` e do `MetaRankingResolver`. Não é subconjunto do faturamento:
+     * é o que foi vendido, independente de já ter virado nota.
+     *
+     * ⚠️ Bloco de cache PRÓPRIO (`venda-comparacao`), nunca reaproveitando a chave do
+     * faturamento. Os dois blocos têm o mesmo formato de retorno, então uma chave
+     * compartilhada não daria erro nenhum — só entregaria o número errado, na aba errada,
+     * de forma silenciosa. É o pior tipo de bug de cache.
+     *
+     * ⚠️ O valor sai do CABEÇALHO (`pedidos.valor_total`), sem JOIN com `pedido_itens`.
+     * Conferido no banco: a soma dos itens bate exatamente com a dos cabeçalhos
+     * (R$ 114.997.228,23) e não existe pedido sem item — então o JOIN só custaria.
+     *
+     * ⚠️ ESTADO DO DADO, e isto muda como a aba é lida: `pedidos` só tem volume denso a
+     * partir de julho/2026. O ano anterior inteiro tem 67 pedidos. O histórico de pedidos
+     * emitidos ainda não foi carregado (existe no legado, em `pedidos_status`), então a
+     * linha do ano anterior nasce rente ao zero. Não é bug de query — é ausência de dado
+     * de origem, e o front declara isso em vez de fingir.
+     *
+     * @param  array<string>|null  $codVendedores
+     */
+    public function vendaComparacao(ChaveEscopo $escopo, ?array $codVendedores): array
+    {
+        $anoAtual = (int) now()->year;
+
+        return $this->cachear(
+            $escopo->paraDoDia('venda-comparacao', ['ano' => $anoAtual]),
+            function () use ($anoAtual, $codVendedores) {
+                $meses = fn (int $ano) => $this->somaMensal(
+                    Pedido::query()->selectRaw('MONTH(data_pedido) as mes, SUM(valor_total) as total'),
+                    'data_pedido',
+                    $ano,
+                    $codVendedores,
+                );
+
+                return [
+                    'metrica' => 'venda',
+                    'anoAtual' => $anoAtual,
+                    'anoAnterior' => $anoAtual - 1,
+                    'valoresAnoAtual' => $meses($anoAtual),
+                    'valoresAnoAnterior' => $meses($anoAtual - 1),
+                ];
+            },
+        );
+    }
+
+    /**
+     * Soma por mês de um ano, com os 12 meses sempre preenchidos.
+     *
+     * ⚠️ Extraído porque venda e faturamento faziam a MESMA coisa em dois lugares (Regra
+     * de ouro nº 8). O que muda entre eles é só a tabela e o nome da coluna de data; se a
+     * regra de "mês corrente" ou o preenchimento com zero divergir entre as duas abas do
+     * mesmo card, o usuário vê dois períodos diferentes lado a lado.
+     *
+     * ⚠️ O corte do mês corrente vem de `MetaRankingResolver::fimRealizado()` — D-1, e D-3
+     * na segunda-feira. É a mesma janela de TODA métrica de pedido do projeto (o KPI
+     * "Valor no mês" fica no card logo acima); usar o mês civil cheio aqui faria o gráfico
+     * e o KPI discordarem na mesma tela.
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return list<float>
+     */
+    private function somaMensal(Builder $query, string $colunaData, int $ano, ?array $codVendedores): array
+    {
+        [$inicio, $fim] = $this->metaRanking->intervaloDatas($ano, 1, 12);
+
+        $query->whereBetween($colunaData, [$inicio, $fim])->groupBy('mes');
+
+        if ($codVendedores !== null) {
+            $query->whereIn('cod_vendedor', $codVendedores);
+        }
+
+        $totaisPorMes = $query->pluck('total', 'mes');
+
+        return collect(range(1, 12))->map(fn ($mes) => (float) ($totaisPorMes[$mes] ?? 0))->values()->all();
+    }
+
+    /**
      * ⚠️ `BETWEEN` em vez de `whereYear()` é a higiene correta de SQL, mas não resolve
      * sozinho o caso "empresa inteira": hoje 100% do faturamento importado é de um único
      * ano, então nenhum índice reduz as linhas lidas — a soma passa pelas ~930k linhas de
@@ -199,29 +281,27 @@ class DashboardBlocos
     {
         $anoAtual = (int) now()->year;
 
+        /*
+         * ⚠️ A chave virou `paraDoDia` porque a janela do mês corrente agora é D-1 —
+         * ou seja, o resultado depende de HOJE. Com `para()` a chave não mudaria de um dia
+         * para o outro e o gráfico ficaria congelado no recorte de ontem até o TTL expirar.
+         */
         return $this->cachear(
-            $escopo->para('faturamento-comparacao', ['ano' => $anoAtual]),
+            $escopo->paraDoDia('faturamento-comparacao', ['ano' => $anoAtual]),
             function () use ($anoAtual, $codVendedores) {
-                $porAno = function (int $ano) use ($codVendedores) {
-                    $query = Faturamento::query()
-                        ->selectRaw('MONTH(data_emissao) as mes, SUM(valor_total) as total')
-                        ->whereBetween('data_emissao', ["{$ano}-01-01", "{$ano}-12-31"])
-                        ->groupBy('mes');
-
-                    if ($codVendedores !== null) {
-                        $query->whereIn('cod_vendedor', $codVendedores);
-                    }
-
-                    $totaisPorMes = $query->pluck('total', 'mes');
-
-                    return collect(range(1, 12))->map(fn ($mes) => (float) ($totaisPorMes[$mes] ?? 0))->values()->all();
-                };
+                $meses = fn (int $ano) => $this->somaMensal(
+                    Faturamento::query()->selectRaw('MONTH(data_emissao) as mes, SUM(valor_total) as total'),
+                    'data_emissao',
+                    $ano,
+                    $codVendedores,
+                );
 
                 return [
+                    'metrica' => 'faturamento',
                     'anoAtual' => $anoAtual,
                     'anoAnterior' => $anoAtual - 1,
-                    'valoresAnoAtual' => $porAno($anoAtual),
-                    'valoresAnoAnterior' => $porAno($anoAtual - 1),
+                    'valoresAnoAtual' => $meses($anoAtual),
+                    'valoresAnoAnterior' => $meses($anoAtual - 1),
                 ];
             },
         );

@@ -9,7 +9,7 @@ import CarteiraSegmentoCard from '@/Components/Dashboard/CarteiraSegmentoCard.vu
 import LigacoesStatsCards from '@/Components/Dashboard/LigacoesStatsCards.vue';
 import OrcamentosStatsCard from '@/Components/Dashboard/OrcamentosStatsCard.vue';
 import PedidosAtencaoCard from '@/Components/Dashboard/PedidosAtencaoCard.vue';
-import FaturamentoComparisonChart from '@/Components/Dashboard/FaturamentoComparisonChart.vue';
+import ComparacaoCard from '@/Components/Dashboard/ComparacaoCard.vue';
 import FaturamentoBiEmbed from '@/Components/Dashboard/FaturamentoBiEmbed.vue';
 import SugestoesBoard from '@/Components/Dashboard/SugestoesBoard.vue';
 import { Head, usePage } from '@inertiajs/vue3';
@@ -22,6 +22,7 @@ const props = defineProps({
     metaGauge: Object,
     ligacoesStats: Object,
     observacoesStats: Object,
+    vendaComparacao: Object,
     faturamentoComparacao: Object,
     biEmbedUrl: String,
     carteiraSegmento: Object,
@@ -133,8 +134,9 @@ const mesAno = computed(() => {
                 </PageHero>
 
                 <FaturamentoBiEmbed v-if="biEmbedUrl" :url="biEmbedUrl" />
-                <FaturamentoComparisonChart
-                    v-else-if="faturamentoComparacao"
+                <ComparacaoCard
+                    v-else-if="vendaComparacao || faturamentoComparacao"
+                    :venda-comparacao="vendaComparacao"
                     :faturamento-comparacao="faturamentoComparacao"
                 />
 
