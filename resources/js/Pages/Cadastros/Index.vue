@@ -11,6 +11,7 @@ import CadastroBobinaTabela from '@/Components/Cadastros/CadastroBobinaTabela.vu
 import CadastroEtiquetaForm from '@/Components/Cadastros/CadastroEtiquetaForm.vue';
 import CadastroEtiquetaTabela from '@/Components/Cadastros/CadastroEtiquetaTabela.vue';
 import CadastroClienteForm from '@/Components/Cadastros/CadastroClienteForm.vue';
+import QuemCuidaBusca from '@/Components/Cadastros/QuemCuidaBusca.vue';
 import CadastroClienteTabela from '@/Components/Cadastros/CadastroClienteTabela.vue';
 import CadastroLeadForm from '@/Components/Cadastros/CadastroLeadForm.vue';
 import CadastroLeadTabela from '@/Components/Cadastros/CadastroLeadTabela.vue';
@@ -217,6 +218,10 @@ const tabBtn = (ativo) =>
                     </div>
 
                     <template v-if="subAbaClientes === 'cliente'">
+                        <!-- Antes do formulário de propósito: a pergunta "esse cliente já
+                             existe e é de quem?" só evita retrabalho se for respondida
+                             ANTES de a solicitação ser preenchida e enviada. -->
+                        <QuemCuidaBusca />
                         <CadastroClienteForm :opcoes="opcoes" />
                         <DarkCard title="Solicitações de cliente" :subtitle="`${clientesFila.total} registro${clientesFila.total !== 1 ? 's' : ''}`">
                             <template #icon>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\CadastroExport;
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Mail\CadastroSolicitacaoMail;
 use App\Models\ClienteParaCadastro;
@@ -9,11 +10,13 @@ use App\Models\Lead;
 use App\Models\SolicitacaoBobina;
 use App\Models\SolicitacaoEtiqueta;
 use App\Models\User;
+use App\Services\Cadastros\BuscaTitularidade;
 use App\Services\Cadastros\SolicitacaoTituloResolver;
 use App\Services\Solicitacoes\BobinaPdfPresenter;
 use App\Services\Solicitacoes\EtiquetaPdfPresenter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -28,6 +31,25 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 class CadastroController extends Controller
 {
     use ExportaPlanilha;
+
+    /**
+     * "Quem cuida do cliente?" — de quem é este CNPJ.
+     *
+     * Vive aqui, e não numa página própria, porque é aqui que a resposta EVITA O ERRO:
+     * antes de pedir cadastro de um cliente novo, descobrir que ele já existe e já tem
+     * dono. No legado era o próprio H1 da tela de cadastro.
+     *
+     * ⚠️ Deliberadamente SEM escopo de vendedor e deliberadamente POBRE em conteúdo —
+     * ver o docblock de BuscaTitularidade, que explica por que as duas coisas andam
+     * juntas.
+     */
+    public function titularidade(Request $request, BuscaTitularidade $busca): JsonResponse
+    {
+        return response()->json([
+            'minimo' => BuscaTitularidade::MINIMO_CARACTERES,
+            'resultados' => $busca->buscar((string) $request->string('termo')),
+        ]);
+    }
 
     private const ESTADOS = [
         'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
@@ -156,7 +178,7 @@ class CadastroController extends Controller
         };
 
         return Excel::download(
-            new \App\Exports\CadastroExport($query, $recurso),
+            new CadastroExport($query, $recurso),
             "cadastros-{$recurso}-".now()->format('Y-m-d-His').'.xlsx',
         );
     }
