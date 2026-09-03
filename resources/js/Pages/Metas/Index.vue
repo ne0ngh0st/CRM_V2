@@ -1,4 +1,5 @@
 <script setup>
+import EscopoVazioAviso from '@/Components/EscopoVazioAviso.vue';
 import { computed, reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
@@ -202,6 +203,8 @@ function salvarMeta() {
                     </div>
                 </template>
             </PageHero>
+
+            <EscopoVazioAviso :total="kpis.total" recurso="vendedor" />
 
             <div class="mb-4 flex flex-wrap gap-2">
                 <button type="button" class="min-w-[84px] flex-1 basis-0" @click="setFaixa('')">

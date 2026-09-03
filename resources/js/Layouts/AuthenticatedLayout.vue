@@ -4,6 +4,7 @@ import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import NotificationBell from '@/Components/NotificationBell.vue';
+import VisaoSupervisorToggle from '@/Components/VisaoSupervisorToggle.vue';
 import SimulacaoBanner from '@/Components/SimulacaoBanner.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link, usePage } from '@inertiajs/vue3';
@@ -233,6 +234,7 @@ const catalogoAtivo = computed(() =>
                         </div>
 
                         <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-1">
+                            <VisaoSupervisorToggle />
                             <NotificationBell />
 
                             <div class="relative ms-2">
@@ -470,6 +472,7 @@ const catalogoAtivo = computed(() =>
                                 </div>
                             </div>
 
+                            <VisaoSupervisorToggle />
                             <NotificationBell />
                         </div>
 

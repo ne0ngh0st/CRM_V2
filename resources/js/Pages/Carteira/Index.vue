@@ -1,11 +1,12 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
 import FilterField from '@/Components/FilterField.vue';
 import Pagination from '@/Components/Pagination.vue';
+import EscopoVazioAviso from '@/Components/EscopoVazioAviso.vue';
 import CarteiraSegmentoCard from '@/Components/Dashboard/CarteiraSegmentoCard.vue';
 import CarteiraTabela from '@/Components/Carteira/CarteiraTabela.vue';
 import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos.vue';
@@ -28,7 +29,23 @@ const props = defineProps({
 // "Ver detalhes" é liberado pra todos os perfis (decisão do Tony, 2026-08-10) — o
 // escopo já é garantido no servidor por `CarteiraController::autorizarCliente()`,
 // então o vendedor só alcança cliente da própria carteira.
-const isVendedor = computed(() => ['vendedor', 'representante'].includes(props.role));
+/**
+ * Quem pode OPERAR o cliente (ligar, agendar, orçar) — não é a mesma pergunta de quem
+ * pode VER.
+ *
+ * ⚠️ Inclui o supervisor em modo "Minha carteira": na Autopel supervisor também vende, e
+ * a lista que ele vê nesse modo é a carteira PESSOAL dele. Deixar os botões de fora ali
+ * seria mostrar os clientes dele e proibi-lo de trabalhá-los.
+ *
+ * Em modo Equipe os botões somem de novo — os clientes na tela são de outras pessoas, e
+ * registrar contato no lugar do vendedor sujaria a métrica de atividade dele.
+ */
+const page = usePage();
+
+const podeOperar = computed(
+    () => ['vendedor', 'representante'].includes(props.role)
+        || (props.role === 'supervisor' && page.props.modoVisao?.modo === 'pessoal'),
+);
 
 const filtros = reactive({
     busca: props.filtros.busca || '',
@@ -196,6 +213,7 @@ const temFiltrosAtivos = computed(() =>
                     </template>
                 </PageHero>
 
+                <EscopoVazioAviso :total="kpis.total" recurso="cliente" />
                 <CarteiraSegmentoCard :carteira-segmento="kpis" :base-filtros="filtros" />
 
                 <div class="flex gap-2">
@@ -241,9 +259,9 @@ const temFiltrosAtivos = computed(() =>
                             v-if="clientes.data.length"
                             :clientes="clientes.data"
                             :pode-ver-detalhes="true"
-                            :pode-ligar="isVendedor"
-                            :pode-agendar="isVendedor"
-                            :pode-orcamento="isVendedor"
+                            :pode-ligar="podeOperar"
+                            :pode-agendar="podeOperar"
+                            :pode-orcamento="podeOperar"
                             :pode-observar="true"
                             :ordenar="filtros.ordenar"
                             @ordenar="ordenarPor"

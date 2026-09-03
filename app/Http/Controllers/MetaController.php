@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\MetasExport;
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\MetaMensal;
 use App\Models\User;
 use App\Models\VendedorPerfil;
 use App\Services\Dashboard\DashboardScopeResolver;
+use App\Services\Equipe\EquipeScopeResolver;
+use App\Services\Escopo\ModoVisao;
 use App\Services\Metas\MetaRankingResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,8 +28,9 @@ class MetaController extends Controller
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly MetaRankingResolver $rankingResolver,
-    ) {
-    }
+        private readonly EquipeScopeResolver $equipeScope,
+        private readonly ModoVisao $modo,
+    ) {}
 
     public function index(Request $request): Response|RedirectResponse
     {
@@ -88,7 +92,7 @@ class MetaController extends Controller
         );
 
         return Excel::download(
-            new \App\Exports\MetasExport($resultado['linhas']),
+            new MetasExport($resultado['linhas']),
             "metas-{$p['ano']}-{$p['mes']}-".now()->format('Y-m-d-His').'.xlsx',
         );
     }
@@ -109,6 +113,29 @@ class MetaController extends Controller
         $visaoSupervisor = $request->string('visao_supervisor')->value() ?: null;
         // Ranking lista a equipe inteira (ou empresa); não filtra a um vendedor só.
         $scope = $this->scopeResolver->resolve($user, $visaoSupervisor, null);
+
+        /*
+         * ⚠️ Em /metas o supervisor entra na lista JUNTO da equipe — e esta é a única
+         * divergência intencional em relação ao escopo do resto do sistema.
+         *
+         * Na Carteira e no Painel, o modo Equipe é equipe PURA. Aqui não: a pergunta de
+         * uma tela de gestão é "por quem esta pessoa responde?", e ela responde por si
+         * mesma também. Sem isto, os R$ 9,04 mi de meta já gravados em códigos de
+         * supervisor continuariam invisíveis — nem no ranking, nem nos totais.
+         *
+         * A regra mora em EquipeScopeResolver::codigosEquipeDe(), compartilhada com
+         * /equipe, para as duas telas gerenciais não divergirem (Regra de ouro nº 8).
+         *
+         * Em modo "Minha carteira" o resolver já devolveu só o código dele, e aí o ranking
+         * é só a linha dele — que é exatamente o que o modo promete.
+         */
+        if ($scope['codVendedores'] !== null && ! $this->modo->pessoal()) {
+            $codSupervisor = $visaoSupervisor ?: ($user->hasRole('supervisor') ? $user->vendedorPerfil?->cod_vendedor : null);
+
+            if ($codSupervisor) {
+                $scope['codVendedores'] = $this->equipeScope->codigosEquipeDe($codSupervisor);
+            }
+        }
 
         return compact('ano', 'mes', 'modo', 'busca', 'faixa', 'scope');
     }

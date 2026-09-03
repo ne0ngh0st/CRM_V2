@@ -5,8 +5,8 @@ use App\Http\Controllers\CarteiraController;
 use App\Http\Controllers\CatalogoFacaController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipeController;
-use App\Http\Controllers\ExportacaoController;
 use App\Http\Controllers\EtiquetaMateriaPrimaController;
+use App\Http\Controllers\ExportacaoController;
 use App\Http\Controllers\InicioController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\MetaController;
@@ -18,6 +18,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SimulacaoController;
 use App\Http\Controllers\SugestaoController;
 use App\Http\Controllers\TabelaPrecoController;
+use App\Http\Controllers\VisaoController;
 use App\Http\Controllers\VisaoGestorController;
 use Illuminate\Support\Facades\Route;
 
@@ -61,6 +62,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
     Route::get('/leads/exportar', [LeadController::class, 'exportar'])->name('leads.exportar');
     Route::post('/leads/wordpress/teste', [LeadController::class, 'enviarTesteWordpress'])->name('leads.wordpress.teste');
+    // ⚠️ Antes de /leads/{lead}: senão o model binding tentaria achar um lead chamado
+    // "funil" e devolveria 404. Mesma armadilha da rota de encerrar simulação.
+    Route::get('/leads/funil/mais', [LeadController::class, 'maisDoFunil'])->name('leads.funil.mais');
+    Route::patch('/leads/{lead}/etapa', [LeadController::class, 'moverEtapa'])->name('leads.etapa');
     Route::get('/leads/{lead}/captura', [LeadController::class, 'capturaWordpress'])->name('leads.captura');
     Route::post('/leads/{lead}/ligacao', [LeadController::class, 'registrarLigacao'])->name('leads.ligacao');
     Route::post('/leads/{lead}/agendamento', [LeadController::class, 'registrarAgendamento'])->name('leads.agendamento');
@@ -79,6 +84,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/catalogo-facas/{faca}', [CatalogoFacaController::class, 'destroy'])->name('catalogo-facas.destroy');
 
     Route::get('/cadastros', [CadastroController::class, 'index'])->name('cadastros.index');
+    Route::get('/cadastros/titularidade', [CadastroController::class, 'titularidade'])->name('cadastros.titularidade');
     Route::get('/cadastros/exportar', [CadastroController::class, 'exportar'])->name('cadastros.exportar');
     Route::post('/cadastros/bobinas', [CadastroController::class, 'storeBobina'])->name('cadastros.bobinas.store');
     Route::get('/cadastros/bobinas/{bobina}/pdf', [CadastroController::class, 'pdfBobina'])->name('cadastros.bobinas.pdf');
@@ -133,6 +139,8 @@ Route::middleware('auth')->group(function () {
     // "existe simulação nesta sessão".
     // `encerrar` precisa vir ANTES de `{usuario}`, senão a rota literal é capturada pelo
     // parâmetro e o model binding devolve 404 procurando um usuário chamado "encerrar".
+    Route::post('/visao/alternar', [VisaoController::class, 'alternar'])->name('visao.alternar');
+
     Route::post('/simulacao/encerrar', [SimulacaoController::class, 'encerrar'])->name('simulacao.encerrar');
     Route::post('/simulacao/{usuario}', [SimulacaoController::class, 'iniciar'])->name('simulacao.iniciar');
 

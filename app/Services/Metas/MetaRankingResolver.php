@@ -254,7 +254,18 @@ class MetaRankingResolver
             return collect();
         }
 
-        $query = User::role(['vendedor', 'representante'])
+        /*
+         * ⚠️ SUPERVISOR ENTRA NO UNIVERSO DO RANKING. Na Autopel o supervisor também
+         * vende, e havia R$ 9,04 mi de meta gravados em códigos de supervisor que este
+         * filtro descartava — a meta existia na tabela e nunca aparecia em lugar nenhum,
+         * nem na linha, nem no total.
+         *
+         * ⚠️ EFEITO COLATERAL VISÍVEL, e é a correção, não um acidente: o gauge de meta da
+         * EMPRESA INTEIRA (metaVsFaturamento com escopo null) deriva a lista daqui, então
+         * o número do admin no Painel MUDA — passa a somar as metas de supervisor que
+         * antes ficavam de fora.
+         */
+        $query = User::role(['vendedor', 'representante', 'supervisor'])
             ->where('is_active', true)
             ->whereHas('vendedorPerfil', function ($q) use ($codVendedores) {
                 $q->whereNotNull('cod_vendedor')->where('cod_vendedor', '!=', '');

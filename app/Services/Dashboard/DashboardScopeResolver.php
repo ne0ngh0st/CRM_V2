@@ -4,6 +4,7 @@ namespace App\Services\Dashboard;
 
 use App\Models\User;
 use App\Models\VendedorPerfil;
+use App\Services\Escopo\ModoVisao;
 use Illuminate\Support\Collection;
 
 /**
@@ -27,13 +28,19 @@ class DashboardScopeResolver
      */
     private array $memo = [];
 
+    public function __construct(private readonly ModoVisao $modo) {}
+
     /**
      * @return array{codVendedores: array<string>|null, visaoSupervisor: ?string, visaoVendedor: ?string}
      */
     public function resolve(User $user, ?string $visaoSupervisor, ?string $visaoVendedor): array
     {
-        return $this->memo["resolve:{$user->id}:{$visaoSupervisor}:{$visaoVendedor}"]
-            ??= $this->resolverEscopo($user, $visaoSupervisor, $visaoVendedor);
+        // ⚠️ O modo entra na chave do memo: dentro de uma requisição ele não muda, mas
+        // um teste que alterne o modo entre dois `resolve()` na mesma instância leria
+        // escopo velho — e leria em silêncio, que é o pior jeito de errar escopo.
+        $chave = "resolve:{$user->id}:{$visaoSupervisor}:{$visaoVendedor}:{$this->modo->atual()}";
+
+        return $this->memo[$chave] ??= $this->resolverEscopo($user, $visaoSupervisor, $visaoVendedor);
     }
 
     /**
@@ -49,6 +56,24 @@ class DashboardScopeResolver
         }
 
         if ($role === 'supervisor') {
+            /*
+             * Modo "Minha carteira": o supervisor opera como vendedor.
+             *
+             * Na Autopel supervisor também vende — exceção da casa, não prática de
+             * mercado. Sem isto, os 9.387 clientes que são carteira pessoal de supervisor
+             * (10,2% da base) não são vistos por ninguém neste perfil, e o supervisor
+             * ROBERTO (000197), que tem equipe VAZIA, via tela em branco no sistema
+             * inteiro apesar de ter 1.649 clientes no nome dele.
+             *
+             * ⚠️ O modo EQUIPE segue sendo equipe PURA (decisão do Tony): a carteira
+             * pessoal não se mistura com a da equipe. Quem quiser os dois números soma —
+             * o que não pode é o sistema somar por conta própria e ninguém saber o que
+             * está olhando.
+             */
+            if ($this->modo->pessoal() && $proprio) {
+                return ['codVendedores' => [$proprio], 'visaoSupervisor' => null, 'visaoVendedor' => null];
+            }
+
             $equipe = $this->equipeDoSupervisor($proprio);
 
             if ($visaoVendedor && $equipe->contains($visaoVendedor)) {
@@ -148,7 +173,7 @@ class DashboardScopeResolver
      * (que são por `usuario_id`, não por `cod_vendedor`, já que o código pode ser
      * compartilhado entre contas).
      *
-     * @param array{codVendedores: array<string>|null, visaoSupervisor: ?string, visaoVendedor: ?string} $scope
+     * @param  array{codVendedores: array<string>|null, visaoSupervisor: ?string, visaoVendedor: ?string}  $scope
      * @return array<int>
      */
     public function usuarioIds(User $user, array $scope): array
