@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Totvs\ClientesLookup;
 use App\Services\Totvs\Normalizador;
 use App\Services\Totvs\Relatorios;
 use Illuminate\Console\Command;
@@ -60,7 +61,7 @@ class ImportPedidosAbertosTotvs extends Command
             'QTD_VENDA', 'QTD_LIBER', 'VLR_PEDIDO',
         ]);
 
-        $clientePorChave = $this->clientesPorChave();
+        $clientePorChave = ClientesLookup::porChave();
 
         $cabecalhos = [];
         $itens = [];
@@ -230,18 +231,4 @@ class ImportPedidosAbertosTotvs extends Command
         }
     }
 
-    /**
-     * @return array<string, int>
-     */
-    private function clientesPorChave(): array
-    {
-        $mapa = [];
-
-        DB::table('clientes')->select('id', 'cod_cliente', 'loja')->orderBy('id')->cursor()
-            ->each(function ($c) use (&$mapa) {
-                $mapa[Normalizador::chaveCliente($c->cod_cliente, $c->loja)] = $c->id;
-            });
-
-        return $mapa;
-    }
 }

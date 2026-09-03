@@ -121,17 +121,40 @@ class Normalizador
      * Devolve null no que não for data — o TOTVS deixa o campo em branco e também
      * escreve "  /  /    " em alguns relatórios.
      */
+    /**
+     * ⚠️ "01/01/1900" é o EPOCH SENTINEL do TOTVS para "sem data", não uma data real —
+     * conferido em `DATA_PCP` do relatório 232: 100% das 22.226 linhas trazem esse valor
+     * exato quando o campo não foi preenchido, nunca uma data de fato próxima de 1900.
+     * Sem este guard, `DateTime::createFromFormat` parseia normalmente e a coluna grava
+     * "1900-01-01" como se fosse PCP real — o tipo de erro que só aparece na tela, nunca
+     * num teste que gera data com Faker.
+     */
+    private const EPOCH_SENTINEL = '01/01/1900';
+
     public static function data(mixed $valor): ?string
     {
         $valor = trim((string) $valor);
 
-        if ($valor === '') {
+        if ($valor === '' || str_starts_with($valor, self::EPOCH_SENTINEL)) {
             return null;
         }
 
         $data = DateTime::createFromFormat('d/m/Y', substr($valor, 0, 10));
 
         return $data ? $data->format('Y-m-d') : null;
+    }
+
+    /**
+     * PESO_LIQ do relatório do TOTVS é o peso UNITÁRIO do produto (confirmado sobre a
+     * base real: nenhum produto distinto tem mais de um valor). Zero vira null de
+     * propósito: mais da metade das linhas vem com "0,00", que significa "o TOTVS não
+     * informou" — gravar 0 faria a tela exibir "0,000 kg" como se fosse peso medido.
+     */
+    public static function pesoOuNull(mixed $valor): ?float
+    {
+        $peso = self::numero($valor);
+
+        return $peso > 0 ? $peso : null;
     }
 
     /**

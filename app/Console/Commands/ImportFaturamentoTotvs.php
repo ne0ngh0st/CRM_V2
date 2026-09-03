@@ -2,10 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Totvs\LeitorRelatorio;
 use App\Services\Totvs\Normalizador;
 use App\Services\Totvs\Relatorios;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 /**
  * Importa o faturamento do relatório 198, direto do arquivo.
@@ -22,9 +24,16 @@ use Illuminate\Support\Facades\DB;
  * para reinserir três mil linhas. Pelo conjunto, só os dias que o arquivo realmente
  * contém são substituídos, e a linha furada afeta apenas o próprio dia dela.
  *
- * O ciclo é: apaga os dias do arquivo, insere o arquivo. Rodar duas vezes seguidas dá o
- * mesmo resultado, e reprocessar um dia que ganhou nota nova é só gerar o relatório de
- * novo — sem `--desde` para digitar (e digitar errado).
+ * ⚠️ PROCESSA TODOS OS ARQUIVOS QUE ACHAR, não só o mais recente por `mtime`. Achado no
+ * import do 232 (que tem o mesmo formato de nome com mês): o Tony pode gerar dois meses
+ * no mesmo dia (ex.: um backfill de agosto depois do relatório de setembro), e o segundo
+ * gravado no disco fica com `mtime` maior mesmo sendo o mês mais VELHO. "Pegar só o mais
+ * recente" ignoraria o outro em silêncio. Como o merge já é por conjunto de datas
+ * PRÓPRIO de cada arquivo, processar todos é seguro: cada um mexe só nos seus dias.
+ *
+ * O ciclo por arquivo é: apaga os dias dele, insere o arquivo. Rodar duas vezes seguidas
+ * dá o mesmo resultado, e reprocessar um dia que ganhou nota nova é só gerar o relatório
+ * de novo — sem `--desde` para digitar (e digitar errado).
  *
  * Para carga histórica de um ano inteiro, o comando é outro:
  * `legado:import-faturamento-arquivo --ano=2024`, que existe justamente porque um xlsx
@@ -43,19 +52,62 @@ class ImportFaturamentoTotvs extends Command
         {--chunk=2000 : tamanho do lote de insert}
         {--dry-run : lê e conta, sem escrever nada}';
 
-    protected $description = 'Importa o faturamento do relatório 198 do TOTVS, substituindo só os dias contidos no arquivo';
+    protected $description = 'Importa o faturamento do relatório 198 do TOTVS, substituindo só os dias contidos em cada arquivo encontrado';
 
     public function handle(): int
     {
         $chunk = (int) $this->option('chunk');
         $dryRun = (bool) $this->option('dry-run');
 
-        $leitor = Relatorios::abrir('faturamento');
-        $leitor->exigirColunas([
-            'FILIAL', 'EMISSAO', 'COD_CLI', 'CNPJ', 'CLIENTE', 'COD_VENDEDOR',
-            'COD_PROD', 'DES_PROD', 'SEGMENTO', 'QUANT', 'VLR_UNIT', 'VLR_TOTAL',
-            'PEDIDO', 'NTA_FISCAL',
-        ]);
+        $arquivos = Relatorios::todos('faturamento');
+
+        if ($arquivos === []) {
+            $this->error('Nenhum relatório 198 encontrado.');
+
+            return self::FAILURE;
+        }
+
+        $totalInseridas = 0;
+        $totalSubstituidas = 0;
+
+        DB::transaction(function () use ($arquivos, $chunk, $dryRun, &$totalInseridas, &$totalSubstituidas) {
+            foreach ($arquivos as $caminho) {
+                [$inseridas, $substituidas] = $this->processarArquivo($caminho, $chunk, $dryRun);
+                $totalInseridas += $inseridas;
+                $totalSubstituidas += $substituidas;
+            }
+        });
+
+        $prefixo = $dryRun ? '[dry-run] ' : '';
+        $this->info($prefixo.'Linhas inseridas no total: '.number_format($totalInseridas, 0, ',', '.'));
+        $this->line('Substituídas no total: '.number_format($totalSubstituidas, 0, ',', '.'));
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * @return array{0: int, 1: int} inseridas, substituídas
+     */
+    private function processarArquivo(string $caminho, int $chunk, bool $dryRun): array
+    {
+        $this->newLine();
+        $this->line('── '.basename($caminho));
+
+        try {
+            $leitor = Relatorios::abrirArquivo($caminho, 'faturamento');
+            $leitor->exigirColunas([
+                'FILIAL', 'EMISSAO', 'COD_CLI', 'CNPJ', 'CLIENTE', 'COD_VENDEDOR',
+                'COD_PROD', 'DES_PROD', 'SEGMENTO', 'QUANT', 'VLR_UNIT', 'VLR_TOTAL',
+                'PEDIDO', 'NTA_FISCAL',
+            ]);
+        } catch (RuntimeException $e) {
+            // Arquivo de formato antigo/estranho não pode derrubar o import dos outros
+            // meses válidos — mesmo cuidado do totvs:import-pedidos-emitidos.
+            $this->warn('  '.$e->getMessage());
+            $this->warn('  pulando este arquivo.');
+
+            return [0, 0];
+        }
 
         // Primeira passada: descobre quais dias o arquivo cobre. Ler duas vezes é mais
         // barato que segurar o arquivo inteiro em memória, e é o que permite apagar
@@ -63,14 +115,14 @@ class ImportFaturamentoTotvs extends Command
         [$datas, $linhas, $semData] = $this->levantarDatas($leitor);
 
         if ($datas === []) {
-            $this->error('Nenhuma linha com data de emissão válida. Nada a fazer.');
+            $this->warn('  nenhuma linha com data de emissão válida — pulando.');
 
-            return self::FAILURE;
+            return [0, 0];
         }
 
         sort($datas);
         $this->line(sprintf(
-            '198 - Faturamento: %s linhas, %d dia(s) — de %s a %s.',
+            '  %s linhas, %d dia(s) — de %s a %s.',
             number_format($linhas, 0, ',', '.'),
             count($datas),
             reset($datas),
@@ -78,44 +130,33 @@ class ImportFaturamentoTotvs extends Command
         ));
 
         if (count($datas) > self::DIAS_ESPERADOS_NO_MES) {
-            $this->warn('O arquivo cobre '.count($datas).' dias — bem mais que um mês.');
-            $this->warn('Se a intenção é carga histórica, o comando é legado:import-faturamento-arquivo --ano=AAAA.');
+            $this->warn('  cobre '.count($datas).' dias — bem mais que um mês.');
+            $this->warn('  se a intenção é carga histórica, o comando é legado:import-faturamento-arquivo --ano=AAAA.');
         }
 
         $existentes = DB::table('faturamentos')->whereIn('data_emissao', $datas)->count();
-        $this->line('Já gravadas nesses dias (serão substituídas): '.number_format($existentes, 0, ',', '.'));
-
-        if ($dryRun) {
-            $this->info('[dry-run] Inseriria '.number_format($linhas - $semData, 0, ',', '.').' linhas.');
-
-            if ($semData > 0) {
-                $this->warn("[dry-run] Ignoraria {$semData} sem data de emissão.");
-            }
-
-            return self::SUCCESS;
-        }
-
-        $inseridas = 0;
-
-        DB::transaction(function () use ($leitor, $datas, $chunk, &$inseridas) {
-            DB::table('faturamentos')->whereIn('data_emissao', $datas)->delete();
-            $inseridas = $this->inserir($leitor, $chunk);
-        });
-
-        $this->info('Linhas inseridas: '.number_format($inseridas, 0, ',', '.'));
-        $this->line('Substituídas: '.number_format($existentes, 0, ',', '.'));
+        $this->line('  já gravadas nesses dias (serão substituídas): '.number_format($existentes, 0, ',', '.'));
 
         if ($semData > 0) {
-            $this->warn("Ignoradas (sem data de emissão): {$semData}");
+            $this->warn("  ignoradas (sem data de emissão): {$semData}");
         }
 
-        return self::SUCCESS;
+        if ($dryRun) {
+            $this->line('  [dry-run] inseriria '.number_format($linhas - $semData, 0, ',', '.').' linhas.');
+
+            return [$linhas - $semData, $existentes];
+        }
+
+        DB::table('faturamentos')->whereIn('data_emissao', $datas)->delete();
+        $inseridas = $this->inserir($leitor, $chunk);
+
+        return [$inseridas, $existentes];
     }
 
     /**
      * @return array{0: list<string>, 1: int, 2: int}
      */
-    private function levantarDatas(\App\Services\Totvs\LeitorRelatorio $leitor): array
+    private function levantarDatas(LeitorRelatorio $leitor): array
     {
         $datas = [];
         $linhas = 0;
@@ -137,7 +178,7 @@ class ImportFaturamentoTotvs extends Command
         return [array_keys($datas), $linhas, $semData];
     }
 
-    private function inserir(\App\Services\Totvs\LeitorRelatorio $leitor, int $chunk): int
+    private function inserir(LeitorRelatorio $leitor, int $chunk): int
     {
         $agora = now();
         $lote = [];

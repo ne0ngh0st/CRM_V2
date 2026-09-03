@@ -7,10 +7,12 @@ return [
     | Relatórios do TOTVS
     |---------------------------------------------------------------------------
     |
-    | Onde ficam os CSVs exportados do TOTVS, do ponto de vista de quem LÊ. Dentro
-    | do container isso é `/relatorios`, montado pelo docker-compose a partir de
-    | TOTVS_RELATORIOS_PATH no .env (na máquina do Tony, a pasta
-    | "RELATORIOS TOTVS/CSV" no OneDrive).
+    | Onde ficam os CSVs exportados do TOTVS, do ponto de vista de quem LÊ. Dentro do
+    | container isso é `/relatorios`, montado pelo docker-compose a partir de
+    | TOTVS_RELATORIOS_PATH no .env (na máquina do Tony, a raiz "RELATORIOS TOTVS" no
+    | OneDrive — a pasta INTEIRA, não só "CSV/": o Tony organiza cada relatório na sua
+    | própria subpasta, então os caminhos de `arquivo` abaixo entram com o prefixo da
+    | subpasta onde cada um vive hoje).
     |
     | ⚠️ Duas variáveis diferentes de propósito: TOTVS_RELATORIOS_PATH é o caminho no
     | HOST, e só o docker-compose usa; `diretorio` é o caminho DENTRO do container, que
@@ -27,9 +29,12 @@ return [
     |---------------------------------------------------------------------------
     |
     | O nome do arquivo é escolha do Tony ao exportar, então mora aqui e não chumbado
-    | no comando. `arquivo` aceita uma LISTA de nomes aceitos, tentados em ordem: o
-    | nome do export muda de vez em quando (o "META VENDA" está virando
-    | "pedidos_emitidos"), e uma renomeação não pode quebrar o import nem exigir deploy.
+    | no comando. `arquivo` aceita uma LISTA DE PADRÕES DE GLOB (aceitam `*`), tentados
+    | todos, e vence o arquivo casado mais recente por data de modificação — não o
+    | primeiro da lista. Duas coisas mudam de vez em quando e as duas têm que continuar
+    | funcionando sem deploy: o NOME do export ("META VENDA" virou "pedidos_emitidos")
+    | e, desde 03/09, o próprio nome carrega o MÊS ("Pedidos emitidos - 092026 -
+    | SQL.csv") — nome fixo quebraria a cada início de mês.
     |
     | `periodo` diz como o import trata o que já existe:
     |
@@ -44,13 +49,13 @@ return [
     'arquivos' => [
 
         'clientes' => [
-            'arquivo' => ['Clientes - SQL.csv'],
+            'arquivo' => ['CSV/Clientes - SQL.csv'],
             'rlt' => '210 - CADASTRO DE CLIENTES',
             'periodo' => 'completo',
         ],
 
         'ultimo_faturamento' => [
-            'arquivo' => ['Ultimo faturamento - SQL.csv'],
+            'arquivo' => ['CSV/Ultimo faturamento - SQL.csv'],
             'rlt' => '199 - ULTIMO FATURAMENTO CLIENTE',
             'periodo' => 'completo',
             // É daqui que saem `segmentos` e `grupos_cliente`: o código mora em
@@ -58,7 +63,7 @@ return [
         ],
 
         'pedidos_abertos' => [
-            'arquivo' => ['Pedidos abertos - SQL.csv'],
+            'arquivo' => ['CSV/Pedidos abertos - SQL.csv'],
             'rlt' => '200 - PEDIDOS EM ABERTO COM STATUS',
             'periodo' => 'completo',
             // "Completo" aqui quer dizer "tudo que está em aberto agora" — pedido
@@ -66,7 +71,7 @@ return [
         ],
 
         'faturamento' => [
-            'arquivo' => ['FAT - SQL.csv'],
+            'arquivo' => ['CSV/FAT - SQL.csv'],
             'rlt' => '198 - FATURAMENTO EQUIPE',
             'periodo' => 'recorte',
             'coluna_data' => 'EMISSAO',
@@ -74,9 +79,14 @@ return [
 
         'pedidos_emitidos' => [
             'arquivo' => [
-                'pedidos_emitidos - SQL.csv',
-                'Pedidos emitidos - SQL.csv',
-                'META VENDA - SQL.csv',
+                // Convenção atual (desde 03/09): pasta própria, mês no nome.
+                'Pedidos emitidos/Pedidos emitidos*SQL.csv',
+                'Pedidos emitidos/pedidos_emitidos*SQL.csv',
+                // Convenções anteriores, mantidas como fallback — não fazem mal se
+                // nunca mais aparecer nada com esse nome.
+                'CSV/pedidos_emitidos - SQL.csv',
+                'CSV/Pedidos emitidos - SQL.csv',
+                'CSV/META VENDA - SQL.csv',
             ],
             'rlt' => '232 - CONSULTA DE PEDIDOS EMITIDOS META DE VENDAS',
             'periodo' => 'recorte',
@@ -84,7 +94,7 @@ return [
         ],
 
         'leads' => [
-            'arquivo' => ['base_marco - SQL.csv'],
+            'arquivo' => ['CSV/base_marco - SQL.csv'],
             'rlt' => null, // não é relatório do TOTVS: é a base de prospecção (ABRAS)
             'periodo' => 'completo',
         ],

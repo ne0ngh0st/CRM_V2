@@ -70,6 +70,11 @@ services:
       # projeto (são ~250 MB de CSV que não podem entrar no git) e o container não
       # enxerga o disco do Windows sozinho — sem este mount o comando não acha nada.
       # Read-only de propósito: o v2 lê o relatório, nunca escreve nele.
+      #
+      # ⚠️ A raiz montada é "RELATORIOS TOTVS" INTEIRA, não a subpasta "CSV/": desde
+      # 03/09 o Tony organiza cada relatório na própria subpasta (ex. "Pedidos
+      # emitidos/"), e config/totvs.php resolve o arquivo dentro dela por glob. Apontar
+      # de novo para "CSV/" faz o import de pedidos emitidos parar de achar o arquivo.
       - "${TOTVS_RELATORIOS_PATH:-./storage/app/totvs}:/relatorios:ro"
     depends_on:
       mysql:
