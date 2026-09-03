@@ -22,9 +22,8 @@ const props = defineProps({
     resumo: {
         type: Object,
         default: () => ({
-            subtotalProdutosSemIpi: 0,
-            subtotalProdutosComIpi: 0,
-            subtotalEtiquetas: 0,
+            subtotalSemIpi: 0,
+            valorIpi: 0,
             totalGeral: 0,
         }),
     },
@@ -67,17 +66,26 @@ const numeroFormatado = () => (props.orcamentoId ? String(props.orcamentoId).pad
         <div class="mt-3 flex justify-end">
             <table class="w-full max-w-[380px] border border-gray-200">
                 <tbody>
+                    <!--
+                        ⚠️ Os totais falam de IMPOSTO, nunca de categoria de produto — e o rótulo
+                        do subtotal MUDA conforme haja IPI. Sem IPI ele é só "Subtotal": chamá-lo
+                        de "Subtotal s/ IPI" num documento onde não existe IPI nenhum sugere que
+                        exista uma parcela "com IPI" em algum lugar, e não existe.
+
+                        Antes havia três linhas por CATEGORIA ("Subtotal s/ IPI" era o balde de
+                        produtos, mais "Subtotal c/ IPI" e "Subtotal etiquetas"). No orçamento 2110,
+                        todo de etiquetas e em modo Serviço, isso imprimia dois subtotais de mesma
+                        natureza com nomes que sugeriam tributação diferente. Quem recebeu não
+                        entendeu, e quem escreveu o sistema também não. Ver o docblock do
+                        OrcamentoCalculoService.
+                    -->
                     <tr>
-                        <td class="px-3 py-1.5 text-[0.78rem] text-gray-500">Subtotal s/ IPI</td>
-                        <td class="px-3 py-1.5 text-right text-[0.82rem] font-medium">{{ formatBRL(resumo.subtotalProdutosSemIpi) }}</td>
+                        <td class="px-3 py-1.5 text-[0.78rem] text-gray-500">{{ resumo.valorIpi > 0 ? 'Subtotal s/ IPI' : 'Subtotal' }}</td>
+                        <td class="px-3 py-1.5 text-right text-[0.82rem] font-medium">{{ formatBRL(resumo.subtotalSemIpi) }}</td>
                     </tr>
-                    <tr v-if="tipoProdutoServico === 'produto'">
-                        <td class="px-3 py-1.5 text-[0.78rem] text-gray-500">Subtotal c/ IPI</td>
-                        <td class="px-3 py-1.5 text-right text-[0.82rem] font-medium">{{ formatBRL(resumo.subtotalProdutosComIpi) }}</td>
-                    </tr>
-                    <tr v-if="resumo.subtotalEtiquetas > 0">
-                        <td class="px-3 py-1.5 text-[0.78rem] text-gray-500">Subtotal etiquetas</td>
-                        <td class="px-3 py-1.5 text-right text-[0.82rem] font-medium">{{ formatBRL(resumo.subtotalEtiquetas) }}</td>
+                    <tr v-if="resumo.valorIpi > 0">
+                        <td class="px-3 py-1.5 text-[0.78rem] text-gray-500">IPI (3,25%)</td>
+                        <td class="px-3 py-1.5 text-right text-[0.82rem] font-medium">{{ formatBRL(resumo.valorIpi) }}</td>
                     </tr>
                     <tr class="bg-navy text-white">
                         <td class="px-3 py-2.5 text-[0.9rem] font-bold tracking-wide">VALOR TOTAL</td>

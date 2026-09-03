@@ -1,4 +1,9 @@
 <script setup>
+import {
+    calcularItem,
+    participaIpi as participaIpiCalc,
+    valorUnitarioSemIpi as valorUnitarioSemIpiCalc,
+} from '@/utils/orcamento';
 /**
  * Tabela de itens da folha de orçamento.
  *
@@ -27,7 +32,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-const IPI_ALIQUOTA = 0.0325;
 const ROTULOS_TIPO = { bobina: 'Bobina', etiqueta: 'Etiqueta', outro: 'Outro' };
 
 const mostrarTipoModal = ref(false);
@@ -73,25 +77,20 @@ function atualizarItem(idx, campo, valor) {
     atualizar(copia);
 }
 
-function baseSemIpi(valor) {
-    return valor / (1 + IPI_ALIQUOTA);
-}
-
+// A matemática de IPI mora em utils/orcamento.js (espelho do OrcamentoCalculoService do
+// PHP). Não reimplementar aqui — ver Regra de ouro nº 8.
 function participaIpi(item) {
-    return props.tipoProdutoServico === 'produto' && item.tipo_item !== 'etiqueta' && !!item.calcula_ipi;
+    return participaIpiCalc(item, props.tipoProdutoServico);
 }
 
 function valorUnitarioSemIpi(item) {
-    const valor = parseFloat(item.valor_unitario) || 0;
-
-    return participaIpi(item) ? baseSemIpi(valor) : valor;
+    return valorUnitarioSemIpiCalc(item, props.tipoProdutoServico);
 }
 
 function valorTotal(item, comIpi = true) {
-    const qtd = parseFloat(item.quantidade) || 0;
-    const valorUnit = comIpi ? parseFloat(item.valor_unitario) || 0 : valorUnitarioSemIpi(item);
+    const calculado = calcularItem(item, props.tipoProdutoServico);
 
-    return qtd * valorUnit;
+    return comIpi ? calculado.valorTotalComIpi : calculado.valorTotalSemIpi;
 }
 
 function descontoInfo(item) {
@@ -296,17 +295,29 @@ const tdBase = 'px-2 py-1.5 align-middle';
                                         {{ ROTULOS_TIPO[item.tipo_item] ?? item.tipo_item }}
                                     </span>
 
-                                    <label class="flex items-center gap-1.5">
+                                    <!--
+                                        ⚠️ SOMENTE LEITURA, e isto conserta um bug real do beta.
+                                        Aqui havia um <input type="number" step="0.01"> recebendo o preço
+                                        de `produtos.preco_tabela`, que é decimal(12,4). Um preço com 3 ou 4
+                                        casas deixava o campo em `stepMismatch`, e a validação NATIVA do
+                                        navegador abortava o submit do formulário — sem passar pelo servidor
+                                        e com o balão de erro longe do campo. Para quem usava, "o botão salvar
+                                        não faz nada"; o jeito era apagar dois dígitos depois da vírgula.
+                                        Sem input, não há step, e a classe inteira do bug deixa de existir.
+
+                                        Além disso o preço de tabela é a REFERÊNCIA do fornecedor e o
+                                        denominador do desconto que define o nível de aprovação — não é campo
+                                        de digitação do vendedor. Ele entra pela busca de produto
+                                        (selecionarProduto) e fica vazio quando o item não tem produto
+                                        vinculado, caso que o NivelAprovacaoCalculator já trata.
+                                    -->
+                                    <span class="flex items-center gap-1.5">
                                         Preço tabela
-                                        <input
-                                            :value="item.preco_tabela"
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            class="w-24 border-0 border-b border-dashed border-gray-300 bg-transparent px-0 py-0.5 text-[0.7rem] focus:border-solid focus:border-cyan focus:ring-0"
-                                            @input="atualizarItem(idx, 'preco_tabela', $event.target.value)"
-                                        />
-                                    </label>
+                                        <span
+                                            class="border-b border-dashed border-gray-300 px-0 py-0.5 font-medium text-gray-600"
+                                            :title="item.preco_tabela ? `Valor de tabela: ${item.preco_tabela}` : 'Item sem produto vinculado'"
+                                        >{{ item.preco_tabela ? formatBRL(item.preco_tabela) : '—' }}</span>
+                                    </span>
 
                                     <span v-if="descontoInfo(item)" :class="descontoInfo(item).cor" class="font-semibold">
                                         {{ descontoInfo(item).label }}

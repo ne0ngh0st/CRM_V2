@@ -73,34 +73,41 @@ class OrcamentoCalculoService
     }
 
     /**
-     * @param  iterable<array{tipoItem: ?string, valorTotalSemIpi: float, valorTotalComIpi: float}>  $itensCalculados  resultado de calcularItem(), um por item
-     * @return array{subtotalProdutosSemIpi: float, subtotalProdutosComIpi: float, subtotalEtiquetas: float, totalGeral: float}
+     * Totais do documento. As três chaves SEMPRE fecham: subtotalSemIpi + valorIpi === totalGeral.
+     *
+     * ⚠️ Os totais falam de IMPOSTO, nunca de categoria de produto. A versão anterior devolvia
+     * `subtotalProdutosSemIpi` / `subtotalProdutosComIpi` / `subtotalEtiquetas`, e isso confundia
+     * de duas formas ao mesmo tempo (orçamento 2110, relatado pelo beta): num orçamento de
+     * Serviço, "Subtotal s/ IPI" era só o nome do balde PRODUTOS, então dois itens de etiqueta
+     * apareciam em linhas diferentes sem que houvesse IPI nenhum em jogo; e, quando havia IPI,
+     * `subtotalProdutos + subtotalEtiquetas` NÃO batia com o total. Agora bate por construção.
+     *
+     * Etiqueta nunca participa de IPI (itemParticipaIpi), então o valorTotalSemIpi dela já é o
+     * valor de face — somar todo mundo por essa chave é o que torna a etiqueta um caso comum
+     * em vez de um balde à parte.
+     *
+     * @param  iterable<array{valorTotalSemIpi: float, valorTotalComIpi: float}>  $itensCalculados  resultado de calcularItem(), um por item
+     * @return array{subtotalSemIpi: float, valorIpi: float, totalGeral: float}
      */
     public function resumo(iterable $itensCalculados): array
     {
-        $subtotalProdutosSemIpi = 0.0;
-        $subtotalProdutosComIpi = 0.0;
-        $subtotalEtiquetas = 0.0;
+        $subtotalSemIpi = 0.0;
         $totalGeral = 0.0;
 
         foreach ($itensCalculados as $item) {
+            $subtotalSemIpi += $item['valorTotalSemIpi'];
             $totalGeral += $item['valorTotalComIpi'];
-
-            if ($item['tipoItem'] === 'etiqueta') {
-                $subtotalEtiquetas += $item['valorTotalComIpi'];
-
-                continue;
-            }
-
-            $subtotalProdutosSemIpi += $item['valorTotalSemIpi'];
-            $subtotalProdutosComIpi += $item['valorTotalComIpi'];
         }
 
+        // Arredonda ANTES de subtrair: é o que garante o fechamento exato em centavos.
+        // Calcular o IPI sobre os valores cheios e arredondar depois deixaria sobra de 1 centavo.
+        $subtotalSemIpi = round($subtotalSemIpi, 2);
+        $totalGeral = round($totalGeral, 2);
+
         return [
-            'subtotalProdutosSemIpi' => round($subtotalProdutosSemIpi, 2),
-            'subtotalProdutosComIpi' => round($subtotalProdutosComIpi, 2),
-            'subtotalEtiquetas' => round($subtotalEtiquetas, 2),
-            'totalGeral' => round($totalGeral, 2),
+            'subtotalSemIpi' => $subtotalSemIpi,
+            'valorIpi' => round($totalGeral - $subtotalSemIpi, 2),
+            'totalGeral' => $totalGeral,
         ];
     }
 }

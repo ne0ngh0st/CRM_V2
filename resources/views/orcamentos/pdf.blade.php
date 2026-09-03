@@ -275,20 +275,20 @@
         <td style="width: 54%;"></td>
         <td style="width: 46%;">
             <table class="resumo">
+                {{--
+                    ⚠️ Os totais falam de IMPOSTO, nunca de categoria de produto, e o rótulo do
+                    subtotal muda conforme haja IPI. Este bloco é o par de OrcamentoSheet.vue:
+                    mexeu aqui, mexe lá. Ver o docblock do OrcamentoCalculoService para o caso
+                    real (orçamento 2110) que motivou a mudança.
+                --}}
                 <tr>
-                    <td class="rot">Subtotal s/ IPI</td>
-                    <td class="num">R$ {{ $moeda($resumo['subtotalProdutosSemIpi']) }}</td>
+                    <td class="rot">{{ $resumo['valorIpi'] > 0 ? 'Subtotal s/ IPI' : 'Subtotal' }}</td>
+                    <td class="num">R$ {{ $moeda($resumo['subtotalSemIpi']) }}</td>
                 </tr>
-                @if ($ehProduto)
+                @if ($resumo['valorIpi'] > 0)
                     <tr>
-                        <td class="rot">Subtotal c/ IPI</td>
-                        <td class="num">R$ {{ $moeda($resumo['subtotalProdutosComIpi']) }}</td>
-                    </tr>
-                @endif
-                @if ($resumo['subtotalEtiquetas'] > 0)
-                    <tr>
-                        <td class="rot">Subtotal etiquetas</td>
-                        <td class="num">R$ {{ $moeda($resumo['subtotalEtiquetas']) }}</td>
+                        <td class="rot">IPI (3,25%)</td>
+                        <td class="num">R$ {{ $moeda($resumo['valorIpi']) }}</td>
                     </tr>
                 @endif
                 <tr class="total">

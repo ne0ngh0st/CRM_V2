@@ -28,6 +28,10 @@ class OrcamentoItem extends Model
         return [
             'calcula_ipi' => 'boolean',
             'etiqueta_calc' => 'array',
+            // 4 casas para acompanhar `produtos.preco_tabela` (decimal(12,4) vindo do TOTVS).
+            // Sem cast, o MySQL devolvia string e a comparação de desconto ficava sujeita a
+            // coerção implícita. Ver a migration 2026_09_03_090000.
+            'preco_tabela' => 'decimal:4',
         ];
     }
 
