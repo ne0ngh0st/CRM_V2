@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\LeadExport;
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\AgendamentoLigacao;
 use App\Models\Lead;
@@ -12,6 +13,7 @@ use App\Services\Cache\ChaveEscopo;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Marketing\WpLeadCapturaStatus;
 use App\Services\Marketing\WpLeadIngestor;
+use App\Services\Marketing\WpLeadPayloadParser;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -24,6 +26,12 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class LeadController extends Controller
 {
+    /**
+     * Cards carregados por coluna do funil. O quadro NUNCA carrega a coluna inteira —
+     * ver o docblock de quadroDoFunil().
+     */
+    private const LIMITE_COLUNA = 20;
+
     use ExportaPlanilha;
 
     public function __construct(
@@ -31,8 +39,7 @@ class LeadController extends Controller
         private readonly CacheDeAgregacao $cache,
         private readonly WpLeadCapturaStatus $wpCaptura,
         private readonly WpLeadIngestor $wpIngestor,
-    ) {
-    }
+    ) {}
 
     /**
      * Opcoes dos dropdowns de Estado e Segmento.
@@ -82,10 +89,10 @@ class LeadController extends Controller
         } elseif (! in_array($origem, Lead::ORIGENS, true)) {
             $origem = '';
         }
-        if (! in_array($status, ['ativo', 'inativo', 'convertido'], true)) {
+        if (! in_array($status, Lead::ETAPAS, true)) {
             $status = '';
         }
-        if (! in_array($aba, ['leads', 'calendario'], true)) {
+        if (! in_array($aba, ['leads', 'calendario', 'funil'], true)) {
             $aba = 'leads';
         }
 
@@ -107,7 +114,10 @@ class LeadController extends Controller
             ->selectRaw("SUM(origem = 'sistema') as sistema")
             ->selectRaw("SUM(origem = 'manual') as manual")
             ->selectRaw("SUM(origem = 'wordpress') as wordpress")
-            ->selectRaw("SUM(status = 'ativo') as ativos")
+            // "Em jogo" = etapa ainda aberta. Antes era `status = 'ativo'`, que depois da
+            // separação dos eixos passaria a contar TODO lead não-excluído — inclusive os
+            // ganhos e perdidos — e o KPI viraria uma cópia do total.
+            ->selectRaw("SUM(etapa IN ('novo','em_contato','orcamento','negociacao')) as ativos")
             ->first();
 
         $kpis = [
@@ -148,7 +158,10 @@ class LeadController extends Controller
             'estado' => $lead->estado,
             'segmento' => $lead->segmento,
             'valorEstimado' => $lead->valor_estimado !== null ? (float) $lead->valor_estimado : null,
-            'status' => $lead->status,
+            'etapa' => $lead->etapa,
+            'proximaEtapa' => $lead->proximaEtapa(),
+            'paradoDesde' => $lead->etapa_alterada_em?->toIso8601String(),
+            'motivoPerda' => $lead->motivo_perda,
             'codVendedor' => $lead->cod_vendedor,
             'vendedorNome' => $nomesPorCod[$lead->cod_vendedor] ?? $lead->cod_vendedor,
             'atualizadoEm' => $lead->updated_at?->format('d/m/Y'),
@@ -169,6 +182,12 @@ class LeadController extends Controller
              * o onMounted do Leads/Index.vue cobre esse caso.
              */
             'agendamentos' => Inertia::optional(fn () => $this->agendamentosDoEscopo($request, $codVendedores)),
+            /*
+             * O quadro do funil, também opcional: são 17 mil leads e a aba Lista é onde a
+             * maioria das visitas para. ⚠️ Visita completa (/leads?aba=funil ou F5) não
+             * traz prop opcional — o onMounted do Leads/Index.vue cobre esse caso.
+             */
+            'funil' => Inertia::optional(fn () => $this->quadroDoFunil($request)),
             'filtros' => [
                 'busca' => $busca,
                 'estado' => $estado,
@@ -203,9 +222,8 @@ class LeadController extends Controller
     {
         $this->prepararExport('leads');
 
-
         return Excel::download(
-            new \App\Exports\LeadExport($this->listaQuery($request)),
+            new LeadExport($this->listaQuery($request)),
             'leads-'.now()->format('Y-m-d-His').'.xlsx',
         );
     }
@@ -224,7 +242,20 @@ class LeadController extends Controller
         return redirect()->route('leads.index', ['origem' => Lead::ORIGEM_WORDPRESS]);
     }
 
-    public function capturaWordpress(Request $request, Lead $lead): JsonResponse
+    /**
+     * O que o cliente preencheu no site, em forma de ficha legível.
+     *
+     * ⚠️ Quem abre isto é VENDEDOR, não técnico. Até 2026-09-03 a tela despejava
+     * `JSON.stringify(payload, null, 2)` num <pre> — quem precisava do telefone do
+     * cliente tinha que garimpar chave crua de plugin do WordPress. Agora os campos
+     * comerciais vêm prontos em `campos`, e o JSON continua disponível só para admin,
+     * em `tecnico`, porque é o que permite diagnosticar um formato de payload novo.
+     *
+     * ⚠️ Os rótulos comerciais saem de `WpLeadPayloadParser::extrairCampos()`, o MESMO
+     * dicionário de aliases que a promoção do lead usa. Não duplicar esse mapa no front:
+     * se ele divergir, a ficha mostra um valor e o lead guarda outro. Regra de ouro nº 8.
+     */
+    public function capturaWordpress(Request $request, Lead $lead, WpLeadPayloadParser $parser): JsonResponse
     {
         $this->autorizarLead($request, $lead);
         abort_unless($lead->origem === Lead::ORIGEM_WORDPRESS, 404);
@@ -238,7 +269,174 @@ class LeadController extends Controller
             'fonte' => $staging->fonte,
             'recebidoEm' => $staging->recebido_em?->format('d/m/Y H:i:s'),
             'formulario' => $staging->formulario?->nome,
-            'payload' => $envelope ?? $staging->payload_json,
+            'campos' => $parser->extrairCampos($this->camposCrusDoEnvelope($envelope)),
+            // Só admin. Ver o docblock acima.
+            'tecnico' => $request->user()->hasRole('admin') ? [
+                'remoteAddr' => $staging->remote_addr,
+                'userAgent' => $staging->user_agent,
+                'tentativas' => $staging->tentativas,
+                'erro' => $staging->erro,
+                'payloadHash' => $staging->payload_hash,
+                'payload' => $envelope ?? $staging->payload_json,
+            ] : null,
+        ]);
+    }
+
+    /**
+     * O envelope tem TRÊS formas, e a ficha precisa aguentar as três:
+     * webhook e teste interno guardam os campos em `parsed`; o import de CSV guarda em
+     * `colunas`. E `json_decode` devolve null quando o payload gravado não é JSON válido
+     * — nesse caso não há campo comercial nenhum a extrair, e a ficha fica vazia em vez
+     * de estourar.
+     *
+     * @return array<string, mixed>
+     */
+    private function camposCrusDoEnvelope(mixed $envelope): array
+    {
+        if (! is_array($envelope)) {
+            return [];
+        }
+
+        foreach (['parsed', 'colunas'] as $chave) {
+            if (isset($envelope[$chave]) && is_array($envelope[$chave])) {
+                return $envelope[$chave];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * O quadro do funil: uma coluna por etapa aberta, com o total e só as primeiras N.
+     *
+     * ⚠️ PERFORMANCE É O DESENHO, NÃO UM AJUSTE DEPOIS. São 17 mil leads e a esmagadora
+     * maioria está em "Novo" (a base de prospecção importada nunca foi trabalhada).
+     * Carregar coluna inteira seria um payload de megabytes e uma tela travada. Por isso:
+     * uma query de contagem agregada para todas as colunas, e uma query por coluna
+     * limitada a LIMITE_COLUNA.
+     *
+     * ⚠️ Ordem `etapa_alterada_em ASC` — mais parado primeiro. Não é estética: é o que faz
+     * o quadro ser útil (o topo da coluna é o que precisa de ação) e é exatamente o que o
+     * índice `leads_funil_idx` cobre.
+     */
+    protected function quadroDoFunil(Request $request): array
+    {
+        $porEtapa = (clone $this->baseQuery($request))
+            ->selectRaw('etapa, COUNT(*) as total')
+            ->groupBy('etapa')
+            ->pluck('total', 'etapa');
+
+        $colunas = [];
+        foreach (Lead::ETAPAS_ABERTAS as $etapa) {
+            $colunas[] = [
+                'etapa' => $etapa,
+                'total' => (int) ($porEtapa[$etapa] ?? 0),
+                'cards' => $this->cardsDaColuna($request, $etapa),
+            ];
+        }
+
+        return [
+            'colunas' => $colunas,
+            'limiteColuna' => self::LIMITE_COLUNA,
+            // Desfechos não são coluna (cresceriam para sempre) — viram contador.
+            'fechados' => [
+                'ganho' => (int) ($porEtapa[Lead::ETAPA_GANHO] ?? 0),
+                'perdido' => (int) ($porEtapa[Lead::ETAPA_PERDIDO] ?? 0),
+            ],
+        ];
+    }
+
+    /**
+     * Uma página de cards de uma coluna.
+     *
+     * ⚠️ Paginação por CURSOR (`depois`, o id do último card), não por offset. Com OFFSET
+     * alto o MySQL troca de plano e passa a varrer a tabela — o penhasco medido em
+     * 2026-08-29 na Carteira (página 30 = 96 ms, página 40 = 1.084 ms).
+     */
+    protected function cardsDaColuna(Request $request, string $etapa, ?int $depois = null): array
+    {
+        $query = (clone $this->baseQuery($request))
+            ->where('etapa', $etapa)
+            ->orderBy('etapa_alterada_em')
+            ->orderBy('id');
+
+        if ($depois !== null) {
+            $ancora = Lead::query()->find($depois);
+            if ($ancora) {
+                $query->where(function ($q) use ($ancora) {
+                    $q->where('etapa_alterada_em', '>', $ancora->etapa_alterada_em)
+                        ->orWhere(function ($q2) use ($ancora) {
+                            $q2->where('etapa_alterada_em', $ancora->etapa_alterada_em)
+                                ->where('id', '>', $ancora->id);
+                        });
+                });
+            }
+        }
+
+        return $query
+            ->limit(self::LIMITE_COLUNA)
+            ->get(['id', 'razao_social', 'nome', 'nome_fantasia', 'cnpj', 'telefone', 'email', 'estado', 'cidade', 'origem', 'etapa', 'etapa_alterada_em', 'valor_estimado'])
+            ->map(fn (Lead $lead) => [
+                'id' => $lead->id,
+                'razaoSocial' => $lead->razao_social ?: $lead->nome,
+                'nome' => $lead->nome,
+                'cnpj' => $lead->cnpj,
+                'telefone' => $lead->telefone,
+                'email' => $lead->email,
+                'local' => trim(($lead->cidade ?: '').($lead->estado ? ' - '.$lead->estado : ''), ' -'),
+                'origem' => $lead->origem,
+                'etapa' => $lead->etapa,
+                'proximaEtapa' => $lead->proximaEtapa(),
+                'paradoDesde' => $lead->etapa_alterada_em?->toIso8601String(),
+                'valorEstimado' => $lead->valor_estimado !== null ? (float) $lead->valor_estimado : null,
+            ])
+            ->all();
+    }
+
+    /** "Carregar mais" de UMA coluna, sem remontar o quadro inteiro. */
+    public function maisDoFunil(Request $request): JsonResponse
+    {
+        $etapa = (string) $request->string('etapa');
+        abort_unless(in_array($etapa, Lead::ETAPAS_ABERTAS, true), 422);
+
+        return response()->json([
+            'etapa' => $etapa,
+            'cards' => $this->cardsDaColuna($request, $etapa, $request->integer('depois') ?: null),
+        ]);
+    }
+
+    /**
+     * ÚNICO ponto de escrita da etapa vindo da tela. Arrastar o card e clicar no "→"
+     * caem os dois aqui — mesma validação, mesma autorização (Regra de ouro nº 8).
+     *
+     * ⚠️ A etapa chega da requisição e vira valor de um ENUM do MySQL. Sem o `Rule::in`,
+     * um valor arbitrário grava STRING VAZIA em silêncio fora do modo estrito, e a
+     * contagem por coluna passa a mentir sem erro nenhum aparecer. Mesmo risco da
+     * whitelist de ordenação da Carteira: isto é segurança, não organização.
+     */
+    public function moverEtapa(Request $request, Lead $lead): JsonResponse
+    {
+        $this->autorizarLead($request, $lead);
+
+        $data = $request->validate([
+            'etapa' => ['required', Rule::in(Lead::ETAPAS)],
+            // Perder sem dizer por quê é o que torna o funil inútil como diagnóstico.
+            'motivo_perda' => [Rule::requiredIf($request->input('etapa') === Lead::ETAPA_PERDIDO), 'nullable', 'string', 'max:255'],
+        ]);
+
+        $lead->moverParaEtapa($data['etapa'], $data['motivo_perda'] ?? null);
+
+        /*
+         * ⚠️ JSON, não `back()`. Mover um card não é navegação: um redirect faria o Inertia
+         * refazer a visita, e `funil` é prop OPCIONAL — ela não voltaria, o `v-if` da
+         * página derrubaria o quadro e o vendedor perderia a tela a cada movimento.
+         * (Confirmado no navegador antes de mudar.) O quadro já mantém o estado local e
+         * desfaz sozinho quando esta resposta falha.
+         */
+        return response()->json([
+            'etapa' => $lead->etapa,
+            'proximaEtapa' => $lead->proximaEtapa(),
+            'paradoDesde' => $lead->etapa_alterada_em?->toIso8601String(),
         ]);
     }
 
@@ -278,7 +476,7 @@ class LeadController extends Controller
         } elseif (! in_array($origem, Lead::ORIGENS, true)) {
             $origem = '';
         }
-        if (! in_array($status, ['ativo', 'inativo', 'convertido'], true)) {
+        if (! in_array($status, Lead::ETAPAS, true)) {
             $status = '';
         }
 
@@ -302,7 +500,9 @@ class LeadController extends Controller
             $query->where('segmento', $segmento);
         }
         if ($status !== '') {
-            $query->where('status', $status);
+            // O filtro passou a ser por ETAPA. O nome do parâmetro segue `status` para não
+            // quebrar link salvo, mas o que ele recorta é o estágio da negociação.
+            $query->where('etapa', $status);
         }
         if ($origem !== '') {
             $query->where('origem', $origem);

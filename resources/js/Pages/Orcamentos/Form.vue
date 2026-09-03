@@ -1,4 +1,5 @@
 <script setup>
+import { resumo as resumoOrcamento } from '@/utils/orcamento';
 import { computed, ref } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
@@ -57,6 +58,10 @@ function itemVazio() {
 
 const form = useForm({
     cliente_nome: fonte?.clienteNome ?? props.prefillCliente?.nome ?? '',
+    // Vínculo com o lead de origem, quando o orçamento nasce de um. É o que permite
+    // responder "quantos orçamentos saíram deste lead?" e o que faz o funil avançar
+    // sozinho para a etapa Orçamento — etapa que depende só de disciplina não é movida.
+    lead_id: fonte?.leadId ?? props.prefillCliente?.leadId ?? null,
     cliente_cnpj: fonte?.clienteCnpj ?? props.prefillCliente?.cnpj ?? '',
     cliente_contato: fonte?.clienteContato ?? props.prefillCliente?.contato ?? '',
     forma_pagamento: fonte?.formaPagamento ?? '',
@@ -100,45 +105,18 @@ function selecionarFormaPagamento(valor) {
 }
 
 function selecionarCliente(cliente) {
+    // Só lead tem vínculo; escolher um cliente do TOTVS depois de um lead tem que limpar,
+    // senão o orçamento ficaria atribuído a um lead que não é mais o do documento.
+    form.lead_id = cliente.origem === 'lead' ? (cliente.leadId ?? null) : null;
     form.cliente_nome = cliente.nome ?? '';
     form.cliente_cnpj = cliente.cnpj ?? '';
     form.cliente_contato = cliente.telefone ?? '';
 }
 
-const IPI_ALIQUOTA = 0.0325;
-function baseSemIpi(valor) {
-    return valor / (1 + IPI_ALIQUOTA);
-}
-function participaIpi(item) {
-    return form.tipo_produto_servico === 'produto' && item.tipo_item !== 'etiqueta' && !!item.calcula_ipi;
-}
-
-const resumo = computed(() => {
-    let subtotalProdutosSemIpi = 0;
-    let subtotalProdutosComIpi = 0;
-    let subtotalEtiquetas = 0;
-
-    for (const item of form.itens) {
-        const qtd = parseFloat(item.quantidade) || 0;
-        const valorUnit = parseFloat(item.valor_unitario) || 0;
-        const totalComIpi = qtd * valorUnit;
-        const totalSemIpi = qtd * (participaIpi(item) ? baseSemIpi(valorUnit) : valorUnit);
-
-        if (item.tipo_item === 'etiqueta') {
-            subtotalEtiquetas += totalComIpi;
-        } else {
-            subtotalProdutosComIpi += totalComIpi;
-            subtotalProdutosSemIpi += totalSemIpi;
-        }
-    }
-
-    return {
-        subtotalProdutosSemIpi,
-        subtotalProdutosComIpi,
-        subtotalEtiquetas,
-        totalGeral: subtotalProdutosComIpi + subtotalEtiquetas,
-    };
-});
+// A matemática de IPI mora em utils/orcamento.js (espelho do OrcamentoCalculoService do
+// PHP). Não reimplementar aqui: era exatamente a cópia divergente que fazia a tela e o
+// PDF discordarem em centavos. Ver Regra de ouro nº 8.
+const resumo = computed(() => resumoOrcamento(form.itens, form.tipo_produto_servico));
 
 function salvar() {
     if (props.orcamento) {

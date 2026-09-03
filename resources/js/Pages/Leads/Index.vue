@@ -1,4 +1,6 @@
 <script setup>
+import FunilQuadro from '@/Components/Leads/FunilQuadro.vue';
+import CapturaWordpressDetalhe from '@/Components/Leads/CapturaWordpressDetalhe.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
@@ -18,6 +20,7 @@ import ModalPadrao from '@/Components/ModalPadrao.vue';
 const props = defineProps({
     role: String,
     aba: { type: String, default: 'leads' },
+    funil: { type: Object, default: null },
     leads: Object,
     kpis: Object,
     agendamentos: { type: Array, default: () => [] },
@@ -63,15 +66,24 @@ function trocarAba(aba) {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: aba === 'calendario'
-            ? ['leads', 'kpis', 'filtros', 'visao', 'aba', 'agendamentos']
-            : ['leads', 'kpis', 'filtros', 'visao', 'aba'],
+        // Cada aba pede só a prop opcional que vai usar — pedir as duas faria a aba
+        // Leads pagar por duas consultas que iriam pro lixo.
+        only: {
+            calendario: ['leads', 'kpis', 'filtros', 'visao', 'aba', 'agendamentos'],
+            funil: ['leads', 'kpis', 'filtros', 'visao', 'aba', 'funil'],
+        }[aba] ?? ['leads', 'kpis', 'filtros', 'visao', 'aba'],
     });
 }
 
 // Entrar direto por URL (/leads?aba=calendario) e visita completa, e visita completa
 // nao traz prop opcional — sem isto o calendario abriria vazio.
 onMounted(() => {
+    if (props.aba === 'funil' && !props.funil) {
+        // Mesmo motivo do calendário: /leads?aba=funil e F5 são visita completa, e visita
+        // completa não traz prop opcional — sem isto o quadro abriria vazio.
+        router.reload({ only: ['funil'] });
+    }
+
     if (props.aba === 'calendario' && !props.agendamentos.length) {
         router.reload({ only: ['agendamentos'], preserveState: true, preserveScroll: true });
     }
@@ -122,7 +134,7 @@ async function abrirCaptura(lead) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         capturaJson.value = await res.json();
     } catch {
-        capturaErro.value = 'Não foi possível carregar o payload desta captura.';
+        capturaErro.value = 'Não foi possível carregar os dados desta captura.';
     }
 }
 
@@ -254,6 +266,14 @@ const temFiltrosAtivos = computed(() => {
                     >
                         Calendário
                     </button>
+                    <button
+                        type="button"
+                        class="rounded border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide"
+                        :class="aba === 'funil' ? 'border-navy bg-navy text-white' : 'border-gray-300 bg-white text-gray-600'"
+                        @click="trocarAba('funil')"
+                    >
+                        Funil
+                    </button>
                 </div>
 
                 <template v-if="aba === 'leads'">
@@ -293,6 +313,16 @@ const temFiltrosAtivos = computed(() => {
                     </DarkCard>
                 </template>
 
+                <DarkCard v-else-if="aba === 'funil'" title="Funil" subtitle="Onde cada negociação está — mais parado primeiro">
+                    <template #icon>
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" class="h-4 w-4">
+                            <path d="M3 4h14l-5 6v6l-4 2v-8L3 4z" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </template>
+                    <FunilQuadro v-if="funil" :funil="funil" />
+                    <p v-else class="py-6 text-center text-sm text-gray-400">Carregando o funil…</p>
+                </DarkCard>
+
                 <CalendarioAgendamentos
                     v-else
                     :agendamentos="agendamentos"
@@ -315,20 +345,14 @@ const temFiltrosAtivos = computed(() => {
         />
         <ModalPadrao
             :show="modalCaptura"
-            titulo="Captura do site"
+            titulo="Dados recebidos do site"
             :subtitulo="leadAtivo?.razaoSocial || leadAtivo?.nome || ''"
             max-width="2xl"
             @close="modalCaptura = false"
         >
             <p v-if="capturaErro" class="text-sm text-red-600">{{ capturaErro }}</p>
             <p v-else-if="!capturaJson" class="text-sm text-gray-400">Carregando…</p>
-            <template v-else>
-                <p class="mb-2 text-xs text-gray-500">
-                    {{ capturaJson.fonte }} · {{ capturaJson.recebidoEm }}
-                    <span v-if="capturaJson.formulario"> · {{ capturaJson.formulario }}</span>
-                </p>
-                <pre class="max-h-96 overflow-auto rounded border border-gray-200 bg-gray-50 p-3 text-[0.7rem] leading-4 text-gray-700">{{ JSON.stringify(capturaJson.payload, null, 2) }}</pre>
-            </template>
+            <CapturaWordpressDetalhe v-else :captura="capturaJson" />
         </ModalPadrao>
     </AuthenticatedLayout>
 </template>

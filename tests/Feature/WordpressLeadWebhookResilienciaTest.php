@@ -9,7 +9,9 @@ use App\Models\MarketingWpFormulario;
 use App\Models\MarketingWpLeadRaw;
 use App\Models\Observacao;
 use App\Services\Marketing\WpLeadIngestor;
+use App\Services\Notificacao\NotificacaoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Tests\TestCase;
 
 /**
@@ -351,7 +353,7 @@ class WordpressLeadWebhookResilienciaTest extends TestCase
         $this->assertNull($staging->lead_id);
         $this->assertSame(1, MarketingWpLeadRaw::query()->pendentes()->count());
 
-        (new PromoverCapturasWpPendentesJob)->handle(app(WpLeadIngestor::class));
+        (new PromoverCapturasWpPendentesJob)->handle(app(WpLeadIngestor::class), app(NotificacaoService::class));
 
         $staging->refresh();
         $this->assertNotNull($staging->lead_id, 'o job tinha que ter promovido a captura pendente');
@@ -434,7 +436,7 @@ class WordpressLeadWebhookResilienciaTest extends TestCase
         $ingestor = app(WpLeadIngestor::class);
         $teste = $ingestor->ingerirTesteInterno(1)['staging'];
         $real = $ingestor->ingerirDoWebhook(
-            \Illuminate\Http\Request::create('/webhooks/wordpress-leads', 'POST', [], [], [], [], json_encode([
+            Request::create('/webhooks/wordpress-leads', 'POST', [], [], [], [], json_encode([
                 'nome' => 'Joana', 'email' => 'joana@empresa.com',
             ])),
         )['staging'];

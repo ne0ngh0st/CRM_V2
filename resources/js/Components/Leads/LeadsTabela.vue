@@ -2,7 +2,7 @@
 import { router } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import BotoesContato from '@/Components/Contato/BotoesContato.vue';
-import { ROTULOS_STATUS_LEAD, TONS_STATUS_LEAD, ROTULOS_ORIGEM_LEAD, TONS_ORIGEM_LEAD } from '@/constants/leads.js';
+import { ROTULOS_ETAPA_LEAD, TONS_ETAPA_LEAD, ROTULOS_ORIGEM_LEAD, TONS_ORIGEM_LEAD } from '@/constants/leads.js';
 
 defineProps({
     leads: { type: Array, required: true },
@@ -75,8 +75,8 @@ function excluir(lead) {
                         </StatusPill>
                     </td>
                     <td class="tbl-td">
-                        <StatusPill :tone="TONS_STATUS_LEAD[lead.status] || 'neutral'" size="sm">
-                            {{ ROTULOS_STATUS_LEAD[lead.status] || lead.status }}
+                        <StatusPill :tone="TONS_ETAPA_LEAD[lead.etapa] || 'neutral'" size="sm">
+                            {{ ROTULOS_ETAPA_LEAD[lead.etapa] || lead.etapa }}
                         </StatusPill>
                     </td>
                     <td class="tbl-td">{{ formatBRL(lead.valorEstimado) }}</td>
@@ -85,7 +85,7 @@ function excluir(lead) {
                             <button
                                 v-if="lead.temCaptura"
                                 type="button"
-                                title="Ver payload da captura"
+                                title="Ver dados recebidos do site"
                                 class="tbl-acao tbl-acao-neutro"
                                 @click="emit('captura', lead)"
                             >

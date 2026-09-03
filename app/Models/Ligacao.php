@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\Carteira\UltimoContatoSincronizador;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -53,7 +54,7 @@ class Ligacao extends Model
      * exatamente da mesma quebra (Regra de ouro nº 8). O laço percorre `TIPOS_CONTATO`,
      * então canal novo na constante aparece sozinho nas duas telas.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<self>|\Illuminate\Database\Query\Builder  $query
+     * @param  Builder<self>|\Illuminate\Database\Query\Builder  $query
      */
     public static function somarPorCanal($query): void
     {
@@ -96,6 +97,17 @@ class Ligacao extends Model
     {
         static::created(function (self $ligacao) {
             app(UltimoContatoSincronizador::class)->aoRegistrar($ligacao);
+
+            /*
+             * Auto-avanço do funil: contato registrado tira o lead de "Novo".
+             *
+             * ⚠️ MESMO hook, não um `created` a mais. Dois listeners no mesmo evento
+             * fazem a ordem de execução virar sorte, e aqui os dois escrevem no banco.
+             *
+             * ⚠️ `avancarAutomaticamentePara` NUNCA retrocede nem toca lead com desfecho
+             * — a regra vive no model, não aqui, porque o orçamento também a usa.
+             */
+            $ligacao->lead?->avancarAutomaticamentePara(Lead::ETAPA_EM_CONTATO);
         });
     }
 

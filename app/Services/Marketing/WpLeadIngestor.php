@@ -6,8 +6,11 @@ use App\Models\Lead;
 use App\Models\MarketingWpFormulario;
 use App\Models\MarketingWpLeadRaw;
 use App\Models\Observacao;
+use App\Models\User;
+use App\Services\Notificacao\NotificacaoService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -47,8 +50,8 @@ class WpLeadIngestor
     public function __construct(
         private readonly WpLeadPayloadParser $parser,
         private readonly WpLeadFormularioResolver $formularios,
-    ) {
-    }
+        private readonly NotificacaoService $notificacoes,
+    ) {}
 
     /**
      * @return array{staging: MarketingWpLeadRaw, duplicada: bool}
@@ -241,6 +244,8 @@ class WpLeadIngestor
                 'erro' => null,
             ])->save();
 
+            $this->avisarDonoDoLead($staging, $lead);
+
             return $lead;
         } catch (Throwable $e) {
             return $this->registrarFalha(
@@ -383,6 +388,86 @@ class WpLeadIngestor
      *
      * @param  array<string, ?string>  $extraidos
      */
+    /**
+     * Avisa quem cuida deste lead que chegou contato novo pelo site.
+     *
+     * ⚠️ CHAVEADO PELA CAPTURA (`marketing_wp_leads_raw.id`), não pelo lead. É isso que
+     * torna o retry do PromoverCapturasWpPendentesJob seguro: a unique de
+     * `notificacoes (user_id, tipo, referencia_tipo, referencia_id)` absorve a repetição
+     * sozinha. E é o certo também no caso oposto — um segundo formulário do mesmo e-mail
+     * dentro de 24h REAPROVEITA o lead existente, mas é contato novo e merece aviso.
+     *
+     * ⚠️ NOTIFICA TODOS OS USUÁRIOS DO `cod_vendedor`, não um. A regra é "quem é avisado
+     * é quem enxerga": a /leads filtra por cod_vendedor, e esse código é documentadamente
+     * NÃO único neste projeto (há contas compartilhando código). Escolher um só deixaria
+     * a pessoa errada sabendo.
+     *
+     * ⚠️ Lead sem `cod_vendedor` cai nos admins. Esse é o caso mais silencioso desta
+     * integração: sem código, NINGUÉM vê o lead na listagem — o contato do cliente entra
+     * e some. Mandar para o admin transforma o silêncio em sinal.
+     *
+     * ⚠️ Teste interno não notifica, de propósito. Consequência a lembrar: o botão
+     * "Enviar lead de teste" NÃO prova mais o caminho da notificação.
+     *
+     * ⚠️ Nunca deixa a promoção cair — mesmo tratamento de registrarObservacaoDoSite().
+     * Perder um aviso é aceitável; perder o lead do cliente não é.
+     */
+    private function avisarDonoDoLead(MarketingWpLeadRaw $staging, Lead $lead): void
+    {
+        if ($staging->fonte === self::FONTE_TESTE) {
+            return;
+        }
+
+        try {
+            $destinatarios = $this->destinatariosDoLead($lead);
+
+            $titulo = 'Novo lead do site';
+            $mensagem = trim(($lead->razao_social ?: $lead->nome).' — '.($lead->telefone ?: $lead->email ?: 'sem contato'));
+            $link = route('leads.index', array_filter([
+                'origem' => Lead::ORIGEM_WORDPRESS,
+                'busca' => $lead->cnpj ?: $lead->email,
+            ]));
+
+            foreach ($destinatarios as $destinatario) {
+                $this->notificacoes->notificar(
+                    destinatario: $destinatario,
+                    tipo: 'lead_wordpress',
+                    titulo: $titulo,
+                    mensagem: $mensagem,
+                    link: $link,
+                    referenciaTipo: 'marketing_wp_lead_raw',
+                    referenciaId: $staging->id,
+                );
+            }
+        } catch (Throwable $e) {
+            Log::warning('wp-lead: nao consegui notificar o dono do lead', [
+                'lead_id' => $lead->id,
+                'staging_id' => $staging->id,
+                'erro' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    private function destinatariosDoLead(Lead $lead): Collection
+    {
+        if ($lead->cod_vendedor) {
+            $donos = User::query()
+                ->where('is_active', true)
+                ->whereHas('vendedorPerfil', fn ($q) => $q->where('cod_vendedor', $lead->cod_vendedor))
+                ->get();
+
+            if ($donos->isNotEmpty()) {
+                return $donos;
+            }
+        }
+
+        // Sem dono resolvível o lead é invisível na listagem — ver o docblock acima.
+        return User::query()->where('is_active', true)->role('admin')->get();
+    }
+
     private function registrarObservacaoDoSite(Lead $lead, array $extraidos): void
     {
         $partes = array_filter([

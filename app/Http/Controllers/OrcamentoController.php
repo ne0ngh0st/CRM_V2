@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\OrcamentoExport;
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\Cliente;
 use App\Models\EtiquetaMateriaPrima;
@@ -21,6 +22,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -47,8 +49,7 @@ class OrcamentoController extends Controller
         private readonly NivelAprovacaoCalculator $calculator,
         private readonly OrcamentoCalculoService $calculoService,
         private readonly NotificacaoService $notificacaoService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -150,7 +151,7 @@ class OrcamentoController extends Controller
         $query = $this->baseQuery($request)->with('user:id,name,display_name')->latest();
 
         return Excel::download(
-            new \App\Exports\OrcamentoExport($query),
+            new OrcamentoExport($query),
             'orcamentos-'.now()->format('Y-m-d-His').'.xlsx',
         );
     }
@@ -284,6 +285,7 @@ class OrcamentoController extends Controller
                 'desconto_pct_max' => 0,
                 'nivel_aprovacao' => 'nenhum',
                 'status_gestor' => 'pendente',
+                'lead_id' => $data['lead_id'] ?? null,
                 'observacoes' => $data['observacoes'] ?? null,
                 'variacao_producao_personalizado' => $data['variacao_producao_personalizado'] ?? null,
                 'prazo_producao' => $data['prazo_producao'] ?? null,
@@ -293,6 +295,14 @@ class OrcamentoController extends Controller
 
             $this->salvarItens($orcamento, $data['itens']);
             $this->recalcularAprovacao($orcamento, novo: true);
+
+            /*
+             * Auto-avanço do funil: orçamento emitido tira o lead de "Novo"/"Em contato".
+             *
+             * ⚠️ `avancarAutomaticamentePara` NUNCA retrocede nem toca lead com desfecho —
+             * a regra mora no model Lead, porque o registro de contato usa a mesma.
+             */
+            $orcamento->lead?->avancarAutomaticamentePara(Lead::ETAPA_ORCAMENTO);
         });
 
         return redirect()->route('orcamentos.index');
@@ -448,6 +458,10 @@ class OrcamentoController extends Controller
             ->get()
             ->map(fn (Lead $l) => [
                 'origem' => 'lead',
+                // O id vem junto para o formulário poder gravar o vínculo. Sem ele, o
+                // orçamento só copiava nome e CNPJ como texto e o funil nunca sabia que
+                // um orçamento tinha saído deste lead.
+                'leadId' => $l->id,
                 'nome' => $l->razao_social ?: $l->nome,
                 'cnpj' => $l->cnpj,
                 'telefone' => $l->telefone,
@@ -489,6 +503,7 @@ class OrcamentoController extends Controller
     {
         return $request->validate([
             'cliente_nome' => ['required', 'string', 'max:255'],
+            'lead_id' => ['nullable', 'integer', 'exists:leads,id'],
             'cliente_cnpj' => ['nullable', 'string', 'max:18'],
             'cliente_contato' => ['nullable', 'string', 'max:255'],
             'forma_pagamento' => ['nullable', 'string', 'max:50'],
@@ -628,8 +643,8 @@ class OrcamentoController extends Controller
         }
     }
 
-    /** @return \Illuminate\Support\Collection<int, User> */
-    private function resolverAprovadores(Orcamento $orcamento): \Illuminate\Support\Collection
+    /** @return Collection<int, User> */
+    private function resolverAprovadores(Orcamento $orcamento): Collection
     {
         if ($orcamento->nivel_aprovacao === 'diretor') {
             return User::role(['diretor', 'admin'])->get();
@@ -716,6 +731,8 @@ class OrcamentoController extends Controller
         return [
             'id' => $orcamento->id,
             'statusGestor' => $orcamento->status_gestor,
+            // Sem isto, reeditar um orçamento perderia o vínculo com o lead de origem.
+            'leadId' => $orcamento->lead_id,
             'clienteNome' => $orcamento->cliente_nome,
             'clienteCnpj' => $orcamento->cliente_cnpj,
             'clienteContato' => $orcamento->cliente_contato,
