@@ -37,3 +37,8 @@ Desktop.ini
 
 # CSVs de carga historica de faturamento (arquivos grandes, gerados por scripts/)
 /storage/app/import-faturamento
+
+# Espelho local dos relatorios do TOTVS baixados do S3 (totvs:sincronizar-s3), usado em
+# producao como TOTVS_RELATORIOS_DIR. Precisa sobreviver ao `git clean -fd` do deploy.sh
+# -- ver infra/deploy.sh e app/Console/Commands/SincronizarRelatoriosTotvsS3.php.
+/storage/app/totvs
