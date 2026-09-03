@@ -957,7 +957,232 @@ por coincidência neste projeto em 2026-08-29.
 - A ficha do cliente (`/carteira/{id}/detalhes`) não lista o histórico de contatos —
   só a Carteira mostra o último.
 
+### Sete frentes: orçamento, funil, supervisor-vendedor e titularidade — 2026-09-03
+
+Rodada grande, saída do uso real do beta. Detalhe de cada decisão está nos docblocks dos
+arquivos citados; aqui fica só o que muda decisão futura.
+
+#### 1. Preço de tabela travava o salvamento do orçamento (bug do beta)
+
+A Fernanda não conseguia salvar quando o preço de tabela vinha com muitas casas. **Não era
+validação do servidor** (a regra é só `nullable|numeric|min:0`): era `step="0.01"` num
+`<input type="number">` recebendo valor de 4 casas de `produtos.preco_tabela decimal(12,4)`.
+O navegador abortava o submit com `stepMismatch` e o balão nativo aparecia longe do campo —
+para quem usa, "o botão não faz nada"; o jeito era apagar dois dígitos.
+
+- **O campo deixou de ser input.** Preço de tabela é a REFERÊNCIA do fornecedor e o
+  denominador do desconto que define o nível de aprovação — não é campo de digitação do
+  vendedor. Entra pela busca de produto e fica `—` quando não há produto vinculado.
+- ⚠️ **Dano invisível junto**: `orcamento_itens.preco_tabela` era `decimal(12,2)` e o MySQL
+  **arredonda** casa excedente em silêncio (Note 1265). O valor era truncado ao gravar, e
+  ele é o denominador do desconto — um centésimo a menos pode fazer um item cruzar as
+  fronteiras de 10%/15% e mudar QUEM aprova. Migration `2026_09_03_090000` levou a 4 casas.
+- ⚠️ **Sem backfill, de propósito.** O preço de tabela de um orçamento é a referência
+  *daquele momento*; reescrevê-lo mudaria retroativamente o nível de aprovação de
+  documentos já aprovados.
+- Conferido que a calculadora de etiqueta **não** tem o mesmo problema: `precoSugerido` já
+  é `round(…, 2)`.
+
+#### 2. Os subtotais do orçamento mentiam (ambiguidade do beta)
+
+O orçamento 2110 (KNTT), todo de etiquetas e em modo Serviço, imprimia *"Subtotal s/ IPI
+2.224,80"* e *"Subtotal etiquetas 8.832,00"* — dois baldes de mesma natureza, com nomes
+sugerindo tributação diferente, num documento sem IPI nenhum. "Subtotal s/ IPI" era só o
+nome do balde PRODUTOS.
+
+- **Os totais passaram a falar de IMPOSTO, nunca de categoria.** `resumo()` devolve
+  `subtotalSemIpi`, `valorIpi` e `totalGeral`, e **as três sempre fecham**. Sem IPI: duas
+  linhas ("Subtotal", "VALOR TOTAL"). Com IPI: três, e a soma bate.
+- ⚠️ O contrato antigo **não fechava**: com IPI, `subtotalProdutos + subtotalEtiquetas` não
+  dava `totalGeral`. Ninguém tinha notado porque não havia teste nenhum sobre isso.
+- **`resources/js/utils/orcamento.js`** (novo) — a matemática de IPI vivia copiada em
+  `Form.vue` e `ItensTabela.vue`, com arredondamentos e ORDENS DE OPERAÇÃO diferentes entre
+  si e do PHP (`total/1,0325` no back vs `qtd × unit/1,0325` no front). Divergência de
+  centavos entre tela e PDF era estrutural. Agora é um módulo só, espelho do serviço PHP.
+- ⚠️ **`OrcamentoSheet.vue` e `pdf.blade.php` são um par** (o próprio blade já avisava):
+  rótulo, ordem e regra de exibição têm que bater nos dois.
+- Testes: `tests/Unit/Orcamento/OrcamentoCalculoServiceTest.php` (16 casos). ⚠️ Dois
+  fixtures foram **achados por busca, não por intuição**, porque a suíte passava com o
+  código errado: `qtd=2, unit=1,51` distingue as duas ordens de operação (2,92 vs 2,93), e
+  três itens (41×5,22 / 10×6,37 / 22×1,01) distinguem subtrair o IPI de somá-lo por linha
+  (9,44 vs 9,45). Sem eles o teste não morde — verificado por mutação.
+
+#### 3. Supervisor também é vendedor — alternador global
+
+Exceção da Autopel: supervisor atende clientes diretamente. O sistema resolvia o escopo
+dele como **só a equipe**, então **9.387 clientes (10,2% da base)** que são carteira pessoal
+de supervisor não eram vistos por ninguém nesse perfil. Pior: **ROBERTO (`000197`) tem
+equipe vazia** — `[]` num `whereIn` devolve zero linhas, e ele via **tela em branco no
+sistema inteiro** apesar de ter 1.649 clientes no nome dele.
+
+- **`App\Services\Escopo\ModoVisao`** — sessão `visao_modo` (`equipe` | `pessoal`), lida
+  DENTRO do `DashboardScopeResolver`. `resolve()` é chamado em 18 pontos de 8 controllers;
+  passar parâmetro em cada chamada é o que o legado fez (`supervisor_apenas_proprios`
+  threaded à mão por ~15 arquivos) e por isso ficou inconsistente entre telas.
+- **Custo por request: ZERO query** — mesmo desenho da simulação de usuário. Travado por
+  teste.
+- ⚠️ **A prop compartilhada chama-se `modoVisao`, NÃO `visao`.** Seis páginas já mandam uma
+  prop de PÁGINA chamada `visao` (dropdowns de supervisor/vendedor), e no Inertia a prop de
+  página sobrescreve a compartilhada: com o nome colidindo o alternador **não aparecia** em
+  nenhuma delas, sem erro no console. Só apareceu abrindo a Carteira no navegador — nenhum
+  teste de escopo pegaria, porque o servidor resolvia certo e quem sumia era o botão. Há
+  teste travando isso agora.
+- ⚠️ **Modo Equipe é equipe PURA** (decisão do Tony): a carteira pessoal não se mistura com
+  a da equipe.
+- ⚠️ **`/equipe` e `/metas` são a exceção**: ali o supervisor entra JUNTO da equipe, porque
+  a pergunta de uma tela de gestão é "por quem esta pessoa responde?". A regra mora em
+  `EquipeScopeResolver::codigosEquipeDe()`, compartilhada pelas duas.
+- **`MetaRankingResolver::usuariosDoEscopo()`** passou a incluir `supervisor`. ⚠️ **Efeito
+  colateral visível, e é a correção**: havia **R$ 9,04 mi** de meta gravados em códigos de
+  supervisor que nunca eram somados; o gauge de meta da EMPRESA INTEIRA muda de valor.
+- Supervisor **vê** a própria meta mas **não edita** — quem atribui é admin/diretor.
+- Fora de contexto HTTP (fila, `cache:aquecer`) o modo é sempre `equipe`: o job monta chave
+  de cache a partir do escopo, e "herdar" modo pessoal aqueceria chave que ninguém procura.
+
+#### 4. Painel: aba Venda ao lado de Faturamento
+
+Venda (pedido emitido) é o que o vendedor influencia hoje; faturamento é consequência.
+`ComparacaoCard.vue` substitui `FaturamentoComparisonChart.vue`, com **Venda como aba
+padrão**. As duas séries vêm juntas — alternar não vai ao servidor.
+
+- ⚠️ **As duas abas usam a MESMA janela (D-1, D-3 na segunda)**, porque o card fica ao lado
+  do KPI "Valor no mês". O faturamento usava ano civil cheio; manter duas convenções daria
+  dois números para o mesmo mês na mesma tela. A chave do faturamento virou `paraDoDia()`.
+- ⚠️ **Bloco de cache PRÓPRIO.** Os dois têm o mesmo formato de retorno, então chave
+  compartilhada não daria erro — só entregaria o número errado na aba errada, em silêncio.
+  Travado por teste (verificado por mutação).
+- ⚠️ **A série do ano anterior nasce vazia** e o card DECLARA isso. O histórico de pedidos
+  emitidos ainda não foi carregado (existe no legado); 2025 inteiro tem 67 pedidos. Não é
+  bug de query, é ausência de dado — e o aviso some sozinho quando o import entrar.
+- Gestor continua vendo o Power BI, não o gráfico.
+
+#### 5. Captura do site: ficha legível + notificações
+
+O botão "ver payload" despejava `JSON.stringify` num `<pre>`. Quem abre é vendedor.
+
+- **`CapturaWordpressDetalhe.vue`** — campos rotulados; JSON cru vira bloco "Dados
+  técnicos" recolhido e **decidido no servidor**, só para admin (um `v-if` no Vue não
+  impediria o vendedor de ler o payload na resposta da rota).
+- ⚠️ Os rótulos comerciais saem de `WpLeadPayloadParser::extrairCampos()`, o MESMO
+  dicionário que a promoção usa. Duplicar o mapa no front faria a ficha mostrar um valor e
+  o lead guardar outro.
+- ⚠️ **Três formas de envelope**: webhook e teste guardam em `parsed`, CSV em `colunas`, e
+  o payload pode vir como string quando o JSON está corrompido. A ficha aguenta as três.
+- **Notificação de lead novo** — disparada em `WpLeadIngestor::promover()`, não no
+  controller do webhook (a promoção também roda pelo job de retry).
+  - ⚠️ **Chaveada pela CAPTURA (`marketing_wp_lead_raw.id`), não pelo lead.** É o que faz o
+    retry ser seguro. Testar isso exige simular a falha real (zerar `lead_id`): chamar
+    `promover()` três vezes seguidas não exercita nada, porque ele retorna cedo.
+  - ⚠️ **Notifica TODOS os usuários do `cod_vendedor`** — a regra é "quem é avisado é quem
+    enxerga", e o código é documentadamente não único.
+  - ⚠️ **Lead sem `cod_vendedor` notifica os admins**: é a falha mais silenciosa da
+    integração — sem código, ninguém vê o lead e ele entra e some.
+  - **Lead de teste não notifica.** ⚠️ Consequência: o botão "Enviar lead de teste" deixou
+    de provar o caminho da notificação; para verificá-lo, captura real ou tinker.
+- **Captura travada** avisa o admin. ⚠️ O que evita o aviso por minuto é o escopo
+  `pendentes()`, não a chave de idempotência — a chave cobre workers concorrentes. São dois
+  mecanismos diferentes.
+
+#### 6. Funil de leads (kanban)
+
+`leads.status` era `ativo | inativo | convertido | excluido` — descrevia o REGISTRO, não a
+NEGOCIAÇÃO; por isso "convertido" convivia com "inativo".
+
+- **`etapa`** (`novo → em_contato → orcamento → negociacao`, mais `ganho`/`perdido`),
+  **`etapa_alterada_em`**, **`motivo_perda`**. `status` encolheu para `ativo | excluido`.
+- ⚠️ **Ganho e Perdido não são colunas** — são desfechos que tiram o card do quadro.
+- ⚠️ **`etapa_alterada_em`, nunca `updated_at`**: qualquer edição toca o `updated_at` e uma
+  correção de telefone "reanimaria" um lead esquecido há meses.
+- ⚠️ **A migração deriva a etapa do que já estava gravado** (convertido→ganho,
+  inativo→perdido, com ligação→em_contato). O carimbo inicial é `updated_at`, então o
+  "parado há X dias" nasce **aproximado** até o primeiro movimento real.
+- **Três formas de mover, um endpoint só** (`PATCH /leads/{lead}/etapa`): botão `→`,
+  arrastar, e auto-avanço.
+- ⚠️ **AUTO-AVANÇO NUNCA RETROCEDE** — registrar contato num lead em Negociação não pode
+  puxá-lo de volta, e nunca toca lead com desfecho. É a regra que faz o quadro não brigar
+  com o vendedor. ⚠️ As duas guardas de `avancarAutomaticamentePara()` se sobrepõem de
+  propósito; ver o docblock antes de "simplificar".
+- ⚠️ **O gancho de contato entra no `Ligacao::created()` que já existe**, não num segundo
+  listener.
+- **`orcamentos.lead_id`** (novo) — o orçamento só copiava nome/CNPJ como texto. Além do
+  funil, permite responder "quantos orçamentos saíram deste lead?".
+- ⚠️ **O quadro NUNCA carrega a coluna inteira**: 17.173 leads, quase todos em "Novo".
+  `LIMIT 20` por coluna + total agregado, e "carregar mais" **por cursor, não offset**.
+  Travado por `tests/Feature/Performance/FunilDeQueriesTest.php`.
+- ⚠️ **Mover card usa `fetch`, não `router.patch`**: o redirect do Inertia refazia a visita
+  e, como `funil` é prop OPCIONAL, ela não voltava — o quadro sumia a cada movimento.
+  Confirmado no navegador.
+
+#### 7. "Quem cuida do cliente?" (gap do legado, fechado)
+
+Vive no topo da solicitação de cliente novo em `/cadastros` — é onde a resposta evita o
+erro. Mostra razão social, documento, responsável e supervisor. Nada mais.
+
+- ⚠️ **É a ÚNICA consulta de cliente do sistema que IGNORA o escopo do vendedor**, e o
+  escopo ausente É a feature: a Carteira é escopada e por isso não responde "de quem é esse
+  CNPJ?". O que limita o dano é o conteúdo ser pobre — sem status, sem última compra, sem
+  telefone, sem valores. Cada campo novo ali é decisão consciente. Há teste afirmando que
+  esses campos NÃO saem.
+- ⚠️ **Sem `raiz_cnpj`** (Regra nº 3) e sem `REPLACE()` na coluna: os dígitos digitados são
+  remontados na máscara e a busca vira `cnpj LIKE 'prefixo%'`, que usa o índice. Conferido
+  antes de escrever: 91.451 clientes com CNPJ mascarado, 746 com CPF mascarado, **zero** só
+  com dígitos.
+- Inclui as solicitações pendentes de `clientes_para_cadastro` — é o que impede a segunda
+  solicitação duplicada.
+
+#### Performance — tudo medido com volume real (Regras nº 6 e nº 9)
+
+| O quê | Antes | Depois |
+|---|---:|---:|
+| Funil, contagem das 4 colunas (admin, 17k leads) | 55,1 ms | **10,4 ms** |
+| Funil, cards das 4 colunas (admin) | 281,1 ms | **8,1 ms** |
+| Titularidade, nome raro ("KNTT", 92k clientes) | 360 ms | **9,5 ms** |
+| Titularidade, `razao_social` OR `nome_fantasia` | 287,3 ms | **1,3 ms** |
+
+- ⚠️ **Duas vezes o problema foi `Extra:`, não `key:`.** No funil sem escopo o MySQL
+  ESCOLHIA `leads_status_index` e mesmo assim fazia `Using temporary; Using filesort`.
+  Mesma lição de 2026-08-31: índice escolhido ≠ índice suficiente.
+- ⚠️ **O termo RARO é o mais caro numa busca por nome.** Com `ORDER BY … LIMIT 30`, o MySQL
+  percorre o índice até achar 30 matches; para um termo com poucas ocorrências ele percorre
+  as 92 mil. Quanto mais específica a busca, pior o tempo — daí prefixo primeiro e "contém"
+  só como fallback.
+- ⚠️ **Um OR com coluna não indexada derruba o plano inteiro** — daí o índice novo em
+  `nome_fantasia`. Acrescentar uma terceira coluna àquele OR exige indexá-la junto.
+- **`pedidos` ganhou covering index** (`2026_09_03_140000`) replicando o padrão dos
+  faturamentos. ⚠️ **O ganho HOJE é nulo** — a tabela tem 15.991 linhas e já roda em 16 ms.
+  O índice está lá pelo histórico que vem (407.604 linhas no legado); criá-lo depois, com a
+  tabela cheia, custaria janela de manutenção.
+
+#### Lições de processo desta rodada
+
+- ⚠️ **Verificar teste por MUTAÇÃO virou obrigatório, e provou-se necessário.** Cinco
+  testes desta leva passavam com o código quebrado na primeira versão. Em dois casos o
+  fixture teve que ser **procurado por busca exaustiva**, porque nenhum valor "natural"
+  distinguia o certo do errado.
+- ⚠️ **Três defeitos só apareceram no navegador**, nenhum deles pegável por teste de
+  servidor: a colisão de nome de prop, o quadro sumindo a cada movimento, e o nome fantasia
+  escondido no resultado da titularidade.
+- ⚠️ **`document.getElementById('app').dataset.page` é o payload INICIAL** e não acompanha
+  as visitas do Inertia. Ler dali para conferir estado depois de uma ação dá resultado
+  errado — perdi tempo "diagnosticando" um alternador que já funcionava.
+- ⚠️ **A suíte roda contra um `palma_v2_test` único nesta máquina.** Dois agentes rodando
+  `php artisan test` ao mesmo tempo derrubam as tabelas um do outro no meio do
+  `migrate:fresh` e produzem centenas de `QueryException` que não são bug de código. Se
+  acontecer: `DROP DATABASE palma_v2_test; CREATE DATABASE palma_v2_test …` e rodar de novo.
+
+
 ## Pendências
+- **Carregar o histórico de pedidos emitidos.** É o que falta para a aba Venda do painel
+  comparar ano vs. ano de verdade — hoje 2025 inteiro tem 67 pedidos e o card declara isso
+  na tela. O material existe no legado (`pedidos_status`, 407.604 linhas). ⚠️ Carga
+  histórica **antes** de criar índice, nunca depois (a lição de 2026-08-31 nos faturamentos,
+  10m40s contra 66s) — os covering index de `pedidos` já estão criados, então pesar se vale
+  dropá-los durante a carga.
+- **Preencher `orcamentos.lead_id` retroativamente**, se fizer falta. A coluna existe desde
+  2026-09-03 mas só é preenchida em orçamento novo; os históricos não têm vínculo com lead.
+- **O funil não tem relatório de conversão.** `etapa_alterada_em` responde "parado há X
+  dias", mas não "onde os leads morrem" — isso exigiria a tabela de histórico de etapa que
+  ficou fora de escopo por decisão (2026-09-03). Reabrir só se a pergunta aparecer no uso.
 - Avaliar coluna "Último contato" no export Excel da Carteira (ficou de fora em 2026-09-02; ficou barato depois da desnormalização — é só mais uma coluna de `clientes`).
 - Adicionar campo "tubete obrigatório" no `CadastroBobinaForm.vue` (backend já trata; formulário nunca ganhou o input — ver seção "E-mail transacional de Cadastros" acima).
 - Popular `etiquetas_materia_prima` com dados reais de custo (Tony faz pela tela `/orcamentos/materia-prima`).

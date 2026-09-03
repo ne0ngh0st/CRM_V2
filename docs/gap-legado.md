@@ -191,7 +191,7 @@ Visão do Gestor e pelos KPIs da Home — não são gap.
 
 ## 10. Já mapeado na análise anterior, segue em aberto
 
-Busca "quem cuida do cliente?" (titularidade por CNPJ), importar tabela de preços por tela,
+~~Busca "quem cuida do cliente?" (titularidade por CNPJ)~~ **— FECHADO em 2026-09-03**, vive no topo da solicitação de cliente novo em `/cadastros` (ver `App\Services\Cadastros\BuscaTitularidade`); importar tabela de preços por tela,
 Calendário como página própria, Devoluções de Faturamento, Organograma de Faturamento por
 Equipe, lixeira/auditoria de exclusões (`admin_gestao_unificado.php`, `crud/excluidos.php`,
 `mover_para_lixao.php`, `excluir_definitivamente.php`).

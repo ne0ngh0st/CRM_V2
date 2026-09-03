@@ -454,6 +454,72 @@ duas têm a mesma data (acontece: WhatsApp e e-mail no mesmo segundo). Aqui a re
 
 ---
 
+## 1.13 🔴 `ORDER BY … LIMIT` com filtro pouco seletivo — o termo RARO é o mais caro
+
+Medido em 2026-09-03 na busca de titularidade, sobre os 92.209 clientes reais:
+
+| Termo | `LIKE 'termo%'` | `LIKE '%termo%'` |
+|---|---:|---:|
+| MERCADO (472 achados) | 1,5 ms | 44,7 ms |
+| PADARIA (94) | 2,1 ms | 348,7 ms |
+| KNTT (3) | 2,1 ms | **511,8 ms** |
+
+**O contra-intuitivo: quanto mais específica a busca, pior o tempo.** Com
+`ORDER BY razao_social LIMIT 30`, o MySQL percorre o índice em ordem e para na 30ª linha
+que casar. Para "MERCADO" isso acontece cedo; para "KNTT", que tem três ocorrências, ele
+percorre as 92 mil entradas antes de desistir. O `EXPLAIN` mostra `type=index` — varredura
+do índice inteiro, não `range`.
+
+**Correção:** prefixo primeiro (range no índice), "contém" só quando o prefixo não achou
+nada. Quem digita o começo do nome — o caso normal — nunca paga. O único caso caro que
+sobra é o termo que não casa por prefixo: 290 ms, e é o mais raro.
+
+⚠️ **Um OR com coluna não indexada derruba o plano inteiro.** `razao_social` já era
+indexada, mas casá-la com `nome_fantasia` num OR custava **287,3 ms contra 1,3 ms** — o
+`key:` continuava apontando para `clientes_razao_social_index` e mesmo assim o plano era
+ruim. Índice novo em `nome_fantasia` (`2026_09_03_130000`) fez o MySQL usar `index_merge`
+com `sort_union`. Acrescentar uma terceira coluna àquele OR exige indexá-la junto.
+
+## 1.14 🟠 Quadro do funil — o índice que o escopo do vendedor esconde
+
+O funil de leads (2026-09-03) tem duas leituras por coluna: a contagem agregada e os
+primeiros N cards ordenados por "mais parado". Com `leads_funil_idx (cod_vendedor, etapa,
+etapa_alterada_em)`, o vendedor e o supervisor resolvem em **1,7 ms**.
+
+**Mas o índice começa por `cod_vendedor`, e admin não filtra nada.** Medido com os 17.173
+leads:
+
+| Escopo admin | Antes | Depois |
+|---|---:|---:|
+| Contagem das 4 colunas | 55,1 ms | **10,4 ms** |
+| Cards das 4 colunas | 281,1 ms | **8,1 ms** |
+
+⚠️ **O sintoma estava no `Extra:`, não no `key:`** — de novo. O MySQL ESCOLHIA
+`leads_status_index` e fazia `Using temporary` na contagem e `Using where; Using filesort`
+nos cards. Com `leads_funil_geral_idx (status, etapa, etapa_alterada_em)` as duas viram
+`Using index`. 336 ms para desenhar um quadro estouraria sozinho o orçamento de 400 ms.
+
+**Regra prática que sai daí:** sempre que um índice de escopo começar por `cod_vendedor`,
+perguntar quem NÃO filtra por vendedor — admin e diretor existem, e caem noutro plano.
+
+## 1.15 🟢 Índice criado por antecipação — quando vale
+
+`pedidos` ganhou covering index em 2026-09-03 (`(data_pedido, valor_total)` e
+`(cod_vendedor, data_pedido, valor_total)`) replicando o padrão que valeu 6-8x em
+`faturamentos`. **O ganho hoje é nulo**: a tabela tem 15.991 linhas e a agregação já rodava
+em 16 ms mesmo com `type=ALL`.
+
+O índice está lá pelo que vem: o histórico de pedidos emitidos (407.604 linhas no legado)
+ainda não foi carregado, e quando entrar essa agregação vira exatamente o caso que custou
+4.074 ms em `faturamentos`. **Criar índice com a tabela cheia custa janela de manutenção;
+criar com ela vazia custa nada.** É a única situação em que vale antecipar sem medição de
+ganho — e o docblock da migration diz isso explicitamente, para ninguém achar que houve
+medição favorável.
+
+⚠️ Corolário oposto, que continua valendo: **carga histórica sempre ANTES de criar índice**
+(10m40s contra 66s, medido em 2026-08-31). Se o histórico de pedidos for carregado em lote,
+pesar dropar esses índices durante a carga.
+
 # Parte 2 — O que é BARATO
 
 Ganho alto, esforço baixo. Fazer tudo isto **antes** de considerar máquina maior.
