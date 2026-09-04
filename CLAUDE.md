@@ -1115,8 +1115,20 @@ NEGOCIAÇÃO; por isso "convertido" convivia com "inativo".
 
 #### 7. "Quem cuida do cliente?" (gap do legado, fechado)
 
-Vive no topo da solicitação de cliente novo em `/cadastros` — é onde a resposta evita o
-erro. Mostra razão social, documento, responsável e supervisor. Nada mais.
+Vive em `/cadastros` — é onde a resposta evita o erro. Mostra razão social, documento,
+responsável e supervisor. Nada mais.
+
+> **Realocada em 2026-09-04 (mudança só estética, pedido do Tony).** Saiu do topo da
+> solicitação de cliente novo e passou a ficar no **nível da página, logo abaixo da barra
+> de filtros do `PageHero` e acima das abas** — a pergunta precede QUALQUER solicitação,
+> inclusive bobina e etiqueta, então é contexto de página e não passo de um formulário.
+> Junto virou **`DarkCard`**: era o único bloco da tela desenhado do zero (Regra de ouro
+> nº 8) e, pior, o `bg-gray-50` do painel próprio era **exatamente a mesma cor do
+> `.tbl-head-row`** — a tabela de resultados não tinha separação do fundo e parecia vazar
+> do container. Num corpo branco de card os tokens de tabela voltam a funcionar como no
+> resto do sistema. O campo de busca também adotou a gramática da barra de filtros logo
+> acima (rótulo micro em maiúsculas + `py-1.5 text-xs`), para as duas linhas lerem como
+> uma coisa só. Nada de servidor mudou.
 
 - ⚠️ **É a ÚNICA consulta de cliente do sistema que IGNORA o escopo do vendedor**, e o
   escopo ausente É a feature: a Carteira é escopada e por isso não responde "de quem é esse

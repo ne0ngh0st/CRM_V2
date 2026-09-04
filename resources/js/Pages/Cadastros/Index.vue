@@ -183,6 +183,14 @@ const tabBtn = (ativo) =>
                     </button>
                 </div>
 
+                <!--
+                    Nível de PÁGINA, logo abaixo da barra de filtros e acima das abas: a
+                    pergunta "esse cliente já existe e é de quem?" precede qualquer
+                    solicitação, inclusive bobina e etiqueta — não é passo do formulário de
+                    cliente, onde ficava até 2026-09-04.
+                -->
+                <QuemCuidaBusca />
+
                 <div class="flex flex-wrap gap-1 border-b border-gray-300">
                     <button
                         v-for="tab in abas"
@@ -218,10 +226,6 @@ const tabBtn = (ativo) =>
                     </div>
 
                     <template v-if="subAbaClientes === 'cliente'">
-                        <!-- Antes do formulário de propósito: a pergunta "esse cliente já
-                             existe e é de quem?" só evita retrabalho se for respondida
-                             ANTES de a solicitação ser preenchida e enviada. -->
-                        <QuemCuidaBusca />
                         <CadastroClienteForm :opcoes="opcoes" />
                         <DarkCard title="Solicitações de cliente" :subtitle="`${clientesFila.total} registro${clientesFila.total !== 1 ? 's' : ''}`">
                             <template #icon>
