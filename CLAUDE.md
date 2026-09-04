@@ -1297,14 +1297,23 @@ meta, a ordem das contagens ou a reutilização do valor faz o teste corresponde
 Suíte inteira verde: **346 testes**.
 
 ## Pendências
-- **Conferir se `metas_mensais` tem meta de VENDA cadastrada em produção.** Desde
-  2026-09-04 a aba Venda é a PADRÃO do gauge do Painel: sem meta de venda, todo vendedor
-  abre o sistema vendo "Meta não cadastrada" e 0,0% no anel, mesmo tendo vendido. O estado
-  vazio é honesto e é o que aponta a falta, mas é a primeira coisa que os beta testers vão
-  ver. Cadastro é por `/metas` (campo "Meta venda / pedidos emitidos (R$)"), admin ou
-  diretor. Em dev as metas de venda estão em escala errada (herdadas do seeder antigo) e os
-  meses 8-12 zerados — limpar `metas_mensais` e rodar `db:seed --class=MetaMensalSeeder`
-  resolve, mas isso APAGA metas editadas à mão (Regra de ouro nº 7).
+- 🔴 **As metas de VENDA em produção são, na maioria, lixo de seed.** Conferido no RDS em
+  2026-09-04, logo após o deploy: `metas_mensais` só tem os meses **8 a 12** (nada de
+  janeiro a julho), e as metas de venda valem **R$ 1.874 (ago), R$ 1.817 (out), R$ 1.930
+  (nov), R$ 1.892 (dez)** — exatamente a faixa 500-4.000 do `MetaMensalSeeder` antigo, que
+  gerava escala de *quantidade de pedidos*. Só **setembro** tem valor plausível
+  (R$ 5,13 mi). Como a aba Venda virou a PADRÃO do gauge em 2026-09-04, esse lixo é a
+  primeira coisa que o vendedor vê: o acumulado do ano marca **485,7%**, comparando
+  R$ 24,9 mi de realizado contra uma meta de um mês só. O gauge está certo; a meta é que
+  não existe. **Cadastrar pelo `/metas`** (campo "Meta venda / pedidos emitidos (R$)",
+  admin ou diretor) — não há como o sistema distinguir seed de meta real sozinho. As metas
+  de faturamento estão melhores mas também só cobrem ago-dez.
+- 🔴 **Sincronização de dados parada desde 2026-08-10.** `faturamentos` vai até
+  **04/08/2026** e `pedidos` até **05/08/2026**; `data_sync_status` marca a última carga em
+  10/08. Consequência visível hoje: a janela do mês corrente (D-1) não tem nenhuma linha, e
+  o gauge mostra **realizado zero e 0% nas duas abas** para todo mundo — não é bug do card.
+  É a mesma pendência do import automático travado no Adriano. Enquanto não voltar, todo KPI
+  de mês corrente do sistema está zerado.
 - **Carregar o histórico de pedidos emitidos.** É o que falta para a aba Venda do painel
   comparar ano vs. ano de verdade — hoje 2025 inteiro tem 67 pedidos e o card declara isso
   na tela. O material existe no legado (`pedidos_status`, 407.604 linhas). ⚠️ Carga
