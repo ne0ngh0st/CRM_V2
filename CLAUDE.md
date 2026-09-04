@@ -173,7 +173,7 @@ Aplicado em `Dashboard.vue` + tudo em `resources/js/Components/Dashboard/`. Toda
 | `.tbl-body` | `<tbody>` | `divide-y divide-gray-200` |
 | `.tbl-row` | `<tr>` do corpo | `divide-x divide-gray-200` + `hover:bg-gray-50/60` |
 | `.tbl-td` | `<td>` | `px-3 py-1.5 text-center align-middle` |
-| `.tbl-main` | 1ª linha de célula de duas linhas (razão social) | `block truncate font-semibold leading-4` |
+| `.tbl-main` | 1ª linha de célula de duas linhas (razão social) | `mx-auto block truncate font-medium leading-4` |
 | `.tbl-sub` | 2ª linha da mesma célula (CNPJ, código) | `block text-[0.65rem] leading-3 text-gray-400` |
 | `.tbl-wrap` | `<div>` em volta da `<table>` | `overflow-x-auto` |
 | `.tbl-acoes` | `<div>` dentro do `<td>` de ações | `flex flex-wrap items-center justify-center gap-1` |
@@ -183,6 +183,7 @@ Aplicado em `Dashboard.vue` + tudo em `resources/js/Components/Dashboard/`. Toda
 O que **não** precisa ser escrito na tabela, porque já vem dos tokens:
 - **Tamanho do ícone**: `.tbl-acao svg` já aplica `h-3.5 w-3.5`. Não pôr classe de tamanho no `<svg>`.
 - **Estado desabilitado**: `.tbl-acao:disabled` já cobre cursor, cor, opacidade e neutraliza o hover. Não repetir corrente de `disabled:` no HTML. ⚠️ No `app.css` esse bloco tem que ficar **depois** dos modificadores de cor — mesma especificidade, ganha quem vem por último; se subir, botão desabilitado volta a acender no hover.
+- **Centralização do bloco truncado**: `.tbl-main` e `.tbl-trunc` já trazem `mx-auto`. Não repetir no HTML. ⚠️ E não remover do token achando que é decoração: são blocos com `max-w-[Npx]` inline, e bloco mais estreito que a célula encosta na ESQUERDA — o `text-center` do `.tbl-td` centraliza o texto dentro da caixa, não a caixa dentro da célula. Sem `mx-auto` o nome fica deslocado do próprio cabeçalho e da `.tbl-sub` de baixo (88px numa coluna de 480px). Até 2026-09-04 o `mx-auto` estava copiado no HTML de 8 tabelas e faltava no token; a 9ª tabela a nascer (a busca "Quem cuida do cliente?") saiu torta por isso — Regra de ouro nº 8 em estado puro.
 - **Cor do texto da célula**: `.tbl-td` já é `text-gray-600`. Só usar `.tbl-main` (destaque) ou `.tbl-sub` (apoio) quando quiser fugir disso — nada de `text-gray-700` avulso.
 
 Uma mesma cor pode servir a mais de uma função (aprovar e ligar são verdes; agendar e simular são cyan) — o que não pode é a mesma função mudar de cor entre telas. Era exatamente o que acontecia antes: agendar era âmbar nos Leads e cyan na Carteira, observação era navy nos Leads e âmbar na Carteira.

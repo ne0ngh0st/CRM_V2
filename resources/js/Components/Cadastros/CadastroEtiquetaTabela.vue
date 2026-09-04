@@ -32,7 +32,7 @@ function tone(status) {
                     <td class="tbl-td">{{ item.id }}</td>
                     <td class="tbl-td">{{ item.data }}</td>
                     <td class="tbl-td">
-                        <span class="tbl-main mx-auto max-w-[220px]" :title="item.tituloPadronizado">{{ item.tituloPadronizado }}</span>
+                        <span class="tbl-main max-w-[220px]" :title="item.tituloPadronizado">{{ item.tituloPadronizado }}</span>
                     </td>
                     <td class="tbl-td">
                         <span class="tbl-trunc max-w-[140px]" :title="item.nomenclatura">{{ item.nomenclatura }}</span>

@@ -64,7 +64,7 @@ function pdfUrl(orcamento, download) {
                             </svg>
                         </td>
                         <td class="tbl-td">
-                            <span class="tbl-main mx-auto max-w-[220px]" :title="orcamento.clienteNome">{{ orcamento.clienteNome }}</span>
+                            <span class="tbl-main max-w-[220px]" :title="orcamento.clienteNome">{{ orcamento.clienteNome }}</span>
                             <span class="tbl-sub">{{ orcamento.clienteCnpj ?? '—' }}</span>
                         </td>
                         <td class="tbl-td">{{ orcamento.vendedorNome }}</td>

@@ -32,7 +32,7 @@ function tone(status) {
                     <td class="tbl-td">{{ item.data }}</td>
                     <td class="tbl-td">{{ item.cnpjFaturamento }}</td>
                     <td class="tbl-td">
-                        <span class="tbl-main mx-auto max-w-[200px]" :title="item.razaoSocial">{{ item.razaoSocial || '—' }}</span>
+                        <span class="tbl-main max-w-[200px]" :title="item.razaoSocial">{{ item.razaoSocial || '—' }}</span>
                     </td>
                     <td class="tbl-td">{{ item.segmentoAtuacao }}</td>
                     <td class="tbl-td">

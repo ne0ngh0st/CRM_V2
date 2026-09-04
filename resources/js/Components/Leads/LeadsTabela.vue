@@ -57,7 +57,7 @@ function excluir(lead) {
             <tbody class="tbl-body">
                 <tr v-for="lead in leads" :key="lead.id" class="tbl-row">
                     <td class="tbl-td">
-                        <span class="tbl-main mx-auto max-w-[220px]" :title="lead.razaoSocial">
+                        <span class="tbl-main max-w-[220px]" :title="lead.razaoSocial">
                             {{ lead.razaoSocial || lead.nome }}
                         </span>
                         <span class="tbl-sub">{{ lead.cnpj || lead.email || '—' }}</span>

@@ -123,9 +123,19 @@
 
     /* Texto principal de uma célula de duas linhas (ex.: razão social).
        `leading-4` é o que segura a altura da linha — sem isso o line-height
-       padrão do text-sm (20px) dobrado com a 2ª linha é o que inflava a linha. */
+       padrão do text-sm (20px) dobrado com a 2ª linha é o que inflava a linha.
+
+       ⚠️ `mx-auto` NÃO é decoração, e é por isso que ele mora aqui e não no HTML:
+       este é um bloco com `max-w-[Npx]` inline, e bloco com largura menor que a
+       célula encosta na ESQUERDA — o `text-center` do `.tbl-td` centraliza o
+       texto DENTRO da caixa, não a caixa dentro da célula. Sem ele, o nome fica
+       deslocado em relação ao próprio cabeçalho e à `.tbl-sub` logo abaixo (88px
+       de diferença, medidos numa coluna de 480px). Até 2026-09-04 as 8 tabelas
+       compensavam repetindo `mx-auto` no HTML, e a 9ª (a busca de titularidade
+       em Cadastros) nasceu torta justamente por não ter como saber disso —
+       Regra de ouro nº 8. Mesmo motivo pelo qual `.tbl-trunc` sempre teve. */
     .tbl-main {
-        @apply block truncate font-medium leading-4 text-gray-800;
+        @apply mx-auto block truncate font-medium leading-4 text-gray-800;
     }
 
     /* Célula de uma linha só que precisa truncar (nome de grupo, descrição longa).

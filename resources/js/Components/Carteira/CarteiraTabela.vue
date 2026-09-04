@@ -58,7 +58,7 @@ function criarOrcamento(cliente) {
             <tbody class="tbl-body">
                 <tr v-for="cliente in clientes" :key="cliente.id" class="tbl-row">
                     <td class="tbl-td">
-                        <span class="tbl-main mx-auto max-w-[220px]" :title="cliente.razaoSocial">{{ cliente.razaoSocial }}</span>
+                        <span class="tbl-main max-w-[220px]" :title="cliente.razaoSocial">{{ cliente.razaoSocial }}</span>
                         <span class="tbl-sub">{{ cliente.cnpj ?? '—' }}</span>
                     </td>
                     <td class="tbl-td">
