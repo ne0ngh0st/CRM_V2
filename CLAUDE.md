@@ -1171,7 +1171,128 @@ erro. Mostra razão social, documento, responsável e supervisor. Nada mais.
   acontecer: `DROP DATABASE palma_v2_test; CREATE DATABASE palma_v2_test …` e rodar de novo.
 
 
+### Gauge de metas passou a medir Venda, com alternador — 2026-09-04
+
+O card "Performance Comercial" do Painel media só **faturamento**: nota emitida, que sai
+dias depois do pedido. O vendedor via a própria performance medida por um número que ele
+não move no dia. Agora o card tem **duas abas — Venda e Faturamento — com Venda como
+padrão**, mesmo alternador e mesma justificativa do card de Comparação (2026-09-03).
+
+**Não foi preciso migration.** `metas_mensais.tipo` já era `enum('faturamento','venda')`
+desde a migration original, `/metas` já editava e rankeava os dois, e
+`MetaRankingResolver` já sabia somar `pedidos.valor_total` por `data_pedido`. O que
+faltava era o gauge saber perguntar.
+
+#### O de-para tipo → fonte do realizado mora num lugar só
+
+| tipo | realizado | tabela / coluna |
+|---|---|---|
+| `venda` | pedido emitido (aberto ou faturado) | `pedidos.valor_total` por `data_pedido` |
+| `faturamento` | nota emitida | `faturamentos.valor_total` por `data_emissao` |
+
+`MetaRankingResolver::queryRealizado()` é a única definição disso. Ela substituiu
+`faturamentoPorCodigo()` + `vendaPorCodigo()`, que eram o **mesmo código** com outra tabela
+e outra coluna de data — com as duas cópias, "qual é a fonte do realizado de venda" tinha
+duas respostas possíveis e o gauge novo seria uma terceira (Regra de ouro nº 8).
+
+`metaVsFaturamento()` virou **`metaVsRealizado(..., string $tipo)`** e devolve
+`realizado`, não `faturamento` — o componente do front foi renomeado junto
+(`MetaFatCard.vue` → `MetaRealizadoCard.vue`, campo `dados.realizado`). Nome de campo que
+descreve metade dos casos é como um rótulo errado entra na tela sem ninguém reparar.
+
+- ⚠️ **`TIPOS` é whitelist, não organização.** O tipo vem da aba e escolhe QUAL TABELA
+  responde. Valor desconhecido **estoura** (`InvalidArgumentException`); cair num default
+  "faturamento" mostraria o realizado errado sob o rótulo certo, sem erro nenhum. Mesmo
+  risco da whitelist de ordenação da Carteira. Coberto por teste.
+
+#### O KPI "Pedidos emitidos" mudou de universo — e o admin vai notar
+
+Os tiles agora usam **a mesma lista de códigos resolvida para a meta** (vendedor,
+representante e supervisor ativos com código), em vez da tabela inteira de pedidos.
+
+- ⚠️ **Em dev isso é 81% do valor do mês** (R$ 3,99 mi → R$ 763 mil; 1.171 → 345 pedidos) e
+  75% do ano. Não é regressão: era a mesma divergência que já existia entre o Painel e
+  `/metas`, só que agora ficaria a cinco centímetros do "Realizado" da aba Venda, na mesma
+  leitura — dois números para a mesma coisa.
+- ⚠️ **Consequência conhecida e aceita:** o tile diverge da listagem `/pedidos-emitidos`,
+  para onde ele mesmo linka — lá o escopo é operacional (todo pedido do escopo bruto), aqui
+  é a equipe comercial ativa. Se um dia isso incomodar mais que a contradição interna do
+  card, o conserto é uma linha (voltar a passar `$codVendedores` cru para
+  `pedidosEmitidos()`).
+- **A igualdade "Valor no mês" = "Realizado" da aba Venda é ESTRUTURAL**, não uma promessa
+  de comentário: o tile lê o número que a agregação de venda já calculou, em vez de somar de
+  novo. Travado por teste.
+
+#### Performance — medido com volume real (Regras nº 6 e nº 9)
+
+O bloco dobrou de agregações (2 → 4) e **o escopo mais caro ficou mais rápido**:
+
+| escopo | antes | depois | queries |
+|---|---:|---:|---|
+| empresa (`null`) | 167,8 ms | **149,0 ms** | 20 → 15 |
+| equipe (51 códigos) | 49,2 ms | 57,1 ms | 8 → 9 |
+| vendedor (1 código) | 11,7 ms | 17,7 ms | 8 → 9 |
+
+Arco completo em `docs/performance.md` §1.16. O que muda decisão:
+
+- ⚠️ **Medições intercaladas, não sequenciais.** Em dev sob Docker/WSL2 o mesmo bloco varia
+  30% entre execuções; a primeira comparação "antes/depois" que fiz apontou +35% e era
+  ruído. A resposta certa é rodar as duas versões alternadas no mesmo processo.
+- **O custo real era o escopo, não a agregação.** Resolver `null` (empresa) custa 6 queries
+  de roles/perfis do spatie; com quatro agregações resolvendo por dentro seriam 24 queries
+  só para redescobrir a mesma lista. Daí `codigosDoEscopo()` ser público — quem monta um
+  bloco com várias agregações resolve **uma vez** e passa adiante.
+- **Venda é barata onde faturamento é cara:** soma do ano no escopo empresa, `pedidos`
+  **24 ms** contra `faturamentos` **660 ms** (46 mil linhas contra 6,0 milhões, as duas com
+  covering index).
+- As duas contagens de pedido saem de **uma query só** (`COUNT(*)` para o ano,
+  `SUM(data_pedido >= início do mês)` para o mês — a janela do mês é sufixo da do ano).
+  `type=range`, `Using index`.
+
+#### ⚠️ `ChaveEscopo::VERSAO` foi para `v2`
+
+O payload de `metaGauge` deixou de ser `{mes, ano}` e virou `{venda, faturamento}`. Sem o
+bump, um payload v1 ainda quente seria entregue ao front novo durante os 30 min de TTL após
+o deploy e quebraria o card no navegador de quem já estava logado — exatamente onde ninguém
+olha o console. **Toda mudança de FORMATO de bloco cacheado exige esse bump**; o histórico
+fica no docblock da constante.
+
+#### Dois detalhes de tela
+
+- **O anel encurta percentual grande** (`999+%` acima de mil, arredondado de 100 a 999).
+  Não é firula: com meta de venda zerada ou em ordem de grandeza errada, um `37281.4%`
+  transbordava o círculo e cobria a legenda. O valor exato continua no card logo abaixo.
+- **`MetaMensalSeeder` gerava meta de venda entre 500 e 4.000** — escala de *quantidade de
+  pedidos* — enquanto a de faturamento ia a 200 mil e o realizado de venda soma milhões. Em
+  dev o gauge mostrava percentuais de cinco dígitos e parecia defeito de cálculo. Agora as
+  duas nascem em R$ e na mesma ordem de grandeza. ⚠️ **Reseed não é automático**: o banco de
+  dev ainda tem os valores antigos (e os meses 8-12 zerados por alguma rodada anterior), então
+  o gauge de venda local segue mostrando número absurdo até `metas_mensais` ser limpa e
+  semeada de novo.
+
+#### Testes
+
+`tests/Feature/DashboardMetaVendaTest.php` (10 casos). ⚠️ Os valores do fixture são
+**todos diferentes entre si** de propósito (meta venda 4.000, meta faturamento 250, pedido
+1.000, nota 500): venda e faturamento têm formato de retorno idêntico, então com números
+parecidos trocar a tabela de um pela do outro passaria verde. Cobre também o corte D-1, o
+escopo por vendedor, escopo vazio, tipo inválido, a separação mês/ano da query fundida, a
+igualdade tile ↔ realizado, o contrato da prop com o front e um **teto de queries** (9) que
+denuncia a volta da resolução de escopo por agregação.
+
+⚠️ **Verificado por mutação**, não só por estar verde: quebrar `queryRealizado`, o tipo da
+meta, a ordem das contagens ou a reutilização do valor faz o teste correspondente falhar.
+Suíte inteira verde: **346 testes**.
+
 ## Pendências
+- **Conferir se `metas_mensais` tem meta de VENDA cadastrada em produção.** Desde
+  2026-09-04 a aba Venda é a PADRÃO do gauge do Painel: sem meta de venda, todo vendedor
+  abre o sistema vendo "Meta não cadastrada" e 0,0% no anel, mesmo tendo vendido. O estado
+  vazio é honesto e é o que aponta a falta, mas é a primeira coisa que os beta testers vão
+  ver. Cadastro é por `/metas` (campo "Meta venda / pedidos emitidos (R$)"), admin ou
+  diretor. Em dev as metas de venda estão em escala errada (herdadas do seeder antigo) e os
+  meses 8-12 zerados — limpar `metas_mensais` e rodar `db:seed --class=MetaMensalSeeder`
+  resolve, mas isso APAGA metas editadas à mão (Regra de ouro nº 7).
 - **Carregar o histórico de pedidos emitidos.** É o que falta para a aba Venda do painel
   comparar ano vs. ano de verdade — hoje 2025 inteiro tem 67 pedidos e o card declara isso
   na tela. O material existe no legado (`pedidos_status`, 407.604 linhas). ⚠️ Carga

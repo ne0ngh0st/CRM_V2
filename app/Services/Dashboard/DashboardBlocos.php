@@ -161,10 +161,48 @@ class DashboardBlocos
     // ── Blocos COM cache ────────────────────────────────────────────────────────
 
     /**
-     * Metas do mês e do ano + volume de pedidos emitidos.
+     * Metas do mês e do ano, nos DOIS tipos (venda e faturamento), + volume de pedidos.
      *
-     * Era o maior buraco não cacheado do Dashboard: 6+ queries agregadas sobre
-     * `faturamentos`, `pedidos` e `metas_mensais`, no topo visual da página.
+     * ⚠️ VENDA vem primeiro e é a aba padrão do card, deliberadamente: venda é pedido
+     * emitido — o que o vendedor consegue influenciar hoje. Faturamento é consequência e
+     * chega depois. Até 2026-09-04 o gauge só sabia falar de faturamento, e o vendedor via
+     * a própria performance medida por um número que ele não controla no dia.
+     *
+     * ⚠️ OS DOIS TIPOS VÊM JUNTOS, e o alternador do card NÃO vai ao servidor. Mesma
+     * decisão do card de Comparação: buscar a outra aba no clique tornaria a troca lenta
+     * justamente para quem alterna.
+     *
+     * ⚠️ OS CÓDIGOS DO ESCOPO SÃO RESOLVIDOS UMA VEZ AQUI, e não dentro de cada agregação.
+     * Resolver `null` (empresa) custa 6 queries de roles/perfis do spatie; com quatro
+     * agregações, resolver por dentro seriam 24 queries só para redescobrir a mesma lista.
+     *
+     * ⚠️ `pedidosEmitidos` RECEBE A MESMA LISTA RESOLVIDA, e isso MUDA O NÚMERO QUE O
+     * ADMIN VÊ. Antes ele somava a tabela inteira de pedidos, inclusive códigos sem
+     * usuário comercial ativo — em dev isso é 81% do valor do mês (R$ 3,99 mi → R$ 763
+     * mil) e 826 pedidos de 1.171. Com a aba Venda logo acima, manter o KPI irrestrito
+     * poria "Realizado R$ 763 mil" e "Valor no mês R$ 3,99 mi" a cinco centímetros de
+     * distância: dois números para a mesma coisa, na mesma leitura. O universo do KPI
+     * passou a ser o universo da meta, que é o mesmo de /metas.
+     *
+     * ⚠️ Consequência a conhecer: o KPI diverge da listagem /pedidos-emitidos, para onde
+     * o próprio tile linka — lá o escopo é operacional (todo pedido do escopo bruto),
+     * aqui é a equipe comercial ativa. É deliberado; se um dia isso incomodar mais que a
+     * contradição interna do card, o conserto é uma linha (voltar a passar
+     * `$codVendedores` cru para pedidosEmitidos).
+     *
+     * Custo medido em dev, recálculo completo (cache MISS), com volume real — 92 mil
+     * clientes, 6,0 mi de faturamentos, 46 mil pedidos, medianas de 15 execuções
+     * intercaladas com a versão antiga para cancelar deriva da máquina:
+     *
+     *   escopo      antes (só faturamento)   depois (dois tipos)   queries
+     *   empresa            167,8 ms                149,0 ms         20 → 15
+     *   equipe (51)         49,2 ms                 57,1 ms          8 →  9
+     *   vendedor            11,7 ms                 17,7 ms          8 →  9
+     *
+     * O escopo empresa FICOU MAIS RÁPIDO mesmo dobrando as agregações, porque a resolução
+     * única do escopo e a fusão das contagens de pedido economizaram mais do que a segunda
+     * métrica custou. Nada disso está no caminho quente: o bloco é cacheado por 30 min e
+     * pré-aquecido pelo job, então o p95 de quem abre o Painel não muda.
      *
      * `isRepresentante` NÃO entra aqui de propósito — é derivado do perfil de quem está
      * olhando, não do escopo. Incluir poria o role na chave e duplicaria o cache de dois
@@ -179,11 +217,22 @@ class DashboardBlocos
 
         return $this->cachear(
             $escopo->para('meta-gauge', ['ano' => $ano, 'mes' => $mes]),
-            fn () => [
-                'mes' => $this->metaRanking->metaVsFaturamento($codVendedores, $ano, $mes, $mes),
-                'ano' => $this->metaRanking->metaVsFaturamento($codVendedores, $ano, 1, $mes),
-                'pedidosEmitidos' => $this->pedidosEmitidos($codVendedores, $ano, $mes),
-            ],
+            function () use ($ano, $mes, $codVendedores) {
+                $codigos = $this->metaRanking->codigosDoEscopo($codVendedores);
+
+                $porTipo = fn (string $tipo) => [
+                    'mes' => $this->metaRanking->metaVsRealizado($codigos, $ano, $mes, $mes, $tipo),
+                    'ano' => $this->metaRanking->metaVsRealizado($codigos, $ano, 1, $mes, $tipo),
+                ];
+
+                $venda = $porTipo('venda');
+
+                return [
+                    'venda' => $venda,
+                    'faturamento' => $porTipo('faturamento'),
+                    'pedidosEmitidos' => $this->pedidosEmitidos($codigos, $ano, $mes, $venda),
+                ];
+            },
         );
     }
 
@@ -419,23 +468,38 @@ class DashboardBlocos
 
     // ── Interno ─────────────────────────────────────────────────────────────────
 
-    /** Volume de pedidos emitidos (toda a tabela, aberto ou faturado) no mês e no ano. */
-    private function pedidosEmitidos(?array $codVendedores, int $ano, int $mes): array
+    /**
+     * Volume de pedidos emitidos (aberto ou faturado) no mês e no ano.
+     *
+     * ⚠️ O VALOR NÃO É RECALCULADO: vem do realizado da aba Venda, que já somou
+     * `pedidos.valor_total` no mesmo período e sobre os mesmos códigos. Antes eram duas
+     * somas idênticas na mesma requisição — desperdício, e pior, duas chances de os
+     * números divergirem na tela depois de alguém mexer só num dos lados. Aqui a
+     * igualdade entre "Realizado" e "Valor no mês" é estrutural, não uma promessa de
+     * comentário.
+     *
+     * ⚠️ AS DUAS CONTAGENS SAEM DE UMA QUERY SÓ. A janela do mês é sufixo da janela do
+     * ano (mesmo fim, D-1), então `COUNT(*)` responde o ano e um `SUM(data >= início do
+     * mês)` responde o mês, na mesma varredura — mesmo padrão de `Ligacao::somarPorCanal`.
+     *
+     * @param  list<string>  $codigos
+     * @param  array{mes: array{realizado: float}, ano: array{realizado: float}}  $venda
+     */
+    private function pedidosEmitidos(array $codigos, int $ano, int $mes, array $venda): array
     {
-        [$inicioMes, $fimMes] = $this->metaRanking->intervaloDatas($ano, $mes, $mes);
+        [$inicioMes] = $this->metaRanking->intervaloDatas($ano, $mes, $mes);
         [$inicioAno, $fimAno] = $this->metaRanking->intervaloDatas($ano, 1, $mes);
 
-        $base = Pedido::query();
-        if ($codVendedores !== null) {
-            $base->whereIn('cod_vendedor', $codVendedores);
-        }
-
-        $doMes = (clone $base)->whereBetween('data_pedido', [$inicioMes, $fimMes]);
-        $doAno = (clone $base)->whereBetween('data_pedido', [$inicioAno, $fimAno]);
+        $contagem = Pedido::query()
+            ->whereIn('cod_vendedor', $codigos)
+            ->whereBetween('data_pedido', [$inicioAno, $fimAno])
+            ->selectRaw('COUNT(*) as no_ano')
+            ->selectRaw('SUM(data_pedido >= ?) as no_mes', [$inicioMes])
+            ->first();
 
         return [
-            'mes' => ['pedidos' => (clone $doMes)->count(), 'valor' => (float) (clone $doMes)->sum('valor_total')],
-            'ano' => ['pedidos' => (clone $doAno)->count(), 'valor' => (float) (clone $doAno)->sum('valor_total')],
+            'mes' => ['pedidos' => (int) ($contagem->no_mes ?? 0), 'valor' => $venda['mes']['realizado']],
+            'ano' => ['pedidos' => (int) ($contagem->no_ano ?? 0), 'valor' => $venda['ano']['realizado']],
         ];
     }
 

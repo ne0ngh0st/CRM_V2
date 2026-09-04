@@ -1,4 +1,13 @@
 <script setup>
+/**
+ * Anel de atingimento. O número é encurtado conforme cresce: até 99% com uma casa
+ * decimal, de 100% em diante arredondado, e acima de 999% só "999+%".
+ *
+ * ⚠️ NÃO é firula. O anel tem 160px de viewBox e o texto é `text-xl`: com a aba Venda,
+ * cujas metas podem estar zeradas ou cadastradas em ordem de grandeza errada, um
+ * "37281.4%" transbordava o círculo e cobria a legenda. O valor exato continua legível
+ * logo abaixo, no card que mostra realizado e meta lado a lado.
+ */
 import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
 
@@ -14,6 +23,18 @@ const circunferencia = 2 * Math.PI * raio;
 
 const percentualVisual = computed(() => Math.min(props.dados.percentual, 100));
 const dashOffset = computed(() => circunferencia - (percentualVisual.value / 100) * circunferencia);
+
+/**
+ * Ver o docblock do componente: percentual grande é encurtado para caber no anel.
+ */
+const textoPercentual = computed(() => {
+    const pct = props.dados.percentual;
+
+    if (pct >= 1000) return '999+%';
+    if (pct >= 100) return `${Math.round(pct)}%`;
+
+    return `${pct.toFixed(1).replace('.', ',')}%`;
+});
 
 const cor = computed(() => {
     if (props.dados.percentual >= 100) return '#22c55e';
@@ -40,7 +61,7 @@ const cor = computed(() => {
                 class="transition-all duration-700 ease-out"
             />
             <text x="80" y="76" text-anchor="middle" class="fill-navy text-xl font-bold">
-                {{ dados.percentual.toFixed(1) }}%
+                {{ textoPercentual }}
             </text>
             <text x="80" y="94" text-anchor="middle" class="fill-gray-400 text-[10px] uppercase tracking-wide">
                 {{ label }}

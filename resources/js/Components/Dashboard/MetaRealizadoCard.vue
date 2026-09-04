@@ -1,4 +1,12 @@
 <script setup>
+/**
+ * Linha de meta × realizado do card "Performance Comercial" (mês ou acumulado do ano).
+ *
+ * ⚠️ Serve aos DOIS tipos de meta — venda (pedido emitido) e faturamento (nota
+ * emitida). Por isso o campo do payload é `realizado`, e não `faturamento` como era até
+ * 2026-09-04: um componente compartilhado com um nome de campo que só descreve metade
+ * dos casos é como um rótulo errado entra na tela sem ninguém reparar.
+ */
 import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
 
@@ -9,7 +17,7 @@ const props = defineProps({
     href: { type: String, default: null },
 });
 
-const diferenca = computed(() => Math.abs(props.dados.faturamento - props.dados.meta));
+const diferenca = computed(() => Math.abs(props.dados.realizado - props.dados.meta));
 
 const tier = computed(() => {
     if (props.dados.meta <= 0) return 'sem';
@@ -78,7 +86,7 @@ function formatBRL(valor) {
             <div class="min-w-0">
                 <span class="block text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">Realizado</span>
                 <span class="mt-0.5 block text-sm font-extrabold tabular-nums leading-tight text-gray-900">
-                    {{ formatBRL(dados.faturamento) }}
+                    {{ formatBRL(dados.realizado) }}
                 </span>
             </div>
             <div class="min-w-0">

@@ -7,41 +7,58 @@ use App\Models\MetaMensal;
 use App\Models\Pedido;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use InvalidArgumentException;
 
 /**
  * Ranking meta × realizado em batch (sem N+1).
  *
- * Realizado faturamento = SUM(faturamentos.valor_total) no período.
+ * Realizado faturamento = SUM(faturamentos.valor_total) por data_emissao.
  * Realizado venda = SUM(pedidos.valor_total) por data_pedido (mesma base da Home "pedidos emitidos").
+ * O de-para tipo → tabela/coluna vive num lugar só: {@see self::queryRealizado()}.
  * Mês corrente: realizado até D-1 (segunda → D-3), alinhado ao legado gestao_metas.
  */
 class MetaRankingResolver
 {
     /**
-     * Agregado único (Home / gauges): meta vs faturamento no intervalo de meses.
-     * Universo alinhado ao ranking: só códigos de vendedor/representante ativos.
+     * Tipos de meta que o sistema conhece. Espelha o enum de `metas_mensais.tipo`.
+     *
+     * ⚠️ É a whitelist usada por {@see self::metaVsRealizado()}: o tipo chega do front
+     * (aba do card) e escolhe TABELA e COLUNA DE DATA. Valor fora daqui tem que estourar,
+     * nunca cair num default silencioso — um tipo desconhecido lido como "faturamento"
+     * mostraria o número errado sob o rótulo certo.
+     *
+     * @var list<string>
+     */
+    public const TIPOS = ['faturamento', 'venda'];
+
+    /**
+     * Agregado único (Home / gauges): meta vs realizado no intervalo de meses.
+     *
+     * `venda` = pedido emitido (`pedidos.data_pedido`); `faturamento` = nota emitida
+     * (`faturamentos.data_emissao`). Os dois são R$ e vivem na mesma tabela de metas,
+     * separados por `tipo` — o que muda é a fonte do realizado.
+     *
+     * Universo alinhado ao ranking: só códigos de vendedor/representante/supervisor
+     * ativos. Sem isso o % da Home divergiria de /metas para o mesmo período.
      *
      * @param  array<string>|null  $codVendedores  null = empresa (vendedores ativos); [] = vazio
-     * @return array{meta: float, faturamento: float, percentual: float}
+     * @return array{meta: float, realizado: float, percentual: float, tipo: string}
      */
-    public function metaVsFaturamento(?array $codVendedores, int $ano, int $mesInicio, int $mesFim): array
-    {
-        if ($codVendedores !== null && $codVendedores === []) {
-            return ['meta' => 0.0, 'faturamento' => 0.0, 'percentual' => 0.0];
-        }
+    public function metaVsRealizado(
+        ?array $codVendedores,
+        int $ano,
+        int $mesInicio,
+        int $mesFim,
+        string $tipo = 'faturamento',
+    ): array {
+        $this->garantirTipo($tipo);
 
-        // null → mesmos códigos do ranking (ativos), evita % da Home divergir de /metas.
-        if ($codVendedores === null) {
-            $codVendedores = $this->usuariosDoEscopo(null)
-                ->pluck('vendedorPerfil.cod_vendedor')
-                ->filter()
-                ->unique()
-                ->values()
-                ->all();
-            if ($codVendedores === []) {
-                return ['meta' => 0.0, 'faturamento' => 0.0, 'percentual' => 0.0];
-            }
+        $codVendedores = $this->codigosDoEscopo($codVendedores);
+
+        if ($codVendedores === []) {
+            return ['meta' => 0.0, 'realizado' => 0.0, 'percentual' => 0.0, 'tipo' => $tipo];
         }
 
         [$inicio, $fim] = $this->intervaloDatas($ano, $mesInicio, $mesFim);
@@ -49,23 +66,50 @@ class MetaRankingResolver
         $meta = (float) MetaMensal::query()
             ->where('ano', $ano)
             ->whereBetween('mes', [$mesInicio, $mesFim])
-            ->where('tipo', 'faturamento')
+            ->where('tipo', $tipo)
             ->whereIn('cod_vendedor', $codVendedores)
             ->sum('valor_meta');
 
-        $faturamento = 0.0;
+        $realizado = 0.0;
         if ($fim >= $inicio) {
-            $faturamento = (float) Faturamento::query()
-                ->whereBetween('data_emissao', [$inicio, $fim])
+            $realizado = (float) $this->queryRealizado($tipo)
+                ->whereBetween($this->colunaDataDoTipo($tipo), [$inicio, $fim])
                 ->whereIn('cod_vendedor', $codVendedores)
                 ->sum('valor_total');
         }
 
         return [
             'meta' => $meta,
-            'faturamento' => $faturamento,
-            'percentual' => $meta > 0 ? round(($faturamento / $meta) * 100, 1) : 0.0,
+            'realizado' => $realizado,
+            'percentual' => $meta > 0 ? round(($realizado / $meta) * 100, 1) : 0.0,
+            'tipo' => $tipo,
         ];
+    }
+
+    /**
+     * Resolve `null` (empresa inteira) na lista de códigos ativos do ranking; devolve o
+     * que veio, intacto, para qualquer escopo já explícito.
+     *
+     * ⚠️ É público porque quem monta um bloco com VÁRIAS agregações no mesmo escopo deve
+     * resolver UMA vez e passar o resultado adiante. Cada resolução custa 6 queries (roles
+     * do spatie + perfis), e o gauge do Painel faz quatro agregações — resolver dentro de
+     * cada uma multiplicava esse custo por quatro, sem mudar o resultado.
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return list<string>
+     */
+    public function codigosDoEscopo(?array $codVendedores): array
+    {
+        if ($codVendedores !== null) {
+            return array_values($codVendedores);
+        }
+
+        return $this->usuariosDoEscopo(null)
+            ->pluck('vendedorPerfil.cod_vendedor')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**
@@ -102,8 +146,8 @@ class MetaRankingResolver
 
         $metasFat = $this->metasPorCodigo($codigos, $ano, $mesInicio, $mesFim, 'faturamento');
         $metasVenda = $this->metasPorCodigo($codigos, $ano, $mesInicio, $mesFim, 'venda');
-        $fatRealizado = $this->faturamentoPorCodigo($codigos, $inicio, $fim);
-        $vendaRealizado = $this->vendaPorCodigo($codigos, $inicio, $fim);
+        $fatRealizado = $this->realizadoPorCodigo('faturamento', $codigos, $inicio, $fim);
+        $vendaRealizado = $this->realizadoPorCodigo('venda', $codigos, $inicio, $fim);
 
         $linhas = $usuarios->map(function (User $u) use ($metasFat, $metasVenda, $fatRealizado, $vendaRealizado) {
             $cod = $u->vendedorPerfil->cod_vendedor;
@@ -261,7 +305,7 @@ class MetaRankingResolver
          * nem na linha, nem no total.
          *
          * ⚠️ EFEITO COLATERAL VISÍVEL, e é a correção, não um acidente: o gauge de meta da
-         * EMPRESA INTEIRA (metaVsFaturamento com escopo null) deriva a lista daqui, então
+         * EMPRESA INTEIRA (metaVsRealizado com escopo null) deriva a lista daqui, então
          * o número do admin no Painel MUDA — passa a somar as metas de supervisor que
          * antes ficavam de fora.
          */
@@ -301,18 +345,25 @@ class MetaRankingResolver
     }
 
     /**
+     * Realizado por código, no tipo pedido.
+     *
+     * ⚠️ Substituiu `faturamentoPorCodigo()` + `vendaPorCodigo()`, que eram o MESMO
+     * código com outra tabela e outra coluna de data. Com as duas cópias, "qual é a fonte
+     * do realizado de venda" tinha duas respostas possíveis — e o gauge do Painel virou
+     * uma terceira. Agora a resposta mora só em {@see self::queryRealizado()}.
+     *
      * @param  list<string>  $codigos
      * @return array<string, float>
      */
-    private function faturamentoPorCodigo(array $codigos, string $inicio, string $fim): array
+    private function realizadoPorCodigo(string $tipo, array $codigos, string $inicio, string $fim): array
     {
         if ($codigos === [] || $fim < $inicio) {
             return [];
         }
 
-        return Faturamento::query()
+        return $this->queryRealizado($tipo)
             ->selectRaw('cod_vendedor, SUM(valor_total) as total')
-            ->whereBetween('data_emissao', [$inicio, $fim])
+            ->whereBetween($this->colunaDataDoTipo($tipo), [$inicio, $fim])
             ->whereIn('cod_vendedor', $codigos)
             ->groupBy('cod_vendedor')
             ->pluck('total', 'cod_vendedor')
@@ -321,25 +372,37 @@ class MetaRankingResolver
     }
 
     /**
-     * Pedidos emitidos (toda a tabela) — mesma convenção da Home (data_pedido).
+     * A ÚNICA definição de "de onde vem o realizado de cada tipo de meta".
      *
-     * @param  list<string>  $codigos
-     * @return array<string, float>
+     * venda       → `pedidos` (todo pedido emitido, aberto ou faturado)
+     * faturamento → `faturamentos` (nota emitida)
+     *
+     * Venda NÃO é subconjunto do faturamento: é o que foi vendido, tenha virado nota ou
+     * não. Por isso as duas séries podem se cruzar no gráfico e o realizado de venda pode
+     * superar o de faturamento no mesmo mês.
      */
-    private function vendaPorCodigo(array $codigos, string $inicio, string $fim): array
+    private function queryRealizado(string $tipo): Builder
     {
-        if ($codigos === [] || $fim < $inicio) {
-            return [];
-        }
+        $this->garantirTipo($tipo);
 
-        return Pedido::query()
-            ->selectRaw('cod_vendedor, SUM(valor_total) as total')
-            ->whereBetween('data_pedido', [$inicio, $fim])
-            ->whereIn('cod_vendedor', $codigos)
-            ->groupBy('cod_vendedor')
-            ->pluck('total', 'cod_vendedor')
-            ->map(fn ($v) => (float) $v)
-            ->all();
+        return $tipo === 'venda' ? Pedido::query() : Faturamento::query();
+    }
+
+    private function colunaDataDoTipo(string $tipo): string
+    {
+        return $tipo === 'venda' ? 'data_pedido' : 'data_emissao';
+    }
+
+    /**
+     * ⚠️ Explode em vez de cair num default. O tipo vem da aba escolhida no front e
+     * decide QUAL TABELA responde pelo número; um valor desconhecido tratado como
+     * "faturamento" exibiria o realizado errado sob o rótulo certo, sem erro nenhum.
+     */
+    private function garantirTipo(string $tipo): void
+    {
+        if (! in_array($tipo, self::TIPOS, true)) {
+            throw new InvalidArgumentException("Tipo de meta desconhecido: {$tipo}.");
+        }
     }
 
     /** @param array<string, mixed> $linha */

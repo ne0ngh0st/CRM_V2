@@ -25,8 +25,15 @@ final readonly class ChaveEscopo
      *
      * Bumpar aqui invalida tudo de uma vez, sem precisar de flush: as chaves novas
      * simplesmente não colidem com as antigas, e as velhas expiram sozinhas pelo TTL.
+     *
+     * Histórico:
+     *   v1 → v2 (2026-09-04) — `meta-gauge` passou a devolver `{venda, faturamento}` no
+     *   lugar de `{mes, ano}`. Sem o bump, um payload v1 ainda quente seria entregue ao
+     *   front novo, que leria `metaGauge.venda` como `undefined` e quebraria o card no
+     *   navegador — durante os 30 minutos de TTL logo após o deploy, exatamente quando
+     *   ninguém está olhando para o console de quem já estava logado.
      */
-    public const VERSAO = 'v1';
+    public const VERSAO = 'v2';
 
     private const PREFIXO = 'agg';
 

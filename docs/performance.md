@@ -520,6 +520,55 @@ medição favorável.
 (10m40s contra 66s, medido em 2026-08-31). Se o histórico de pedidos for carregado em lote,
 pesar dropar esses índices durante a carga.
 
+## 1.16 🟢 Métrica nova num bloco já cacheado — o custo real é o escopo, não a agregação
+
+O gauge "Performance Comercial" do Painel passou a medir **venda (pedido emitido)** além de
+faturamento (2026-09-04). Isso **dobrou** o número de agregações do bloco `metaGauge`: eram
+duas (meta × faturamento, no mês e no ano), viraram quatro.
+
+A intuição diz que dobrar agregação dobra o custo. Medido, não foi o que aconteceu:
+
+| escopo | antes (só faturamento) | depois (dois tipos) | queries |
+|---|---:|---:|---|
+| empresa (`null`) | 167,8 ms | **149,0 ms** | 20 → 15 |
+| equipe (51 códigos) | 49,2 ms | 57,1 ms | 8 → 9 |
+| vendedor (1 código) | 11,7 ms | 17,7 ms | 8 → 9 |
+
+*Medianas de 15 execuções INTERCALADAS entre as duas versões, no mesmo processo, para
+cancelar deriva da máquina — em dev, sob Docker/WSL2, medições sequenciais de blocos
+diferentes variam 30% entre si e uma comparação "antes, depois" ingênua mede o ruído.*
+
+**Por que o escopo mais caro ficou mais rápido.** Duas economias pagaram a métrica nova:
+
+1. **Resolver o escopo uma vez, não por agregação.** `metaVsRealizado(null)` descobre os
+   códigos ativos com 6 queries de roles/perfis do spatie. Com quatro agregações, resolver
+   por dentro seriam **24 queries só para redescobrir a mesma lista**. Daí
+   `MetaRankingResolver::codigosDoEscopo()` ser público: quem monta um bloco com várias
+   agregações no mesmo escopo resolve uma vez e passa adiante.
+2. **Não somar duas vezes a mesma coisa.** O KPI "Valor no mês" era uma segunda soma de
+   `pedidos.valor_total` na mesma janela e sobre os mesmos códigos que o realizado da aba
+   Venda. Agora reaproveita o valor já calculado, e as duas contagens de pedido (mês e ano)
+   saem de **uma query só** — a janela do mês é sufixo da do ano, então `COUNT(*)` responde
+   o ano e `SUM(data_pedido >= início do mês)` responde o mês, na mesma varredura
+   (`type=range`, `Using index`, mesmo padrão de `Ligacao::somarPorCanal`).
+
+**Venda é barata onde faturamento é cara**, e a diferença é de ordem de grandeza — soma do
+ano no escopo empresa: `pedidos` **24 ms** contra `faturamentos` **660 ms**. São 46 mil
+linhas contra 6,0 milhões, as duas com covering index. Vale lembrar disso antes de recusar
+uma métrica de pedido por medo de custo.
+
+⚠️ **Nada disso está no caminho quente.** O bloco é cacheado por 30 min e pré-aquecido pelo
+job, então o p95 de quem abre o Painel não muda — os números acima são o custo do
+recálculo. A conclusão que interessa é outra: **dobrar o que um bloco cacheado entrega
+costuma custar menos que uma ida a mais ao servidor**, e é por isso que as duas abas do card
+vêm juntas em vez de serem buscadas no clique.
+
+⚠️ **Mudar o FORMATO de um bloco cacheado exige bumpar `ChaveEscopo::VERSAO`.** O payload
+de `metaGauge` deixou de ser `{mes, ano}` e virou `{venda, faturamento}`. Sem o bump, um
+payload antigo ainda quente seria entregue ao front novo durante os 30 min de TTL após o
+deploy — e quebraria o card no navegador de quem já estava logado, que é exatamente onde
+ninguém está olhando o console.
+
 # Parte 2 — O que é BARATO
 
 Ganho alto, esforço baixo. Fazer tudo isto **antes** de considerar máquina maior.

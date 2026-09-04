@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Schema;
  *     table scan .................... 4.074 ms
  *     com covering .....................660 ms   (6,2x)
  *
- *   Soma por vendedor (MetaRankingResolver::metaVsFaturamento)
+ *   Soma por vendedor (MetaRankingResolver::metaVsRealizado / realizadoPorCodigo)
  *     table scan .................... 3.785 ms
  *     com covering .................... 493 ms   (7,7x)
  *
