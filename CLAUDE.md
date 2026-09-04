@@ -1309,15 +1309,25 @@ Suíte inteira verde: **346 testes**.
   não existe. **Cadastrar pelo `/metas`** (campo "Meta venda / pedidos emitidos (R$)",
   admin ou diretor) — não há como o sistema distinguir seed de meta real sozinho. As metas
   de faturamento estão melhores mas também só cobrem ago-dez.
-- 🔴 **Sincronização de dados parada desde 2026-08-10.** `faturamentos` vai até
-  **04/08/2026** e `pedidos` até **05/08/2026**; `data_sync_status` marca a última carga em
-  10/08. Consequência visível hoje: a janela do mês corrente (D-1) não tem nenhuma linha, e
-  o gauge mostra **realizado zero e 0% nas duas abas** para todo mundo — não é bug do card.
-  É a mesma pendência do import automático travado no Adriano. Enquanto não voltar, todo KPI
-  de mês corrente do sistema está zerado.
-- **Carregar o histórico de pedidos emitidos.** É o que falta para a aba Venda do painel
-  comparar ano vs. ano de verdade — hoje 2025 inteiro tem 67 pedidos e o card declara isso
-  na tela. O material existe no legado (`pedidos_status`, 407.604 linhas). ⚠️ Carga
+- ~~🔴 **Sincronização de dados parada desde 2026-08-10.**~~ **Resolvida em 2026-09-04.**
+  O diagnóstico da linha antiga ("import automático travado no Adriano") estava errado: os
+  importadores `totvs:import-*` e a ponte S3 já existiam e estavam deployados nos dois nós,
+  e os CSVs estavam no bucket desde 03/09 — faltava `TOTVS_RELATORIOS_DIR` no `.env`, a
+  pasta `storage/app/totvs`, e **qualquer agendamento chamando aquilo**. Hoje `faturamentos`
+  vai até 02/09 (6.003.030 linhas) e `pedidos` até 02/09 (46.237, itens 606.043), e
+  `totvs:atualizar` roda de hora em hora no cron da app-2. Detalhe completo em
+  `docs/importacao-dados-legado.md` §10.
+  - ⚠️ **A lição que fica: dado velho não acende luz vermelha.** Os 12 alarmes ficaram
+    verdes o mês inteiro — CPU, ALB e 5xx não sabem que a última nota fiscal é de trinta
+    dias atrás. Mesmo formato da fila parada de 29/08 e da badge "0 online" de 31/08. Não
+    existe alarme de frescor de dado neste sistema; se um número precisa estar fresco,
+    alguém tem que medir a idade dele. **Vale criar essa métrica** (é o mesmo caminho do
+    `metricas:publicar`, que já publica idade do aquecimento de cache).
+- **Carregar o histórico de pedidos emitidos** — **parcialmente feito em 2026-09-04**:
+  maio a setembro/2026 entraram (15.523 → 46.237 pedidos). Falta o que vem ANTES de maio,
+  que é o necessário para a aba Venda do painel comparar ano vs. ano — 2025 inteiro
+  continua com 67 pedidos e o card declara isso na tela. O material existe no legado
+  (`pedidos_status`, 407.604 linhas). ⚠️ Carga
   histórica **antes** de criar índice, nunca depois (a lição de 2026-08-31 nos faturamentos,
   10m40s contra 66s) — os covering index de `pedidos` já estão criados, então pesar se vale
   dropá-los durante a carga.

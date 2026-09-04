@@ -96,3 +96,31 @@ Schedule::job(new PromoverCapturasWpPendentesJob)
 // Envelope cru é longText e a tabela nunca para de crescer — mesmo motivo do
 // expurgo de notificações. Também é o que apaga o lead de teste depois de 24h.
 Schedule::job(new ExpurgarCapturasWpJob)->dailyAt('03:40')->onOneServer();
+
+/*
+ * Atualização dos dados do TOTVS (clientes, faturamento, pedidos).
+ *
+ * O Tony gera os relatórios no TOTVS e sobe com `infra/enviar-relatorios-totvs.sh`;
+ * daqui para frente o resto é automático. Antes de 2026-09-04 não era: os importadores
+ * existiam e estavam deployados, mas nada os chamava — a produção ficou **um mês** com
+ * faturamento parado em 04/08 sem que nenhum alarme dissesse nada, porque do ponto de
+ * vista da AWS estava tudo verde. Dado velho não acende luz vermelha; é preciso agendar.
+ *
+ * ⚠️ DE HORA EM HORA, e não uma vez por dia, porque o custo de uma rodada sem novidade é
+ * um ListObjects no S3 mais um `stat` por arquivo — o `totvs:atualizar` só importa quando
+ * a impressão digital do diretório muda. Diário faria o dado do Tony esperar até a
+ * madrugada seguinte sem nenhuma economia real.
+ *
+ * ⚠️ Se a rodada pegar o upload pela metade (são 10 arquivos, ~40 s), ela importa um
+ * conjunto misto — um relatório novo ao lado de um velho. Não corrompe (todo importador
+ * é idempotente e cada um mexe só na própria faixa), e a rodada seguinte completa. Foi
+ * aceito em vez de inventar detecção de upload estável.
+ *
+ * `withoutOverlapping(30)`: a carga completa leva ~2 min, mas uma reimportação de todos
+ * os meses de pedidos chega perto de 10 — duas rodadas simultâneas disputariam o RDS.
+ */
+Schedule::command(\App\Console\Commands\AtualizarDadosTotvs::class)
+    ->hourly()
+    ->onOneServer()
+    ->withoutOverlapping(30)
+    ->name('atualizar-dados-totvs');

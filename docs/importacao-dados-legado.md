@@ -538,3 +538,135 @@ import. Performance testada (1.885 linhas — listagem com itens 21ms, soma de a
 
 **Com isso, `orcamentos` deixa de ser mock também** — hoje só a criação de orçamento novo
 continua 100% no fluxo normal da tela do v2 (não recebe mais import depois desta rodada).
+
+---
+
+## 10. O fluxo em produção: S3 → EC2 → RDS (fechado em 2026-09-04)
+
+Até esta data a sincronização **não existia em produção**. Os importadores `totvs:import-*`
+e a ponte `infra/enviar-relatorios-totvs.sh` → S3 → `totvs:sincronizar-s3` já estavam
+escritos e deployados nos dois nós, e os CSVs estavam no bucket desde 03/09 — mas
+`TOTVS_RELATORIOS_DIR` nunca tinha sido posto no `.env`, `storage/app/totvs` não existia,
+e nenhum agendamento chamava nada. Resultado: **produção passou um mês** com faturamento
+parado em 04/08 e pedidos em 05/08.
+
+> ⚠️ **A lição não é "faltou um passo", é que dado velho não acende luz vermelha.** Os 12
+> alarmes do CloudWatch ficaram verdes o mês inteiro — CPU, memória, ALB e 5xx não têm
+> como saber que a última nota fiscal é de trinta dias atrás. É o mesmo formato do
+> incidente de 29/08 (fila parada seis horas com tudo verde) e da badge "0 online agora"
+> de 31/08: **o defeito silencioso é a regra neste sistema, não a exceção.** Se um número
+> precisa estar fresco, alguém tem que medir a idade dele.
+
+### 10.1 Como ficou
+
+```
+TOTVS ──(Tony exporta)──> RELATORIOS TOTVS\      (OneDrive, máquina do Tony)
+                              │
+                              │  bash infra/enviar-relatorios-totvs.sh
+                              ▼
+                          s3://crm-v2-arquivos-.../totvs/
+                              │
+                              │  php artisan totvs:atualizar   (cron horário, app-2)
+                              ▼
+                    storage/app/totvs/ ──> os 4 importadores ──> RDS
+```
+
+`TOTVS_RELATORIOS_DIR=/var/www/crm/storage/app/totvs` está no `.env` dos **dois** nós
+(para não haver surpresa se o papel de scheduler mudar de máquina), mas hoje só a **app-2**
+tem o cron do `schedule:run` — é lá que os relatórios são baixados e os imports rodam.
+
+### 10.2 `totvs:atualizar` — o comando que o cron chama
+
+Agendado **de hora em hora** em `routes/console.php`. Ele sincroniza do S3 e só importa se
+a impressão digital do diretório (caminho + tamanho + mtime de cada relatório) mudou desde
+a **última importação bem-sucedida** — marcador em `storage/app/totvs/.ultima-importacao`.
+
+⚠️ **A ordem dos quatro imports é regra de negócio, não lista.** Está num lugar só, dentro
+do comando, exatamente porque valeria também no SSH manual e em qualquer runbook (Regra de
+ouro nº 8):
+
+| # | Import | Por que nessa posição |
+|---|---|---|
+| 1 | `totvs:import-clientes` | alimenta o `ClientesLookup` dos dois imports de pedido. Medido em 04/09: **109 pedidos órfãos** quando o 232 rodou antes; **zero** depois de importar os 916 clientes novos primeiro |
+| 2 | `totvs:import-faturamento` | independente; posição livre |
+| 3 | `totvs:import-pedidos-emitidos` | o 232 marca `data_faturamento` |
+| 4 | `totvs:import-pedidos-abertos` | **por último.** O 200 é o retrato de "aberto AGORA" e prevalece no empate (faturamento parcial). Invertido, o 232 marcaria faturado por cima e o pedido sumiria da tela de pendentes |
+
+⚠️ **Falha no meio aborta a corrente e NÃO grava o marcador** — a rodada seguinte tenta de
+novo. Gravar o marcador cedo esconderia a falha e congelaria o dado em silêncio, que é
+exatamente o defeito que este comando existe para não repetir.
+
+⚠️ **Comparar contra a última importação bem-sucedida, não contra "antes/depois do
+download"**: com a comparação ingênua, um import que falha faz a rodada seguinte ver
+"nada mudou no S3" e pular para sempre.
+
+### 10.3 A carga de recuperação (04/09) e o buraco de agosto
+
+Ligada a ponta de produção, apareceu um vão: o `FAT - SQL.csv` cobria só **01-02/09** e o
+banco parava em **04/08**. Importar só ele deixaria quase um mês vazio no meio da série —
+pior que o atraso uniforme, porque todo KPI de agosto passaria a mostrar número parcial
+com cara de real.
+
+Decisão do Tony: buscar agosto no **MySQL de produção do PALMA legado (KingHost)**, que é
+a mesma fonte de onde os 2026 já gravados vieram — não introduz série mista. Dali para
+frente, o fluxo de CSV mensal assume.
+
+**149.751 linhas** (agosto 139.540 + setembro 10.211) importadas com
+`legado:import-faturamento-arquivo` **sem `--ano`** (nesse modo ele só acrescenta; a faixa
+estava comprovadamente com zero linhas). Resultado: `faturamentos` foi de 5.853.279 para
+**6.003.030**, série contínua de 2018-01-15 a 2026-09-02.
+
+**Duas confirmações cruzadas que valeram mais que qualquer teste:**
+- setembro deu **10.211 linhas no KingHost e 10.211 no `FAT - SQL.csv`** — fontes
+  independentes batendo;
+- rodar o `totvs:import-faturamento` depois deixou o total **idêntico** (6.003.030),
+  provando que o merge por recorte é idempotente e que o fluxo contínuo funciona ponta a
+  ponta. Foi de propósito: melhor descobrir isso agora do que no mês que vem.
+
+Pedidos na mesma rodada: 15.523 → **46.237**, itens 186.497 → **606.043**, zero pedidos
+sem item, cobertura contínua de maio a setembro.
+
+### 10.4 ⚠️ Exportar texto do KingHost: sempre `HEX()`
+
+As `varchar` de `FATURAMENTO` no KingHost são **`latin1_swedish_ci` guardando bytes
+UTF-8** (o legado sempre conectou com `charset=utf8` e nunca converteu nada). Isso põe
+qualquer cliente num palpite, e ele erra por dois caminhos diferentes:
+
+- `CAST(col AS CHAR)` faz o **próprio MariaDB** converter latin1→utf8 e **dobrar** cada
+  byte: `Nº` (`C2 BA`) vira `NÂº` (`C3 82 C2 BA`);
+- sem `CAST`, o **driver** decodifica como Latin-1 — mesmo estrago.
+
+A saída é `HEX(col)` para todo texto: o servidor devolve ASCII descrevendo os bytes
+gravados, sem passar por charset nenhum, e a conversão acontece no cliente, uma vez e de
+forma explícita. `CAST(... AS CHAR)` continua **necessário nos numéricos**, por outro
+motivo: sem ele o cliente formata o decimal no locale pt-BR (vírgula) e o `(float)` do PHP
+leria `"218,8"` como `218`.
+
+⚠️ **Testar a coluna isolada engana** — num `SELECT` de uma coluna só o driver acertou nos
+três charsets testados, e só errou dentro do export real. E **a renderização do terminal
+mente nos dois sentidos**: a verificação que presta é contar o par de bytes `C3 82` no
+arquivo gerado, que tem que dar zero.
+
+Acesso remoto do KingHost é liberado **por IP**: o do Tony passa, os das EC2 não. A
+diferença entre os erros é o diagnóstico — **1045** ("access denied ... using password")
+é grant inexistente para aquele IP; **1044** ("access denied ... to database X") é
+credencial boa e nome de banco errado. O banco é `autopel01`.
+
+⚠️ A credencial do KingHost entra no `.env` **só durante a carga** e sai depois (é o que
+`config/legado.php` já mandava). Em 04/09 nem chegou a ser usada em produção: o import foi
+por arquivo, e a exportação rodou da máquina do Tony.
+
+### 10.5 O que continua fora do fluxo automático
+
+- **`produtos`** — o `PRODUTOS - SQL.xlsx` está vazio e o Tony mescla dois CSVs à mão;
+  enquanto a query de origem não virar uma só, continua vindo do `legado:import-produtos`
+  (espelho do v1). Ver seção 4.4.
+- **`leads`** (`base_marco - SQL.csv`) — o arquivo é sincronizado do S3 mas o import não
+  entrou na corrente do `totvs:atualizar`: o `legado:import-leads` apaga e reinsere as
+  linhas `origem='sistema'`, então os ids mudam a cada rodada e observação/agendamento
+  religariam no lead errado. Precisa de chave estável antes de automatizar — é a mesma
+  razão pela qual `leads` está fora do `infra/sincronizar-dados.sh`.
+- **`CSV/META VENDA - SQL.csv`** — convenção antiga do relatório 232, hoje duplicata de
+  agosto+setembro. A cópia que está no S3 tem o formato velho (23 colunas) e é **pulada
+  sozinha** pelo `exigirColunas`; uma regerada com as 32 colunas atuais entraria
+  redundante. Apagar da pasta.
