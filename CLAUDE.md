@@ -1315,8 +1315,10 @@ Suíte inteira verde: **346 testes**.
   e os CSVs estavam no bucket desde 03/09 — faltava `TOTVS_RELATORIOS_DIR` no `.env`, a
   pasta `storage/app/totvs`, e **qualquer agendamento chamando aquilo**. Hoje `faturamentos`
   vai até 02/09 (6.003.030 linhas) e `pedidos` até 02/09 (46.237, itens 606.043), e
-  `totvs:atualizar` roda de hora em hora no cron da app-2. Detalhe completo em
-  `docs/importacao-dados-legado.md` §10.
+  `totvs:atualizar` roda de hora em hora no cron da app-2, e existe a tela admin-only
+  **`/atualizacoes`** (menu do usuário) com idade do dado, inventário do S3, histórico das
+  rodadas e botão de disparo. Detalhe completo em `docs/importacao-dados-legado.md` §10
+  (a tela é a §10.6).
   - ⚠️ **A lição que fica: dado velho não acende luz vermelha.** Os 12 alarmes ficaram
     verdes o mês inteiro — CPU, ALB e 5xx não sabem que a última nota fiscal é de trinta
     dias atrás. Mesmo formato da fila parada de 29/08 e da badge "0 online" de 31/08. Não
