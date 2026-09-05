@@ -1313,22 +1313,29 @@ Suíte inteira verde: **346 testes**.
   O diagnóstico da linha antiga ("import automático travado no Adriano") estava errado: os
   importadores `totvs:import-*` e a ponte S3 já existiam e estavam deployados nos dois nós,
   e os CSVs estavam no bucket desde 03/09 — faltava `TOTVS_RELATORIOS_DIR` no `.env`, a
-  pasta `storage/app/totvs`, e **qualquer agendamento chamando aquilo**. Hoje `faturamentos`
-  vai até 02/09 (6.003.030 linhas) e `pedidos` até 02/09 (46.237, itens 606.043), e
-  `totvs:atualizar` roda de hora em hora no cron da app-2, e existe a tela admin-only
-  **`/atualizacoes`** (menu do usuário) com idade do dado, inventário do S3, histórico das
-  rodadas e botão de disparo. Detalhe completo em `docs/importacao-dados-legado.md` §10
-  (a tela é a §10.6).
+  pasta `storage/app/totvs`, e **qualquer agendamento chamando aquilo**. Hoje
+  `totvs:atualizar` roda de hora em hora no cron da app-2.
+  - ⚠️ **Não perguntar "até que data está o dado" para este arquivo — ele envelhece.**
+    A resposta viva está na tela admin-only **`/atualizacoes`** (menu do usuário): idade
+    do dado, inventário do S3, histórico das rodadas e botão de disparo. Qualquer número
+    escrito aqui estará errado no dia seguinte.
+  - **O fluxo do Tony é UM passo: gerar o relatório no TOTVS e salvar na pasta.** O envio
+    para o S3 é automático (vigia na Inicialização do Windows, a cada 5 min) e o import
+    também (cron horário). Detalhe completo em `docs/importacao-dados-legado.md` §10 — a
+    tela é a §10.6, a automação do envio é a §10.7.
+  - ⚠️ **`FAT` e `Pedidos emitidos` são RECORTE**: o import apaga só a faixa de datas que
+    está dentro do arquivo e repõe. Gerar sempre o **mês corrente inteiro**, não só os
+    dias novos — assim uma falha de um dia se conserta sozinha na subida seguinte.
   - ⚠️ **A lição que fica: dado velho não acende luz vermelha.** Os 12 alarmes ficaram
     verdes o mês inteiro — CPU, ALB e 5xx não sabem que a última nota fiscal é de trinta
     dias atrás. Mesmo formato da fila parada de 29/08 e da badge "0 online" de 31/08. Não
     existe alarme de frescor de dado neste sistema; se um número precisa estar fresco,
     alguém tem que medir a idade dele. **Vale criar essa métrica** (é o mesmo caminho do
     `metricas:publicar`, que já publica idade do aquecimento de cache).
-- **Carregar o histórico de pedidos emitidos** — **parcialmente feito em 2026-09-04**:
-  maio a setembro/2026 entraram (15.523 → 46.237 pedidos). Falta o que vem ANTES de maio,
-  que é o necessário para a aba Venda do painel comparar ano vs. ano — 2025 inteiro
-  continua com 67 pedidos e o card declara isso na tela. O material existe no legado
+- **Carregar o histórico de pedidos emitidos** — **março a setembro/2026 já entraram**
+  (04 e 05/09; de 15.523 para 69.454 pedidos e 905.228 itens). Falta **janeiro e
+  fevereiro/2026** e **2025 inteiro**, este último o que a aba Venda do painel precisa para
+  comparar ano vs. ano — 2025 segue com 67 pedidos e o card declara isso na tela. O material existe no legado
   (`pedidos_status`, 407.604 linhas). ⚠️ Carga
   histórica **antes** de criar índice, nunca depois (a lição de 2026-08-31 nos faturamentos,
   10m40s contra 66s) — os covering index de `pedidos` já estão criados, então pesar se vale
