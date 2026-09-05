@@ -3,11 +3,21 @@
     Inicializacao do Windows (o vigia sobe junto com a sessao e repete de N em N
     minutos).
 
-    ⚠️ ESTE E O CAMINHO QUE FUNCIONA NESTA MAQUINA. A tarefa agendada
-    (infra/instalar-tarefa-upload.ps1) NAO funciona aqui: o Agendador registra,
-    dispara, cria o processo e reporta "codigo de retorno 0" -- sem executar a acao.
-    Verificado em 2026-09-05 ate com `cmd.exe /c echo ok > arquivo`. Ver o cabecalho
-    de infra/vigiar-relatorios-totvs.ps1.
+    ⚠️ NAO USE ISTO NA MAQUINA DO TONY -- NAO FUNCIONA LA. Testado em 2026-09-05 com
+    um reboot de verdade: o .vbs e instalado no caminho certo (sem redirecionamento de
+    pasta, sem estar desabilitado em StartupApproved) e o Explorer simplesmente NAO o
+    executa no logon -- 5,5 min depois do boot, nenhum processo e nenhuma linha no log.
+    Chamado a mao, funciona. Suspeita nao confirmada: .vbs na Inicializacao e a tecnica
+    classica de persistencia de malware, e EDR corporativo costuma bloquear isso no
+    logon permitindo a execucao manual.
+
+    A tarefa agendada (infra/instalar-tarefa-upload.ps1) tambem nao funciona la, por
+    outro motivo: reporta "codigo de retorno 0" sem executar a acao.
+
+    O que se usa hoje e o duplo clique em "Enviar relatorios TOTVS.cmd". Este script
+    continua aqui porque funciona em maquina sem essa politica -- e porque
+    `vigiar-relatorios-totvs.ps1`, que ele instala, funciona normalmente quando lancado
+    a mao. Ver docs/importacao-dados-legado.md secao 10.7.
 
     Uso (PowerShell normal, sem administrador):
         powershell -ExecutionPolicy Bypass -File "infra\instalar-inicializacao.ps1"
