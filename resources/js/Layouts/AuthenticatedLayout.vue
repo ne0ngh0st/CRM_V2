@@ -16,6 +16,9 @@ const isGestor = computed(() =>
     (page.props.auth?.roles ?? []).some((r) => ['admin', 'diretor', 'supervisor'].includes(r)),
 );
 const isAssistente = computed(() => (page.props.auth?.roles ?? []).includes('assistente'));
+// A tela de atualizacao de dados mostra estado de infraestrutura e dispara carga pesada
+// no banco -- so admin, igual a materia-prima de etiqueta e ao CRUD do Catalogo de Facas.
+const isAdmin = computed(() => (page.props.auth?.roles ?? []).includes('admin'));
 const visaoGestorAtiva = computed(() =>
     route().current('equipe.*')
     || route().current('visao-gestor.*')
@@ -287,6 +290,9 @@ const catalogoAtivo = computed(() =>
                                     <template #content>
                                         <DropdownLink :href="route('profile.edit')">
                                             Perfil
+                                        </DropdownLink>
+                                        <DropdownLink v-if="isAdmin" :href="route('atualizacoes.index')">
+                                            Atualização de dados
                                         </DropdownLink>
                                         <DropdownLink
                                             :href="route('logout')"

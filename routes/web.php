@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AtualizacaoDadosController;
 use App\Http\Controllers\CadastroController;
 use App\Http\Controllers\CarteiraController;
 use App\Http\Controllers\CatalogoFacaController;
@@ -148,6 +149,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/metas', [MetaController::class, 'index'])->name('metas.index');
     Route::get('/metas/exportar', [MetaController::class, 'exportar'])->name('metas.exportar');
     Route::patch('/metas', [MetaController::class, 'update'])->name('metas.update');
+
+    // Atualizacao de dados do TOTVS. Admin-only checado no controller, como no
+    // EtiquetaMateriaPrimaController e no CRUD do Catalogo de Facas.
+    Route::get('/atualizacoes', [AtualizacaoDadosController::class, 'index'])->name('atualizacoes.index');
+    Route::post('/atualizacoes', [AtualizacaoDadosController::class, 'disparar'])->name('atualizacoes.disparar');
 });
 
 require __DIR__.'/auth.php';

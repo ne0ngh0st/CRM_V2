@@ -670,3 +670,57 @@ por arquivo, e a exportação rodou da máquina do Tony.
   agosto+setembro. A cópia que está no S3 tem o formato velho (23 colunas) e é **pulada
   sozinha** pelo `exigirColunas`; uma regerada com as 32 colunas atuais entraria
   redundante. Apagar da pasta.
+
+### 10.6 A tela `/atualizacoes` (2026-09-04)
+
+Admin-only, no menu do usuário. Responde sem SSH as três perguntas que só o terminal
+respondia: **o dado está velho?**, **o que eu subi chegou no S3?** e **a última rodada
+funcionou?** — mais um botão para não esperar a hora cheia.
+
+| Bloco | Fonte |
+|---|---|
+| Idade do dado (data mais recente + atraso + linhas) | `MAX()` em `faturamentos`/`pedidos` |
+| Relatórios enviados (arquivo, tamanho, quando subiu) | `listContents` do S3 |
+| Rodadas (status, origem, quem, duração, saída de cada import) | `totvs_importacoes` |
+
+⚠️ **A TELA NÃO LÊ O DISCO.** Os relatórios vivem em `storage/app/totvs` da **app-2**, e a
+página é servida pelo ALB, caindo em qualquer um dos dois nós. Tudo que ela mostra vem do
+banco ou do S3 — as duas fontes que os dois nós enxergam igual. Ler o diretório local
+daria "nenhum relatório" de forma **intermitente**, conforme o nó sorteado, que é o tipo de
+defeito que ninguém consegue reproduzir.
+
+⚠️ **O botão enfileira; quem trabalha é o worker.** Não é só latência (a corrente leva ~2
+min contra o orçamento de 500 ms da Regra nº 9): é correção. O worker roda na app-2, que é
+onde os arquivos estão; no request cairia no nó que o ALB escolhesse.
+
+⚠️ **A linha `executando` nasce no CONTROLLER, não no worker.** Defeito real encontrado só
+no navegador: com a linha nascendo no job, o redirect voltava com `emAndamento = false`, o
+acompanhamento automático nunca começava e a tela dizia "nenhuma rodada registrada" logo
+depois do clique — como se o botão não tivesse feito nada. Nenhum teste de servidor pegaria
+isso sozinho. De quebra, o guarda de "já existe uma em andamento" passou a valer antes de o
+worker pegar o job.
+
+⚠️ **Rodada `executando` há mais de 30 min é mostrada como "Interrompida" e libera o
+botão.** Sem isso, um worker morto no meio (aconteceu em 28/08 com
+`ProcessTimedOutException`) deixaria a linha eterna e o botão travado para sempre — o
+usuário ficaria sem saída pela interface, o oposto do que a tela existe para fazer.
+
+⚠️ **`sem_mudanca` é resultado NORMAL, não falha.** É o que a rodada de hora em hora
+devolve quase sempre. Pintar de vermelho treinaria qualquer um a ignorar a tela.
+
+⚠️ **A prop de aviso chama-se `aviso`, não `flash`** — `flash` já é compartilhada pelo
+`HandleInertiaRequests` e no Inertia a prop de página sobrescreve a compartilhada. Travado
+por teste.
+
+Falha ao listar o S3 **não derruba a página**: o inventário mostra o erro e os outros dois
+blocos continuam respondendo, que é o que mais importa quando algo está errado.
+
+**Testes:** `tests/Feature/AtualizacaoDadosTest.php` (20 casos). Os dois mais importantes —
+"falha no meio interrompe a corrente e não grava o marcador" e "depois de falhar a rodada
+seguinte tenta de novo" — foram **verificados por mutação**: gravar o marcador antes da
+corrente, ou remover a interrupção, faz os dois falharem.
+
+⚠️ **Armadilha de teste que custou uma rodada:** um segundo `Artisan::shouldReceive('call')`
+no mesmo teste **acumula** expectativas em vez de substituir a anterior. Os testes de fase
+única passavam e exatamente os quatro de duas fases falhavam. O helper agora é chamado uma
+vez por teste, com `reiniciar()` entre as fases.
