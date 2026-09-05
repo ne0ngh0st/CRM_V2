@@ -724,3 +724,46 @@ corrente, ou remover a interrupção, faz os dois falharem.
 no mesmo teste **acumula** expectativas em vez de substituir a anterior. Os testes de fase
 única passavam e exatamente os quatro de duas fases falhavam. O helper agora é chamado uma
 vez por teste, com `reiniciar()` entre as fases.
+
+### 10.7 Enviar os relatórios sem terminal (2026-09-05)
+
+⚠️ **O upload NÃO pode ser um botão no CRM, e isso é arquitetura, não preguiça.** Os
+relatórios vivem no OneDrive da máquina do Tony e o CRM roda na AWS — nenhum servidor
+alcança aquela pasta. É justamente por isso que a ponte é o S3. O botão "Atualizar agora"
+da tela `/atualizacoes` cuida da outra metade (S3 → RDS), que essa mora no servidor.
+
+Três formas de disparar a metade local, da mais manual para a mais automática:
+
+| Como | Arquivo |
+|---|---|
+| Terminal | `infra/enviar-relatorios-totvs.sh` (Git Bash) |
+| Duplo clique | `infra/Enviar relatorios TOTVS.cmd` |
+| Sozinho, a cada N minutos | `infra/instalar-tarefa-upload.ps1` (tarefa agendada) |
+
+As duas últimas são cascas finas sobre **`infra/enviar-relatorios-totvs.ps1`** — a lógica
+(filtros, espera, log) mora num lugar só. A versão `.sh` continua existindo e é a
+referência dos filtros; se um mudar, mudar o outro.
+
+⚠️ **`$MinutosParaAssentar` (3 min) existe por causa da automação, e não deve ir a zero.**
+Um relatório do TOTVS leva minutos sendo escrito no disco. Se o upload pegar o arquivo
+pela metade, o S3 fica com um CSV truncado — e o importador do outro lado **não tem como
+saber**: lê as linhas que existem e grava um mês incompleto, sem erro nenhum. Pior, a
+impressão digital já terá mudado, então a rodada seguinte considera o trabalho feito e nem
+tenta de novo. O risco não existe quando alguém roda na mão (só roda depois de gerar);
+ele **nasce** da automação. Arquivo tocado há menos que isso entra como `--exclude` e sobe
+no ciclo seguinte.
+
+⚠️ **A tarefa agendada roda como o USUÁRIO, não como SYSTEM** (por isso não pede
+administrador). Como SYSTEM ela não teria o perfil do AWS CLI (`crm-v2`) nem enxergaria a
+pasta do OneDrive — falharia toda vez, em silêncio.
+
+⚠️ **`MultipleInstances IgnoreNew`**: se a rodada anterior ainda está subindo 200 MB, a
+seguinte é descartada em vez de empilhar dois syncs sobre os mesmos arquivos.
+
+Log em `%LOCALAPPDATA%\CRM_V2\upload-totvs.log`, rotacionado em 2 MB — numa tarefa
+agendada a saída não vai para lugar nenhum, e sem teto o arquivo cresceria para sempre
+(mesmo motivo dos expurgos do resto do sistema).
+
+**Com a tarefa instalada, o fluxo inteiro vira um passo:** gerar o relatório no TOTVS e
+salvar na pasta. A tarefa sobe para o S3 em até N minutos e o cron da app-2 importa na
+virada da hora.
