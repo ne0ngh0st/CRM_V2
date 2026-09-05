@@ -82,11 +82,23 @@ return [
                 // Convenção atual (desde 03/09): pasta própria, mês no nome.
                 'Pedidos emitidos/Pedidos emitidos*SQL.csv',
                 'Pedidos emitidos/pedidos_emitidos*SQL.csv',
-                // Convenções anteriores, mantidas como fallback — não fazem mal se
-                // nunca mais aparecer nada com esse nome.
+                // Convenções anteriores, mantidas como fallback — não fazem mal
+                // enquanto nada com esse nome existir na pasta.
                 'CSV/pedidos_emitidos - SQL.csv',
                 'CSV/Pedidos emitidos - SQL.csv',
-                'CSV/META VENDA - SQL.csv',
+
+                // ⚠️ `CSV/META VENDA - SQL.csv` FOI REMOVIDO desta lista em 2026-09-05, e
+                // não deve voltar. O nome antigo continua sendo gerado de vez em quando e
+                // o arquivo cobre agosto+setembro — exatamente o mesmo período dos
+                // `Pedidos emitidos - 082026/092026` da pasta nova. Como este domínio
+                // processa TODOS os arquivos que casarem (não só o mais recente), mantê-lo
+                // significava reler e regravar ~170 mil linhas a cada importação, sem
+                // acrescentar um pedido sequer.
+                //
+                // Enquanto ele teve o formato velho de 23 colunas, o `exigirColunas` o
+                // pulava sozinho e ninguém notava; regerado com as 32 colunas atuais ele
+                // passaria a ser importado de verdade. Tirar daqui resolve sem depender de
+                // alguém lembrar de não gerar o arquivo.
             ],
             'rlt' => '232 - CONSULTA DE PEDIDOS EMITIDOS META DE VENDAS',
             'periodo' => 'recorte',

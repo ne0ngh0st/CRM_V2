@@ -50,11 +50,17 @@ echo "==> Origem: $ORIGEM"
 echo "==> Destino: $BUCKET"
 echo ""
 
+# ATENCAO: "META VENDA - SQL.csv" fica de fora desde 2026-09-05. E o nome antigo do
+# relatorio 232 e cobre agosto+setembro -- exatamente o mesmo periodo dos arquivos
+# "Pedidos emitidos - 082026/092026" da pasta nova. Foi removido de config/totvs.php
+# pelo mesmo motivo: ninguem o le mais. Sao ~124 MB por upload que nao acrescentam
+# um pedido sequer.
 aws s3 sync "$ORIGEM" "$BUCKET" $DRY_RUN \
   --exclude "*" \
   --include "CSV/*.csv" \
   --include "Pedidos emitidos/*.csv" \
   --exclude "CSV/etc/*" \
+  --exclude "CSV/META VENDA*" \
   --delete
 
 echo ""
