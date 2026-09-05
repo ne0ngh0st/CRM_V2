@@ -738,7 +738,58 @@ Três formas de disparar a metade local, da mais manual para a mais automática:
 |---|---|
 | Terminal | `infra/enviar-relatorios-totvs.sh` (Git Bash) |
 | Duplo clique | `infra/Enviar relatorios TOTVS.cmd` |
-| Sozinho, a cada N minutos | `infra/instalar-tarefa-upload.ps1` (tarefa agendada) |
+| **Sozinho, a cada N minutos** | **`infra/instalar-inicializacao.ps1`** ← é este que funciona |
+| ~~Tarefa agendada~~ | `infra/instalar-tarefa-upload.ps1` — **não funciona nesta máquina**, ver abaixo |
+
+#### 🔴 O Agendador de Tarefas do Windows reporta sucesso sem executar nada
+
+Descoberto em 2026-09-05, tentando automatizar o upload. Na máquina do Tony (domínio
+AUTOPEL, conta sem administrador) o Agendador **aceita registrar a tarefa, dispara no
+horário, cria o processo, grava no log de eventos "concluída com sucesso, código de
+retorno 0" — e a ação não executa.**
+
+Reduzido ao caso mínimo antes de concluir: uma tarefa rodando
+`C:\Windows\System32\cmd.exe /c echo ok > arquivo.txt` no próprio perfil do usuário
+**não cria o arquivo**, e mesmo assim reporta 0. Não é o script, não é permissão de
+registro (registrar funciona), não é caminho: é política da máquina.
+
+⚠️ **`LastTaskResult = 0` NÃO é prova de que algo aconteceu.** Se a tarefa tivesse sido
+dada como pronta por causa do código 0 — que foi exatamente o que quase aconteceu —, o
+upload teria parado em silêncio e o sintoma apareceria semanas depois como "o CRM está
+com dado velho". É o mesmo formato do mês de sincronização parada (§10) e da fila de
+29/08: **a prova é o efeito colateral, nunca o código de retorno.**
+
+Por isso `instalar-tarefa-upload.ps1` **se auto-verifica**: depois de registrar, ele
+dispara a tarefa e espera o log CRESCER. Se não crescer, remove a tarefa e manda usar a
+inicialização — uma tarefa que mente é pior que nenhuma.
+
+Dois defeitos reais foram corrigidos no caminho, e valem para qualquer tarefa agendada
+futura:
+- **`[TimeSpan]::MaxValue` como `RepetitionDuration` é recusado** (`P99999999DT23H59M59S`,
+  HRESULT 0x80041318). Omitir a duração é o certo: vazia significa "indefinidamente".
+- **`New-ScheduledTaskTrigger -AtLogOn` sem `-User` é system-wide** e dá "Acesso negado"
+  numa conta sem administrador — o erro parece falta de permissão para criar tarefa,
+  quando criar tarefa funciona. Escopado ao próprio usuário, registra normalmente.
+
+#### Como o automático funciona hoje
+
+`infra/instalar-inicializacao.ps1` põe um `.vbs` na pasta de Inicialização que sobe
+`infra/vigiar-relatorios-totvs.ps1` — um laço que chama o envio de N em N minutos.
+
+- **`.vbs` e não `.lnk`/`.cmd`**: é a única forma de subir sem piscar um console preto a
+  cada logon.
+- **Mutex de instância única**: sem ele, cada logon deixaria mais um vigia rodando, todos
+  disparando `aws s3 sync` sobre os mesmos arquivos.
+- **O envio roda como processo FILHO**: uma falha (rede caída, credencial expirada) não
+  derruba o vigia; ele tenta de novo no ciclo seguinte.
+- **O instalador sobe o vigia na hora**, senão a pessoa instalaria e ficaria sem nada
+  rodando até reiniciar — a mesma armadilha do gatilho `-AtLogOn`.
+- ⚠️ **O caminho do repositório fica escrito dentro do `.vbs`**: se a pasta do projeto
+  mudar de lugar, rodar o instalador de novo.
+
+Verificado em 2026-09-05 pelo efeito, não por código de retorno: dois ciclos consecutivos
+com intervalo de 1 min no teste, e o ciclo automático de 5 min da instalação real
+(00:49:45 → 00:54:47), com o log crescendo nas duas vezes.
 
 As duas últimas são cascas finas sobre **`infra/enviar-relatorios-totvs.ps1`** — a lógica
 (filtros, espera, log) mora num lugar só. A versão `.sh` continua existindo e é a

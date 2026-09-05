@@ -58,11 +58,21 @@ $acao = New-ScheduledTaskAction -Execute 'powershell.exe' `
     com 2 min de atraso para nao disputar CPU com o resto que sobe junto com a
     sessao.
 #>
+# ATENCAO: -RepetitionDuration OMITIDO de proposito. No XML do Agendador, Duration
+# vazia significa "repetir indefinidamente", que e o que queremos. A receita comum
+# de usar [TimeSpan]::MaxValue NAO funciona aqui: vira P99999999DT23H59M59S e o
+# Register-ScheduledTask recusa com "valor formatado incorretamente ou fora do
+# intervalo" (HRESULT 0x80041318). Foi o erro real da primeira instalacao.
 $agora = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
-    -RepetitionInterval (New-TimeSpan -Minutes $Minutos) `
-    -RepetitionDuration ([TimeSpan]::MaxValue)
+    -RepetitionInterval (New-TimeSpan -Minutes $Minutos)
 
-$aoLogar = New-ScheduledTaskTrigger -AtLogOn
+# ATENCAO: -User e OBRIGATORIO aqui. `New-ScheduledTaskTrigger -AtLogOn` sem usuario
+# significa "no logon de QUALQUER usuario" -- e isso e system-wide, entao o
+# Register-ScheduledTask devolve "Acesso negado" (0x80070005) numa conta sem
+# administrador. Foi o segundo erro real da instalacao, e ele nao aponta para o
+# gatilho: parece falta de permissao para criar tarefa, quando criar tarefa
+# funciona normalmente. Escopado ao proprio usuario, registra sem admin.
+$aoLogar = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
 $aoLogar.Delay = 'PT2M'
 $aoLogar.Repetition = $agora.Repetition
 
@@ -89,7 +99,48 @@ Register-ScheduledTask -TaskName $Nome -Action $acao -Trigger $gatilho -Settings
     -Description 'Envia os relatorios do TOTVS (RELATORIOS TOTVS) para o S3 do CRM-V2. Ver infra/enviar-relatorios-totvs.ps1.' `
     -Force | Out-Null
 
-Write-Host "Tarefa '$Nome' instalada: a cada $Minutos minuto(s), a partir do logon."
+<#
+    ATENCAO: A INSTALACAO NAO TERMINA AQUI -- ela e VERIFICADA.
+
+    Na maquina do Tony (dominio AUTOPEL, conta sem administrador) o Agendador
+    aceita registrar, dispara no horario, cria o processo e grava no log de eventos
+    "concluida com sucesso, codigo de retorno 0" -- SEM EXECUTAR A ACAO. Testado ate
+    o caso minimo: cmd.exe do System32 escrevendo um arquivo no proprio perfil do
+    usuario nao cria o arquivo, e mesmo assim reporta 0.
+
+    Uma tarefa assim e PIOR que nenhuma: parece instalada, o Windows jura que rodou,
+    e o upload simplesmente para de acontecer em silencio -- o sintoma aparece
+    semanas depois como "o CRM esta com dado velho". Por isso o teste abaixo nao
+    olha codigo de retorno nenhum: olha o EFEITO (o log crescer). Se nao cresceu, a
+    tarefa e removida e o script manda usar infra/instalar-inicializacao.ps1, que e
+    o caminho que funciona aqui.
+#>
+$log = Join-Path $env:LOCALAPPDATA 'CRM_V2\upload-totvs.log'
+$antes = if (Test-Path -LiteralPath $log) { (Get-Item -LiteralPath $log).Length } else { 0 }
+
+Write-Host 'Verificando se a acao realmente executa...'
+Start-ScheduledTask -TaskName $Nome
+$funcionou = $false
+foreach ($i in 1..20) {
+    Start-Sleep -Seconds 3
+    $agora = if (Test-Path -LiteralPath $log) { (Get-Item -LiteralPath $log).Length } else { 0 }
+    if ($agora -gt $antes) { $funcionou = $true; break }
+}
+
+if (-not $funcionou) {
+    Unregister-ScheduledTask -TaskName $Nome -Confirm:$false
+    Write-Host ''
+    Write-Host 'FALHOU: o Agendador aceitou a tarefa mas a acao nao produziu efeito nenhum'
+    Write-Host '(o log nao cresceu). Isto e politica desta maquina, nao erro do script --'
+    Write-Host 'o Windows reporta sucesso mesmo assim, entao a tarefa foi REMOVIDA para nao'
+    Write-Host 'ficar mentindo que funciona.'
+    Write-Host ''
+    Write-Host 'Use o caminho que foi testado e funciona aqui:'
+    Write-Host '  powershell -ExecutionPolicy Bypass -File "infra\instalar-inicializacao.ps1"'
+    exit 1
+}
+
+Write-Host "Tarefa '$Nome' instalada e VERIFICADA: a cada $Minutos minuto(s), a partir do logon."
 Write-Host "Log: $env:LOCALAPPDATA\CRM_V2\upload-totvs.log"
 Write-Host ''
 Write-Host 'Para remover:  powershell -ExecutionPolicy Bypass -File "infra\instalar-tarefa-upload.ps1" -Remover'
