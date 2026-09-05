@@ -124,6 +124,12 @@ class AtualizadorTotvs
             $impressao = $this->impressaoDigital();
 
             if (! $forcar && $impressao === $this->marcadorGravado()) {
+                // De graça quando a chave está quente (`remember` nem consulta), e é o que
+                // mantém a tela em 4 ms: esta rodada acontece de hora em hora, contra um
+                // TTL de 6 h. Sem isto, a cada 6 horas alguém pagaria os 943 ms do
+                // COUNT(*) ao abrir a página.
+                $this->contagens();
+
                 return $this->encerrar($rodada, 'sem_mudanca', $passos);
             }
 
