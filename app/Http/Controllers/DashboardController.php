@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Cache\ChaveEscopo;
+use App\Services\Carteira\SegmentosDoVendedorResolver;
 use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
 use Illuminate\Http\Request;
@@ -21,6 +22,7 @@ class DashboardController extends Controller
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly DashboardBlocos $blocos,
+        private readonly SegmentosDoVendedorResolver $segmentosDoVendedor,
     ) {}
 
     public function index(Request $request): Response
@@ -89,6 +91,29 @@ class DashboardController extends Controller
                 : null,
             'biEmbedUrl' => $eGestor ? $this->urlDoBi() : null,
             'carteiraSegmento' => $temEscopo && $mostraBlocos ? $this->blocos->carteiraSegmento($porVendedor, $codVendedores) : null,
+            /*
+             * Potencial da Carteira: mesma condição do card de Comparação, e pelo mesmo
+             * motivo. É a tela de quem opera a carteira; para gestor em escopo de equipe ou
+             * empresa a pergunta "quais dos MEUS clientes não compram etiqueta?" não tem
+             * dono, e a consulta passaria a varrer `faturamentos` sem que ninguém leia o
+             * resultado (ver o custo medido no docblock do PotencialCarteiraResolver).
+             */
+            'potencialCarteira' => $temEscopo && $mostraBlocos && ! $eGestor
+                ? $this->blocos->potencialCarteira($porVendedor, $codVendedores)
+                : null,
+            /*
+             * Segmento(s) de quem está olhando. Só quando o escopo é UM vendedor: para
+             * equipe ou empresa "o segmento" seriam os 23, o que não informa nada. Cobre
+             * vendedor, representante, supervisor em modo Pessoal e gestor com drill-down.
+             *
+             * ⚠️ Fora dos blocos cacheados de propósito. É uma query numa tabela de ~200
+             * linhas com `cod_vendedor` indexado, e mantê-la fora do cache é o que evita
+             * bumpar ChaveEscopo::VERSAO — que recongelaria as seis chaves da Home por
+             * 30 min a cada deploy.
+             */
+            'segmentosVendedor' => is_array($codVendedores) && count($codVendedores) === 1
+                ? $this->segmentosDoVendedor->nomes($codVendedores[0])
+                : [],
             'orcamentosStats' => $mostraBlocos ? $this->blocos->orcamentosStats($porUsuario, $usuarioIds) : null,
             'pedidosAtencao' => $temEscopo && $mostraBlocos ? $this->blocos->pedidosAtencao($porVendedor, $codVendedores) : null,
         ]);

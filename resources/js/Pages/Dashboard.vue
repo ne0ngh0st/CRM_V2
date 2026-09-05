@@ -10,6 +10,7 @@ import LigacoesStatsCards from '@/Components/Dashboard/LigacoesStatsCards.vue';
 import OrcamentosStatsCard from '@/Components/Dashboard/OrcamentosStatsCard.vue';
 import PedidosAtencaoCard from '@/Components/Dashboard/PedidosAtencaoCard.vue';
 import ComparacaoCard from '@/Components/Dashboard/ComparacaoCard.vue';
+import PotencialCarteiraCard from '@/Components/Dashboard/PotencialCarteiraCard.vue';
 import FaturamentoBiEmbed from '@/Components/Dashboard/FaturamentoBiEmbed.vue';
 import SugestoesBoard from '@/Components/Dashboard/SugestoesBoard.vue';
 import { Head, usePage } from '@inertiajs/vue3';
@@ -28,6 +29,8 @@ const props = defineProps({
     carteiraSegmento: Object,
     orcamentosStats: Object,
     pedidosAtencao: Object,
+    potencialCarteira: Object,
+    segmentosVendedor: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -111,6 +114,15 @@ const mesAno = computed(() => {
                         · {{ mesAno }} · dados referentes ao dia anterior (D-1)
                     </template>
                     <template #meta>
+                        <!--
+                            Identidade: o vendedor vê a que segmento a carteira dele
+                            responde. Aqui vai COM o rótulo "Segmento:", porque no topo da
+                            página o chip aparece fora de contexto; dentro do card de
+                            Carteira por Segmento ele entra sem rótulo, já contextualizado.
+                        -->
+                        <StatusPill v-if="segmentosVendedor.length" tone="neutral" surface="dark" :title="segmentosVendedor.join(', ')">
+                            Segmento: {{ segmentosVendedor[0] }}<template v-if="segmentosVendedor.length > 1"> +{{ segmentosVendedor.length - 1 }}</template>
+                        </StatusPill>
                         <StatusPill v-if="statusGeral" :tone="statusGeral.tom" surface="dark">
                             Sistema: {{ statusGeral.label }}
                         </StatusPill>
@@ -133,17 +145,37 @@ const mesAno = computed(() => {
                     </template>
                 </PageHero>
 
+                <!--
+                    ⚠️ ORDEM DA PÁGINA = HIERARQUIA DE IMPORTÂNCIA, revisada com o Tony em
+                    2026-09-05. O primeiro bloco abaixo do cabeçalho é o que o usuário vê
+                    sem rolar, e ele muda por perfil:
+                      · vendedor/representante → POTENCIAL DA CARTEIRA (onde há venda a
+                        fazer hoje — é o motivo de a página existir para quem opera);
+                      · gestor → o embed do Power BI, que é a ferramenta dele.
+                    A comparação ano contra ano saiu da primeira dobra e passou a fechar o
+                    bloco de performance, logo abaixo de Carteira por Segmento e Performance
+                    Comercial: é o histórico que dá contexto àqueles dois números, então mora
+                    junto deles — mas depois, porque é leitura de apoio e não pauta do dia.
+
+                    ⚠️ NÃO empilhar dois cards numa coluna deste grid. O grid é
+                    `items-stretch`; um wrapper flex-col aqui recebe a altura da coluna mais
+                    alta e ENCOLHE os cards para caberem — foi o que cortou 44px do bloco
+                    "Pedidos emitidos" quando o Potencial morava aqui. Card novo entra como
+                    faixa própria, não empilhado.
+                -->
                 <FaturamentoBiEmbed v-if="biEmbedUrl" :url="biEmbedUrl" />
-                <ComparacaoCard
-                    v-else-if="vendaComparacao || faturamentoComparacao"
-                    :venda-comparacao="vendaComparacao"
-                    :faturamento-comparacao="faturamentoComparacao"
+                <PotencialCarteiraCard
+                    v-else-if="potencialCarteira"
+                    :potencial-carteira="potencialCarteira"
+                    :visao-supervisor="visao.visaoSupervisor"
+                    :visao-vendedor="visao.visaoVendedor"
                 />
 
                 <div v-if="carteiraSegmento || metaGauge" class="grid gap-4 lg:grid-cols-2 lg:items-stretch">
                     <CarteiraSegmentoCard
                         v-if="carteiraSegmento"
                         :carteira-segmento="carteiraSegmento"
+                        :segmentos="segmentosVendedor"
                         :visao-supervisor="visao.visaoSupervisor"
                         :visao-vendedor="visao.visaoVendedor"
                     />
@@ -155,6 +187,12 @@ const mesAno = computed(() => {
                         :visao-vendedor="visao.visaoVendedor"
                     />
                 </div>
+
+                <ComparacaoCard
+                    v-if="vendaComparacao || faturamentoComparacao"
+                    :venda-comparacao="vendaComparacao"
+                    :faturamento-comparacao="faturamentoComparacao"
+                />
 
                 <div v-if="ligacoesStats || orcamentosStats || pedidosAtencao" class="grid gap-4 lg:grid-cols-3 lg:items-stretch">
                     <LigacoesStatsCards

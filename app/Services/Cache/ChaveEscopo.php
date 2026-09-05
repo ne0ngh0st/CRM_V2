@@ -32,8 +32,20 @@ final readonly class ChaveEscopo
      *   front novo, que leria `metaGauge.venda` como `undefined` e quebraria o card no
      *   navegador — durante os 30 minutos de TTL logo após o deploy, exatamente quando
      *   ninguém está olhando para o console de quem já estava logado.
+     *
+     *   v2 → v3 (2026-09-05) — `potencial-carteira` passou a devolver `inativos` e, por
+     *   família, `potencialAtivos`/`potencialInativos`, quando o card deixou de medir só a
+     *   carteira ativa. Reproduzido em dev ANTES do deploy, e o sintoma é o mesmo de v1:
+     *   o card renderizou o subtítulo com o total antigo e a linha "ativos · inativos"
+     *   SEM OS NÚMEROS, porque os campos novos vinham `undefined` do payload quente. Não
+     *   quebra nada em vermelho — só mostra um card mutilado para quem já estava logado.
+     *
+     *   ⚠️ Aconteceu DUAS vezes no mesmo dia: a segunda ao renomear `parados` para
+     *   `inativos`, já dentro do v3. Renomear campo de payload cacheado é mudança de
+     *   formato como qualquer outra. Como o v3 ainda não tinha ido a produção, bastou
+     *   limpar o cache de dev — se já tivesse ido, teria exigido v4.
      */
-    public const VERSAO = 'v2';
+    public const VERSAO = 'v3';
 
     private const PREFIXO = 'agg';
 

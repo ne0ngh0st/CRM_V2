@@ -7,6 +7,7 @@ use App\Models\Segmento;
 use App\Models\SegmentoVendedor;
 use App\Models\User;
 use App\Models\VendedorPerfil;
+use App\Services\Carteira\SegmentosDoVendedorResolver;
 use App\Services\Equipe\EquipeScopeResolver;
 use App\Services\Equipe\OrganogramaBuilder;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,6 +30,7 @@ class EquipeController extends Controller
     public function __construct(
         private readonly EquipeScopeResolver $scope,
         private readonly OrganogramaBuilder $organogramaBuilder,
+        private readonly SegmentosDoVendedorResolver $segmentosDoVendedor,
     ) {
     }
 
@@ -57,12 +59,7 @@ class EquipeController extends Controller
         $usuarios = $this->queryFiltrada($request, $user)->get();
 
         $codVendedoresPresentes = $usuarios->pluck('vendedorPerfil.cod_vendedor')->filter()->values();
-        $segmentosPorCodVendedor = SegmentoVendedor::query()
-            ->whereIn('cod_vendedor', $codVendedoresPresentes)
-            ->with('segmento')
-            ->get()
-            ->groupBy('cod_vendedor')
-            ->map(fn ($grupo) => $grupo->pluck('segmento'));
+        $segmentosPorCodVendedor = $this->segmentosDoVendedor->porCodigo($codVendedoresPresentes);
 
         $nomesPorCodVendedor = VendedorPerfil::query()
             ->with('user:id,name,display_name')

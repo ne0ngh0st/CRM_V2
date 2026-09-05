@@ -19,6 +19,8 @@ use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
+use App\Services\Potencial\FamiliaProduto;
+use App\Services\Potencial\PotencialCarteiraResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,6 +40,7 @@ class CarteiraController extends Controller
         private readonly ClienteStatusResolver $statusResolver,
         private readonly CacheDeAgregacao $cache,
         private readonly DashboardBlocos $blocos,
+        private readonly PotencialCarteiraResolver $potencial,
     ) {
     }
 
@@ -127,6 +130,7 @@ class CarteiraController extends Controller
             'segmento' => (string) $request->string('segmento'),
             'status' => (string) $request->string('status'),
             'aderencia' => (string) $request->string('aderencia'),
+            'sem_familia' => (string) $request->string('sem_familia'),
         ], fn (string $v) => $v !== '');
 
         if ($filtros === []) {
@@ -155,6 +159,8 @@ class CarteiraController extends Controller
         $segmento = (string) $request->string('segmento');
         $status = (string) $request->string('status');
         $aderencia = (string) $request->string('aderencia');
+        $semFamiliaBruto = (string) $request->string('sem_familia');
+        $semFamilia = in_array($semFamiliaBruto, FamiliaProduto::chaves(), true) ? $semFamiliaBruto : '';
         $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
         $aba = (string) $request->string('aba') ?: 'clientes';
 
@@ -256,6 +262,14 @@ class CarteiraController extends Controller
                 'status' => $status,
                 'aderencia' => $aderencia,
                 'ordenar' => $ordenar,
+                // Vem do card de Potencial da Carteira do Painel. Fica na prop para a tela
+                // poder anunciar o recorte e oferecer o "limpar" — filtro que a pessoa não
+                // consegue ver nem desfazer é o que faz a lista parecer quebrada.
+                'semFamilia' => $semFamilia,
+                'semFamiliaRotulo' => $semFamilia !== '' ? FamiliaProduto::rotuloDe($semFamilia) : null,
+                // Quantas EMPRESAS o recorte tem. A tabela lista filiais, então este número
+                // é menor que o total da listagem — e é ele que bate com o card do Painel.
+                'semFamiliaEmpresas' => $semFamilia !== '' ? count($this->codigosSemFamilia($request) ?? []) : null,
             ],
             'opcoes' => $this->opcoesDeFiltro($request, $codVendedores),
             'visao' => [
@@ -345,6 +359,8 @@ class CarteiraController extends Controller
             $query->where('clientes.cod_segmento', $segmento);
         }
 
+        $this->aplicarSemFamilia($request, $query);
+
         match ($status) {
             'ativo' => $query->where('clientes.data_ultima_compra', '>=', $limiteAtivo),
             'inativando' => $query->where('clientes.data_ultima_compra', '<', $limiteAtivo)
@@ -354,6 +370,69 @@ class CarteiraController extends Controller
         };
 
         return $query;
+    }
+
+    /**
+     * Filtro "clientes ativos que ainda NÃO compram <família>", vindo do card de Potencial
+     * da Carteira do Painel. É o que transforma o número do card numa lista de clientes
+     * para ligar.
+     *
+     * ⚠️ Whitelist, não string livre: a família vem da query string e vira o valor
+     * comparado contra `produtos.categoria`. `FamiliaProduto::garantir()` estoura em valor
+     * desconhecido; aqui um valor inválido simplesmente não filtra nada, porque a tela não
+     * deve dar 500 por causa de um link velho.
+     *
+     * ⚠️ CACHEADO POR DIA, e o motivo não é economia: no código de vendedor extremo
+     * (`010002`, sozinho 94% das linhas de `faturamentos`) a consulta leva 30 segundos.
+     * Para os 121 vendedores reais ela custa entre 3,7 ms e 72,7 ms, mas quem chega aqui
+     * por um link de gestor com drill-down pagaria os 30 s. Com a chave diária isso
+     * acontece no máximo uma vez por escopo por dia.
+     *
+     * ⚠️ O grão diverge de propósito: o card conta EMPRESAS (`cod_cliente`) e esta tela
+     * lista FILIAIS. Um código com 5 lojas vira 5 linhas aqui. É consequência de
+     * `faturamentos` não guardar `loja` — ver o docblock do PotencialCarteiraResolver — e o
+     * card declara isso no rodapé.
+     */
+    private function aplicarSemFamilia(Request $request, Builder $query): void
+    {
+        $codigos = $this->codigosSemFamilia($request);
+
+        if ($codigos !== null) {
+            $query->whereIn('clientes.cod_cliente', $codigos);
+        }
+    }
+
+    /**
+     * Os códigos do recorte, ou null quando não há recorte de família na requisição.
+     *
+     * ⚠️ Separado de `aplicarSemFamilia()` porque `index()` também precisa do TAMANHO da
+     * lista: o card do Painel conta empresas e esta tela lista filiais, então sem dizer
+     * "86 filiais de 40 empresas" o vendedor clica em 40 e encontra 86, sem explicação. A
+     * segunda chamada não custa nada — cai no mesmo cache.
+     *
+     * @return list<string>|null
+     */
+    private function codigosSemFamilia(Request $request): ?array
+    {
+        $familia = (string) $request->string('sem_familia');
+
+        if ($familia === '' || ! in_array($familia, FamiliaProduto::chaves(), true)) {
+            return null;
+        }
+
+        $scope = $this->scopeResolver->resolve(
+            $request->user(),
+            $request->string('visao_supervisor')->value() ?: null,
+            $request->string('visao_vendedor')->value() ?: null,
+        );
+
+        $chave = ChaveEscopo::deCodVendedores($scope['codVendedores'])
+            ->paraDoDia('potencial-codigos', ['familia' => $familia]);
+
+        return $this->cache->lembrar(
+            $chave,
+            fn () => $this->potencial->codigosSemFamilia($scope['codVendedores'], $familia),
+        );
     }
 
     /**

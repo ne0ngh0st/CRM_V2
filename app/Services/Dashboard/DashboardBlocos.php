@@ -14,6 +14,7 @@ use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Metas\MetaRankingResolver;
+use App\Services\Potencial\PotencialCarteiraResolver;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -41,6 +42,7 @@ class DashboardBlocos
         private readonly CacheDeAgregacao $cache,
         private readonly CarteiraAderenciaResolver $aderenciaResolver,
         private readonly MetaRankingResolver $metaRanking,
+        private readonly PotencialCarteiraResolver $potencialResolver,
     ) {}
 
     /** Instância irmã que sempre recalcula. Usada só pelo job de warming e pelo comando. */
@@ -299,12 +301,24 @@ class DashboardBlocos
      * "Valor no mês" fica no card logo acima); usar o mês civil cheio aqui faria o gráfico
      * e o KPI discordarem na mesma tela.
      *
+     * ⚠️ O ano corrente para no MÊS CORRENTE, e passar `12` fixo aqui era um bug silencioso:
+     * `fimRealizado($anoCorrente, 12)` cai no ramo "mês futuro" e devolve 30/11, ou seja, a
+     * série NÃO era cortada em D-1 — ao contrário do que o parágrafo acima afirma. Nunca
+     * apareceu porque não há linha datada depois de hoje enquanto a sincronização está
+     * atrasada. Importa agora porque o subtotal desta série substituiu o "acumulado do ano"
+     * do card de Performance Comercial: com janelas diferentes, um pedido lançado hoje
+     * entraria num número e não no outro, lado a lado na mesma tela.
+     *
+     * Ano passado continua fechando em 31/12 (o ramo "mês passado" de `fimRealizado`).
+     *
      * @param  array<string>|null  $codVendedores
      * @return list<float>
      */
     private function somaMensal(Builder $query, string $colunaData, int $ano, ?array $codVendedores): array
     {
-        [$inicio, $fim] = $this->metaRanking->intervaloDatas($ano, 1, 12);
+        $mesFim = $ano === (int) now()->year ? (int) now()->month : 12;
+
+        [$inicio, $fim] = $this->metaRanking->intervaloDatas($ano, 1, $mesFim);
 
         $query->whereBetween($colunaData, [$inicio, $fim])->groupBy('mes');
 
@@ -383,6 +397,31 @@ class DashboardBlocos
 
                 return $this->aderenciaResolver->resolver($query);
             },
+        );
+    }
+
+    /**
+     * Potencial da Carteira: entre os clientes que já compram deste vendedor, quantos
+     * ainda não compram cada família (bobina, etiqueta, tag de gôndola).
+     *
+     * A regra inteira — inclusive por que o denominador é cliente ATIVO e por que o grão é
+     * `cod_cliente` e não filial — vive em {@see PotencialCarteiraResolver}. Aqui só mora a
+     * chave.
+     *
+     * ⚠️ `paraDoDia`: a janela é "últimos 12 meses a partir de hoje", então o resultado
+     * envelhece com o dia. Com `para()` o card ficaria congelado no recorte de ontem até o
+     * TTL expirar — mesmo motivo de `faturamento-comparacao`.
+     *
+     * ⚠️ Chave NOVA (`potencial-carteira`), não uma mudança de formato de bloco existente:
+     * por isso esta entrega não bumpa `ChaveEscopo::VERSAO`.
+     *
+     * @param  array<string>|null  $codVendedores
+     */
+    public function potencialCarteira(ChaveEscopo $escopo, ?array $codVendedores): array
+    {
+        return $this->cachear(
+            $escopo->paraDoDia('potencial-carteira'),
+            fn () => $this->potencialResolver->resolver($codVendedores),
         );
     }
 

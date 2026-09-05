@@ -144,6 +144,26 @@
         @apply mx-auto block truncate;
     }
 
+    /*
+     * Número que ABRE uma lista filtrada, dentro de card ou legenda de KPI
+     * (hoje: Carteira por Segmento no Painel e na própria Carteira).
+     *
+     * Existe porque "número clicável" estava escrito de três jeitos diferentes e
+     * nenhum anunciava que era clicável antes de o mouse chegar em cima: texto
+     * cinza-800 com `hover:underline` parece rótulo, não link. Aqui o alvo de
+     * clique tem caixa própria (padding + canto arredondado) e acende um fundo
+     * no hover, que é o que dá o "isto é um botão" sem precisar de underline.
+     *
+     * ⚠️ SEM COR de propósito. Quem usa define (`text-navy` na tabela de status,
+     * `text-emerald-600`/`text-red-500` nos totais de dentro/fora). Se a cor
+     * morasse aqui, um `hover:text-*` no layer `components` ganharia por
+     * especificidade do `text-*` sem hover que vem do layer `utilities`, e o
+     * total verde viraria azul só ao passar o mouse.
+     */
+    .tbl-num-link {
+        @apply -mr-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 transition hover:bg-navy/10;
+    }
+
     /* Segunda linha de apoio dentro da mesma célula (CNPJ, código, etc.). */
     .tbl-sub {
         @apply block text-[0.65rem] leading-3 text-gray-400;

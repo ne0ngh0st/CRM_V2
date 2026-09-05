@@ -21,6 +21,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RoleSeeder::class,
             SegmentoSeeder::class,
+            // Depende do SegmentoSeeder: cria o par (segmento, família) que faltar.
+            PotencialPesoSeeder::class,
             FacaSeeder::class,
             MarketingWpFormularioSeeder::class,
         ]);

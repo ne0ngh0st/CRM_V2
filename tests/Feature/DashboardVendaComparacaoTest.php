@@ -125,8 +125,72 @@ class DashboardVendaComparacaoTest extends TestCase
     }
 
     /**
-     * Gestor vê o Power BI, não o Chart.js — a agregação (a mais cara da Home no escopo
-     * empresa) não roda para quem não vai ler o resultado.
+     * ⚠️ Trava de regressão de um bug que viveu escondido: `somaMensal()` chamava
+     * `intervaloDatas($ano, 1, 12)`, e para o ANO CORRENTE `fimRealizado($ano, 12)` cai no
+     * ramo "mês futuro" e devolve 30/11 — a série não era cortada em D-1, ao contrário do
+     * que o docblock do método afirmava. Não aparecia porque não há linha datada depois de
+     * hoje enquanto a sincronização está atrasada.
+     *
+     * Passou a importar quando o subtotal desta série substituiu o "acumulado do ano" do
+     * card de Performance Comercial: com janelas diferentes, um pedido lançado hoje entra
+     * num número e não no outro, lado a lado na mesma tela.
+     *
+     * A data é congelada num dia 16 justamente para o teste valer tanto no corte D-1
+     * quanto no D-3 de segunda-feira: 01/09 entra nos dois, 16/09 fica fora nos dois.
+     */
+    #[Test]
+    public function test_serie_do_ano_corrente_para_no_corte_d1(): void
+    {
+        $this->travelTo('2026-09-16 10:00:00');
+
+        $this->pedido('2026-09-01', 1000);
+        $this->pedido('2026-09-16', 7777);
+
+        $dados = app(DashboardBlocos::class)
+            ->vendaComparacao(ChaveEscopo::deCodVendedores(['010617']), ['010617']);
+
+        // Índice 8 = setembro.
+        $this->assertSame(
+            1000.0,
+            $dados['valoresAnoAtual'][8],
+            'pedido datado de hoje não pode entrar na série: a janela é D-1',
+        );
+    }
+
+    /**
+     * ⚠️ A invariante que AUTORIZA ter tirado o "acumulado do ano" do card de Performance
+     * Comercial. O card agora mostra só o percentual da meta anual; o valor realizado
+     * passou a ser o subtotal desta tabela. Se as duas janelas divergirem, a Home volta a
+     * mostrar dois números diferentes para a mesma coisa — e ninguém liga um ao outro.
+     */
+    #[Test]
+    public function test_acumulado_da_serie_bate_com_o_realizado_do_ano_do_gauge(): void
+    {
+        $this->travelTo('2026-09-16 10:00:00');
+
+        $this->pedido('2026-02-10', 1000);
+        $this->pedido('2026-07-05', 2500);
+        $this->pedido('2026-09-01', 400);
+        // Fora da janela D-1 nos dois lados — tem que ficar fora dos DOIS números.
+        $this->pedido('2026-09-16', 9999);
+
+        $bloco = app(DashboardBlocos::class);
+        $escopo = ChaveEscopo::deCodVendedores(['010617']);
+
+        $serie = $bloco->vendaComparacao($escopo, ['010617']);
+        $gauge = $bloco->metaGauge($escopo, ['010617']);
+
+        $this->assertSame(3900.0, array_sum($serie['valoresAnoAtual']));
+        $this->assertSame(
+            $gauge['venda']['ano']['realizado'],
+            array_sum($serie['valoresAnoAtual']),
+            'o subtotal da tabela e o acumulado do ano do gauge têm que ser o mesmo número',
+        );
+    }
+
+    /**
+     * Gestor vê o Power BI, não o gráfico local — a agregação (a mais cara da Home no
+     * escopo empresa) não roda para quem não vai ler o resultado.
      */
     #[Test]
     public function test_gestor_nao_recebe_a_agregacao_de_venda(): void

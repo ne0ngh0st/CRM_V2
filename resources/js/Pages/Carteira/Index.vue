@@ -53,6 +53,9 @@ const filtros = reactive({
     segmento: props.filtros.segmento || '',
     status: props.filtros.status || '',
     aderencia: props.filtros.aderencia || '',
+    // Vem do card de Potencial da Carteira do Painel; não tem campo próprio na barra de
+    // filtros — é anunciado por uma faixa acima da tabela, com "limpar".
+    sem_familia: props.filtros.semFamilia || '',
     ordenar: props.filtros.ordenar || 'nome_asc',
     visao_supervisor: props.visao.visaoSupervisor || '',
     visao_vendedor: props.visao.visaoVendedor || '',
@@ -139,10 +142,15 @@ function abrirAgendamento(cliente) {
 }
 
 const temFiltrosAtivos = computed(() =>
-    ['busca', 'estado', 'segmento', 'status', 'aderencia'].some((k) => filtros[k] !== '')
+    ['busca', 'estado', 'segmento', 'status', 'aderencia', 'sem_familia'].some((k) => filtros[k] !== '')
     || !!filtros.visao_supervisor
     || !!filtros.visao_vendedor,
 );
+
+function limparSemFamilia() {
+    filtros.sem_familia = '';
+    aplicarFiltros();
+}
 </script>
 
 <template>
@@ -236,6 +244,40 @@ const temFiltrosAtivos = computed(() =>
                 </div>
 
                 <template v-if="aba === 'clientes'">
+                    <!--
+                        Recorte vindo do card de Potencial da Carteira do Painel. Precisa ser
+                        anunciado: sem isso a pessoa chega numa lista bem menor que a carteira
+                        dela, sem campo na barra de filtros explicando o porquê, e conclui que
+                        a tela quebrou.
+                    -->
+                    <div
+                        v-if="filtros.sem_familia"
+                        class="flex flex-wrap items-center justify-between gap-2 rounded border border-cyan/40 bg-cyan/10 px-3 py-2"
+                    >
+                        <p class="text-sm text-gray-700">
+                            Mostrando apenas clientes que compraram nos últimos 12 meses e
+                            <strong class="font-semibold">ainda não compram {{ props.filtros.semFamiliaRotulo }}</strong>.
+                            <!--
+                                ⚠️ Os dois números lado a lado de propósito: o card do Painel
+                                conta EMPRESAS e esta tabela lista FILIAIS, porque a nota
+                                fiscal não registra a loja. Sem dizer isso aqui, quem clica
+                                em "40" e encontra 86 conclui que o filtro está errado.
+                            -->
+                            <span v-if="props.filtros.semFamiliaEmpresas" class="text-gray-500">
+                                São {{ props.filtros.semFamiliaEmpresas }}
+                                {{ props.filtros.semFamiliaEmpresas === 1 ? 'empresa' : 'empresas' }},
+                                listadas abaixo por filial.
+                            </span>
+                        </p>
+                        <button
+                            type="button"
+                            class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
+                            @click="limparSemFamilia"
+                        >
+                            Limpar recorte
+                        </button>
+                    </div>
+
                     <DarkCard title="Carteira de Clientes" :subtitle="`${kpis.total} cliente${kpis.total !== 1 ? 's' : ''} no escopo atual`">
                         <template #icon>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
