@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Totvs\AtualizadorTotvs;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Permission\Models\Role;
@@ -359,6 +360,33 @@ class AtualizacaoDadosTest extends TestCase
         $this->actingAs($admin)->get(route('atualizacoes.index'))
             ->assertInertia(fn ($p) => $p->where('rodadas.0.origem', 'manual')
                 ->where('rodadas.0.quem', $admin->display_name));
+    }
+
+    /**
+     * ⚠️ A contagem de linhas é cacheada porque `COUNT(*)` em `faturamentos` custa 943 ms
+     * em produção. Sem invalidar ao fim da importação, a tela mostraria o número velho
+     * exatamente no instante em que alguém abriu para conferir se funcionou.
+     */
+    public function test_importacao_bem_sucedida_invalida_a_contagem_cacheada(): void
+    {
+        $this->relatorio('FAT.csv');
+        $this->fingirArtisan();
+        Cache::put(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS, ['faturamentos' => 1, 'pedidos' => 1], 600);
+
+        app(AtualizadorTotvs::class)->executar();
+
+        $this->assertFalse(Cache::has(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS));
+    }
+
+    public function test_rodada_que_falha_nao_invalida_a_contagem(): void
+    {
+        $this->relatorio('FAT.csv');
+        $this->fingirArtisan('totvs:import-clientes');
+        Cache::put(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS, ['faturamentos' => 1, 'pedidos' => 1], 600);
+
+        app(AtualizadorTotvs::class)->executar();
+
+        $this->assertTrue(Cache::has(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS));
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\AtualizarDadosTotvsJob;
 use App\Models\TotvsImportacao;
+use App\Services\Totvs\AtualizadorTotvs;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -115,9 +116,16 @@ class AtualizacaoDadosController extends Controller
      * produção passou um mês com dado parado e os 12 alarmes do CloudWatch ficaram verdes,
      * porque CPU e ALB não sabem a idade da última nota fiscal.
      *
-     * ⚠️ `MAX()` sobre 6 milhões de linhas é barato AQUI porque as duas colunas são a
-     * primeira chave de um índice — o MySQL lê a última entrada e para (`Select tables
-     * optimized away`). Não replicar este padrão numa coluna sem índice.
+     * ⚠️ O `MAX()` é barato e fica AO VIVO: as duas colunas são a primeira chave de um
+     * índice, então o MySQL lê a última entrada e para — 0,3 ms medido em produção com 6
+     * milhões de linhas.
+     *
+     * ⚠️ O `COUNT(*)` NÃO é barato e por isso é cacheado: 943 ms em `faturamentos`, porque
+     * o InnoDB não guarda contador e varre o índice inteiro (`type=index`, `Using index`).
+     * Sem o cache a página custava 962 ms — mais que o dobro do orçamento de 400 ms da
+     * Regra de ouro nº 9 —, e como a tela se recarrega a cada 4 s durante uma importação,
+     * seriam 943 ms de RDS a cada 4 s. A contagem é invalidada ao fim de toda importação
+     * bem-sucedida (ver `AtualizadorTotvs::CHAVE_CACHE_CONTAGENS`).
      *
      * @return list<array<string, mixed>>
      */
@@ -125,19 +133,28 @@ class AtualizacaoDadosController extends Controller
     {
         $hoje = now()->startOfDay();
 
+        $contagens = Cache::remember(
+            AtualizadorTotvs::CHAVE_CACHE_CONTAGENS,
+            now()->addMinutes(10),
+            fn () => [
+                'faturamentos' => DB::table('faturamentos')->count(),
+                'pedidos' => DB::table('pedidos')->count(),
+            ]
+        );
+
         $itens = [
             [
                 'dominio' => 'Faturamento',
                 'tabela' => 'faturamentos',
                 'data' => DB::table('faturamentos')->max('data_emissao'),
-                'linhas' => DB::table('faturamentos')->count(),
+                'linhas' => $contagens['faturamentos'],
                 'relatorio' => '198 — FAT',
             ],
             [
                 'dominio' => 'Pedidos',
                 'tabela' => 'pedidos',
                 'data' => DB::table('pedidos')->max('data_pedido'),
-                'linhas' => DB::table('pedidos')->count(),
+                'linhas' => $contagens['pedidos'],
                 'relatorio' => '200 + 232',
             ],
         ];

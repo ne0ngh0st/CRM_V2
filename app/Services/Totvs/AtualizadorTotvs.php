@@ -5,6 +5,7 @@ namespace App\Services\Totvs;
 use App\Models\TotvsImportacao;
 use FilesystemIterator;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -57,6 +58,18 @@ class AtualizadorTotvs
     ];
 
     private const ARQUIVO_MARCADOR = '.ultima-importacao';
+
+    /**
+     * Contagem de linhas exibida em `/atualizacoes`, cacheada porque `COUNT(*)` em
+     * `faturamentos` custa 943 ms — o MySQL varre os 6 milhões de entradas do índice
+     * (`type=index`, `Using index`), não existe contador pronto no InnoDB. Os `MAX()` da
+     * mesma tela custam 0,3 ms e ficam ao vivo.
+     *
+     * ⚠️ É INVALIDADA AO FIM DE UMA IMPORTAÇÃO BEM-SUCEDIDA. Sem isso a tela mostraria a
+     * contagem velha logo depois de atualizar — justamente o instante em que alguém está
+     * olhando para conferir se funcionou.
+     */
+    public const CHAVE_CACHE_CONTAGENS = 'totvs:contagens-frescor';
 
     /**
      * ⚠️ `$rodada` já criada é o caminho do BOTÃO, e não é detalhe de implementação.
@@ -117,6 +130,10 @@ class AtualizadorTotvs
 
             // Só depois de tudo passar. Marcador gravado cedo esconderia a falha acima.
             $this->gravarMarcador($impressao);
+
+            // A tela é aberta justamente para conferir se funcionou; contagem velha ali
+            // seria pior que contagem nenhuma.
+            Cache::forget(self::CHAVE_CACHE_CONTAGENS);
 
             return $this->encerrar($rodada, 'sucesso', $passos);
         } catch (Throwable $e) {
