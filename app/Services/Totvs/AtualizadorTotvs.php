@@ -6,6 +6,7 @@ use App\Models\TotvsImportacao;
 use FilesystemIterator;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -72,6 +73,17 @@ class AtualizadorTotvs
     public const CHAVE_CACHE_CONTAGENS = 'totvs:contagens-frescor';
 
     /**
+     * TTL longo de propósito: a contagem só muda quando uma importação roda, e a
+     * importação invalida a chave explicitamente. Um TTL curto não deixaria o número mais
+     * correto — só faria a tela pagar 943 ms de novo a cada expiração.
+     *
+     * ⚠️ Quem escapa disso é rodar `totvs:import-*` na mão pelo SSH, sem passar pelo
+     * `totvs:atualizar`: aí a contagem fica velha até o TTL virar. É a única forma de
+     * importar que não invalida.
+     */
+    private const TTL_CONTAGENS_HORAS = 6;
+
+    /**
      * ⚠️ `$rodada` já criada é o caminho do BOTÃO, e não é detalhe de implementação.
      * Quando a tela dispara, o controller cria a linha `executando` DENTRO do request e
      * só então enfileira o job. Sem isso, o redirect volta antes de o worker pegar o job,
@@ -131,9 +143,12 @@ class AtualizadorTotvs
             // Só depois de tudo passar. Marcador gravado cedo esconderia a falha acima.
             $this->gravarMarcador($impressao);
 
-            // A tela é aberta justamente para conferir se funcionou; contagem velha ali
-            // seria pior que contagem nenhuma.
-            Cache::forget(self::CHAVE_CACHE_CONTAGENS);
+            // ⚠️ RECALCULA em vez de só esquecer. A tela é aberta justamente para
+            // conferir se funcionou, e contagem velha ali seria pior que contagem
+            // nenhuma; mas apenas invalidar empurraria os 943 ms do COUNT(*) para o
+            // próximo request de quem abrisse a página. Aqui já estamos num job de ~2
+            // min, fora do caminho de qualquer usuário — o lugar certo para pagar isso.
+            $this->recalcularContagens();
 
             return $this->encerrar($rodada, 'sucesso', $passos);
         } catch (Throwable $e) {
@@ -176,6 +191,45 @@ class AtualizadorTotvs
         ]);
 
         return $rodada->refresh();
+    }
+
+    /**
+     * Contagem de linhas por domínio, para a tela `/atualizacoes`.
+     *
+     * ⚠️ Mora aqui, e não no controller, porque quem invalida e quem lê precisam
+     * concordar sobre O QUE está cacheado, não só sobre a chave (Regra de ouro nº 8).
+     *
+     * ⚠️ `COUNT(*)` em `faturamentos` custa 943 ms em produção: o InnoDB não guarda
+     * contador e varre os 6 milhões de entradas do índice (`type=index`, `Using index`).
+     * Daí o cache. Os `MAX()` da mesma tela custam 0,3 ms e continuam ao vivo.
+     *
+     * @return array{faturamentos: int, pedidos: int}
+     */
+    public function contagens(): array
+    {
+        return Cache::remember(
+            self::CHAVE_CACHE_CONTAGENS,
+            now()->addHours(self::TTL_CONTAGENS_HORAS),
+            fn () => $this->contarLinhas()
+        );
+    }
+
+    private function recalcularContagens(): void
+    {
+        Cache::put(
+            self::CHAVE_CACHE_CONTAGENS,
+            $this->contarLinhas(),
+            now()->addHours(self::TTL_CONTAGENS_HORAS)
+        );
+    }
+
+    /** @return array{faturamentos: int, pedidos: int} */
+    private function contarLinhas(): array
+    {
+        return [
+            'faturamentos' => DB::table('faturamentos')->count(),
+            'pedidos' => DB::table('pedidos')->count(),
+        ];
     }
 
     public function diretorio(): string

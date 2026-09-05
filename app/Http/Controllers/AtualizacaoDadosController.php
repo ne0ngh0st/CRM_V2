@@ -133,14 +133,7 @@ class AtualizacaoDadosController extends Controller
     {
         $hoje = now()->startOfDay();
 
-        $contagens = Cache::remember(
-            AtualizadorTotvs::CHAVE_CACHE_CONTAGENS,
-            now()->addMinutes(10),
-            fn () => [
-                'faturamentos' => DB::table('faturamentos')->count(),
-                'pedidos' => DB::table('pedidos')->count(),
-            ]
-        );
+        $contagens = app(AtualizadorTotvs::class)->contagens();
 
         $itens = [
             [

@@ -364,29 +364,36 @@ class AtualizacaoDadosTest extends TestCase
 
     /**
      * ⚠️ A contagem de linhas é cacheada porque `COUNT(*)` em `faturamentos` custa 943 ms
-     * em produção. Sem invalidar ao fim da importação, a tela mostraria o número velho
-     * exatamente no instante em que alguém abriu para conferir se funcionou.
+     * em produção. A importação tem que RECALCULAR (não só esquecer): a tela é aberta
+     * justamente para conferir se funcionou, então mostraria o número velho no pior
+     * momento possível — e só invalidar empurraria os 943 ms para o request de quem
+     * abrisse a página, em vez de pagá-los dentro do job.
      */
-    public function test_importacao_bem_sucedida_invalida_a_contagem_cacheada(): void
+    public function test_importacao_bem_sucedida_recalcula_a_contagem_cacheada(): void
     {
         $this->relatorio('FAT.csv');
         $this->fingirArtisan();
-        Cache::put(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS, ['faturamentos' => 1, 'pedidos' => 1], 600);
+        $velho = ['faturamentos' => 999999, 'pedidos' => 999999];
+        Cache::put(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS, $velho, 600);
 
         app(AtualizadorTotvs::class)->executar();
 
-        $this->assertFalse(Cache::has(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS));
+        $agora = Cache::get(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS);
+        $this->assertNotNull($agora, 'A contagem tem que ficar quente, não sumir.');
+        $this->assertNotSame($velho, $agora);
+        $this->assertSame(0, $agora['faturamentos'], 'A tabela está vazia neste teste.');
     }
 
-    public function test_rodada_que_falha_nao_invalida_a_contagem(): void
+    public function test_rodada_que_falha_nao_mexe_na_contagem(): void
     {
         $this->relatorio('FAT.csv');
         $this->fingirArtisan('totvs:import-clientes');
-        Cache::put(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS, ['faturamentos' => 1, 'pedidos' => 1], 600);
+        $velho = ['faturamentos' => 999999, 'pedidos' => 999999];
+        Cache::put(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS, $velho, 600);
 
         app(AtualizadorTotvs::class)->executar();
 
-        $this->assertTrue(Cache::has(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS));
+        $this->assertSame($velho, Cache::get(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS));
     }
 
     /**
