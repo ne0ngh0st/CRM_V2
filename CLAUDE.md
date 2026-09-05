@@ -500,7 +500,7 @@ Tony recebeu credenciais de um SMTP relay dedicado (**smtplw.com.br**, usuário 
 - **Não portamos o bloco de "raiz de CNPJ já na carteira"** (matriz/filial, detecção automática por `raiz_cnpj`) do `montarTextoRaizNaCarteiraEmail` do legado — depende da Regra de ouro nº 3 (proibida). O `cadastro_raiz_opcao` (filial/nova_entrega) do formulário continua existindo, só não tem mais aquele bloco especial de aviso no corpo do e-mail.
 - **Solicitante sempre em cópia, nos 3 tipos** (pedido novo do Tony, não existia no legado): `enviarEmail()` mescla `$dados['solicitanteEmail']` (vem de `$model->user?->email`, sempre o dono do registro — não o usuário que clicou "enviar", relevante no reenvio via botão "Enviar p/ Cadastro") com o `cc` fixo do setor, deduplicado.
 - **Achado ao rodar a suíte depois da mudança**: dois testes de `SolicitacaoBobinaPdfTest` já estavam quebrados antes desta sessão (`Impressão`/`Rebobinamento` removidos do `BobinaPdfPresenter` numa rodada anterior no mesmo dia, substituídos por "Uso obrigatório de tubete" — igual ao legado, `mapearImpressao`/`mapearRebobinamento` são funções mortas lá, nunca renderizadas). Corrigidos os testes pra refletir o comportamento atual (correto), não revertido o presenter.
-- **Gap real encontrado e sinalizado (não corrigido aqui)**: `tubete_obrigatorio` já está validado/gravado/exibido (PDF e e-mail) mas o formulário `CadastroBobinaForm.vue` nunca ganhou o campo — hoje é sempre `null` pra qualquer solicitação real. Flag registrada como tarefa em background.
+- **Gap encontrado nesta rodada e resolvido depois**: `tubete_obrigatorio` era validado/gravado/exibido (PDF e e-mail) mas o formulário `CadastroBobinaForm.vue` não tinha o campo, então vinha sempre `null`. O campo entrou (rádio Sim/Não + diâmetro) — confirmado em 2026-09-05.
 - **Operacional, não é bug do código**: o worker `queue` morreu sozinho (`ProcessTimedOutException`, timeout de 700s do `queue:listen`) no meio dos testes desta sessão. `docker compose up -d queue` religou e ele retomou o job pendente sozinho. Se voltar a acontecer, vale investigar—não investigado a fundo ainda.
 
 **PDF de etiqueta — mesma data, pedido do Tony ao notar que só a bobina vinha com ficha anexada.** A etiqueta nunca teve PDF no CRM-V2 (só a bobina), mas o legado tem sim (`includes/pdf/solicitacao_etiqueta_pdf.php`), então não é feature nova — é paridade que faltou.
@@ -1346,7 +1346,10 @@ Suíte inteira verde: **346 testes**.
   dias", mas não "onde os leads morrem" — isso exigiria a tabela de histórico de etapa que
   ficou fora de escopo por decisão (2026-09-03). Reabrir só se a pergunta aparecer no uso.
 - Avaliar coluna "Último contato" no export Excel da Carteira (ficou de fora em 2026-09-02; ficou barato depois da desnormalização — é só mais uma coluna de `clientes`).
-- Adicionar campo "tubete obrigatório" no `CadastroBobinaForm.vue` (backend já trata; formulário nunca ganhou o input — ver seção "E-mail transacional de Cadastros" acima).
+- ~~Adicionar campo "tubete obrigatório" no `CadastroBobinaForm.vue`.~~ **Feito** — o rádio
+  Sim/Não e o diâmetro estão no formulário, e a solicitação real de 01/09 tem `'nao'`
+  gravado (escolha do usuário, não default). Conferido na auditoria de 2026-09-05; a
+  pendência tinha ficado marcada como aberta depois de já ter sido resolvida.
 - Popular `etiquetas_materia_prima` com dados reais de custo (Tony faz pela tela `/orcamentos/materia-prima`).
 - Revisitar a fórmula de "margem bruta %" da calculadora de etiqueta se o quirk herdado do legado (unidade por-etiqueta vs. custo-do-rolo) incomodar no uso real.
 - Dropar tabela órfã `leads_manuais` + model `LeadManual` (ver revisão 2026-07-28 acima).

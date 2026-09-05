@@ -112,8 +112,12 @@ Register-ScheduledTask -TaskName $Nome -Action $acao -Trigger $gatilho -Settings
     e o upload simplesmente para de acontecer em silencio -- o sintoma aparece
     semanas depois como "o CRM esta com dado velho". Por isso o teste abaixo nao
     olha codigo de retorno nenhum: olha o EFEITO (o log crescer). Se nao cresceu, a
-    tarefa e removida e o script manda usar infra/instalar-inicializacao.ps1, que e
-    o caminho que funciona aqui.
+    tarefa e removida e o script manda usar o duplo clique manual.
+
+    ⚠️ NAO mandar para infra/instalar-inicializacao.ps1: a pasta de Inicializacao
+    TAMBEM nao dispara nesta maquina (testado com reboot real em 2026-09-05 -- o
+    .vbs fica no caminho certo e o Explorer nao o executa no logon). Aqui nao existe
+    automacao de logon que funcione; o que funciona e o duplo clique.
 #>
 $log = Join-Path $env:LOCALAPPDATA 'CRM_V2\upload-totvs.log'
 $antes = if (Test-Path -LiteralPath $log) { (Get-Item -LiteralPath $log).Length } else { 0 }
@@ -135,8 +139,11 @@ if (-not $funcionou) {
     Write-Host 'o Windows reporta sucesso mesmo assim, entao a tarefa foi REMOVIDA para nao'
     Write-Host 'ficar mentindo que funciona.'
     Write-Host ''
-    Write-Host 'Use o caminho que foi testado e funciona aqui:'
-    Write-Host '  powershell -ExecutionPolicy Bypass -File "infra\instalar-inicializacao.ps1"'
+    Write-Host 'Use o duplo clique, que foi testado e funciona:'
+    Write-Host '  infra\Enviar relatorios TOTVS.cmd'
+    Write-Host ''
+    Write-Host 'A pasta de Inicializacao tambem nao dispara nesta maquina -- ver'
+    Write-Host 'docs/importacao-dados-legado.md secao 10.7 antes de tentar de novo.'
     exit 1
 }
 
