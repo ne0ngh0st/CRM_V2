@@ -45,13 +45,28 @@ if (-not (Test-Path $Script)) { throw "Nao encontrei $Script" }
 $acao = New-ScheduledTaskAction -Execute 'powershell.exe' `
     -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $Script)
 
-# Repeticao sem fim a partir do logon. Comeca 2 min depois para nao disputar CPU com
-# o resto que sobe junto com a sessao.
-$gatilho = New-ScheduledTaskTrigger -AtLogOn
-$gatilho.Delay = 'PT2M'
-$gatilho.Repetition = (New-ScheduledTaskTrigger -Once -At (Get-Date) `
+<#
+    DOIS GATILHOS, e o primeiro nao e redundante.
+
+    ATENCAO: so com -AtLogOn a tarefa nao roda ao ser instalada -- o gatilho ja
+    passou, porque quem instala esta logado ha horas. Ela ficaria parada ate o
+    proximo logon, e a pessoa que acabou de instalar concluiria que "nao funciona"
+    (ou pior: acharia que esta rodando e nao esta). O gatilho -Once comecando AGORA,
+    com repeticao indefinida, e o que faz valer no minuto seguinte a instalacao.
+
+    O -AtLogOn continua porque e ele que garante o rearme depois de reiniciar o PC,
+    com 2 min de atraso para nao disputar CPU com o resto que sobe junto com a
+    sessao.
+#>
+$agora = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
     -RepetitionInterval (New-TimeSpan -Minutes $Minutos) `
-    -RepetitionDuration ([TimeSpan]::MaxValue)).Repetition
+    -RepetitionDuration ([TimeSpan]::MaxValue)
+
+$aoLogar = New-ScheduledTaskTrigger -AtLogOn
+$aoLogar.Delay = 'PT2M'
+$aoLogar.Repetition = $agora.Repetition
+
+$gatilho = @($agora, $aoLogar)
 
 <#
     StartWhenAvailable: se a maquina estava desligada na hora, roda assim que ligar.
