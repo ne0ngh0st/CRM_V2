@@ -27,7 +27,10 @@ function formatBRL(valor) {
 </script>
 
 <template>
-    <DarkCard title="Pedidos que Requerem Atenção" subtitle="Atrasados e vencendo nos próximos 7 dias">
+    <DarkCard title="Pedidos que Requerem Atenção" subtitle="Atrasados e vencendo nos próximos 7 dias"
+        :rotulo-detalhes="'Ver pedidos'"
+        chave-detalhes="pedidos-atencao"
+    >
         <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                 <polygon points="12,3 21,20 3,20" stroke-linejoin="round" />
@@ -44,26 +47,28 @@ function formatBRL(valor) {
             <KpiTile :value="formatBRL(pedidosAtencao.valorEmRisco)" label="Valor em risco" :href="pedidosHref({ situacao: 'risco' })" />
         </div>
 
-        <div class="mt-4 border-t border-gray-100 pt-4">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Pedidos mais atrasados</p>
-
-            <p v-if="!pedidosAtencao.itens.length" class="mt-3 text-sm text-gray-400">Nenhum pedido atrasado.</p>
-
-            <ul v-else class="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
-                <li v-for="item in pedidosAtencao.itens" :key="item.numero">
-                    <Link
-                        :href="pedidosHref({ busca: item.numero })"
-                        class="block rounded border border-gray-100 p-2.5 transition hover:border-navy hover:bg-gray-50"
-                    >
-                        <div class="flex items-center justify-between gap-2">
-                            <span class="truncate text-sm font-semibold text-gray-800">Pedido {{ item.numero }}</span>
-                            <StatusPill tone="danger">{{ item.diasAtraso }} dia(s)</StatusPill>
-                        </div>
-                        <p class="mt-1 truncate text-sm text-gray-700">{{ item.cliente }}</p>
-                        <p class="mt-0.5 text-xs text-gray-400">{{ formatBRL(item.valorTotal) }} · previsão {{ item.previsao }}</p>
-                    </Link>
-                </li>
-            </ul>
-        </div>
+        <template #detalhes>
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Pedidos mais atrasados</p>
+    
+                <p v-if="!pedidosAtencao.itens.length" class="mt-3 text-sm text-gray-400">Nenhum pedido atrasado.</p>
+    
+                <ul v-else class="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
+                    <li v-for="item in pedidosAtencao.itens" :key="item.numero">
+                        <Link
+                            :href="pedidosHref({ busca: item.numero })"
+                            class="block rounded border border-gray-100 p-2.5 transition hover:border-navy hover:bg-gray-50"
+                        >
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="truncate text-sm font-semibold text-gray-800">Pedido {{ item.numero }}</span>
+                                <StatusPill tone="danger">{{ item.diasAtraso }} dia(s)</StatusPill>
+                            </div>
+                            <p class="mt-1 truncate text-sm text-gray-700">{{ item.cliente }}</p>
+                            <p class="mt-0.5 text-xs text-gray-400">{{ formatBRL(item.valorTotal) }} · previsão {{ item.previsao }}</p>
+                        </Link>
+                    </li>
+                </ul>
+            </div>
+        </template>
     </DarkCard>
 </template>

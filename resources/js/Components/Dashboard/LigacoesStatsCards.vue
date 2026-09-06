@@ -99,7 +99,10 @@ watch(() => [props.visaoSupervisor, props.visaoVendedor], carregar);
 </script>
 
 <template>
-    <DarkCard title="Ligações e Observações" :subtitle="`${mesAno} · resumo do mês e atividade recente`">
+    <DarkCard title="Ligações e Observações" :subtitle="`${mesAno} · resumo do mês e atividade recente`"
+        :rotulo-detalhes="'Ver observações recentes'"
+        chave-detalhes="ligacoes-stats"
+    >
         <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                 <rect x="7" y="2" width="10" height="20" rx="2" />
@@ -125,56 +128,58 @@ watch(() => [props.visaoSupervisor, props.visaoVendedor], carregar);
             </div>
         </div>
 
-        <div class="mt-4 border-t border-gray-100 pt-4">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Observações recentes</p>
-
-            <form v-if="podeEscrever" class="mt-2 flex flex-col gap-2 sm:flex-row" @submit.prevent="enviar">
-                <input
-                    v-model="novoCnpj"
-                    type="text"
-                    placeholder="CNPJ do cliente"
-                    class="rounded-md border-gray-300 text-sm focus:border-cyan focus:ring-cyan sm:w-48"
-                />
-                <input
-                    v-model="novaMensagem"
-                    type="text"
-                    placeholder="Observação..."
-                    class="flex-1 rounded-md border-gray-300 text-sm focus:border-cyan focus:ring-cyan"
-                />
-                <button
-                    type="submit"
-                    :disabled="enviando"
-                    class="rounded-md bg-teal px-4 py-2 text-sm font-medium text-white hover:bg-teal/90 disabled:opacity-50"
-                >
-                    Anotar
-                </button>
-            </form>
-
-            <p v-if="carregando" class="mt-3 text-sm text-gray-400">Carregando...</p>
-            <p v-else-if="!observacoes.length" class="mt-3 text-sm text-gray-400">Nenhuma observação ainda.</p>
-
-            <ul v-else class="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
-                <li
-                    v-for="o in observacoes"
-                    :key="o.id"
-                    class="rounded border border-gray-100 p-2.5"
-                >
-                    <div class="flex items-center justify-between gap-2 text-xs text-gray-400">
-                        <span class="truncate">{{ o.autor }} · {{ o.cnpj }}</span>
-                        <button
-                            v-if="o.podeEditar"
-                            type="button"
-                            class="shrink-0 font-medium hover:underline"
-                            :class="o.fixada ? 'text-amber' : 'text-gray-400'"
-                            @click="fixar(o)"
-                        >
-                            {{ o.fixada ? '★ Fixada' : '☆ Fixar' }}
-                        </button>
-                        <span v-else-if="o.fixada" class="shrink-0 font-medium text-amber">★ Fixada</span>
-                    </div>
-                    <p class="mt-1 text-sm text-gray-800">{{ o.mensagem }}</p>
-                </li>
-            </ul>
-        </div>
+        <template #detalhes>
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Observações recentes</p>
+    
+                <form v-if="podeEscrever" class="mt-2 flex flex-col gap-2 sm:flex-row" @submit.prevent="enviar">
+                    <input
+                        v-model="novoCnpj"
+                        type="text"
+                        placeholder="CNPJ do cliente"
+                        class="rounded-md border-gray-300 text-sm focus:border-cyan focus:ring-cyan sm:w-48"
+                    />
+                    <input
+                        v-model="novaMensagem"
+                        type="text"
+                        placeholder="Observação..."
+                        class="flex-1 rounded-md border-gray-300 text-sm focus:border-cyan focus:ring-cyan"
+                    />
+                    <button
+                        type="submit"
+                        :disabled="enviando"
+                        class="rounded-md bg-teal px-4 py-2 text-sm font-medium text-white hover:bg-teal/90 disabled:opacity-50"
+                    >
+                        Anotar
+                    </button>
+                </form>
+    
+                <p v-if="carregando" class="mt-3 text-sm text-gray-400">Carregando...</p>
+                <p v-else-if="!observacoes.length" class="mt-3 text-sm text-gray-400">Nenhuma observação ainda.</p>
+    
+                <ul v-else class="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
+                    <li
+                        v-for="o in observacoes"
+                        :key="o.id"
+                        class="rounded border border-gray-100 p-2.5"
+                    >
+                        <div class="flex items-center justify-between gap-2 text-xs text-gray-400">
+                            <span class="truncate">{{ o.autor }} · {{ o.cnpj }}</span>
+                            <button
+                                v-if="o.podeEditar"
+                                type="button"
+                                class="shrink-0 font-medium hover:underline"
+                                :class="o.fixada ? 'text-amber' : 'text-gray-400'"
+                                @click="fixar(o)"
+                            >
+                                {{ o.fixada ? '★ Fixada' : '☆ Fixar' }}
+                            </button>
+                            <span v-else-if="o.fixada" class="shrink-0 font-medium text-amber">★ Fixada</span>
+                        </div>
+                        <p class="mt-1 text-sm text-gray-800">{{ o.mensagem }}</p>
+                    </li>
+                </ul>
+            </div>
+        </template>
     </DarkCard>
 </template>

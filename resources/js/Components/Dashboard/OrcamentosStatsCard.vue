@@ -39,7 +39,10 @@ function formatBRL(valor) {
 </script>
 
 <template>
-    <DarkCard title="Estatísticas de Orçamentos" subtitle="Resumo geral e do mês atual">
+    <DarkCard title="Estatísticas de Orçamentos" subtitle="Resumo geral e do mês atual"
+        :rotulo-detalhes="'Ver últimos orçamentos'"
+        chave-detalhes="orcamentos-stats"
+    >
         <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                 <rect x="6" y="3" width="12" height="18" rx="1" />
@@ -58,28 +61,30 @@ function formatBRL(valor) {
             <KpiTile :value="formatBRL(orcamentosStats.valorAprovado)" label="Valor aprovado" tone="info" compact :href="orcamentosHref({ status: 'aprovado' })" />
         </div>
 
-        <div class="mt-4 border-t border-gray-100 pt-4">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Últimos orçamentos</p>
-
-            <p v-if="!orcamentosStats.itens.length" class="mt-3 text-sm text-gray-400">Nenhum orçamento registrado.</p>
-
-            <ul v-else class="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
-                <li v-for="item in orcamentosStats.itens" :key="item.id">
-                    <Link
-                        :href="route('orcamentos.editar', item.id)"
-                        class="block rounded border border-gray-100 p-2.5 transition hover:border-navy hover:bg-gray-50"
-                    >
-                        <div class="flex items-center justify-between gap-2">
-                            <span class="truncate text-sm font-semibold text-gray-800">Orçamento #{{ item.id }}</span>
-                            <StatusPill :tone="statusTom[item.status] || 'neutral'">{{ statusLabel[item.status] || item.status }}</StatusPill>
-                        </div>
-                        <p class="mt-1 truncate text-sm text-gray-700">{{ item.cliente }}</p>
-                        <p class="mt-0.5 text-xs text-gray-400">
-                            {{ formatBRL(item.valorTotal) }} · {{ item.criadoHoje ? 'Criado hoje' : `Criado em ${item.criadoEm}` }}
-                        </p>
-                    </Link>
-                </li>
-            </ul>
-        </div>
+        <template #detalhes>
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Últimos orçamentos</p>
+    
+                <p v-if="!orcamentosStats.itens.length" class="mt-3 text-sm text-gray-400">Nenhum orçamento registrado.</p>
+    
+                <ul v-else class="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
+                    <li v-for="item in orcamentosStats.itens" :key="item.id">
+                        <Link
+                            :href="route('orcamentos.editar', item.id)"
+                            class="block rounded border border-gray-100 p-2.5 transition hover:border-navy hover:bg-gray-50"
+                        >
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="truncate text-sm font-semibold text-gray-800">Orçamento #{{ item.id }}</span>
+                                <StatusPill :tone="statusTom[item.status] || 'neutral'">{{ statusLabel[item.status] || item.status }}</StatusPill>
+                            </div>
+                            <p class="mt-1 truncate text-sm text-gray-700">{{ item.cliente }}</p>
+                            <p class="mt-0.5 text-xs text-gray-400">
+                                {{ formatBRL(item.valorTotal) }} · {{ item.criadoHoje ? 'Criado hoje' : `Criado em ${item.criadoEm}` }}
+                            </p>
+                        </Link>
+                    </li>
+                </ul>
+            </div>
+        </template>
     </DarkCard>
 </template>

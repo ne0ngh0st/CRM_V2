@@ -26,20 +26,21 @@ use App\Models\Cliente;
 class SegmentosInativosResolver
 {
     /**
-     * Quantas linhas nomeadas o quadro mostra antes de dobrar a cauda em "Demais".
+     * Quantos segmentos o quadro mostra antes de precisar de "ver mais".
      *
-     * ⚠️ SEIS, não dez, e o número saiu de olhar o dado: um vendedor real tem inativo
-     * espalhado por 11 segmentos, e a cauda vinha com linhas de 4, 4, 2 e 2 clientes —
-     * ruído puro num quadro cujo pedido literal foi "MENOS É MAIS". Com seis, as linhas
-     * nomeadas cobrem 172 dos 188 inativos dele (91%), e o resto vira uma linha só.
+     * ⚠️ TRÊS, a pedido do Tony em 2026-09-06: o principal fica visível e o resto abre no
+     * clique. Nada é descartado — o resolver devolve TODAS as linhas, e é o front que
+     * decide quantas pinta de início. Foi por isso que a agregação "Demais segmentos"
+     * saiu: ela existia para o total fechar quando a cauda era jogada fora, e agora a
+     * cauda é só um clique.
      */
-    public const MAX_LINHAS = 6;
+    public const LINHAS_VISIVEIS = 3;
 
     public function __construct(private readonly ClienteStatusResolver $statusResolver) {}
 
     /**
      * @param  array<string>|null  $codVendedores  null = empresa inteira
-     * @return array{total:int, linhas:list<array{codigo:string, nome:string, inativos:int, outros:bool}>}
+     * @return array{total:int, linhas:list<array{codigo:string, nome:string, inativos:int}>}
      */
     public function resolver(?array $codVendedores): array
     {
@@ -66,38 +67,21 @@ class SegmentosInativosResolver
          * mesma informação em dois lugares, contra o "menos é mais" que originou este
          * quadro.
          */
-        $linhas = [];
-        $outros = 0;
-
-        foreach ($porSegmento as $i => $linha) {
-            if ($i >= self::MAX_LINHAS) {
-                $outros += $linha['inativos'];
-
-                continue;
-            }
-
-            $linhas[] = [
-                // ⚠️ O CÓDIGO viaja junto porque a linha é um link para a Carteira, e o
-                // filtro de lá compara `clientes.cod_segmento`, que é o código bruto.
-                // Mandar o nome faria o filtro não casar nada — foi o mismatch
-                // nome×código que quebrou a aderência em silêncio em julho de 2026.
-                'codigo' => $linha['codigo'],
-                'nome' => $linha['nome'],
-                'inativos' => $linha['inativos'],
-                'outros' => false,
-            ];
-        }
-
         /*
-         * A cauda além do teto vira uma linha só. Não é enfeite: sem ela o total do quadro
-         * não fecharia com a soma das linhas, e é assim que o usuário deixa de confiar no
-         * número.
+         * ⚠️ Devolve TODAS as linhas, ordenadas por inativos desc. O corte de exibição é
+         * decisão de tela, e vive no componente — assim "ver mais" não precisa de uma
+         * segunda ida ao servidor, e o total sempre fecha com a soma das linhas por
+         * construção.
          */
-        if ($outros > 0) {
-            // Sem código: a cauda são vários segmentos, e nenhum filtro da Carteira
-            // representa "o resto". Linha sem link, em vez de link que mente.
-            $linhas[] = ['codigo' => '', 'nome' => 'Demais segmentos', 'inativos' => $outros, 'outros' => true];
-        }
+        $linhas = array_map(fn (array $l) => [
+            // ⚠️ O CÓDIGO viaja junto porque a linha é um link para a Carteira, e o filtro
+            // de lá compara `clientes.cod_segmento`, que é o código bruto. Mandar o nome
+            // faria o filtro não casar nada — foi o mismatch nome×código que quebrou a
+            // aderência em silêncio em julho de 2026.
+            'codigo' => $l['codigo'],
+            'nome' => $l['nome'],
+            'inativos' => $l['inativos'],
+        ], $porSegmento);
 
         return ['total' => (int) $total, 'linhas' => $linhas];
     }

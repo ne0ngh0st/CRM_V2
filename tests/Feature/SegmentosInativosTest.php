@@ -107,14 +107,16 @@ class SegmentosInativosTest extends TestCase
     }
 
     /**
-     * ⚠️ A INVARIANTE do quadro: a soma das linhas tem que fechar com o total. É o que
-     * impede o card de esconder cliente numa cauda cortada — e é por isso que a linha
-     * "Demais segmentos" existe.
+     * ⚠️ A INVARIANTE do quadro: a soma das linhas fecha com o total, SEMPRE.
+     *
+     * Desde 2026-09-06 o resolver devolve todos os segmentos e quem corta é a tela (mostra
+     * 3, "ver mais" abre o resto). É o que garante que o TOTAL do rodapé continue sendo a
+     * carteira inteira mesmo com a lista fechada — se o corte fosse no servidor, o total
+     * mentiria ou a lista esconderia cliente.
      */
     #[Test]
     public function test_soma_das_linhas_sempre_fecha_com_o_total(): void
     {
-        // 8 segmentos com contagens decrescentes: passa do teto de 6 linhas.
         foreach (range(1, 8) as $i) {
             Segmento::firstOrCreate(['codigo' => "20{$i}"], ['nome' => "SEGMENTO {$i}"]);
 
@@ -125,26 +127,12 @@ class SegmentosInativosTest extends TestCase
 
         $r = $this->resolver();
 
+        $this->assertCount(8, $r['linhas'], 'nenhum segmento fica de fora do payload');
         $this->assertSame(
             $r['total'],
             array_sum(array_column($r['linhas'], 'inativos')),
             'a soma das linhas tem que fechar com o total',
         );
-        $this->assertCount(SegmentosInativosResolver::MAX_LINHAS + 1, $r['linhas'], '6 nomeadas + a cauda');
-        $this->assertSame('Demais segmentos', end($r['linhas'])['nome']);
-        $this->assertTrue(end($r['linhas'])['outros']);
-    }
-
-    /** Sem cauda, não existe linha "Demais segmentos" — nada de linha zerada na tela. */
-    #[Test]
-    public function test_sem_cauda_nao_cria_linha_demais(): void
-    {
-        $this->cliente('A1', '101', $this->inativo());
-
-        $linhas = $this->resolver()['linhas'];
-
-        $this->assertCount(1, $linhas);
-        $this->assertFalse($linhas[0]['outros']);
     }
 
     #[Test]
@@ -188,25 +176,19 @@ class SegmentosInativosTest extends TestCase
     }
 
     /**
-     * ⚠️ A cauda não pode virar link: nenhum filtro da Carteira representa "o resto", e
-     * link que leva ao lugar errado é pior que linha estática. O front decide pelo código
-     * vazio.
+     * ⚠️ Cliente sem segmento no cadastro entra com código vazio, e é assim que o front
+     * sabe que aquela linha não pode virar link: o filtro da Carteira compara o código, e
+     * um link vazio abriria a carteira inteira — pior que linha estática.
      */
     #[Test]
-    public function test_cauda_nao_tem_codigo(): void
+    public function test_cliente_sem_segmento_entra_com_codigo_vazio(): void
     {
-        foreach (range(1, 8) as $i) {
-            Segmento::firstOrCreate(['codigo' => "30{$i}"], ['nome' => "SEG {$i}"]);
+        $this->cliente('A1', '', $this->inativo());
 
-            foreach (range(1, 9 - $i) as $j) {
-                $this->cliente("S{$i}C{$j}", "30{$i}", $this->inativo());
-            }
-        }
+        $linha = $this->resolver()['linhas'][0];
 
-        $cauda = end($this->resolver()['linhas']);
-
-        $this->assertTrue($cauda['outros']);
-        $this->assertSame('', $cauda['codigo']);
+        $this->assertSame('', $linha['codigo']);
+        $this->assertSame(1, $linha['inativos']);
     }
 
     /**

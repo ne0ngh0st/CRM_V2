@@ -29,7 +29,7 @@
  * quadro agrupa por nome já resolvido. Ligar os dois exigiria devolver o código junto —
  * decisão para quando a regra de família voltar e o quadro ganhar as colunas de produto.
  */
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import DarkCard from '@/Components/DarkCard.vue';
 
@@ -47,11 +47,12 @@ const props = defineProps({
  * mesmo `clientes.cod_segmento`. Se um dia divergirem, o vendedor clica em 53 e encontra
  * outra quantidade — que é como ele deixa de confiar na tela.
  *
- * ⚠️ Linha sem código (a cauda "Demais segmentos") não vira link: nenhum filtro da
- * Carteira representa "o resto", e link que leva ao lugar errado é pior que linha estática.
+ * ⚠️ Linha sem código (cliente sem segmento no cadastro) não vira link: o filtro da
+ * Carteira compara o código, e um link vazio levaria à carteira inteira — pior que linha
+ * estática.
  */
 function href(linha) {
-    if (linha.outros || !linha.codigo) {
+    if (!linha.codigo) {
         return null;
     }
 
@@ -77,17 +78,34 @@ const explicacao = [
     'Clique numa linha para abrir a Carteira já filtrada naquele segmento.',
     '',
     'As linhas são os segmentos onde você tem cliente inativo, do maior para o menor.',
-    '"Demais segmentos" reúne a cauda além das 6 primeiras linhas — existe para o total fechar com a sua carteira.',
+    'Mostra os 3 maiores; "ver mais" abre os demais. O TOTAL é sempre da carteira inteira, esteja a lista aberta ou não.',
     '',
     'Conta TODOS os clientes inativos do escopo.',
     'O card "Carteira por Segmento" pode mostrar um número menor: os quadrinhos de lá deixam de fora os clientes cujo vendedor não tem segmento cadastrado, porque ali a pergunta é de aderência. Aqui a pergunta é quantos inativos existem, e nenhum fica de fora.',
 ].join('\n');
 
+/**
+ * O quadro mostra os 3 maiores e abre o resto no clique — pedido do Tony em 2026-09-06:
+ * "mostra 3 e se quiser expande e vê o resto".
+ *
+ * ⚠️ O corte é de EXIBIÇÃO, não de dado: o servidor manda todos os segmentos, o TOTAL do
+ * rodapé é sempre da carteira inteira, e "ver mais" não vai ao servidor.
+ */
+const VISIVEIS = 3;
+
+const aberto = ref(false);
+
+const linhasVisiveis = computed(() => (aberto.value
+    ? props.segmentosInativos.linhas
+    : props.segmentosInativos.linhas.slice(0, VISIVEIS)));
+
+const ocultas = computed(() => Math.max(0, props.segmentosInativos.linhas.length - VISIVEIS));
+
 const formatar = new Intl.NumberFormat('pt-BR');
 </script>
 
 <template>
-    <DarkCard title="Segmentos Atendidos" :subtitle="subtitulo">
+    <DarkCard title="Segmentos Atendidos" :subtitle="subtitulo" colapsavel chave-colapso="segmentos-inativos">
         <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                 <line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round" />
@@ -121,7 +139,7 @@ const formatar = new Intl.NumberFormat('pt-BR');
                     -->
                     <component
                         :is="href(linha) ? Link : 'tr'"
-                        v-for="linha in segmentosInativos.linhas"
+                        v-for="linha in linhasVisiveis"
                         :key="linha.nome"
                         :href="href(linha) ?? undefined"
                         :as="href(linha) ? 'tr' : undefined"
@@ -129,16 +147,10 @@ const formatar = new Intl.NumberFormat('pt-BR');
                         :class="href(linha) ? 'group cursor-pointer' : ''"
                         :title="href(linha) ? `Ver os ${linha.inativos} inativos de ${linha.nome} na Carteira` : null"
                     >
-                        <td
-                            class="tbl-td text-left"
-                            :class="linha.outros ? 'italic text-gray-500' : 'font-medium text-gray-800'"
-                        >
+                        <td class="tbl-td text-left font-medium text-gray-800">
                             {{ linha.nome }}
                         </td>
-                        <td
-                            class="tbl-td text-right tabular-nums"
-                            :class="linha.outros ? 'text-gray-500' : 'font-semibold text-gray-800'"
-                        >
+                        <td class="tbl-td text-right font-semibold tabular-nums text-gray-800">
                             <span class="inline-flex items-center justify-end gap-1">
                                 {{ formatar.format(linha.inativos) }}
                                 <svg
@@ -168,6 +180,19 @@ const formatar = new Intl.NumberFormat('pt-BR');
                     </tr>
                 </tfoot>
             </table>
+
+            <button
+                v-if="ocultas > 0"
+                type="button"
+                class="mt-2 flex w-full items-center justify-center gap-1 text-xs font-medium text-gray-500 transition hover:text-navy"
+                :aria-expanded="aberto"
+                @click="aberto = !aberto"
+            >
+                {{ aberto ? 'Ver menos' : `Ver mais ${ocultas} ${ocultas === 1 ? 'segmento' : 'segmentos'}` }}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3 transition-transform" :class="aberto ? 'rotate-180' : ''">
+                    <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </button>
         </div>
 
         <p v-else class="text-sm text-gray-400">Nenhum cliente inativo nesta carteira.</p>
