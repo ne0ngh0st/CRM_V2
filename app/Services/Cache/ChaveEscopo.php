@@ -44,8 +44,14 @@ final readonly class ChaveEscopo
      *   `inativos`, já dentro do v3. Renomear campo de payload cacheado é mudança de
      *   formato como qualquer outra. Como o v3 ainda não tinha ido a produção, bastou
      *   limpar o cache de dev — se já tivesse ido, teria exigido v4.
+     *
+     *   v3 → v4 (2026-09-06) — `venda-comparacao` e `faturamento-comparacao` passaram a
+     *   carregar `dias` e `mesCorrente` para a aba de retrato diário. Mudança de formato
+     *   de bloco JÁ EM PRODUÇÃO (o v3 subiu no dia anterior), então aqui o bump é
+     *   obrigatório: sem ele a aba Dia abriria vazia por 30 min após o deploy, para quem
+     *   já estava logado.
      */
-    public const VERSAO = 'v3';
+    public const VERSAO = 'v4';
 
     private const PREFIXO = 'agg';
 

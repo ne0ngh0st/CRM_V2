@@ -343,22 +343,30 @@ class PotencialCarteiraTest extends TestCase
         $this->assertSame(6, PotencialPeso::query()->count(), '2 segmentos × 3 famílias, sem duplicar');
     }
 
+    /**
+     * ⚠️ INVERTIDO em 2026-09-06, não apagado. Este teste afirmava que a Home entregava
+     * `potencialCarteira`; hoje ela entrega `segmentosInativos`, porque o diretor pediu o
+     * quadro por segmento e mandou tirar a família de produto "neste primeiro momento".
+     *
+     * O cálculo por família continua inteiro e testado neste arquivo — só não é exposto na
+     * Home. Este teste passa a guardar exatamente isso: se alguém religar a prop sem
+     * revisar o custo, a suíte acusa. A versão anterior custava 41,5 s no escopo empresa,
+     * e é por isso que ela não pode voltar por descuido.
+     */
     #[Test]
-    public function test_vendedor_recebe_o_bloco_e_gestor_nao(): void
+    public function test_a_home_nao_expoe_mais_o_bloco_por_familia(): void
     {
         $vendedor = User::factory()->create();
         $vendedor->assignRole('vendedor');
         VendedorPerfil::create(['user_id' => $vendedor->id, 'cod_vendedor' => self::COD]);
 
         $props = $this->actingAs($vendedor)->get(route('dashboard'))->assertOk()->viewData('page')['props'];
-        $this->assertNotNull($props['potencialCarteira']);
-        $this->assertCount(3, $props['potencialCarteira']['familias']);
 
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
+        $this->assertArrayNotHasKey('potencialCarteira', $props);
+        $this->assertNotNull($props['segmentosInativos'], 'o quadro por segmento tomou o lugar');
 
-        $props = $this->actingAs($admin)->get(route('dashboard'))->assertOk()->viewData('page')['props'];
-        $this->assertNull($props['potencialCarteira'], 'gestor não recebe a agregação sobre faturamentos');
+        // O resolver por família continua funcionando — só não vai para a tela.
+        $this->assertCount(3, $this->resolver()['familias']);
     }
 
     /**

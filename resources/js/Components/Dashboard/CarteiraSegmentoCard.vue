@@ -36,9 +36,29 @@ function carteiraHref(params) {
     });
 }
 
-const totalAtivos = computed(() => props.carteiraSegmento.dentroSegmento.ativos + props.carteiraSegmento.foraSegmento.ativos);
-const totalInativando = computed(() => props.carteiraSegmento.dentroSegmento.inativando + props.carteiraSegmento.foraSegmento.inativando);
-const totalInativos = computed(() => props.carteiraSegmento.dentroSegmento.inativos + props.carteiraSegmento.foraSegmento.inativos);
+/**
+ * ⚠️ Os três totais somam DENTRO + FORA + SEM SEGMENTO DEFINIDO.
+ *
+ * Até 2026-09-06 o terceiro balde ficava de fora, e isso produzia dois defeitos:
+ *
+ *  1. Os quadrinhos não fechavam com o próprio subtítulo do card. No escopo empresa o
+ *     card dizia "92.209 clientes" e os tiles somavam 28.746 — os 63.463 clientes de
+ *     vendedor sem segmento cadastrado simplesmente não apareciam em lugar nenhum.
+ *  2. O card "Segmentos Atendidos", ao lado, mostrava 73.935 inativos contra os 21.619
+ *     daqui. Dois números com o mesmo nome, na mesma tela, sem explicação.
+ *
+ * "Sem segmento definido" continua como tile próprio: ele responde outra pergunta (a
+ * ADERÊNCIA não é mensurável para esses clientes), e por isso segue fora do denominador
+ * de `pctDentro`/`pctFora`. O que mudou é que eles voltaram a contar no status.
+ */
+const somaStatus = (campo) => computed(() =>
+    props.carteiraSegmento.dentroSegmento[campo]
+    + props.carteiraSegmento.foraSegmento[campo]
+    + (props.carteiraSegmento.semSegmentoDefinido?.[campo] ?? 0));
+
+const totalAtivos = somaStatus('ativos');
+const totalInativando = somaStatus('inativando');
+const totalInativos = somaStatus('inativos');
 
 /**
  * Uma linha por status, com a coluna DENTRO e a coluna FORA lado a lado.
@@ -98,18 +118,18 @@ const linhas = computed(() => STATUS.map((s) => ({
                 ⚠️ Sem tile de "% no segmento": esse número já está no subtítulo do card E na
                 barra logo abaixo, com mais contexto nos dois. Três vezes a mesma
                 porcentagem na mesma caixa era ruído, não reforço.
+
+                ⚠️ Sem tile de "Sem segmento definido" (removido em 2026-09-06, pedido do
+                Tony: "só confunde"). Esses clientes NÃO sumiram da conta — desde a mesma
+                data eles entram nos três status acima, que é o que fez os quadrinhos
+                fecharem com o total do card e com o quadro "Segmentos Atendidos". O que
+                saiu foi só o tile; a aderência deles continua fora do denominador de
+                dentro/fora, como sempre foi.
             -->
             <div class="flex flex-wrap gap-2">
                 <KpiTile :value="totalAtivos" label="Ativos" tone="ok" :href="carteiraHref({ status: 'ativo' })" />
                 <KpiTile :value="totalInativando" label="Inativando" tone="warn" :href="carteiraHref({ status: 'inativando' })" />
                 <KpiTile :value="totalInativos" label="Inativos" tone="danger" :href="carteiraHref({ status: 'inativo' })" />
-                <KpiTile
-                    v-if="carteiraSegmento.semSegmentoDefinido.total > 0"
-                    :value="carteiraSegmento.semSegmentoDefinido.total"
-                    label="Sem segmento definido"
-                    tone="default"
-                    :href="carteiraHref({ aderencia: 'sem_segmento' })"
-                />
             </div>
 
             <div class="space-y-2">
@@ -150,7 +170,7 @@ const linhas = computed(() => STATUS.map((s) => ({
             <table class="w-full text-sm">
                 <thead>
                     <tr class="text-[0.65rem] uppercase tracking-wide text-gray-400">
-                        <th class="pb-1 text-left font-semibold">Status</th>
+                        <th class="pb-1 text-left font-semibold" title="Só os clientes com aderência mensurável — quem não tem segmento cadastrado fica no tile ao lado">Status</th>
                         <th class="pb-1 text-right font-semibold">No segmento</th>
                         <th class="pb-1 text-right font-semibold">Fora do segmento</th>
                     </tr>

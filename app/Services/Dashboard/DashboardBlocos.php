@@ -13,6 +13,7 @@ use App\Models\Pedido;
 use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
+use App\Services\Carteira\SegmentosInativosResolver;
 use App\Services\Metas\MetaRankingResolver;
 use App\Services\Potencial\PotencialCarteiraResolver;
 use Closure;
@@ -43,6 +44,7 @@ class DashboardBlocos
         private readonly CarteiraAderenciaResolver $aderenciaResolver,
         private readonly MetaRankingResolver $metaRanking,
         private readonly PotencialCarteiraResolver $potencialResolver,
+        private readonly SegmentosInativosResolver $segmentosInativosResolver,
     ) {}
 
     /** Instância irmã que sempre recalcula. Usada só pelo job de warming e pelo comando. */
@@ -283,6 +285,12 @@ class DashboardBlocos
                     'anoAnterior' => $anoAtual - 1,
                     'valoresAnoAtual' => $meses($anoAtual),
                     'valoresAnoAnterior' => $meses($anoAtual - 1),
+                    'mesCorrente' => (int) now()->month,
+                    'dias' => $this->somaDiaria(
+                        Pedido::query()->selectRaw('DAY(data_pedido) as dia, SUM(valor_total) as total'),
+                        'data_pedido',
+                        $codVendedores,
+                    ),
                 ];
             },
         );
@@ -332,6 +340,48 @@ class DashboardBlocos
     }
 
     /**
+     * Soma por DIA do mês corrente, com todos os dias do mês preenchidos.
+     *
+     * É o "retrato diário" pedido pelo diretor em 2026-09-06. Só o mês corrente: virou o
+     * mês, a tabela recomeça — pedido dele, e cai naturalmente porque a janela é sempre
+     * "mês corrente até D-1".
+     *
+     * ⚠️ MESMO corte da série mensal, via `intervaloDatas($ano, $mes, $mes)` →
+     * `fimRealizado()` (D-1, D-3 na segunda). Usar outra janela aqui faria a aba Dia e a
+     * aba Mês contarem períodos diferentes no MESMO card — que é exatamente o bug que a
+     * série mensal já teve quando passava `12` fixo.
+     *
+     * ⚠️ `DAY()` só no SELECT/GROUP BY, nunca no WHERE. O filtro continua sendo
+     * `whereBetween` com datas literais, que é o que mantém o `range` no índice coberto
+     * (`ped_vend_data_valor_idx` / `fat_vend_data_valor_idx`). Envolver a coluna numa
+     * função no WHERE mataria o plano. Medido: 3 a 38 ms em qualquer escopo.
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return list<float>  índice 0 = dia 1
+     */
+    private function somaDiaria(Builder $query, string $colunaData, ?array $codVendedores): array
+    {
+        $ano = (int) now()->year;
+        $mes = (int) now()->month;
+
+        [$inicio, $fim] = $this->metaRanking->intervaloDatas($ano, $mes, $mes);
+
+        $query->whereBetween($colunaData, [$inicio, $fim])->groupBy('dia');
+
+        if ($codVendedores !== null) {
+            $query->whereIn('cod_vendedor', $codVendedores);
+        }
+
+        $totaisPorDia = $query->pluck('total', 'dia');
+        $diasNoMes = (int) Carbon::create($ano, $mes, 1)->daysInMonth;
+
+        return collect(range(1, $diasNoMes))
+            ->map(fn ($dia) => (float) ($totaisPorDia[$dia] ?? 0))
+            ->values()
+            ->all();
+    }
+
+    /**
      * ⚠️ `BETWEEN` em vez de `whereYear()` é a higiene correta de SQL, mas não resolve
      * sozinho o caso "empresa inteira": hoje 100% do faturamento importado é de um único
      * ano, então nenhum índice reduz as linhas lidas — a soma passa pelas ~930k linhas de
@@ -365,6 +415,12 @@ class DashboardBlocos
                     'anoAnterior' => $anoAtual - 1,
                     'valoresAnoAtual' => $meses($anoAtual),
                     'valoresAnoAnterior' => $meses($anoAtual - 1),
+                    'mesCorrente' => (int) now()->month,
+                    'dias' => $this->somaDiaria(
+                        Faturamento::query()->selectRaw('DAY(data_emissao) as dia, SUM(valor_total) as total'),
+                        'data_emissao',
+                        $codVendedores,
+                    ),
                 ];
             },
         );
@@ -397,6 +453,29 @@ class DashboardBlocos
 
                 return $this->aderenciaResolver->resolver($query);
             },
+        );
+    }
+
+    /**
+     * Clientes inativos por segmento atendido — o quadro que o diretor pediu em
+     * 2026-09-06 no lugar do Potencial por família ("MENOS É MAIS").
+     *
+     * A regra inteira vive em {@see SegmentosInativosResolver}; aqui mora só a chave.
+     *
+     * ⚠️ `paraDoDia`: "inativo" é medido contra `now()->subDays(365)`, então o resultado
+     * envelhece com o dia. Com `para()` o quadro ficaria congelado no corte de ontem até
+     * o TTL expirar — mesmo motivo de `carteira-segmento`.
+     *
+     * ⚠️ Chave NOVA. O bloco `potencial-carteira` deixou de ser chamado pela Home; a
+     * chave dele simplesmente expira pelo TTL, sem precisar de flush.
+     *
+     * @param  array<string>|null  $codVendedores
+     */
+    public function segmentosInativos(ChaveEscopo $escopo, ?array $codVendedores): array
+    {
+        return $this->cachear(
+            $escopo->paraDoDia('segmentos-inativos'),
+            fn () => $this->segmentosInativosResolver->resolver($codVendedores),
         );
     }
 

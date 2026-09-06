@@ -36,6 +36,20 @@ const ABAS = [
 
 const aba = ref(props.vendaComparacao ? 'venda' : 'faturamento');
 
+/**
+ * Segundo eixo do card: MÊS (12 meses, ano vs. ano) ou DIA (retrato do mês corrente).
+ *
+ * ⚠️ A aba Dia mostra SÓ o mês corrente, e virou o mês recomeça — pedido do diretor em
+ * 2026-09-06 ("a evolução diária será apenas do mês corrente, virou o mês não traz
+ * mais"). Não há comparação com o mês anterior de propósito.
+ */
+const PERIODOS = [
+    { chave: 'mes', rotulo: 'Mês' },
+    { chave: 'dia', rotulo: 'Dia' },
+];
+
+const periodo = ref('mes');
+
 const abasDisponiveis = computed(() =>
     ABAS.filter((a) => (a.chave === 'venda' ? props.vendaComparacao : props.faturamentoComparacao)),
 );
@@ -44,7 +58,19 @@ const dados = computed(() =>
     aba.value === 'venda' ? props.vendaComparacao : props.faturamentoComparacao,
 );
 
-const subtitulo = computed(() => ABAS.find((a) => a.chave === aba.value)?.subtitulo ?? '');
+const subtitulo = computed(() => {
+    const base = ABAS.find((a) => a.chave === aba.value);
+
+    if (periodo.value === 'dia') {
+        const rotulo = aba.value === 'venda' ? 'Pedidos emitidos' : 'Notas emitidas';
+
+        const mes = MESES_EXTENSO[(dados.value?.mesCorrente ?? 1) - 1] ?? '';
+
+        return `${rotulo} · dia a dia de ${mes}`;
+    }
+
+    return base?.subtitulo ?? '';
+});
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -76,9 +102,11 @@ const soma = (valores) => (valores ?? []).reduce((total, v) => total + (v || 0),
  * Uma célula já resolvida: o que exibir, o que pôr no `title` e se é período futuro.
  * Concentrado aqui para que as três linhas da tabela não repitam a regra de exibição.
  */
-function celula(valor, mes) {
-    if (mes !== null && mes > mesLimite.value) {
-        return { texto: '', title: 'Mês ainda não iniciado', futuro: true };
+function celula(valor, indice, limite = null) {
+    const teto = limite ?? mesLimite.value;
+
+    if (indice !== null && indice > teto) {
+        return { texto: '', title: 'Período ainda não iniciado', futuro: true };
     }
 
     if (!valor) {
@@ -87,6 +115,26 @@ function celula(valor, mes) {
 
     return { texto: compacto.format(valor), title: brl.format(valor), futuro: false };
 }
+
+const MESES_EXTENSO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+/** Dia de hoje, quando estamos no mês que a série cobre. Fora dele, o mês inteiro já fechou. */
+const diaLimite = computed(() => {
+    const agora = new Date();
+    const mesmoMes = dados.value?.mesCorrente === agora.getMonth() + 1
+        && dados.value?.anoAtual === agora.getFullYear();
+
+    return mesmoMes ? agora.getDate() : (dados.value?.dias?.length ?? 31);
+});
+
+const dias = computed(() => dados.value?.dias ?? []);
+
+/** Rótulos 01..31, para a tabela não depender do índice cru. */
+const rotulosDias = computed(() => dias.value.map((_, i) => String(i + 1).padStart(2, '0')));
+
+const linhaDias = computed(() => dias.value.map((v, i) => celula(v, i + 1, diaLimite.value)));
+
+const totalDoMes = computed(() => soma(dias.value.slice(0, diaLimite.value)));
 
 /** Variação percentual. Sem base no ano anterior não há variação — nunca "+100%". */
 function variacao(atual, anterior, mes) {
@@ -140,6 +188,24 @@ const alertaSerieIncompleta = computed(() => {
     const anterior = dados.value?.valoresAnoAnterior ?? [];
     const mesesComDado = anterior.filter((v) => v > 0).length;
 
+    /*
+     * ⚠️ Contar MESES não basta, e o caso real provou isso: os pedidos de 2025 são 67
+     * lançamentos residuais espalhados pelos 12 meses. Com o teste antigo ("menos de 6
+     * meses com dado") o aviso não disparava, e o card comparava R$ 327 milhões contra
+     * R$ 198 mil em silêncio, com variação de cinco dígitos na linha de baixo.
+     *
+     * O teste que pega é de ORDEM DE GRANDEZA: ano anterior abaixo de 5% do atual não é
+     * um ano fraco, é ausência de carga.
+     */
+    const totalAtual = soma(dados.value?.valoresAnoAtual);
+    const totalAnterior = soma(anterior);
+
+    if (totalAtual > 0 && totalAnterior > 0 && totalAnterior < totalAtual * 0.05) {
+        return aba.value === 'venda'
+            ? `Os pedidos de ${dados.value?.anoAnterior} não foram carregados — o pouco que aparece é resíduo, e a variação não é comparável.`
+            : `O faturamento de ${dados.value?.anoAnterior} está incompleto — a variação não é comparável.`;
+    }
+
     if (mesesComDado === 0) {
         return aba.value === 'venda'
             ? `Ainda não há pedidos de ${dados.value?.anoAnterior} carregados — a linha do ano anterior fica vazia.`
@@ -164,21 +230,89 @@ const alertaSerieIncompleta = computed(() => {
         </template>
 
         <template #actions>
-            <div v-if="abasDisponiveis.length > 1" class="flex overflow-hidden rounded border border-gray-600">
-                <button
-                    v-for="opcao in abasDisponiveis"
-                    :key="opcao.chave"
-                    type="button"
-                    class="px-2 py-1 text-xs font-medium transition"
-                    :class="aba === opcao.chave ? 'bg-white/20 text-white' : 'text-gray-300 hover:bg-white/10'"
-                    @click="aba = opcao.chave"
-                >
-                    {{ opcao.rotulo }}
-                </button>
+            <div class="flex items-center gap-2">
+                <div v-if="abasDisponiveis.length > 1" class="flex overflow-hidden rounded border border-gray-600">
+                    <button
+                        v-for="opcao in abasDisponiveis"
+                        :key="opcao.chave"
+                        type="button"
+                        class="px-2 py-1 text-xs font-medium transition"
+                        :class="aba === opcao.chave ? 'bg-white/20 text-white' : 'text-gray-300 hover:bg-white/10'"
+                        @click="aba = opcao.chave"
+                    >
+                        {{ opcao.rotulo }}
+                    </button>
+                </div>
+
+                <!-- Segundo eixo: recorte do período. Ver PERIODOS no script. -->
+                <div class="flex overflow-hidden rounded border border-gray-600">
+                    <button
+                        v-for="opcao in PERIODOS"
+                        :key="opcao.chave"
+                        type="button"
+                        class="px-2 py-1 text-xs font-medium transition"
+                        :class="periodo === opcao.chave ? 'bg-white/20 text-white' : 'text-gray-300 hover:bg-white/10'"
+                        @click="periodo = opcao.chave"
+                    >
+                        {{ opcao.rotulo }}
+                    </button>
+                </div>
             </div>
         </template>
 
-        <template v-if="dados">
+        <template v-if="dados && periodo === 'dia'">
+            <div class="tbl-wrap">
+                <table class="tbl min-w-[1100px]">
+                    <thead>
+                        <tr class="tbl-head-row">
+                            <th class="tbl-th text-left">Período</th>
+                            <th
+                                v-for="(rotulo, i) in rotulosDias"
+                                :key="rotulo"
+                                class="tbl-th"
+                                :class="i + 1 > diaLimite ? 'text-gray-300' : ''"
+                            >
+                                {{ rotulo }}<span v-if="i + 1 === diaLimite" title="Dia corrente, até D-1">*</span>
+                            </th>
+                            <th class="tbl-th border-l-2 border-gray-300 bg-gray-100 text-gray-700">Mês</th>
+                        </tr>
+                    </thead>
+                    <!--
+                        ⚠️ UMA linha só. A versão anterior tinha uma segunda linha com a
+                        soma corrida; saiu a pedido do Tony em 2026-09-06 — o total do mês
+                        já fecha a tabela à direita, e a linha corrida era o mesmo número
+                        repetido 30 vezes até chegar nele.
+                    -->
+                    <tbody class="tbl-body">
+                        <tr class="tbl-row">
+                            <td class="tbl-td text-left font-semibold text-gray-800">{{ dados.anoAtual }}</td>
+                            <td
+                                v-for="(c, i) in linhaDias"
+                                :key="i"
+                                class="tbl-td font-medium text-gray-800"
+                                :class="c.futuro ? 'bg-gray-50' : ''"
+                                :title="c.title"
+                            >
+                                {{ c.texto }}
+                            </td>
+                            <td
+                                class="tbl-td border-l-2 border-gray-300 bg-gray-50 font-bold text-gray-900"
+                                :title="brl.format(totalDoMes)"
+                            >
+                                {{ totalDoMes ? compacto.format(totalDoMes) : '—' }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p class="mt-2 text-[0.7rem] text-gray-400">
+                Só o mês corrente — vira o mês, a contagem recomeça. Valores abreviados;
+                passe o mouse para o valor exato. O dia corrente (*) vai até o dia anterior (D-1).
+            </p>
+        </template>
+
+        <template v-else-if="dados">
             <p v-if="alertaSerieIncompleta" class="mb-3 rounded border border-amber/40 bg-amber/10 px-2 py-1 text-xs text-amber-dark">
                 {{ alertaSerieIncompleta }}
             </p>

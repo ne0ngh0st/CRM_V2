@@ -75,16 +75,17 @@ class AquecerCacheDashboardJob implements ShouldQueue
         // só que em modo forçado. É isso que impede o job de gravar numa chave que
         // ninguém lê.
         //
-        // vendaComparacao e faturamentoComparacao ficam de fora de propósito: na Home dos
-        // gestores (único público dos escopos aquecidos — empresa e equipes) o card
-        // Chart.js foi trocado pelo embed do Power BI. Vendedor/representante ainda chamam
-        // os dois métodos, mas o escopo individual não é aquecido (config
-        // escopos_aquecidos.vendedores) porque já é naturalmente barato.
-        //
-        // ⚠️ Se um dia o card voltar a aparecer para gestor, os DOIS blocos precisam
-        // entrar aqui — não só o de faturamento.
+        // ⚠️ vendaComparacao e faturamentoComparacao ENTRARAM aqui em 2026-09-06, quando o
+        // card de Comparação voltou a aparecer para gestor (o embed do Power BI virou só
+        // um botão). O comentário anterior neste ponto já avisava que, se isso
+        // acontecesse, os DOIS blocos precisariam entrar — não só o de faturamento.
+        // Sem eles, o primeiro ADM a abrir a Home paga a agregação fria do escopo empresa
+        // (~660 ms só na soma do ano de faturamento).
         $frios->metaGauge($porVendedor, $escopo['codVendedores']);
         $frios->carteiraSegmento($porVendedor, $escopo['codVendedores']);
+        $frios->segmentosInativos($porVendedor, $escopo['codVendedores']);
+        $frios->vendaComparacao($porVendedor, $escopo['codVendedores']);
+        $frios->faturamentoComparacao($porVendedor, $escopo['codVendedores']);
         $frios->pedidosAtencao($porVendedor, $escopo['codVendedores']);
         $frios->orcamentosStats($porUsuario, $escopo['usuarioIds']);
     }

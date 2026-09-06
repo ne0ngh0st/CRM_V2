@@ -28,16 +28,42 @@ class DashboardBiEmbedTest extends TestCase
         ];
     }
 
+    /**
+     * ⚠️ INVERTIDO em 2026-09-06, não apagado. Este teste afirmava que gestor recebia o
+     * embed E `faturamentoComparacao` NULO — o card local era exclusivo de vendedor.
+     *
+     * O diretor pediu o contrário: "na tela inicial dos ADM devem ter essas informações
+     * também" e "retira esse painel de BI e troca por um botão". Agora o gestor recebe as
+     * duas agregações E a URL do BI, que virou atalho em vez de iframe.
+     *
+     * Mantido invertido porque a decisão nova precisa de guarda igual à antiga: se alguém
+     * recolocar o `&& ! $eGestor` no controller, a suíte acusa.
+     */
     #[DataProvider('gestores')]
-    public function test_gestor_recebe_o_embed_e_nao_a_agregacao_de_faturamento(string $role): void
+    public function test_gestor_recebe_o_atalho_do_bi_e_tambem_as_agregacoes(string $role): void
     {
-        $this->actingAs($this->usuario($role))
+        /*
+         * ⚠️ Supervisor precisa de equipe, senão `codVendedores` volta `[]`, `$temEscopo`
+         * é falso e TODO bloco escopado vem nulo. A versão anterior deste teste afirmava
+         * justamente que os blocos eram nulos — e passava neste perfil pelo motivo errado,
+         * escopo vazio em vez do gate de gestor. Sem esta equipe, o teste novo continuaria
+         * sem exercitar o caminho que ele diz cobrir.
+         */
+        $gestor = $this->usuario($role, comCodigo: true);
+
+        if ($role === 'supervisor') {
+            $subordinado = $this->usuario('vendedor', comCodigo: true);
+            $subordinado->vendedorPerfil->update(['cod_super' => $gestor->vendedorPerfil->cod_vendedor]);
+        }
+
+        $this->actingAs($gestor)
             ->get(route('dashboard'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Dashboard')
                 ->where('biEmbedUrl', config('powerbi.embed_url'))
-                ->where('faturamentoComparacao', null)
+                ->where('faturamentoComparacao.anoAtual', (int) now()->year)
+                ->where('vendaComparacao.anoAtual', (int) now()->year)
             );
     }
 

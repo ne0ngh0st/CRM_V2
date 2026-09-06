@@ -10,7 +10,7 @@ import LigacoesStatsCards from '@/Components/Dashboard/LigacoesStatsCards.vue';
 import OrcamentosStatsCard from '@/Components/Dashboard/OrcamentosStatsCard.vue';
 import PedidosAtencaoCard from '@/Components/Dashboard/PedidosAtencaoCard.vue';
 import ComparacaoCard from '@/Components/Dashboard/ComparacaoCard.vue';
-import PotencialCarteiraCard from '@/Components/Dashboard/PotencialCarteiraCard.vue';
+import SegmentosInativosCard from '@/Components/Dashboard/SegmentosInativosCard.vue';
 import FaturamentoBiEmbed from '@/Components/Dashboard/FaturamentoBiEmbed.vue';
 import SugestoesBoard from '@/Components/Dashboard/SugestoesBoard.vue';
 import { Head, usePage } from '@inertiajs/vue3';
@@ -29,7 +29,7 @@ const props = defineProps({
     carteiraSegmento: Object,
     orcamentosStats: Object,
     pedidosAtencao: Object,
-    potencialCarteira: Object,
+    segmentosInativos: Object,
     segmentosVendedor: { type: Array, default: () => [] },
 });
 
@@ -163,10 +163,9 @@ const mesAno = computed(() => {
                     "Pedidos emitidos" quando o Potencial morava aqui. Card novo entra como
                     faixa própria, não empilhado.
                 -->
-                <FaturamentoBiEmbed v-if="biEmbedUrl" :url="biEmbedUrl" />
-                <PotencialCarteiraCard
-                    v-else-if="potencialCarteira"
-                    :potencial-carteira="potencialCarteira"
+                <SegmentosInativosCard
+                    v-if="segmentosInativos"
+                    :segmentos-inativos="segmentosInativos"
                     :visao-supervisor="visao.visaoSupervisor"
                     :visao-vendedor="visao.visaoVendedor"
                 />
@@ -187,6 +186,14 @@ const mesAno = computed(() => {
                         :visao-vendedor="visao.visaoVendedor"
                     />
                 </div>
+
+                <!--
+                    ⚠️ Faixa fina, logo acima da Comparação. O embed de 560px saiu em
+                    2026-09-06 (pedido do diretor) e o atalho tinha ido para o pé da
+                    página — longe demais de quem o usa. Aqui ele encosta no bloco de
+                    séries, que é o assunto vizinho, sem roubar a primeira dobra.
+                -->
+                <FaturamentoBiEmbed v-if="biEmbedUrl" :url="biEmbedUrl" />
 
                 <ComparacaoCard
                     v-if="vendaComparacao || faturamentoComparacao"

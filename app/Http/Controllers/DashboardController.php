@@ -83,23 +83,29 @@ class DashboardController extends Controller
              * cacheadas, e ir buscar a outra aba no clique tornaria o alternador lento
              * justamente para quem alterna.
              */
-            'vendaComparacao' => $temEscopo && $mostraBlocos && ! $eGestor
+            'vendaComparacao' => $temEscopo && $mostraBlocos
                 ? $this->blocos->vendaComparacao($porVendedor, $codVendedores)
                 : null,
-            'faturamentoComparacao' => $temEscopo && $mostraBlocos && ! $eGestor
+            'faturamentoComparacao' => $temEscopo && $mostraBlocos
                 ? $this->blocos->faturamentoComparacao($porVendedor, $codVendedores)
                 : null,
             'biEmbedUrl' => $eGestor ? $this->urlDoBi() : null,
             'carteiraSegmento' => $temEscopo && $mostraBlocos ? $this->blocos->carteiraSegmento($porVendedor, $codVendedores) : null,
             /*
-             * Potencial da Carteira: mesma condição do card de Comparação, e pelo mesmo
-             * motivo. É a tela de quem opera a carteira; para gestor em escopo de equipe ou
-             * empresa a pergunta "quais dos MEUS clientes não compram etiqueta?" não tem
-             * dono, e a consulta passaria a varrer `faturamentos` sem que ninguém leia o
-             * resultado (ver o custo medido no docblock do PotencialCarteiraResolver).
+             * Clientes inativos por segmento atendido. Visível para TODO perfil com escopo,
+             * gestor incluído — pedido do diretor em 2026-09-06 ("na tela inicial dos ADM
+             * devem ter essas informações também, e ao filtrar a equipe vemos o resumo da
+             * equipe"). O recorte por equipe sai de graça: o VisaoSelector já muda
+             * `codVendedores`, e o bloco é escopado por ele.
+             *
+             * ⚠️ Isto só coube porque a família de produto saiu do quadro. A versão
+             * anterior cruzava `produtos` sobre as 5,87 M linhas de `faturamentos` e
+             * custava 41,5 s no escopo empresa; esta sai de `clientes` e custa 261 ms
+             * (39 ms por vendedor). Se a família voltar ao quadro, esta condição volta a
+             * precisar de `&& ! $eGestor` — ou de uma tabela de apoio.
              */
-            'potencialCarteira' => $temEscopo && $mostraBlocos && ! $eGestor
-                ? $this->blocos->potencialCarteira($porVendedor, $codVendedores)
+            'segmentosInativos' => $temEscopo && $mostraBlocos
+                ? $this->blocos->segmentosInativos($porVendedor, $codVendedores)
                 : null,
             /*
              * Segmento(s) de quem está olhando. Só quando o escopo é UM vendedor: para

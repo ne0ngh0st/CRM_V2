@@ -189,18 +189,113 @@ class DashboardVendaComparacaoTest extends TestCase
     }
 
     /**
-     * Gestor vê o Power BI, não o gráfico local — a agregação (a mais cara da Home no
-     * escopo empresa) não roda para quem não vai ler o resultado.
+     * ⚠️ A INVARIANTE que amarra as duas abas do card: o total da aba Dia (soma dos dias
+     * do mês corrente) tem que ser IGUAL ao valor do mês corrente na aba Mês.
+     *
+     * As duas séries saem de queries diferentes — `somaDiaria()` e `somaMensal()` — sobre
+     * a mesma tabela. Se as janelas divergirem, o mesmo card mostra dois números para o
+     * mesmo mês, um em cada aba, e ninguém liga um ao outro.
      */
     #[Test]
-    public function test_gestor_nao_recebe_a_agregacao_de_venda(): void
+    public function test_soma_dos_dias_bate_com_o_mes_corrente_da_aba_mes(): void
+    {
+        $this->travelTo('2026-09-16 10:00:00');
+
+        $this->pedido('2026-09-01', 1000);
+        $this->pedido('2026-09-02', 500);
+        $this->pedido('2026-09-10', 250);
+        $this->pedido('2026-08-20', 9999); // outro mês: não entra em nenhuma das duas
+
+        $dados = app(DashboardBlocos::class)
+            ->vendaComparacao(ChaveEscopo::deCodVendedores(['010617']), ['010617']);
+
+        // Índice 8 = setembro.
+        $this->assertSame(1750.0, $dados['valoresAnoAtual'][8]);
+        $this->assertSame(1750.0, array_sum($dados['dias']));
+        $this->assertSame(9, $dados['mesCorrente']);
+    }
+
+    /**
+     * ⚠️ Mesmo corte D-1 da série mensal. Sem isto a aba Dia mostraria o pedido de hoje e
+     * a aba Mês não — o card se contradiria sozinho.
+     */
+    #[Test]
+    public function test_serie_diaria_para_no_corte_d1(): void
+    {
+        $this->travelTo('2026-09-16 10:00:00');
+
+        $this->pedido('2026-09-01', 1000);
+        $this->pedido('2026-09-16', 7777);
+
+        $dados = app(DashboardBlocos::class)
+            ->vendaComparacao(ChaveEscopo::deCodVendedores(['010617']), ['010617']);
+
+        $this->assertSame(1000.0, $dados['dias'][0], 'dia 1 entra');
+        $this->assertSame(0.0, $dados['dias'][15], 'dia de hoje (16) não entra: a janela é D-1');
+    }
+
+    /** A série cobre o mês inteiro, para a tabela ter uma coluna por dia. */
+    #[Test]
+    public function test_serie_diaria_cobre_todos_os_dias_do_mes(): void
+    {
+        $this->travelTo('2026-09-16 10:00:00');
+
+        $dados = app(DashboardBlocos::class)
+            ->vendaComparacao(ChaveEscopo::deCodVendedores(['010617']), ['010617']);
+
+        $this->assertCount(30, $dados['dias'], 'setembro tem 30 dias');
+
+        $this->travelTo('2026-02-10 10:00:00');
+        app(DashboardBlocos::class)->comRecalculoForcado();
+
+        $fevereiro = app(DashboardBlocos::class)
+            ->vendaComparacao(ChaveEscopo::deCodVendedores(['010618']), ['010618']);
+
+        $this->assertCount(28, $fevereiro['dias'], 'fevereiro de 2026 tem 28 dias');
+    }
+
+    /**
+     * ⚠️ Mesmo risco da série mensal: venda e faturamento têm o mesmo formato, então uma
+     * chave compartilhada não daria erro — entregaria o número errado na aba errada.
+     */
+    #[Test]
+    public function test_serie_diaria_de_venda_e_faturamento_nao_se_misturam(): void
+    {
+        $this->travelTo('2026-09-16 10:00:00');
+
+        $this->pedido('2026-09-03', 1000, '010617');
+
+        Faturamento::create([
+            'nota_fiscal' => '999',
+            'data_emissao' => '2026-09-03',
+            'cod_vendedor' => '010617',
+            'valor_total' => 4242,
+            'quantidade' => 1,
+            'valor_unitario' => 4242,
+        ]);
+
+        $bloco = app(DashboardBlocos::class);
+        $escopo = ChaveEscopo::deCodVendedores(['010617']);
+
+        $this->assertSame(1000.0, $bloco->vendaComparacao($escopo, ['010617'])['dias'][2]);
+        $this->assertSame(4242.0, $bloco->faturamentoComparacao($escopo, ['010617'])['dias'][2]);
+    }
+
+    /**
+     * ⚠️ Regressão do pedido do diretor em 2026-09-06: "na tela inicial dos ADM devem ter
+     * essas informações também". Até então gestor recebia `null` nos dois blocos, porque
+     * via o embed do Power BI no lugar — que virou só um botão.
+     */
+    #[Test]
+    public function test_gestor_passou_a_receber_as_duas_agregacoes(): void
     {
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
         $props = $this->actingAs($admin)->get(route('dashboard'))->assertOk()->viewData('page')['props'];
 
-        $this->assertNull($props['vendaComparacao']);
-        $this->assertNull($props['faturamentoComparacao']);
+        $this->assertNotNull($props['vendaComparacao']);
+        $this->assertNotNull($props['faturamentoComparacao']);
+        $this->assertArrayHasKey('dias', $props['vendaComparacao']);
     }
 }

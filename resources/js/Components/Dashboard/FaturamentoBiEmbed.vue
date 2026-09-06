@@ -9,9 +9,13 @@ defineProps({
 
 <template>
     <!--
-        Mesmo recorte do PageHero: faixa full-width, chrome fino, altura travada.
-        A proporção 1140×541 no container de 1800px virava ~830px e empurrava o
-        resto da Home pra fora da tela.
+        ⚠️ SEM IFRAME desde 2026-09-06, a pedido do diretor: "retira esse painel de BI e
+        troca por um botão que leva para o navegador ver o BI". O embed ocupava 560px da
+        Home e, para quem não estava autenticado na conta Microsoft, mostrava só a tela de
+        login do Power BI — que foi exatamente a captura que ele mandou.
+
+        O botão já existia no header deste componente; o que saiu foi o iframe embaixo
+        dele. Restou uma faixa fina.
     -->
     <div class="overflow-hidden rounded border border-gray-300 bg-white shadow-sm">
         <div class="flex min-h-[3.5rem] flex-wrap items-center justify-between gap-3 bg-corp-black px-4 py-2.5">
@@ -29,7 +33,7 @@ defineProps({
                     Dashboard BI
                 </h3>
                 <p class="mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-snug text-gray-400">
-                    Power BI · conta Microsoft Pro. O seletor de visão não filtra aqui.
+                    Power BI · conta Microsoft Pro. Abre em nova aba; o seletor de visão não filtra lá.
                 </p>
             </div>
             <a
@@ -41,12 +45,5 @@ defineProps({
                 Abrir no Power BI
             </a>
         </div>
-        <iframe
-            :src="url"
-            title="Dashboard BI"
-            class="block h-[560px] w-full border-0"
-            allow="fullscreen"
-            allowfullscreen
-        />
-    </div>
+</div>
 </template>
