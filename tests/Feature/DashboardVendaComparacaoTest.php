@@ -38,14 +38,24 @@ class DashboardVendaComparacaoTest extends TestCase
         return $user;
     }
 
-    private function pedido(string $data, float $valor, string $cod = '010617'): void
+    /**
+     * Pedido FATURADO por padrão — conta como venda com qualquer idade.
+     *
+     * ⚠️ `data_faturamento` preenchida não é detalhe: desde 2026-09-06 pedido ainda ABERTO
+     * só conta como venda enquanto for mais novo que 180 dias (ver
+     * `Pedido::scopeContaComoVenda`). A versão anterior deste helper gravava
+     * `status = 'faturado'` sem a data, um estado que não existe no import real, e os
+     * testes de mês passado passaram a falhar quando a regra entrou — corretamente.
+     */
+    private function pedido(string $data, float $valor, string $cod = '010617', bool $emAberto = false): void
     {
         Pedido::create([
             'numero_pedido' => 'P'.fake()->unique()->numberBetween(1, 999999),
             'cod_vendedor' => $cod,
             'data_pedido' => $data,
+            'data_faturamento' => $emAberto ? null : $data,
             'valor_total' => $valor,
-            'status' => 'faturado',
+            'status' => $emAberto ? 'pendente_totvs' : 'faturado',
         ]);
     }
 
@@ -279,6 +289,41 @@ class DashboardVendaComparacaoTest extends TestCase
 
         $this->assertSame(1000.0, $bloco->vendaComparacao($escopo, ['010617'])['dias'][2]);
         $this->assertSame(4242.0, $bloco->faturamentoComparacao($escopo, ['010617'])['dias'][2]);
+    }
+
+    /**
+     * ⚠️ A REGRA DOS 180 DIAS, e por que ela existe.
+     *
+     * O relatório 200 do TOTVS mantém pedido aberto indefinidamente — há caso real de
+     * máquina faturada anos depois. Em produção havia 111 pedidos abertos de 2023 a 2025
+     * (R$ 271 mil) que não são erro de importação, mas também não são "venda daquele ano".
+     *
+     * 180 dias é a política de programação da casa, não um número escolhido por mim.
+     */
+    #[Test]
+    public function test_pedido_aberto_ha_mais_de_180_dias_nao_conta_como_venda(): void
+    {
+        $this->travelTo('2026-09-16 10:00:00');
+
+        // Aberto e velho: é o resíduo — não conta.
+        $this->pedido('2025-06-10', 50000, '010617', emAberto: true);
+        // Aberto e recente: é venda em trânsito — conta.
+        $this->pedido('2026-08-20', 700, '010617', emAberto: true);
+        // Faturado e velho: conta sempre, a idade não importa.
+        $this->pedido('2025-06-10', 300, '010617');
+
+        $bloco = app(DashboardBlocos::class);
+        $escopo = ChaveEscopo::deCodVendedores(['010617']);
+
+        $dados = $bloco->vendaComparacao($escopo, ['010617']);
+
+        $this->assertSame(300.0, array_sum($dados['valoresAnoAnterior']), 'de 2025 só o faturado entra');
+        $this->assertSame(700.0, array_sum($dados['valoresAnoAtual']), 'o aberto recente de 2026 entra');
+
+        // ⚠️ A mesma regra tem que valer na META, senão o gráfico e o gauge contam
+        // universos diferentes na mesma tela.
+        $gauge = $bloco->metaGauge($escopo, ['010617']);
+        $this->assertSame(700.0, $gauge['venda']['ano']['realizado']);
     }
 
     /**

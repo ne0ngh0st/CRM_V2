@@ -385,7 +385,13 @@ class MetaRankingResolver
     {
         $this->garantirTipo($tipo);
 
-        return $tipo === 'venda' ? Pedido::query() : Faturamento::query();
+        /*
+         * ⚠️ `contaComoVenda()` é o que impede o resíduo de pedido eternamente aberto de
+         * virar meta batida. Ver o docblock do scope em App\Models\Pedido — e ele tem que
+         * valer aqui E no card de Comparação, senão a meta e o gráfico contam universos
+         * diferentes na mesma tela.
+         */
+        return $tipo === 'venda' ? Pedido::query()->contaComoVenda() : Faturamento::query();
     }
 
     private function colunaDataDoTipo(string $tipo): string

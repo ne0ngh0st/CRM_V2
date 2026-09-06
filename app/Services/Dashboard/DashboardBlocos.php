@@ -273,7 +273,7 @@ class DashboardBlocos
             $escopo->paraDoDia('venda-comparacao', ['ano' => $anoAtual]),
             function () use ($anoAtual, $codVendedores) {
                 $meses = fn (int $ano) => $this->somaMensal(
-                    Pedido::query()->selectRaw('MONTH(data_pedido) as mes, SUM(valor_total) as total'),
+                    Pedido::query()->contaComoVenda()->selectRaw('MONTH(data_pedido) as mes, SUM(valor_total) as total'),
                     'data_pedido',
                     $ano,
                     $codVendedores,
@@ -287,7 +287,7 @@ class DashboardBlocos
                     'valoresAnoAnterior' => $meses($anoAtual - 1),
                     'mesCorrente' => (int) now()->month,
                     'dias' => $this->somaDiaria(
-                        Pedido::query()->selectRaw('DAY(data_pedido) as dia, SUM(valor_total) as total'),
+                        Pedido::query()->contaComoVenda()->selectRaw('DAY(data_pedido) as dia, SUM(valor_total) as total'),
                         'data_pedido',
                         $codVendedores,
                     ),
@@ -609,6 +609,8 @@ class DashboardBlocos
         [$inicioAno, $fimAno] = $this->metaRanking->intervaloDatas($ano, 1, $mes);
 
         $contagem = Pedido::query()
+            // Mesmo recorte do realizado de venda: os tiles têm que bater com o gauge.
+            ->contaComoVenda()
             ->whereIn('cod_vendedor', $codigos)
             ->whereBetween('data_pedido', [$inicioAno, $fimAno])
             ->selectRaw('COUNT(*) as no_ano')
