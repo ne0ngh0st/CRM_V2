@@ -17,7 +17,7 @@ import { Head, usePage } from '@inertiajs/vue3';
 
 const props = defineProps({
     role: String,
-    statusSistema: Array,
+    statusSistema: Object,
     statusCache: Object,
     visao: Object,
     metaGauge: Object,
@@ -39,28 +39,39 @@ const tonsStatus = {
     atualizado: 'ok',
     atencao: 'warn',
     desatualizado: 'danger',
+    sem_dado: 'neutral',
 };
 
 const labelsStatus = {
     atualizado: 'Atualizado',
     atencao: 'Atenção',
     desatualizado: 'Desatualizado',
+    sem_dado: 'Sem dado',
 };
 
-// Uma métrica só pro sistema como um todo — o pior status entre as tabelas
-// sincronizadas, não uma pill por tabela.
-const prioridadeStatus = { desatualizado: 3, atencao: 2, atualizado: 1 };
-
+// ⚠️ O servidor já escolhe o pior domínio (`FrescorDoDado::pior()`) — aqui não há mais
+// lógica de prioridade. Até 2026-09-08 esta pill lia uma tabela que só o seeder escrevia
+// e dizia "Desatualizado" havia um mês; a regra de quão velho é velho passou a existir em
+// um lugar só, compartilhada com a tela /atualizacoes.
 const statusGeral = computed(() => {
-    if (!props.statusSistema.length) return null;
+    if (!props.statusSistema) return null;
 
-    const pior = props.statusSistema.reduce((acc, item) =>
-        (prioridadeStatus[item.status] || 0) > (prioridadeStatus[acc.status] || 0) ? item : acc,
-    );
+    const { status, dias, dominio, data } = props.statusSistema;
+
+    // O título carrega o porquê: pill vermelha sem dizer o que está velho manda o
+    // usuário adivinhar, e foi assim que um mês de dado parado passou despercebido.
+    const quando = data
+        ? new Date(`${data}T00:00:00`).toLocaleDateString('pt-BR')
+        : null;
+
+    const titulo = quando
+        ? `${dominio}: último registro em ${quando}` + (dias > 0 ? ` (${dias} ${dias === 1 ? 'dia útil' : 'dias úteis'} atrás)` : ' — hoje')
+        : `${dominio}: nenhum registro importado`;
 
     return {
-        tom: tonsStatus[pior.status] || 'neutral',
-        label: labelsStatus[pior.status] || 'Verificando…',
+        tom: tonsStatus[status] || 'neutral',
+        label: labelsStatus[status] || 'Verificando…',
+        titulo,
     };
 });
 
@@ -130,8 +141,8 @@ const mesAno = computed(() => {
                             {{ segmentosVendedor.length === 1 ? 'Segmento' : 'Segmentos' }}:
                             {{ segmentosVendedor.join(' · ') }}
                         </StatusPill>
-                        <StatusPill v-if="statusGeral" :tone="statusGeral.tom" surface="dark">
-                            Sistema: {{ statusGeral.label }}
+                        <StatusPill v-if="statusGeral" :tone="statusGeral.tom" surface="dark" :title="statusGeral.titulo">
+                            Dados: {{ statusGeral.label }}
                         </StatusPill>
                         <StatusPill
                             v-if="cacheWarming"

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\AtualizarDadosTotvsJob;
 use App\Models\TotvsImportacao;
 use App\Services\Totvs\AtualizadorTotvs;
+use App\Services\Totvs\FrescorDoDado;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -40,6 +41,8 @@ class AtualizacaoDadosController extends Controller
      * andamento. Sem cache, cada uma dessas recargas viraria um ListObjects.
      */
     private const CACHE_S3_SEGUNDOS = 60;
+
+    public function __construct(private readonly FrescorDoDado $frescorDoDado) {}
 
     public function index(Request $request): Response
     {
@@ -131,34 +134,15 @@ class AtualizacaoDadosController extends Controller
      */
     private function frescor(): array
     {
-        $hoje = now()->startOfDay();
-
+        // ⚠️ A regra de "quão velho está" mora no `FrescorDoDado`, não aqui. Quando ela
+        // era privada deste controller, a pill do Painel tinha a sua própria — e ficou um
+        // mês mentindo enquanto esta tela dizia a verdade (Regra de ouro nº 8).
         $contagens = app(AtualizadorTotvs::class)->contagens();
 
-        $itens = [
-            [
-                'dominio' => 'Faturamento',
-                'tabela' => 'faturamentos',
-                'data' => DB::table('faturamentos')->max('data_emissao'),
-                'linhas' => $contagens['faturamentos'],
-                'relatorio' => '198 — FAT',
-            ],
-            [
-                'dominio' => 'Pedidos',
-                'tabela' => 'pedidos',
-                'data' => DB::table('pedidos')->max('data_pedido'),
-                'linhas' => $contagens['pedidos'],
-                'relatorio' => '200 + 232',
-            ],
-        ];
-
-        return array_map(function (array $item) use ($hoje) {
-            $data = $item['data'] !== null ? \Illuminate\Support\Carbon::parse($item['data']) : null;
-
-            return $item + [
-                'dias' => $data?->startOfDay()->diffInDays($hoje),
-            ];
-        }, $itens);
+        return array_map(
+            fn (array $item) => $item + ['linhas' => $contagens[$item['tabela']] ?? null],
+            $this->frescorDoDado->porDominio()
+        );
     }
 
     /**

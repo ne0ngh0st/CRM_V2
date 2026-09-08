@@ -34,7 +34,6 @@ class DatabaseSeeder extends Seeder
                 MetaMensalSeeder::class,
                 LigacaoSeeder::class,
                 SugestaoSeeder::class,
-                DataSyncStatusSeeder::class,
                 ObservacaoSeeder::class,
                 SegmentoVendedorSeeder::class,
             ]);

@@ -4,7 +4,6 @@ namespace App\Services\Dashboard;
 
 use App\Jobs\AquecerCacheDashboardJob;
 use App\Models\Cliente;
-use App\Models\DataSyncStatus;
 use App\Models\Faturamento;
 use App\Models\Ligacao;
 use App\Models\Observacao;
@@ -16,6 +15,7 @@ use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Carteira\SegmentosInativosResolver;
 use App\Services\Metas\MetaRankingResolver;
 use App\Services\Potencial\PotencialCarteiraResolver;
+use App\Services\Totvs\FrescorDoDado;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -45,6 +45,7 @@ class DashboardBlocos
         private readonly MetaRankingResolver $metaRanking,
         private readonly PotencialCarteiraResolver $potencialResolver,
         private readonly SegmentosInativosResolver $segmentosInativosResolver,
+        private readonly FrescorDoDado $frescor,
     ) {}
 
     /** Instância irmã que sempre recalcula. Usada só pelo job de warming e pelo comando. */
@@ -66,22 +67,16 @@ class DashboardBlocos
     // observação e o número não muda, ele não conclui "o cache está velho", conclui "o
     // sistema não salvou". Ver docs/performance.md, Parte 4.
 
-    public function statusSistema(): array
+    /**
+     * ⚠️ Lia `data_sync_status` até 2026-09-08, e essa tabela SÓ ERA ESCRITA PELO SEEDER —
+     * em produção estava parada em 10/08, então a pill anunciou "Desatualizado" por um mês
+     * inteiro, inclusive minutos depois de uma importação bem-sucedida. Agora sai do
+     * `FrescorDoDado`, que olha a data da última nota e do último pedido; ver o docblock
+     * de lá para por que medir o DADO e não o import.
+     */
+    public function statusSistema(): ?array
     {
-        return DataSyncStatus::query()->get()->map(function (DataSyncStatus $s) {
-            $horas = $s->last_synced_at->diffInHours(now());
-            $status = match (true) {
-                $horas < 24 => 'atualizado',
-                $horas < 48 => 'atencao',
-                default => 'desatualizado',
-            };
-
-            return [
-                'tabela' => $s->tabela,
-                'status' => $status,
-                'ultimaSincronizacao' => $s->last_synced_at->toIso8601String(),
-            ];
-        })->values()->all();
+        return $this->frescor->pior();
     }
 
     /**
