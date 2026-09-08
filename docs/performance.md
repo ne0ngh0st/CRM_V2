@@ -569,6 +569,51 @@ payload antigo ainda quente seria entregue ao front novo durante os 30 min de TT
 deploy — e quebraria o card no navegador de quem já estava logado, que é exatamente onde
 ninguém está olhando o console.
 
+## 1.17 🔴 Cruzar uma dimensão com `faturamentos` custa 100× cruzar com `clientes`
+
+Medido em 2026-09-05/06, ao construir o quadro "Potencial da Carteira" do Painel.
+
+A pergunta era "quantos clientes inativos por segmento, e por família de produto". As duas
+metades parecem do mesmo tamanho e não são:
+
+| Consulta | Escopo | Tempo |
+|---|---|---:|
+| Potencial **com família** (cruza `produtos` sobre `faturamentos`) | empresa | **41,5 s** ❌ |
+| Potencial **com família** | equipe (51 vendedores) | 1,56 s |
+| Potencial **com família** | vendedor | 41,5 ms (p95) |
+| Segmentos × inativos **sem família** (sai de `clientes`) | empresa | **261 ms** ✅ |
+| Segmentos × inativos **sem família** | vendedor | **39 ms** ✅ |
+| Série diária do mês corrente | qualquer | **3-38 ms** ✅ |
+
+**A diferença não é a agregação, é a tabela.** "Que famílias este cliente compra" só existe
+no histórico: são 5,87 M linhas de `faturamentos` unidas a `produtos`. "Que segmento este
+cliente é" e "quando ele comprou pela última vez" são **colunas da própria `clientes`**, já
+indexadas — 92 mil linhas, e a resposta sai do índice.
+
+⚠️ **A consequência de produto foi maior que a de performance.** Com 41,5 s o quadro não
+podia existir para o ADM, que era justamente o pedido do diretor ("na tela inicial dos ADM
+devem ter essas informações também"). Com 261 ms ele passou a caber em qualquer escopo, sem
+tabela de apoio e sem infra nova. **Cortar a dimensão cara destravou o requisito** — não foi
+otimização, foi escolha de escopo informada por medição.
+
+**A regra prática:** antes de aceitar uma dimensão nova num bloco do Painel, perguntar de
+qual tabela ela vem. Se a resposta for `faturamentos` (ou qualquer coisa na casa dos
+milhões) e o escopo puder ser a empresa inteira, ela precisa de rollup pré-agregado — não
+de um índice a mais. Ver também §1.11: no caso da família o índice existia e não adiantava,
+porque a leitura é do histórico inteiro e não de um recorte.
+
+### Corolário: `OR` num escopo derruba o índice, e às vezes vale mesmo assim
+
+`Pedido::scopeContaComoVenda()` (regra dos 180 dias, 2026-09-08) filtra
+`data_faturamento IS NOT NULL OR data_pedido >= <limite>`. Esse `OR` faz o otimizador
+desistir do índice no escopo empresa — `type: ALL`, **197 ms**; por vendedor continua
+indexado (mediana **15,6 ms**, p95 33,2 ms).
+
+Aceito porque o bloco é cacheado por 30 min e pré-aquecido pelo job, então ninguém paga isso
+no caminho quente. ⚠️ **Mas é o primeiro lugar a olhar quando o histórico de pedidos entrar**
+(407.604 linhas esperadas contra as 69 mil de hoje): o custo de um table scan cresce com a
+tabela, e o escopo empresa é exatamente o que o cache warming recalcula a cada 10 minutos.
+
 # Parte 2 — O que é BARATO
 
 Ganho alto, esforço baixo. Fazer tudo isto **antes** de considerar máquina maior.

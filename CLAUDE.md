@@ -1297,44 +1297,235 @@ denuncia a volta da resolução de escopo por agregação.
 meta, a ordem das contagens ou a reutilização do valor faz o teste correspondente falhar.
 Suíte inteira verde: **346 testes**.
 
-### Potencial da Carteira: peso por segmento, em caixas — 2026-09-08
+### Painel redesenhado: tabela no lugar do gráfico, retrato diário e Potencial — 2026-09-05 a 09-08
 
-A diretoria entregou a matriz de pesos (planilha "Potencial segmentos 08-09-2026.xlsx",
-em `Documentos\DOCS\CRM`) e a coluna Potencial do card "Segmentos Atendidos" deixou de ser
-espaço reservado.
+Quatro dias de iteração no Painel, quase toda ela vinda do uso real do beta e de recados do
+diretor repassados pelo Tony. Vale ler junto de `docs/performance.md` §1.17.
 
-**A conta é `inativos × peso`, e a unidade é CAIXA** (Tony, 08/09): o peso é quantas caixas
-um cliente daquele segmento tende a comprar. Escala 0-20, definida por eles — 20 em
-SUPERMERCADISTA e REVENDA, 0 em ÓRGÃO PÚBLICO, CORPORATIVO, TRANSPORTE e mais oito.
+**A régua do diretor, que explica metade das decisões abaixo: "MENOS É MAIS, nada de
+análises complicadas, simples e direto."** Toda vez que um quadro daqui ficou com cinco
+números por painel, ele mandou cortar.
 
-- **`segmentos.peso_potencial`** (migration `2026_09_08_100000`), não uma tabela nova: o
-  peso é 1:1 com o segmento. A `potencial_pesos` (segmento × família de produto) continua
-  existindo e **sem uso** — responde outra pergunta, e volta quando a regra de família for
-  fechada. Duas tabelas de peso conviveriam mal; está escrito na migration qual é qual.
-- ⚠️ **Default 0, nunca 1.** Peso ausente tem que valer "não é alvo", não "vale um":
-  segmento novo do TOTVS entra zerado e fica fora do ranking até alguém decidir, em vez de
-  aparecer no meio da lista sem ninguém ter escolhido nada.
-- ⚠️ **A migration PREENCHE os valores**, não só cria a coluna. Dev e produção já têm os 23
-  segmentos gravados, e o seeder só alcança banco semeado de novo — sem o `update` a coluna
-  nasceria zerada em produção e a tela mostraria potencial 0 para todo mundo, defeito que
-  passa por "ainda não calibraram" e fica meses assim. Os mesmos valores estão no
-  `SegmentoSeeder`, para banco novo e para a suíte.
-- **O ranking passou a ser por potencial**, com inativos como desempate. Ordenar por
-  inativos deixaria no topo justamente o segmento que a diretoria marcou como fora do alvo.
-- **A unidade aparece na tela sempre** (cabeçalho "(caixas)", "cx" no total, "20 cx/cliente"
-  sob cada número): todo outro número grande do Painel é em reais.
+#### 1. O gráfico ano-a-ano virou tabela, e ganhou aba de dia
 
-**⚠️ Os dois cards da fileira contavam universos diferentes sem dizer.** "Segmentos
-Atendidos" conta só os inativos dos segmentos atendidos; "Carteira por Segmento", ao lado,
-conta a carteira inteira — e ver 0 aqui e 188 ali quebra a confiança na tela (reclamação do
-Tony em 06/09 e de novo em 08/09). O bloco passou a devolver **`totalCarteira`** e o
-subtítulo diz *"66.753 dos 73.940 clientes inativos da carteira estão nos seus 17
-segmentos"*. Sai de graça — é a soma das linhas que a agregação já trazia, incluindo as não
-atendidas — e vem do **próprio bloco**, nunca do outro card, para os dois não poderem
-divergir por caminho.
+`FaturamentoComparisonChart.vue` (Chart.js) foi apagado. No lugar, **`ComparacaoCard.vue`**:
+meses nas colunas, ACUMULADO à direita, e **dois alternadores** — `Venda | Faturamento` e
+`Mês | Dia`. Motivo declarado do Tony: **a direção não gosta de gráfico.**
 
-⚠️ **`ChaveEscopo::VERSAO` foi para `v5`**: `segmentos-inativos` ganhou `peso`, `potencial`,
-`totalPotencial` e `totalCarteira` num bloco já em produção.
+- O card chama-se **"Evolução Comercial"** desde 08/09 (era "Comparação") — pedido do
+  diretor, que também não reconheceu o quadro pelo nome antigo.
+- A aba **Dia** é o "retrato diário" que ele pediu: **só o mês corrente**, duas linhas ("No
+  dia" e "Acumulado"). "Virou o mês não traz mais" — cai naturalmente, porque a janela é
+  sempre mês corrente até D-1.
+- ⚠️ **As duas abas usam a MESMA janela D-1.** Já estava assim desde 03/09 e continua
+  valendo: duas convenções dariam dois números para o mesmo mês na mesma tela.
+- O gauge "Acumulado do ano" saiu do card de Performance Comercial — o subtotal da tabela
+  passou a responder isso, e manter os dois era repetir.
+
+⚠️ **`somaMensal()` tinha um bug de janela que só a tabela expôs**: passava `12` fixo como
+mês final, então a série do ano corrente não era cortada em D-1. No gráfico ninguém via; na
+tabela virou uma coluna com número maior que o acumulado. Corrigido com `$mesFim`, e há dois
+testes de regressão — verificados por mutação (13.899 contra 3.900).
+
+#### 2. Pedido eternamente em aberto não conta como venda (regra dos 180 dias)
+
+O Tony estranhou ver venda de 2025 no perfil admin e pediu para investigar. **Não era erro de
+importação** — provei que o arquivo do TOTVS traz exatamente aqueles pedidos (10/34/67 por
+ano). São 111 pedidos de 2023-2025 ainda abertos, R$ 271.443,06, e a explicação é dele:
+*"as vezes é uma maquina que a empresa compra e sai a nota lá (ja vi sendo faturado um onibus
+da mercedes em 2013 rsrs)"*.
+
+Decisão dele: **não apagar o resíduo, mas não deixá-lo virar métrica.**
+
+**`Pedido::scopeContaComoVenda()`**, com `DIAS_MAXIMO_EM_ABERTO = 180`: pedido faturado conta
+sempre; pedido em aberto conta enquanto for mais novo que 180 dias.
+
+- ⚠️ **Aplicado em exatamente TRÊS pontos de métrica** — `vendaComparacao` (série mensal e
+  diária) e `MetaRankingResolver::queryRealizado('venda')`, mais o tile de pedidos emitidos.
+  **NUNCA nas listagens** (`/pedidos-abertos`, `/pedidos-emitidos`): lá a pergunta é
+  operacional, e sumir com o pedido velho da lista é o que impediria alguém de resolvê-lo.
+- ⚠️ **O corte não podia ser "só pedido faturado"**: 83% do valor de setembro é pedido ainda
+  em aberto, então essa versão apagaria o mês corrente da tela. Medido antes de escolher.
+- Efeito em produção: 2025 foi de R$ 198.293 para **R$ 0**; 2026 caiu 0,02% (R$ 458,73 mi →
+  R$ 458,65 mi). O joelho da idade está em 90 dias (98,8% do valor), e 180 foi escolhido por
+  folga.
+- ⚠️ **O `OR` do escopo quebra o índice no escopo empresa** (`type: ALL`, 197 ms); por
+  vendedor segue indexado (mediana 15,6 ms). Aceito porque o bloco é cacheado e aquecido —
+  mas é o primeiro lugar a olhar quando `pedidos` receber o histórico.
+
+#### 3. "Potencial da Carteira" nasceu por família de produto e morreu no mesmo dia
+
+Construído em 05/09 cruzando família (bobina/etiqueta/tag) com faturamento. O diretor cortou
+em 06/09 — complicado demais — e o Tony decidiu: **família sai da tela "nesse 1 momento"**.
+
+⚠️ **A medição concordou com ele, e por um motivo que vale guardar:** o quadro com família
+custava **41,5 s** no escopo empresa, porque cruzava `produtos` sobre as 5,87 M linhas de
+`faturamentos`. Sem família, a mesma pergunta sai de `clientes` (já indexada) e custa
+**39 ms por vendedor / 261 ms na empresa** — foi isso que permitiu **dar o quadro ao ADM**,
+que era o outro pedido do diretor.
+
+**O back-end de família continua no repositório, sem uso na Home**: `FamiliaProduto`,
+`PotencialCarteiraResolver`, a tabela `potencial_pesos`, o comando `potencial:importar-pesos`
+e o filtro `?sem_familia=` da Carteira. Está testado e volta quando a regra de família for
+fechada com a diretoria. ⚠️ Consequência a lembrar: **o filtro `sem_familia` ficou
+inalcançável pela interface** — nenhum link aponta para ele.
+
+#### 4. O quadro que sobrou: "Segmentos Atendidos"
+
+`SegmentosInativosCard.vue` + `App\Services\Carteira\SegmentosInativosResolver`. Uma linha
+por segmento, com quantos clientes **inativos** há nele. "Inativo" é o mesmo corte da
+Carteira (365 dias sem compra, ou nunca) via `ClienteStatusResolver` — uma pergunta, uma
+resposta.
+
+**🚨 A INVARIANTE, e o caminho errado que percorri até ela.** Em 08/09 restringi a lista aos
+segmentos que a pessoa atende (era o que o nome do card dizia). O resultado: o quadro somava
+66.753 enquanto o card "Carteira por Segmento", a cinco centímetros, mostrava 73.940 para a
+mesma carteira. Tentei resolver com legenda — o subtítulo passou a dizer *"66.753 dos 73.940
+estão nos seus segmentos"*. **O Tony recusou, e a frase dele é a regra: "os dois números têm
+que bater em todos os casos".**
+
+> **Número que precisa de legenda para não parecer errado já perdeu a confiança.** Não é
+> sobre estar certo — os dois estavam. É que o usuário não tem como saber em qual acreditar,
+> e a dúvida contamina a tela inteira, não só o card.
+
+Então: **o quadro lista TODOS os segmentos em que o escopo tem cliente inativo, e os
+atendidos vêm MARCADOS** (ponto teal), nunca filtrados. Marcar em vez de filtrar atende
+junto o pedido do diretor ("colocar todos os segmentos que essa pessoa atende, e destacar na
+listagem") sem quebrar a soma.
+
+- ⚠️ **`total` == inativos da carteira do escopo, sempre.** Há teste conferindo isso contra o
+  próprio `ClienteStatusResolver` — o mesmo caminho do outro card —, e não contra número
+  escrito à mão. **Filtro de linha aqui é proibido**: filtre a EXIBIÇÃO (o "ver mais"),
+  nunca o somatório.
+- Segmento atendido **sem nenhum inativo aparece com zero** e marcado. Somar zero não mexe na
+  invariante.
+- ⚠️ A lista mostra **3 linhas** e abre o resto no clique; o TOTAL é sempre da carteira
+  inteira, esteja a lista aberta ou não.
+
+#### 5. Potencial = inativos × peso, **em caixas**
+
+A diretoria entregou a matriz em 08/09 (planilha `Potencial segmentos 08-09-2026.xlsx`, em
+`Documentos\DOCS\CRM`). Escala **0-20**, e a **unidade é CAIXA** (Tony): o peso é quantas
+caixas um cliente daquele segmento tende a comprar. 20 em SUPERMERCADISTA e REVENDA, 0 em
+ÓRGÃO PÚBLICO, CORPORATIVO, TRANSPORTE e mais oito.
+
+- **`segmentos.peso_potencial`** (migration `2026_09_08_100000`), e não tabela nova: o peso é
+  1:1 com o segmento. A `potencial_pesos` (segmento × família) segue existindo e sem uso —
+  responde outra pergunta. Está escrito na migration qual é qual.
+- ⚠️ **Default 0, nunca 1.** Peso ausente vale "não é alvo", não "vale um": segmento novo do
+  TOTVS entra zerado e fica fora do ranking até alguém decidir, em vez de aparecer no meio da
+  lista sem ninguém ter escolhido nada.
+- ⚠️ **A migration PREENCHE os valores, não só cria a coluna.** Dev e produção já têm os 23
+  segmentos gravados e o seeder só alcança banco semeado de novo — sem o `update` a coluna
+  nasceria zerada em produção, a tela mostraria potencial 0 para todo mundo, e isso passaria
+  por "ainda não calibraram os pesos" por meses. Os mesmos valores estão no `SegmentoSeeder`,
+  para banco novo e para a suíte; **mudança de peso mexe nos dois lugares** enquanto não
+  houver tela de edição.
+- **A tabela é ordenada por potencial**, com inativos como desempate. Ordenar por inativos
+  deixaria no topo justamente o segmento que a diretoria marcou como fora do alvo.
+- ⚠️ **A unidade aparece na tela em três lugares** (cabeçalho "(caixas)", `20 cx/cliente` sob
+  cada número, `cx` no total): todo outro número grande do Painel é em reais, e potencial sem
+  unidade seria lido como dinheiro.
+- O peso vai impresso embaixo do potencial de propósito — o vendedor lê "12.205 × 20" e
+  confere de cabeça. Número que ninguém consegue conferir é número em que ninguém confia.
+
+Produção logo após o deploy, escopo empresa: **73.940 inativos, 474.581 caixas de potencial,
+26 segmentos, 20 atendidos** — e o total batendo com o card vizinho.
+
+#### 6. Cards altos: principal visível, detalhe expansível
+
+Quatro cards ocupavam vertical demais. A primeira tentativa recolhia o card inteiro e estava
+errada por dois motivos — escondia o número que se lê de relance e, dentro de um grid
+`items-stretch`, o card recolhido continuava ocupando a altura da fileira.
+
+**`DarkCard` ganhou o slot `#detalhes`** (props `rotuloDetalhes` e `chaveDetalhes`): o
+principal fica sempre visível, a lista de registros recentes abre no clique. Estado por
+pessoa e por navegador em `localStorage`, **toda leitura e escrita dentro de try/catch** —
+em janela anônima o acessor estoura, e um card não pode derrubar a página por isso.
+
+⚠️ A capacidade mora no `DarkCard`, não em cada card: são quatro lugares querendo o mesmo
+comportamento (Regra de ouro nº 8).
+
+#### 7. Power BI: fora o iframe, e a faixa foi parar no topo
+
+O embed de 560px saiu em 06/09 a pedido do diretor — para quem não estava logado na conta
+Microsoft ele mostrava só a tela de login, que foi exatamente a captura que ele mandou.
+Restou o atalho.
+
+Em 08/09 o Tony pediu a faixa **acima do Segmentos Atendidos** e "pinta de azul pra
+destacar". Duas correções na sequência dele, e elas eram problemas diferentes:
+
+- **"Está feia" era estrutura, não cor.** A faixa reusava o desenho do `DarkCard` (header de
+  3,5 rem, título + subtítulo comprido, botão contornado) sem nada embaixo — lê como card
+  quebrado. Virou objeto próprio: mais baixa que um header de card, **a linha inteira é o
+  link**, ícone num chip, e a ressalva do seletor de visão saiu do subtítulo para o `title`.
+- **"Tá muito escuro" era cor.** O navy encaixado entre o PageHero preto e o header preto do
+  card de baixo virava só mais uma faixa escura. Trocado pelo **cyan da marca (#00A9CE)**, o
+  tom mais claro da paleta, com filete navy na borda e botão branco.
+- ⚠️ **Sobre esse cyan o texto é NAVY, nunca branco**: branco dá 2,4:1 e some; navy dá 5,2:1.
+- ⚠️ **É a única quebra deliberada do header preto do Design System, e só funciona por ser
+  única** — esta é a única coisa da Home que leva para FORA do CRM. Se outro bloco ganhar cor
+  de header, os dois param de destacar. A regra é "um azul na página".
+
+#### 8. Gestor passou a ver tudo
+
+Caiu o `&& ! $eGestor` de `vendaComparacao`, `faturamentoComparacao` e do bloco de segmentos.
+O "resumo da equipe ao filtrar" que o diretor pediu **não exigiu código novo** — o
+`DashboardScopeResolver` já escopa tudo; bastou deixar de esconder.
+
+⚠️ **`AquecerCacheDashboardJob` PRECISOU passar a aquecer os dois blocos de comparação** (o
+próprio job já avisava disso em comentário). Sem isso o primeiro ADM a abrir a Home pagaria a
+agregação fria do escopo empresa.
+
+#### 9. `ChaveEscopo::VERSAO` foi de `v2` a `v6` em quatro dias
+
+Cinco bumps, e o histórico completo está no docblock da constante. O que fica de lição:
+
+⚠️ **Mudança de FORMATO de bloco cacheado exige bump, e "renomear campo" é mudança de
+formato.** Esqueci duas vezes em 05/09 e o sintoma é sempre o mesmo — card renderizado com os
+números faltando, durante os 30 min de TTL, só para quem já estava logado. **Não quebra nada
+em vermelho**, então nenhum teste acusa; quem acusa é abrir a página no navegador depois do
+deploy.
+
+⚠️ Dois bumps no mesmo dia (v5 e v6, 08/09) foram o custo de mudar de ideia sobre o formato
+com o bloco já no ar. É mais barato que o card mutilado.
+
+#### 10. Achados de performance e correções de dado (Regras nº 6 e nº 9)
+
+| O quê | Antes | Depois |
+|---|---:|---:|
+| Potencial com família, escopo empresa | **41,5 s** | descartado |
+| Segmentos × inativos, escopo empresa | — | **261 ms** |
+| Segmentos × inativos, escopo vendedor | — | **39 ms** |
+| Série diária do mês, qualquer escopo | — | **3-38 ms** |
+
+Bugs de dado corrigidos no caminho, todos encontrados por auditoria e não por teste:
+
+- **Dupla contagem na carteira** (178 contra 172): agrupar por segmento contava duas vezes o
+  código atendido por mais de um segmento. Resolvido com uma derivada `carteiraPorCodigo()`.
+- **`MAX(NULL = 'BOBINA')` é NULL**, não 0 — clientes com produto órfão sumiam da lista.
+  `COALESCE(..., 0)`.
+- **130 divergências numa auditoria**: `codigosSemFamilia()` não fazia join com a carteira, e
+  o link listava clientes que já tinham saído do vendedor.
+- **`max(0, …)` era código morto** — a mutação mostrou que removê-lo não quebrava nada.
+  Trocado por um teste que morde.
+- **Link "não funciona"**: funcionava; o alvo tinha 60×21px. Virou 213×44px (7,4× maior).
+
+#### Lições de processo desta rodada
+
+- ⚠️ **Três defeitos só apareceram no navegador**, nenhum pegável por teste de servidor: o
+  card mutilado pelo cache velho (duas vezes), o `only_full_group_by` recusando `GROUP BY`
+  por alias, e o alvo de clique pequeno demais.
+- ⚠️ **A suíte roda contra um `palma_v2_test` único nesta máquina.** Em 08/09 uma sessão
+  paralela do Tony estava editando a MESMA pasta (`FrescorDoDado`, `/atualizacoes`) e o dev
+  local chegou a responder 500 no meio de uma edição de lá. Não é bug: é working tree
+  compartilhado. **Commitar só os próprios arquivos**, nunca `git add -A`.
+- ⚠️ **`infra/deploy.sh` puxa a branch inteira.** Um deploy meu levou junto o commit
+  `87f6cc9` do Tony, feito de outra janela. Não foi problema — era um fix que ele queria em
+  produção —, mas **conferir `git log` antes de deployar** quando há mais de uma sessão
+  aberta.
+
+Suíte inteira verde ao fim: **415 testes**.
 
 ## Pendências
 - 🔴 **As metas de VENDA em produção são, na maioria, lixo de seed.** Conferido no RDS em
@@ -1374,11 +1565,26 @@ divergir por caminho.
 - **Carregar o histórico de pedidos emitidos** — **março a setembro/2026 já entraram**
   (04 e 05/09; de 15.523 para 69.454 pedidos e 905.228 itens). Falta **janeiro e
   fevereiro/2026** e **2025 inteiro**, este último o que a aba Venda do painel precisa para
-  comparar ano vs. ano — 2025 segue com 67 pedidos e o card declara isso na tela. O material existe no legado
+  comparar ano vs. ano. ⚠️ **Desde a regra dos 180 dias (2026-09-08) a coluna 2025 marca
+  R$ 0, não mais R$ 198 mil**: o pouco que havia era resíduo de pedido eternamente em
+  aberto, que deixou de contar como venda. O card declara isso na tela, e o aviso some
+  sozinho quando o import entrar. O material existe no legado
   (`pedidos_status`, 407.604 linhas). ⚠️ Carga
   histórica **antes** de criar índice, nunca depois (a lição de 2026-08-31 nos faturamentos,
   10m40s contra 66s) — os covering index de `pedidos` já estão criados, então pesar se vale
   dropá-los durante a carga.
+- **Fechar com a diretoria a regra de FAMÍLIA DE PRODUTO** (bobina / etiqueta / tag de
+  gôndola) e decidir se o quadro de Potencial volta a ter colunas por família. O back-end
+  está pronto e testado desde 2026-09-05 (`FamiliaProduto`, `PotencialCarteiraResolver`,
+  `potencial_pesos`, `potencial:importar-pesos`), só não é usado na Home. ⚠️ **Se voltar,
+  não voltar pelo mesmo caminho**: cruzar família com `faturamentos` custou **41,5 s** no
+  escopo empresa e é o que inviabilizou a primeira versão — precisa de tabela de apoio ou
+  recorte de escopo. ⚠️ Enquanto isso, o filtro `?sem_familia=` da Carteira está
+  **inalcançável pela interface** (nenhum link aponta para ele).
+- **Não há tela para editar `segmentos.peso_potencial`.** Os pesos da diretoria (08/09/2026)
+  vivem na migration `2026_09_08_100000` e no `SegmentoSeeder`, então peso novo hoje é
+  deploy. Se a diretoria passar a revisar isso com frequência, vale uma tela admin nos
+  moldes de `/orcamentos/materia-prima`.
 - **Preencher `orcamentos.lead_id` retroativamente**, se fizer falta. A coluna existe desde
   2026-09-03 mas só é preenchida em orçamento novo; os históricos não têm vínculo com lead.
 - **O funil não tem relatório de conversão.** `etapa_alterada_em` responde "parado há X
