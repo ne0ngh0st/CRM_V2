@@ -170,6 +170,15 @@ const mesAno = computed(() => {
                     "Pedidos emitidos" quando o Potencial morava aqui. Card novo entra como
                     faixa própria, não empilhado.
                 -->
+                <!--
+                    ⚠️ PRIMEIRA DOBRA, acima de tudo (Tony, 08/09/2026). Ele já tinha pedido
+                    para subir a faixa uma vez ("ficou muito pra baixo") e ela parou logo
+                    acima da Comparação; agora é o primeiro bloco da página. Cabe porque é
+                    faixa de 58px e só gestor a vê — para vendedor `biEmbedUrl` é nulo e o
+                    quadro de segmentos continua sendo o primeiro bloco.
+                -->
+                <FaturamentoBiEmbed v-if="biEmbedUrl" :url="biEmbedUrl" />
+
                 <SegmentosInativosCard
                     v-if="segmentosInativos"
                     :segmentos-inativos="segmentosInativos"
@@ -193,14 +202,6 @@ const mesAno = computed(() => {
                         :visao-vendedor="visao.visaoVendedor"
                     />
                 </div>
-
-                <!--
-                    ⚠️ Faixa fina, logo acima da Comparação. O embed de 560px saiu em
-                    2026-09-06 (pedido do diretor) e o atalho tinha ido para o pé da
-                    página — longe demais de quem o usa. Aqui ele encosta no bloco de
-                    séries, que é o assunto vizinho, sem roubar a primeira dobra.
-                -->
-                <FaturamentoBiEmbed v-if="biEmbedUrl" :url="biEmbedUrl" />
 
                 <ComparacaoCard
                     v-if="vendaComparacao || faturamentoComparacao"
