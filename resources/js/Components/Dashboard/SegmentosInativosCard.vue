@@ -7,24 +7,17 @@
  * anterior trazia, por família, total / ativos / inativos / cobertura / peso — cinco
  * números por painel, três painéis. Este traz um número por linha.
  *
- * ⚠️ "Inativo" aqui usa o MESMO CORTE da Carteira (365 dias sem compra, ou nunca), mas o
- * UNIVERSO é maior: este card conta todos os inativos do escopo, enquanto os quadrinhos
- * do card "Carteira por Segmento" excluem os clientes cujo vendedor não tem segmento
- * cadastrado — lá a pergunta é de aderência, e esse terceiro balde fica à parte.
+ * ⚠️ O TOTAL DAQUI BATE COM O "INATIVOS" DO CARD AO LADO, sempre e em todo escopo — mesmo
+ * corte de 365 dias, mesmo universo. É exigência do Tony (08/09/2026): "os dois números têm
+ * que bater em todos os casos". Uma versão intermediária do mesmo dia listava só os
+ * segmentos atendidos e mostrava 66.753 ao lado de 73.940; explicar a diferença no
+ * subtítulo não resolveu, porque número que precisa de legenda para não parecer errado já
+ * custou a confiança. Nunca reintroduzir filtro de linha aqui: o "ver mais" filtra a
+ * EXIBIÇÃO, jamais o somatório.
  *
- * Para um vendedor com segmento cadastrado os dois números batem (medido: 188 = 188).
- * Em escopo de equipe ou empresa eles divergem, e muito (73.935 contra 21.619 na base de
- * dev). O `i` do card explica isso na tela — sem essa explicação são dois "Inativos"
- * diferentes lado a lado, que é como o usuário deixa de confiar na tela inteira.
- *
- * ⚠️ As linhas são os segmentos que a pessoa ATENDE (cadastro em `segmentos_vendedor`), e
- * só eles — o nome do card é literal. Segmento onde ela tem inativo mas que não é dela
- * fica de fora, e quem responde por esses é o card "Carteira por Segmento", no balde
- * "fora do segmento".
- *
- * ⚠️ Segmento atendido sem nenhum inativo aparece COM ZERO. Medido em 2026-09-06: 24 dos
- * 142 vendedores com segmento cadastrado estão nessa situação e vão ver o card todo em
- * zero. É a resposta certa — o segmento de cadastro está em dia — e não um card quebrado.
+ * ⚠️ Os segmentos que a pessoa atende vêm MARCADOS na listagem (pedido do diretor em
+ * 08/09), e o atendido sem nenhum inativo aparece com zero em vez de sumir. Marcar em vez
+ * de filtrar é o que atende os dois pedidos ao mesmo tempo.
  *
  * ⚠️ POTENCIAL = inativos × peso do segmento, EM CAIXAS (Tony, 08/09/2026) — o peso é
  * quantas caixas um cliente daquele segmento tende a comprar. A unidade aparece na tela
@@ -32,12 +25,6 @@
  * lido como dinheiro. A conta mora no `SegmentosInativosResolver`; aqui só se exibe, com o
  * peso impresso embaixo do número — potencial sem a conta à vista é número que ninguém
  * confere, e a tabela ordena por ele.
- *
- * ⚠️ O subtítulo diz "N dos M inativos" porque os dois cards da fileira contam universos
- * diferentes: aqui só os segmentos atendidos, no "Carteira por Segmento" a carteira
- * inteira. Ver 0 aqui e 188 ali sem explicação é como o vendedor deixa de confiar na tela —
- * reclamação do Tony em 06/09 e de novo em 08/09. O M vem do próprio bloco
- * (`totalCarteira`), não de outro card, para os dois não poderem divergir por caminho.
  */
 import { computed, ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
@@ -79,20 +66,22 @@ const formatar = new Intl.NumberFormat('pt-BR');
 const temLinhas = computed(() => props.segmentosInativos.linhas.length > 0);
 
 const subtitulo = computed(() => {
-    const { total, totalCarteira, linhas } = props.segmentosInativos;
-    const n = linhas.length;
+    const { total, atendidos, linhas } = props.segmentosInativos;
 
-    if (n === 0) {
-        return 'Nenhum segmento cadastrado para você';
+    if (linhas.length === 0) {
+        return 'Nenhum cliente inativo na carteira';
     }
 
-    const onde = n === 1 ? 'no seu segmento' : `nos seus ${n} segmentos`;
+    const inativos = `${formatar.format(total)} ${total === 1 ? 'cliente inativo' : 'clientes inativos'}`;
 
-    // Só compara quando há diferença: "188 dos 188" é ruído, e é o caso de quem tem a
-    // carteira inteira dentro do próprio segmento.
-    return total === totalCarteira
-        ? `${formatar.format(total)} ${total === 1 ? 'cliente inativo' : 'clientes inativos'} ${onde}`
-        : `${formatar.format(total)} dos ${formatar.format(totalCarteira)} clientes inativos da carteira estão ${onde}`;
+    // Diz quantos segmentos são dela porque a listagem mistura os dois tipos de linha — sem
+    // isso a marca de "atendido" fica sem referência de quantidade.
+    if (atendidos === 0) {
+        return `${inativos} · nenhum segmento atribuído a você`;
+    }
+
+    return `${inativos} · ${atendidos} ${atendidos === 1 ? 'segmento seu' : 'segmentos seus'} `
+        + `de ${linhas.length}`;
 });
 
 const explicacao = [
@@ -100,9 +89,8 @@ const explicacao = [
     '',
     'Clique numa linha para abrir a Carteira já filtrada naquele segmento.',
     '',
-    'As linhas são os segmentos que VOCÊ atende, do maior para o menor.',
+    'A lista traz TODOS os segmentos em que você tem cliente inativo. Os que você atende vêm marcados com o ponto colorido.',
     'Segmento seu sem nenhum inativo aparece com zero — quer dizer que está em dia.',
-    'Cliente inativo fora dos seus segmentos não entra aqui; ele está no card Carteira por Segmento, no balde "fora do segmento".',
     'Mostra os 3 maiores; "ver mais" abre os demais. Os TOTAIS são sempre da carteira inteira, esteja a lista aberta ou não.',
     '',
     'POTENCIAL, EM CAIXAS = clientes inativos × caixas por cliente do segmento.',
@@ -110,7 +98,7 @@ const explicacao = [
     'Peso 0 significa que o segmento não é alvo de reativação — por isso o potencial dele é 0 mesmo com muitos inativos.',
     'A tabela é ordenada pelo potencial, não pela quantidade.',
     '',
-    'O TOTAL é a soma das linhas: inativos dentro dos seus segmentos. O card "Carteira por Segmento" mostra a carteira inteira, por isso o número de lá é maior.',
+    'O TOTAL de inativos é o mesmo número do card "Carteira por Segmento" — nenhum cliente fica de fora da conta.',
 ].join('\n');
 
 /**
@@ -188,13 +176,21 @@ function formatarPeso(peso) {
                         :class="href(linha) ? 'group cursor-pointer' : ''"
                         :title="href(linha) ? `${linha.potencial} caixas = ${linha.inativos} clientes inativos × ${linha.peso} caixas por cliente. Clique para ver esses clientes na Carteira.` : null"
                     >
+                        <!--
+                            ⚠️ Ponto teal = segmento que a pessoa atende (pedido do diretor,
+                            08/09). O ponto RESERVA ESPAÇO também quando ausente
+                            (`invisible`, não `v-if`): sem isso os nomes das linhas não
+                            atendidas começam deslocados e a coluna vira um zigue-zague.
+                        -->
                         <td class="tbl-td text-left font-medium text-gray-800">
-                            <!--
-                                ⚠️ Sem marca de "atendido": desde 2026-09-08 TODA linha é um
-                                segmento atendido, então o destaque marcaria tudo — e marca
-                                que sempre aparece não destaca nada.
-                            -->
-                            {{ linha.nome }}
+                            <span class="inline-flex items-center gap-1.5">
+                                <span
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-teal"
+                                    :class="linha.atendido ? '' : 'invisible'"
+                                    :title="linha.atendido ? 'Segmento que você atende' : null"
+                                />
+                                {{ linha.nome }}
+                            </span>
                         </td>
                         <!--
                             ⚠️ O peso aparece embaixo do número, em miúdo. Sem ele o

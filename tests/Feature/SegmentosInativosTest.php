@@ -17,10 +17,12 @@ use Tests\TestCase;
 /**
  * Quadro "Segmentos Atendidos": clientes inativos nos segmentos que a pessoa ATENDE.
  *
- * ⚠️ A regra foi corrigida pelo Tony em 2026-09-08: "não é pra mostrar todos os segmentos
- * nos segmentos atendidos, é só os atendidos mesmo; o resto é na pill". Uma versão
- * intermediária listava todo segmento onde houvesse cliente inativo — agora o nome do card
- * é literal.
+ * ⚠️ A INVARIANTE, exigida pelo Tony em 2026-09-08 ("os dois números têm que bater em todos
+ * os casos"): o total daqui é igual aos inativos da carteira do escopo — o mesmo número que
+ * o card "Carteira por Segmento" mostra ao lado. Houve uma versão, no mesmo dia, que
+ * listava só os segmentos atendidos e por isso divergia (66.753 contra 73.940); explicar a
+ * diferença no subtítulo não bastou, porque número que precisa de legenda para não parecer
+ * errado já custou a confiança. Os segmentos atendidos agora são MARCADOS, não filtrados.
  */
 class SegmentosInativosTest extends TestCase
 {
@@ -97,12 +99,12 @@ class SegmentosInativosTest extends TestCase
     }
 
     /**
-     * ⚠️ A REGRA DO CARD. Cliente inativo em segmento que não é dela não entra — nem como
-     * linha, nem no total. Quem responde por esses é o card "Carteira por Segmento", no
-     * balde "fora do segmento".
+     * ⚠️ A REGRA DO CARD, e a razão de ele ser assim: segmento NÃO atendido continua na
+     * lista e no total — só não recebe a marca. Filtrar aqui faria o total discordar do card
+     * "Carteira por Segmento" ao lado, que foi exatamente a reclamação do Tony.
      */
     #[Test]
-    public function test_segmento_que_nao_e_atendido_fica_de_fora(): void
+    public function test_segmento_nao_atendido_entra_na_lista_sem_a_marca(): void
     {
         $this->atende('101');
 
@@ -112,23 +114,45 @@ class SegmentosInativosTest extends TestCase
 
         $r = $this->resolver();
 
-        $this->assertSame(['SUPERMERCADISTA'], array_column($r['linhas'], 'nome'));
-        $this->assertSame(1, $r['total'], 'inativo fora do segmento não entra no total');
+        $this->assertCount(3, $r['linhas'], 'os três segmentos aparecem');
+        $this->assertSame(3, $r['total'], 'e os três contam no total');
+        $this->assertSame(1, $r['atendidos']);
 
-        /*
-         * ⚠️ `totalCarteira` conta os TRÊS, atendidos ou não: é o número que o card
-         * "Carteira por Segmento" mostra ao lado, e existe para o subtítulo poder dizer
-         * "1 dos 3" em vez de deixar dois números diferentes se contradizendo na tela.
-         */
-        $this->assertSame(3, $r['totalCarteira']);
+        $marca = array_combine(array_column($r['linhas'], 'nome'), array_column($r['linhas'], 'atendido'));
+        $this->assertTrue($marca['SUPERMERCADISTA']);
+        $this->assertFalse($marca['ORGAO PUBLICO']);
+        $this->assertFalse($marca['DROGARIAS']);
     }
 
     /**
-     * ⚠️ Segmento atendido SEM nenhum inativo aparece com ZERO, não some.
-     *
-     * Medido em 2026-09-06: 24 dos 142 vendedores com segmento cadastrado estão nessa
-     * situação e verão o card todo em zero. É a resposta certa — o segmento de cadastro
-     * está em dia — e o teste existe para ninguém "consertar" isso escondendo a linha.
+     * ⚠️ A INVARIANTE do bloco, conferida contra o MESMO corte que o card "Carteira por
+     * Segmento" usa (`ClienteStatusResolver`), e não contra um número escrito à mão: é o que
+     * pega uma futura mudança que volte a filtrar linha aqui.
+     */
+    #[Test]
+    public function test_total_bate_com_os_inativos_da_carteira(): void
+    {
+        $this->atende('101');
+
+        $this->cliente('A1', '101', $this->inativo());
+        $this->cliente('B1', '103', $this->inativo());
+        $this->cliente('B2', '109', null);
+        $this->cliente('C1', '101', $this->ativo());
+
+        $limite = app(ClienteStatusResolver::class)->limiteInativando()->toDateString();
+
+        $inativosDaCarteira = Cliente::query()
+            ->where('cod_vendedor', self::COD)
+            ->where(fn ($q) => $q->whereNull('data_ultima_compra')->orWhere('data_ultima_compra', '<', $limite))
+            ->count();
+
+        $this->assertSame($inativosDaCarteira, $this->resolver()['total']);
+    }
+
+    /**
+     * ⚠️ Segmento atendido SEM nenhum inativo aparece com ZERO, não some — pedido do diretor
+     * em 08/09 ("colocar todos os segmentos que essa pessoa atende, e destacar na listagem").
+     * Somar zero não mexe na invariante do total.
      */
     #[Test]
     public function test_segmento_atendido_sem_inativo_aparece_com_zero(): void
@@ -140,21 +164,30 @@ class SegmentosInativosTest extends TestCase
 
         $r = $this->resolver();
 
-        $this->assertSame(['DROGARIAS'], array_column($r['linhas'], 'nome'));
-        $this->assertSame(0, $r['linhas'][0]['inativos']);
-        $this->assertSame(0, $r['total']);
+        $linha = collect($r['linhas'])->firstWhere('nome', 'DROGARIAS');
+
+        $this->assertNotNull($linha, 'segmento atendido sem inativo tem que aparecer');
+        $this->assertSame(0, $linha['inativos']);
+        $this->assertTrue($linha['atendido']);
+        $this->assertSame(2, $r['total'], 'e não altera o total da carteira');
     }
 
-    /** Sem segmento cadastrado não há o que listar — e a tela avisa em vez de mostrar vazio. */
+    /**
+     * ⚠️ Sem NENHUM segmento cadastrado a lista continua cheia: são os inativos da carteira,
+     * nenhum deles marcado. A versão que filtrava por segmento atendido deixava essas
+     * pessoas com o card inteiro vazio e a carteira cheia de inativo.
+     */
     #[Test]
-    public function test_sem_segmento_cadastrado_a_lista_vem_vazia(): void
+    public function test_sem_segmento_cadastrado_a_lista_ainda_traz_os_inativos(): void
     {
         $this->cliente('A1', '101', $this->inativo());
 
         $r = $this->resolver();
 
-        $this->assertSame([], $r['linhas']);
-        $this->assertSame(0, $r['total']);
+        $this->assertSame(['SUPERMERCADISTA'], array_column($r['linhas'], 'nome'));
+        $this->assertSame(1, $r['total']);
+        $this->assertSame(0, $r['atendidos']);
+        $this->assertFalse($r['linhas'][0]['atendido']);
     }
 
     /**

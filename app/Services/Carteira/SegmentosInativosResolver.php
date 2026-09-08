@@ -9,16 +9,22 @@ use App\Models\SegmentoVendedor;
 /**
  * Quantos clientes INATIVOS há em cada segmento que o escopo ATENDE.
  *
- * ⚠️ SÓ OS SEGMENTOS ATENDIDOS entram, e o nome do card é literal. Uma versão intermediária
- * listava todo segmento onde a pessoa tivesse cliente inativo — o Tony corrigiu em
- * 2026-09-08: "não é pra mostrar todos os segmentos nos segmentos atendidos, é só os
- * atendidos mesmo; o resto é na pill".
+ * ⚠️ O QUADRO LISTA TODOS OS SEGMENTOS onde o escopo tem cliente inativo, e os atendidos
+ * vêm marcados. Isso já foi ao contrário: em 08/09/2026 restringi a lista aos segmentos
+ * atendidos, e o Tony mandou voltar no mesmo dia com o motivo — **"os dois números têm que
+ * bater em todos os casos"**. Com a restrição, o total daqui (66.753) discordava do card
+ * "Carteira por Segmento" ao lado (73.940), e o vendedor não tem como saber em qual dos
+ * dois acreditar. Explicar a diferença no subtítulo NÃO resolveu: número que precisa de
+ * legenda para não parecer errado já custou a confiança.
  *
- * ⚠️ Consequência conhecida e aceita: o segmento atendido aparece MESMO COM ZERO inativos,
- * e para parte da equipe o card fica todo em zero. Medido em 2026-09-06: 24 dos 142
- * vendedores com segmento cadastrado não têm nenhum inativo no próprio segmento. Zero aqui
- * é resposta boa — quer dizer que o segmento de cadastro está em dia —, e quem quiser o
- * total da carteira inteira tem o card "Carteira por Segmento" ao lado.
+ * ⚠️ Por isso a INVARIANTE deste bloco é `total` == inativos da carteira do escopo, o mesmo
+ * número do card vizinho. Qualquer filtro de linha que se pense em acrescentar aqui — por
+ * segmento, por peso, por qualquer coisa — quebra essa invariante: filtre na EXIBIÇÃO (o
+ * "ver mais" do front) e nunca no somatório.
+ *
+ * ⚠️ Segmento ATENDIDO sem nenhum inativo entra assim mesmo, com zero, e marcado — pedido
+ * do diretor em 08/09 ("colocar todos os segmentos que essa pessoa atende, e destacar na
+ * listagem"). Somar zero não mexe na invariante acima.
  *
  * Pedido do diretor em 2026-09-06, com a régua dele: "MENOS É MAIS, nada de análises
  * complicadas, simples e direto". Substituiu o quadro anterior, que cruzava família de
@@ -72,69 +78,94 @@ class SegmentosInativosResolver
 
     /**
      * @param  array<string>|null  $codVendedores  null = empresa inteira
-     * @return array{total:int, totalCarteira:int, totalPotencial:int, linhas:list<array{codigo:string, nome:string, inativos:int, peso:float, potencial:int}>}
+     * @return array{total:int, totalPotencial:int, atendidos:int, linhas:list<array{codigo:string, nome:string, inativos:int, peso:float, potencial:int, atendido:bool}>}
      */
     public function resolver(?array $codVendedores): array
     {
-        $atendidos = $this->segmentosAtendidos($codVendedores);
+        /*
+         * ⚠️ `(string)` em toda chave de código não é redundante: array PHP converte chave
+         * numérica em INTEIRO, e as comparações aqui são estritas — sem o cast,
+         * `isset($atendidos[109])` contra a chave '109' falha e o segmento atendido perde a
+         * marca em silêncio. Foi assim que este bug apareceu na primeira versão da regra.
+         */
+        $atendidos = [];
+        foreach ($this->segmentosAtendidos($codVendedores) as $codigo) {
+            $atendidos[(string) $codigo] = true;
+        }
 
-        $inativosPorCodigo = [];
-        $totalCarteira = 0;
+        $segmentos = $this->segmentosPorCodigo();
+
+        $linhas = [];
 
         foreach ($this->inativosPorSegmento($codVendedores) as $l) {
-            $inativosPorCodigo[$l['codigo']] = $l['inativos'];
-            $totalCarteira += $l['inativos'];
+            $codigo = (string) $l['codigo'];
+
+            $linhas[$codigo] = $this->linha(
+                $codigo,
+                $l['nome'],
+                $l['inativos'],
+                $segmentos[$codigo] ?? null,
+                isset($atendidos[$codigo]),
+            );
         }
 
         /*
-         * ⚠️ A lista PARTE DOS SEGMENTOS ATENDIDOS, não do que existe de cliente inativo.
-         * Segmento atendido sem nenhum inativo entra com zero; segmento onde a pessoa tem
-         * inativo mas que não é dela NÃO entra — é o card "Carteira por Segmento" que
-         * responde por esses (o balde "fora do segmento").
-         *
-         * ⚠️ `(string)` no código não é redundante: `pluck('nome', 'codigo')` devolve array
-         * PHP, e o PHP converte chave numérica em INTEIRO. Todas as comparações aqui são
-         * estritas, então sem o cast `in_array(109, ['109'], true)` dá false e o segmento
-         * atendido some da lista em silêncio — foi assim que este bug apareceu.
+         * Segmento atendido que não apareceu na agregação não tem nenhum inativo: entra com
+         * zero, para o vendedor ver que ele está em dia em vez de o segmento sumir e virar
+         * dúvida. Soma zero, então a invariante do total continua de pé.
          */
-        $linhas = [];
-
-        foreach ($this->segmentosPorCodigo($atendidos) as $codigo => $segmento) {
-            $codigo = (string) $codigo;
-            $inativos = $inativosPorCodigo[$codigo] ?? 0;
-            $peso = (float) $segmento->peso_potencial;
-
-            $linhas[] = [
-                // O CÓDIGO viaja junto porque a linha é link para a Carteira, e o filtro de
-                // lá compara `clientes.cod_segmento`, que é o código bruto. Mandar o nome
-                // faria o filtro não casar nada.
-                'codigo' => $codigo,
-                'nome' => (string) $segmento->nome,
-                'inativos' => $inativos,
-                // O peso viaja junto para a tela poder mostrar a conta ("188 × 8"). Número
-                // que ninguém consegue conferir é número em que ninguém confia.
-                'peso' => $peso,
-                'potencial' => (int) round($inativos * $peso),
-            ];
+        foreach (array_keys($atendidos) as $codigo) {
+            if (! isset($linhas[$codigo]) && isset($segmentos[$codigo])) {
+                $linhas[$codigo] = $this->linha($codigo, $segmentos[$codigo]->nome, 0, $segmentos[$codigo], true);
+            }
         }
+
+        $linhas = array_values($linhas);
 
         /*
          * ⚠️ Ordena por POTENCIAL, com inativos como desempate — é o que a coluna existe
-         * para responder. Dois segmentos com peso 0 ficam empatados em 0 e o desempate por
-         * inativos os deixa em ordem estável entre si.
+         * para responder. Dois segmentos de peso 0 empatam em 0, e o desempate por inativos
+         * os deixa em ordem estável entre si.
          */
         usort($linhas, fn (array $a, array $b) => [$b['potencial'], $b['inativos']] <=> [$a['potencial'], $a['inativos']]);
 
-        // ⚠️ Os totais são a soma DAS LINHAS, sempre. É o que impede o rodapé de anunciar um
-        // número que a tabela não explica.
+        /*
+         * ⚠️ Os totais são a soma DAS LINHAS, sempre — e como nenhuma linha é descartada,
+         * `total` é igual aos inativos que o card "Carteira por Segmento" mostra. É a
+         * invariante do bloco, e há teste comparando os dois caminhos.
+         */
         return [
             'total' => (int) array_sum(array_column($linhas, 'inativos')),
-            // Inativos da carteira INTEIRA, atendidos ou não — é o número que o card
-            // "Carteira por Segmento" mostra, e existe aqui só para a tela não se
-            // contradizer. Nunca usar como denominador de potencial.
-            'totalCarteira' => (int) $totalCarteira,
             'totalPotencial' => (int) array_sum(array_column($linhas, 'potencial')),
+            'atendidos' => count(array_filter(array_column($linhas, 'atendido'))),
             'linhas' => $linhas,
+        ];
+    }
+
+    /**
+     * Uma linha do quadro. Existe para os dois laços de `resolver()` montarem o registro do
+     * mesmo jeito — inclusive o peso, que é onde uma divergência passaria despercebida.
+     *
+     * @return array{codigo:string, nome:string, inativos:int, peso:float, potencial:int, atendido:bool}
+     */
+    private function linha(string $codigo, ?string $nome, int $inativos, ?Segmento $segmento, bool $atendido): array
+    {
+        // Segmento fora dos 23 conhecidos (100, 102, 110) e o balde "Sem segmento" não têm
+        // peso definido: potencial 0, e não um chute.
+        $peso = (float) ($segmento->peso_potencial ?? 0);
+
+        return [
+            // O CÓDIGO viaja junto porque a linha é link para a Carteira, e o filtro de lá
+            // compara `clientes.cod_segmento`, que é o código bruto. Mandar o nome faria o
+            // filtro não casar nada.
+            'codigo' => $codigo,
+            'nome' => (string) ($nome ?? $codigo),
+            'inativos' => $inativos,
+            // O peso viaja junto para a tela mostrar a conta ("5.893 × 8"). Número que
+            // ninguém consegue conferir é número em que ninguém confia.
+            'peso' => $peso,
+            'potencial' => (int) round($inativos * $peso),
+            'atendido' => $atendido,
         ];
     }
 
@@ -161,23 +192,22 @@ class SegmentosInativosResolver
     }
 
     /**
-     * Nome e peso de cada código informado. Uma query numa tabela de 23 linhas.
+     * Todos os segmentos conhecidos, indexados pelo código. Uma query numa tabela de 23
+     * linhas.
      *
-     * ⚠️ `keyBy('codigo')` devolve array PHP, e o PHP converte chave numérica em INTEIRO —
-     * daí o `(string)` em quem consome. Foi assim que o segmento atendido sumiu da lista em
-     * silêncio na primeira execução desta regra, porque as comparações aqui são estritas.
+     * ⚠️ Traz TODOS de propósito, sem recortar pelo escopo: o quadro precisa do peso também
+     * dos segmentos que a pessoa NÃO atende mas nos quais tem cliente inativo — recortar
+     * deixaria essas linhas com potencial 0 por falta de dado, e não por decisão da
+     * diretoria.
      *
-     * @param  list<string>  $codigos
+     * ⚠️ `keyBy('codigo')` devolve array PHP, que converte chave numérica em INTEIRO; por
+     * isso quem consome faz `(string)` nas chaves.
+     *
      * @return array<string, Segmento>
      */
-    private function segmentosPorCodigo(array $codigos): array
+    private function segmentosPorCodigo(): array
     {
-        if ($codigos === []) {
-            return [];
-        }
-
         return Segmento::query()
-            ->whereIn('codigo', $codigos)
             ->get(['codigo', 'nome', 'peso_potencial'])
             ->keyBy('codigo')
             ->all();

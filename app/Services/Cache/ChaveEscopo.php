@@ -55,8 +55,14 @@ final readonly class ChaveEscopo
      *   `totalPotencial` e `totalCarteira` quando a diretoria entregou a matriz de pesos. Bloco JÁ EM
      *   PRODUÇÃO (subiu no dia anterior): sem o bump, a coluna Potencial e o total do
      *   rodapé sairiam vazios por 30 min após o deploy, para quem já estava logado.
+     *
+     *   v5 → v6 (2026-09-08, horas depois) — o mesmo bloco voltou a listar TODOS os
+     *   segmentos, porque o total tem que bater com o card ao lado: `totalCarteira` saiu
+     *   (virou igual a `total`) e entraram `atendido` por linha e `atendidos` no topo.
+     *   Dois bumps no mesmo dia é o custo de mudar de ideia sobre o formato com o bloco já
+     *   no ar — e é mais barato que o card mutilado.
      */
-    public const VERSAO = 'v5';
+    public const VERSAO = 'v6';
 
     private const PREFIXO = 'agg';
 
