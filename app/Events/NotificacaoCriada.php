@@ -33,17 +33,13 @@ class NotificacaoCriada implements ShouldBroadcast
     }
 
     /**
+     * O MESMO payload que o histórico do sino devolve (Notificacao::paraOSino) — a
+     * notificação que chega ao vivo entra na mesma lista da que veio pelo GET inicial.
+     *
      * @return array<string, mixed>
      */
     public function broadcastWith(): array
     {
-        return [
-            'id' => $this->notificacao->id,
-            'tipo' => $this->notificacao->tipo,
-            'titulo' => $this->notificacao->titulo,
-            'mensagem' => $this->notificacao->mensagem,
-            'link' => $this->notificacao->link,
-            'criadoEm' => $this->notificacao->created_at->toIso8601String(),
-        ];
+        return $this->notificacao->paraOSino();
     }
 }

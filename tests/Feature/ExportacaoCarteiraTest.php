@@ -97,6 +97,78 @@ class ExportacaoCarteiraTest extends TestCase
         ]);
     }
 
+    /**
+     * O sino precisa saber que este link devolve um ARQUIVO.
+     *
+     * Sem a marca, o front navega com o router do Inertia — XHR esperando uma resposta de
+     * página — e o .xlsx é descartado sem download e sem erro na tela. Foi o defeito
+     * relatado: "clico na notificação e não baixa nada".
+     */
+    public function test_notificacao_de_planilha_e_marcada_como_download(): void
+    {
+        $user = $this->usuario();
+        $exportacao = $this->exportacaoPronta($user);
+
+        Notificacao::create([
+            'user_id' => $user->id,
+            'tipo' => 'exportacao_pronta',
+            'titulo' => 'Planilha da Carteira pronta',
+            'link' => route('exportacoes.download', $exportacao->id, false),
+        ]);
+
+        $payload = $this->actingAs($user)
+            ->getJson(route('notificacoes.index'))
+            ->assertOk()
+            ->json('naoLidas.0');
+
+        $this->assertTrue($payload['download']);
+        $this->assertSame("/exportacoes/{$exportacao->id}/download", $payload['link']);
+    }
+
+    /** A contraprova: notificação que aponta pra uma página continua abrindo pelo Inertia. */
+    public function test_notificacao_de_pagina_nao_e_marcada_como_download(): void
+    {
+        $user = $this->usuario();
+
+        Notificacao::create([
+            'user_id' => $user->id,
+            'tipo' => 'orcamento_pendente',
+            'titulo' => 'Orçamento aguardando aprovação',
+            'link' => route('orcamentos.index', [], false),
+        ]);
+
+        $payload = $this->actingAs($user)
+            ->getJson(route('notificacoes.index'))
+            ->assertOk()
+            ->json('naoLidas.0');
+
+        $this->assertFalse($payload['download']);
+    }
+
+    /**
+     * O sino monta uma lista só com duas fontes — o GET do histórico e o broadcast do
+     * Reverb. Se os payloads divergirem, a mesma notificação se comporta diferente
+     * conforme tenha chegado ao vivo ou depois de um F5.
+     */
+    public function test_broadcast_em_tempo_real_leva_o_mesmo_payload_do_historico(): void
+    {
+        $user = $this->usuario();
+        $exportacao = $this->exportacaoPronta($user);
+
+        $notificacao = Notificacao::create([
+            'user_id' => $user->id,
+            'tipo' => 'exportacao_pronta',
+            'titulo' => 'Planilha da Carteira pronta',
+            'link' => route('exportacoes.download', $exportacao->id, false),
+        ]);
+
+        $doHistorico = $this->actingAs($user)
+            ->getJson(route('notificacoes.index'))
+            ->json('naoLidas.0');
+
+        $this->assertSame($doHistorico, (new \App\Events\NotificacaoCriada($notificacao))->broadcastWith());
+    }
+
     public function test_download_funciona_para_o_dono(): void
     {
         $user = $this->usuario();

@@ -60,9 +60,24 @@ async function abrir(notificacao) {
 
     axios.post(route('notificacoes.marcarLida', notificacao.id));
 
-    if (notificacao.link) {
-        router.visit(notificacao.link);
+    if (!notificacao.link) return;
+
+    /*
+     * ⚠️ Link de ARQUIVO não passa pelo router do Inertia.
+     *
+     * `router.visit` faz um XHR e espera uma resposta de página; recebendo um .xlsx ele
+     * descarta a resposta e o clique não faz nada — sem download e sem erro visível, que
+     * era o sintoma da planilha da Carteira. Quem sabe baixar é o navegador: como a rota
+     * responde com `Content-Disposition: attachment`, atribuir a location dispara o
+     * download sem sair da página. Quem decide o que é arquivo é o servidor
+     * (Notificacao::TIPOS_DOWNLOAD), não uma lista de tipos repetida aqui.
+     */
+    if (notificacao.download) {
+        window.location.href = notificacao.link;
+        return;
     }
+
+    router.visit(notificacao.link);
 }
 
 async function marcarTodas() {
