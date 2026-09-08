@@ -17,17 +17,27 @@
  * dev). O `i` do card explica isso na tela — sem essa explicação são dois "Inativos"
  * diferentes lado a lado, que é como o usuário deixa de confiar na tela inteira.
  *
- * ⚠️ As linhas são os segmentos ONDE ELE TEM CLIENTE INATIVO, não os atribuídos a ele no
- * cadastro. Medido em 2026-09-06: 24 dos 142 vendedores com segmento atribuído (16,9%)
- * têm ZERO inativo no próprio segmento — pela regra do cadastro o card inteiro viraria
- * uma linha escrita "Outros". Na média só 41,7% dos inativos caem no segmento atribuído.
+ * ⚠️ As linhas são os segmentos que a pessoa ATENDE (cadastro em `segmentos_vendedor`), e
+ * só eles — o nome do card é literal. Segmento onde ela tem inativo mas que não é dela
+ * fica de fora, e quem responde por esses é o card "Carteira por Segmento", no balde
+ * "fora do segmento".
  *
- * ⚠️ A linha "Demais segmentos" (cauda além do teto de 6) não é enfeite: sem ela o TOTAL
- * não fecharia com a soma das linhas.
+ * ⚠️ Segmento atendido sem nenhum inativo aparece COM ZERO. Medido em 2026-09-06: 24 dos
+ * 142 vendedores com segmento cadastrado estão nessa situação e vão ver o card todo em
+ * zero. É a resposta certa — o segmento de cadastro está em dia — e não um card quebrado.
  *
- * ⚠️ Sem link para a Carteira: o filtro de lá recorta por segmento pelo CÓDIGO, e este
- * quadro agrupa por nome já resolvido. Ligar os dois exigiria devolver o código junto —
- * decisão para quando a regra de família voltar e o quadro ganhar as colunas de produto.
+ * ⚠️ POTENCIAL = inativos × peso do segmento, EM CAIXAS (Tony, 08/09/2026) — o peso é
+ * quantas caixas um cliente daquele segmento tende a comprar. A unidade aparece na tela
+ * sempre: todo outro número grande do Painel é em reais, então potencial sem unidade seria
+ * lido como dinheiro. A conta mora no `SegmentosInativosResolver`; aqui só se exibe, com o
+ * peso impresso embaixo do número — potencial sem a conta à vista é número que ninguém
+ * confere, e a tabela ordena por ele.
+ *
+ * ⚠️ O subtítulo diz "N dos M inativos" porque os dois cards da fileira contam universos
+ * diferentes: aqui só os segmentos atendidos, no "Carteira por Segmento" a carteira
+ * inteira. Ver 0 aqui e 188 ali sem explicação é como o vendedor deixa de confiar na tela —
+ * reclamação do Tony em 06/09 e de novo em 08/09. O M vem do próprio bloco
+ * (`totalCarteira`), não de outro card, para os dois não poderem divergir por caminho.
  */
 import { computed, ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
@@ -64,12 +74,25 @@ function href(linha) {
     });
 }
 
+const formatar = new Intl.NumberFormat('pt-BR');
+
 const temLinhas = computed(() => props.segmentosInativos.linhas.length > 0);
 
 const subtitulo = computed(() => {
-    const total = props.segmentosInativos.total;
+    const { total, totalCarteira, linhas } = props.segmentosInativos;
+    const n = linhas.length;
 
-    return `${total} ${total === 1 ? 'cliente inativo' : 'clientes inativos'} na carteira`;
+    if (n === 0) {
+        return 'Nenhum segmento cadastrado para você';
+    }
+
+    const onde = n === 1 ? 'no seu segmento' : `nos seus ${n} segmentos`;
+
+    // Só compara quando há diferença: "188 dos 188" é ruído, e é o caso de quem tem a
+    // carteira inteira dentro do próprio segmento.
+    return total === totalCarteira
+        ? `${formatar.format(total)} ${total === 1 ? 'cliente inativo' : 'clientes inativos'} ${onde}`
+        : `${formatar.format(total)} dos ${formatar.format(totalCarteira)} clientes inativos da carteira estão ${onde}`;
 });
 
 const explicacao = [
@@ -77,11 +100,17 @@ const explicacao = [
     '',
     'Clique numa linha para abrir a Carteira já filtrada naquele segmento.',
     '',
-    'As linhas são os segmentos onde você tem cliente inativo, do maior para o menor.',
-    'Mostra os 3 maiores; "ver mais" abre os demais. O TOTAL é sempre da carteira inteira, esteja a lista aberta ou não.',
+    'As linhas são os segmentos que VOCÊ atende, do maior para o menor.',
+    'Segmento seu sem nenhum inativo aparece com zero — quer dizer que está em dia.',
+    'Cliente inativo fora dos seus segmentos não entra aqui; ele está no card Carteira por Segmento, no balde "fora do segmento".',
+    'Mostra os 3 maiores; "ver mais" abre os demais. Os TOTAIS são sempre da carteira inteira, esteja a lista aberta ou não.',
     '',
-    'Conta TODOS os clientes inativos do escopo.',
-    'O card "Carteira por Segmento" pode mostrar um número menor: os quadrinhos de lá deixam de fora os clientes cujo vendedor não tem segmento cadastrado, porque ali a pergunta é de aderência. Aqui a pergunta é quantos inativos existem, e nenhum fica de fora.',
+    'POTENCIAL, EM CAIXAS = clientes inativos × caixas por cliente do segmento.',
+    'O peso (0 a 20 caixas) foi definido pela diretoria: é quanto um cliente daquele segmento tende a comprar.',
+    'Peso 0 significa que o segmento não é alvo de reativação — por isso o potencial dele é 0 mesmo com muitos inativos.',
+    'A tabela é ordenada pelo potencial, não pela quantidade.',
+    '',
+    'O TOTAL é a soma das linhas: inativos dentro dos seus segmentos. O card "Carteira por Segmento" mostra a carteira inteira, por isso o número de lá é maior.',
 ].join('\n');
 
 /**
@@ -101,7 +130,13 @@ const linhasVisiveis = computed(() => (aberto.value
 
 const ocultas = computed(() => Math.max(0, props.segmentosInativos.linhas.length - VISIVEIS));
 
-const formatar = new Intl.NumberFormat('pt-BR');
+/**
+ * Peso inteiro sai sem casas ("8", não "8,00"); só mostra decimal se a diretoria mandar um
+ * peso quebrado algum dia. A coluna é estreita e "8,00" polui sem informar nada.
+ */
+function formatarPeso(peso) {
+    return Number.isInteger(peso) ? String(peso) : formatar.format(peso);
+}
 </script>
 
 <template>
@@ -126,6 +161,12 @@ const formatar = new Intl.NumberFormat('pt-BR');
                 <thead>
                     <tr class="tbl-head-row">
                         <th class="tbl-th text-left">Segmento</th>
+                        <!--
+                            ⚠️ POTENCIAL vem PRIMEIRO e é o número em destaque: é ele que
+                            ordena a tabela e responde "por onde começo". Inativos fica à
+                            direita, em tom de apoio, como o insumo da conta.
+                        -->
+                        <th class="tbl-th text-right">Potencial <span class="font-normal normal-case text-gray-400">(caixas)</span></th>
                         <th class="tbl-th text-right">Clientes inativos</th>
                     </tr>
                 </thead>
@@ -145,12 +186,31 @@ const formatar = new Intl.NumberFormat('pt-BR');
                         :as="href(linha) ? 'tr' : undefined"
                         class="tbl-row"
                         :class="href(linha) ? 'group cursor-pointer' : ''"
-                        :title="href(linha) ? `Ver os ${linha.inativos} inativos de ${linha.nome} na Carteira` : null"
+                        :title="href(linha) ? `${linha.potencial} caixas = ${linha.inativos} clientes inativos × ${linha.peso} caixas por cliente. Clique para ver esses clientes na Carteira.` : null"
                     >
                         <td class="tbl-td text-left font-medium text-gray-800">
+                            <!--
+                                ⚠️ Sem marca de "atendido": desde 2026-09-08 TODA linha é um
+                                segmento atendido, então o destaque marcaria tudo — e marca
+                                que sempre aparece não destaca nada.
+                            -->
                             {{ linha.nome }}
                         </td>
-                        <td class="tbl-td text-right font-semibold tabular-nums text-gray-800">
+                        <!--
+                            ⚠️ O peso aparece embaixo do número, em miúdo. Sem ele o
+                            potencial é um número que caiu do céu: com ele o vendedor lê
+                            "188 × 8" e confere de cabeça — e entende por que o segmento de
+                            peso 0 fica no fim da lista mesmo cheio de inativo.
+                        -->
+                        <td class="tbl-td text-right">
+                            <span class="block font-semibold leading-4 tabular-nums text-navy">
+                                {{ formatar.format(linha.potencial) }}
+                            </span>
+                            <span class="block text-[0.65rem] leading-3 text-gray-400">
+                                {{ formatarPeso(linha.peso) }} cx/cliente
+                            </span>
+                        </td>
+                        <td class="tbl-td text-right tabular-nums text-gray-600">
                             <span class="inline-flex items-center justify-end gap-1">
                                 {{ formatar.format(linha.inativos) }}
                                 <svg
@@ -174,7 +234,13 @@ const formatar = new Intl.NumberFormat('pt-BR');
                         <td class="tbl-td text-left text-[0.7rem] font-semibold uppercase tracking-wide text-gray-500">
                             Total
                         </td>
-                        <td class="tbl-td text-right text-base font-bold tabular-nums text-navy">
+                        <td class="tbl-td text-right">
+                            <span class="text-base font-bold tabular-nums text-navy">
+                                {{ formatar.format(segmentosInativos.totalPotencial) }}
+                            </span>
+                            <span class="ml-1 text-[0.65rem] text-gray-500">cx</span>
+                        </td>
+                        <td class="tbl-td text-right text-sm font-semibold tabular-nums text-gray-600">
                             {{ formatar.format(segmentosInativos.total) }}
                         </td>
                     </tr>
@@ -195,6 +261,9 @@ const formatar = new Intl.NumberFormat('pt-BR');
             </button>
         </div>
 
-        <p v-else class="text-sm text-gray-400">Nenhum cliente inativo nesta carteira.</p>
+        <p v-else class="text-sm text-gray-400">
+            Nenhum segmento cadastrado para este escopo — fale com o admin para vincular
+            seus segmentos.
+        </p>
     </DarkCard>
 </template>

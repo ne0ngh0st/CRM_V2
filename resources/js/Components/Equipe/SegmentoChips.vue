@@ -1,7 +1,10 @@
 <script setup>
 /**
- * Chips com os segmentos de um vendedor. Mostra 2 e resume o resto em "+N", com os nomes
- * escondidos no `title` — a lista completa estouraria a largura da célula na Equipe.
+ * Chips com os segmentos de um vendedor. Mostra TODOS.
+ *
+ * ⚠️ Mostrava 2 e resumia o resto em "+N" até 2026-09-08, quando o diretor pediu para ver
+ * todos os segmentos que a pessoa atende. São 1-2 por vendedor na regra da casa, e no pior
+ * caso real 4 — cabe. Os chips quebram linha (`flex-wrap`) em vez de estourar a célula.
  *
  * ⚠️ `surface` espelha a prop de mesmo nome do StatusPill: `light` (padrão) para fundo
  * branco, `dark` para o header preto do DarkCard. É vocabulário que o design system já
@@ -33,20 +36,12 @@ const ESTILOS = {
 <template>
     <div v-if="segmentos.length" class="flex flex-wrap gap-1">
         <span
-            v-for="s in segmentos.slice(0, 2)"
+            v-for="s in segmentos"
             :key="s"
             class="inline-flex items-center rounded-full border px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide"
             :class="ESTILOS[surface].chip"
         >
             {{ s }}
-        </span>
-        <span
-            v-if="segmentos.length > 2"
-            class="inline-flex items-center rounded-full border px-2 py-0.5 text-[0.65rem] font-medium"
-            :class="ESTILOS[surface].resto"
-            :title="segmentos.slice(2).join(', ')"
-        >
-            +{{ segmentos.length - 2 }}
         </span>
     </div>
     <span v-else class="text-xs" :class="ESTILOS[surface].vazio">—</span>

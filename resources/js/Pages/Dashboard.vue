@@ -120,8 +120,15 @@ const mesAno = computed(() => {
                             página o chip aparece fora de contexto; dentro do card de
                             Carteira por Segmento ele entra sem rótulo, já contextualizado.
                         -->
-                        <StatusPill v-if="segmentosVendedor.length" tone="neutral" surface="dark" :title="segmentosVendedor.join(', ')">
-                            Segmento: {{ segmentosVendedor[0] }}<template v-if="segmentosVendedor.length > 1"> +{{ segmentosVendedor.length - 1 }}</template>
+                        <!--
+                            ⚠️ TODOS os segmentos, sem "+N". Até 2026-09-08 a pill mostrava
+                            o primeiro e resumia o resto, e o diretor pediu para ver a lista
+                            inteira. São 1-2 por vendedor na regra da casa (4 no pior caso
+                            real), e o `#meta` do PageHero já quebra linha.
+                        -->
+                        <StatusPill v-if="segmentosVendedor.length" tone="neutral" surface="dark">
+                            {{ segmentosVendedor.length === 1 ? 'Segmento' : 'Segmentos' }}:
+                            {{ segmentosVendedor.join(' · ') }}
                         </StatusPill>
                         <StatusPill v-if="statusGeral" :tone="statusGeral.tom" surface="dark">
                             Sistema: {{ statusGeral.label }}

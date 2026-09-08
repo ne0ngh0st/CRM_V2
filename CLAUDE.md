@@ -1297,6 +1297,45 @@ denuncia a volta da resolução de escopo por agregação.
 meta, a ordem das contagens ou a reutilização do valor faz o teste correspondente falhar.
 Suíte inteira verde: **346 testes**.
 
+### Potencial da Carteira: peso por segmento, em caixas — 2026-09-08
+
+A diretoria entregou a matriz de pesos (planilha "Potencial segmentos 08-09-2026.xlsx",
+em `Documentos\DOCS\CRM`) e a coluna Potencial do card "Segmentos Atendidos" deixou de ser
+espaço reservado.
+
+**A conta é `inativos × peso`, e a unidade é CAIXA** (Tony, 08/09): o peso é quantas caixas
+um cliente daquele segmento tende a comprar. Escala 0-20, definida por eles — 20 em
+SUPERMERCADISTA e REVENDA, 0 em ÓRGÃO PÚBLICO, CORPORATIVO, TRANSPORTE e mais oito.
+
+- **`segmentos.peso_potencial`** (migration `2026_09_08_100000`), não uma tabela nova: o
+  peso é 1:1 com o segmento. A `potencial_pesos` (segmento × família de produto) continua
+  existindo e **sem uso** — responde outra pergunta, e volta quando a regra de família for
+  fechada. Duas tabelas de peso conviveriam mal; está escrito na migration qual é qual.
+- ⚠️ **Default 0, nunca 1.** Peso ausente tem que valer "não é alvo", não "vale um":
+  segmento novo do TOTVS entra zerado e fica fora do ranking até alguém decidir, em vez de
+  aparecer no meio da lista sem ninguém ter escolhido nada.
+- ⚠️ **A migration PREENCHE os valores**, não só cria a coluna. Dev e produção já têm os 23
+  segmentos gravados, e o seeder só alcança banco semeado de novo — sem o `update` a coluna
+  nasceria zerada em produção e a tela mostraria potencial 0 para todo mundo, defeito que
+  passa por "ainda não calibraram" e fica meses assim. Os mesmos valores estão no
+  `SegmentoSeeder`, para banco novo e para a suíte.
+- **O ranking passou a ser por potencial**, com inativos como desempate. Ordenar por
+  inativos deixaria no topo justamente o segmento que a diretoria marcou como fora do alvo.
+- **A unidade aparece na tela sempre** (cabeçalho "(caixas)", "cx" no total, "20 cx/cliente"
+  sob cada número): todo outro número grande do Painel é em reais.
+
+**⚠️ Os dois cards da fileira contavam universos diferentes sem dizer.** "Segmentos
+Atendidos" conta só os inativos dos segmentos atendidos; "Carteira por Segmento", ao lado,
+conta a carteira inteira — e ver 0 aqui e 188 ali quebra a confiança na tela (reclamação do
+Tony em 06/09 e de novo em 08/09). O bloco passou a devolver **`totalCarteira`** e o
+subtítulo diz *"66.753 dos 73.940 clientes inativos da carteira estão nos seus 17
+segmentos"*. Sai de graça — é a soma das linhas que a agregação já trazia, incluindo as não
+atendidas — e vem do **próprio bloco**, nunca do outro card, para os dois não poderem
+divergir por caminho.
+
+⚠️ **`ChaveEscopo::VERSAO` foi para `v5`**: `segmentos-inativos` ganhou `peso`, `potencial`,
+`totalPotencial` e `totalCarteira` num bloco já em produção.
+
 ## Pendências
 - 🔴 **As metas de VENDA em produção são, na maioria, lixo de seed.** Conferido no RDS em
   2026-09-04, logo após o deploy: `metas_mensais` só tem os meses **8 a 12** (nada de

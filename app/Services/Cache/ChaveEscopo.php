@@ -50,8 +50,13 @@ final readonly class ChaveEscopo
      *   de bloco JÁ EM PRODUÇÃO (o v3 subiu no dia anterior), então aqui o bump é
      *   obrigatório: sem ele a aba Dia abriria vazia por 30 min após o deploy, para quem
      *   já estava logado.
+     *
+     *   v4 → v5 (2026-09-08) — `segmentos-inativos` passou a carregar `peso`, `potencial`,
+     *   `totalPotencial` e `totalCarteira` quando a diretoria entregou a matriz de pesos. Bloco JÁ EM
+     *   PRODUÇÃO (subiu no dia anterior): sem o bump, a coluna Potencial e o total do
+     *   rodapé sairiam vazios por 30 min após o deploy, para quem já estava logado.
      */
-    public const VERSAO = 'v4';
+    public const VERSAO = 'v5';
 
     private const PREFIXO = 'agg';
 

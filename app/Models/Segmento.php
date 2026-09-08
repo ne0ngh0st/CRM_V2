@@ -12,6 +12,11 @@ class Segmento extends Model
     protected $fillable = [
         'codigo',
         'nome',
+        'peso_potencial',
+    ];
+
+    protected $casts = [
+        'peso_potencial' => 'decimal:2',
     ];
 
     public function segmentosVendedor(): HasMany

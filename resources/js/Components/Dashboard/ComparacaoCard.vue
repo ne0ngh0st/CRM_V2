@@ -1,6 +1,11 @@
 <script setup>
 /**
- * Comparação ano vs. ano, mês a mês, com duas abas: VENDA e FATURAMENTO.
+ * Evolução comercial: ano vs. ano mês a mês, ou dia a dia do mês corrente, com as abas
+ * VENDA e FATURAMENTO.
+ *
+ * ⚠️ Chamava-se "Comparação" até 2026-09-08; o nome novo é do diretor. O arquivo mantém o
+ * nome `ComparacaoCard` de propósito — renomear o componente junto quebraria o histórico
+ * do git dos dois lados (o do arquivo e o do conteúdo) sem ganho nenhum.
  *
  * ⚠️ É TABELA, não gráfico, e a troca foi pedida pela direção (2026-09-05) — não é
  * preferência de implementação. O Chart.js saiu do projeto junto: este era o único
@@ -221,7 +226,7 @@ const alertaSerieIncompleta = computed(() => {
 </script>
 
 <template>
-    <DarkCard title="Comparação" :subtitle="subtitulo">
+    <DarkCard title="Evolução Comercial" :subtitle="subtitulo">
         <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                 <path d="M4 5h16M4 12h16M4 19h16" stroke-linecap="round" />
