@@ -33,6 +33,37 @@ class LeitorRelatorioTotvsTest extends TestCase
         return $caminho;
     }
 
+    public function test_campo_com_byte_cp1252_solto_sai_utf8_valido(): void
+    {
+        // O caminho REAL do defeito de 2026-09-08: o byte não vem de uma string no
+        // código, vem do arquivo. Um teste só sobre o `Normalizador` provaria a regra e
+        // não provaria que o leitor a aplica — foi assim que o import passou meses
+        // conferindo o encoding do arquivo e quebrando no campo.
+        $leitor = LeitorRelatorio::abrir($this->arquivo(
+            "199 - ULTIMO FATURAMENTO.RLT;;;\n".
+            "Grp.Vendas;Descricao;Nome\n".
+            "1014;POSTOS\xA0LAURINDAO;FEDEX BRASIL LOGISTICA E TRANSPORTE\xA0LTDA\n"
+        ));
+
+        $linhas = iterator_to_array($leitor->linhas());
+        $linha = reset($linhas);
+
+        $this->assertSame('POSTOS LAURINDAO', $linha['Descricao']);
+        $this->assertSame('FEDEX BRASIL LOGISTICA E TRANSPORTE LTDA', $linha['Nome']);
+        $this->assertTrue(mb_check_encoding($linha['Descricao'], 'UTF-8'), 'é isto que o MySQL recusa');
+    }
+
+    public function test_nome_de_coluna_com_nbsp_ainda_e_reconhecido(): void
+    {
+        $leitor = LeitorRelatorio::abrir($this->arquivo(
+            "Codigo;Descri\xA0cao\n".
+            "000001;ACME\n"
+        ));
+
+        $leitor->exigirColunas(['Descri cao']);
+        $this->assertSame(['Codigo', 'Descri cao'], $leitor->cabecalho());
+    }
+
     public function test_pula_a_linha_de_titulo_do_relatorio(): void
     {
         $leitor = LeitorRelatorio::abrir($this->arquivo(

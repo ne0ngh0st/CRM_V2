@@ -16,6 +16,75 @@ use DateTime;
  */
 class Normalizador
 {
+    /**
+     * Texto do relatório com a codificação consertada.
+     *
+     * ⚠️ O item 3 do docblock do `LeitorRelatorio` dizia que os relatórios são "UTF-8,
+     * não cp1252", conferido em DOIS dos doze arquivos. Isso vale para o arquivo INTEIRO
+     * e não valia para todo CAMPO: em 2026-09-08 a rodada manual de produção morreu com
+     * `1366 Incorrect string value: '\xA0'` ao gravar `grupos_cliente.nome`, porque o
+     * `199 - ULTIMO FATURAMENTO` trazia 210 valores com um NBSP de cp1252 (byte `A0`
+     * solto, sem o `C2` que o UTF-8 exige) — alguém colou o texto de uma planilha no
+     * cadastro do TOTVS. O arquivo é ASCII em 99,99%, então conferir o encoding do
+     * arquivo passava; quem reprovava era o MySQL, no meio do import.
+     *
+     * ⚠️ A CONVERSÃO É CIRÚRGICA, byte a byte, e não pode virar um
+     * `mb_convert_encoding($v, 'UTF-8', 'Windows-1252')` no campo inteiro: os outros
+     * relatórios TÊM UTF-8 legítimo (8.587 sequências no cadastro de clientes — `Ç`,
+     * travessão), e converter em bloco um campo misto transformaria `AÇO` em `AÃ‡O`.
+     * Aqui cada sequência UTF-8 válida passa intacta e só o byte solto é reinterpretado
+     * como cp1252 — assim um `\xC7` futuro vira `Ç`, em vez do `?` que uma substituição
+     * cega produziria.
+     *
+     * ⚠️ NBSP VIRA ESPAÇO COMUM, inclusive o que já estava em UTF-8 válido. Sem isso
+     * `POSTOS<NBSP>LAURINDAO` e `POSTOS LAURINDAO` seriam dois grupos distintos na tela,
+     * com a diferença invisível — e o `trim()` do PHP também não morde NBSP, então o
+     * padding de largura fixa do TOTVS sobreviveria num campo e não no vizinho.
+     */
+    public static function textoUtf8(mixed $valor): string
+    {
+        $valor = (string) $valor;
+
+        if ($valor === '') {
+            return '';
+        }
+
+        // Caminho rápido: quase todo campo já é válido, e `mb_check_encoding` é ordens de
+        // grandeza mais barato que a regex abaixo. São ~6 milhões de campos por rodada —
+        // pagar a regex em todos custaria minutos à toa.
+        if (! mb_check_encoding($valor, 'UTF-8')) {
+            $valor = self::recuperarBytesInvalidos($valor);
+        }
+
+        return str_replace("\u{A0}", ' ', $valor);
+    }
+
+    /**
+     * Reinterpreta como cp1252 apenas os bytes que não formam sequência UTF-8 válida.
+     *
+     * A alternância abaixo é a gramática do UTF-8 (RFC 3629): o que casar em qualquer
+     * ramo antes do `(.)` final é sequência legítima e sai como entrou. `(.)` só alcança
+     * o que sobrou, byte a byte — e `/s` está lá para que ele também pegue `\n`.
+     */
+    private static function recuperarBytesInvalidos(string $valor): string
+    {
+        return (string) preg_replace_callback(
+            '/[\x00-\x7F]+'
+            .'|[\xC2-\xDF][\x80-\xBF]'
+            .'|\xE0[\xA0-\xBF][\x80-\xBF]'
+            .'|[\xE1-\xEC\xEE\xEF][\x80-\xBF]{2}'
+            .'|\xED[\x80-\x9F][\x80-\xBF]'
+            .'|\xF0[\x90-\xBF][\x80-\xBF]{2}'
+            .'|[\xF1-\xF3][\x80-\xBF]{3}'
+            .'|\xF4[\x80-\x8F][\x80-\xBF]{2}'
+            .'|(.)/s',
+            fn (array $m): string => ($m[1] ?? '') !== ''
+                ? (string) mb_convert_encoding($m[1], 'UTF-8', 'Windows-1252')
+                : $m[0],
+            $valor
+        );
+    }
+
     public static function valorOuNull(mixed $valor): ?string
     {
         $valor = trim((string) $valor);

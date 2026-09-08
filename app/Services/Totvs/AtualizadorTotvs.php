@@ -180,21 +180,62 @@ class AtualizadorTotvs
             // A saída dos importadores é curta (contagens por arquivo), mas o aviso de
             // "relatório com colunas erradas" é uma linha longa — corta para o JSON não
             // virar um despejo.
-            'saida' => mb_substr(trim($buffer->fetch()), 0, 4000),
+            'saida' => mb_substr(trim(Normalizador::textoUtf8($buffer->fetch())), 0, 4000),
         ];
     }
 
     /**
      * @param  list<array<string, mixed>>  $passos
      */
+    /**
+     * ⚠️ REGISTRAR O DESFECHO NÃO PODE FALHAR — e falhou, em produção, em 2026-09-08.
+     *
+     * O import morreu com `1366 Incorrect string value: '\xA0'` (ver
+     * `Normalizador::textoUtf8`), o `catch` do `executar()` chamou este método para
+     * gravar a falha, e A MENSAGEM DE ERRO CARREGAVA O MESMO BYTE — o SQL inteiro vem
+     * dentro dela. O UPDATE estourou pela segunda vez, agora sem ninguém para pegar, e a
+     * linha ficou `executando` para sempre: a tela anunciou "Importação em andamento —
+     * leva cerca de 2 minutos" por 30 minutos, para uma rodada que tinha morrido em 11
+     * segundos. O defeito visível não foi o import quebrado, foi a tela mentindo sobre
+     * ele.
+     *
+     * Daí as duas defesas. O `textoUtf8` conserta a causa; o `catch` existe para o
+     * PRÓXIMO motivo, qualquer que seja — se nem o registro reduzido passar, o log fica
+     * como último recurso, mas `MINUTOS_ATE_CONSIDERAR_TRAVADA` ainda destrava a tela
+     * sozinho. Nunca deixar este método propagar exceção.
+     */
     private function encerrar(TotvsImportacao $rodada, string $status, array $passos, ?string $erro = null): TotvsImportacao
     {
-        $rodada->update([
+        $dados = [
             'status' => $status,
             'concluida_em' => now(),
             'passos' => $passos,
-            'erro' => $erro,
-        ]);
+            // O erro traz o SQL que falhou, com todos os valores do lote — sem corte,
+            // um insert de 1.000 linhas viraria centenas de KB numa coluna `text`.
+            'erro' => $erro === null ? null : mb_substr(Normalizador::textoUtf8($erro), 0, 5000),
+        ];
+
+        try {
+            $rodada->update($dados);
+        } catch (Throwable $e) {
+            Log::error('Falha ao registrar o desfecho da rodada TOTVS', [
+                'rodada' => $rodada->id,
+                'status_pretendido' => $status,
+                'erro_ao_gravar' => $e->getMessage(),
+            ]);
+
+            try {
+                // Sem `passos` nem `erro`: são eles que carregam texto de origem
+                // desconhecida, logo são os suspeitos de qualquer falha de gravação.
+                $rodada->update([
+                    'status' => $status,
+                    'concluida_em' => now(),
+                    'erro' => 'A rodada terminou, mas o detalhe do resultado não pôde ser gravado. Ver o log da aplicação.',
+                ]);
+            } catch (Throwable) {
+                // Nada mais a fazer aqui sem arriscar derrubar o job de novo.
+            }
+        }
 
         return $rodada->refresh();
     }

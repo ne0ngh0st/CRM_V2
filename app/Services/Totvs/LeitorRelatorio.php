@@ -29,9 +29,14 @@ use RuntimeException;
  *    `grupos_cliente`. Aqui a segunda ocorrência vira `Descricao_2`, a terceira
  *    `Descricao_3`, preservando a ordem do arquivo.
  *
- * 3. É UTF-8 COM BOM, não cp1252. Conferido: `FAT - SQL.csv` e `base_marco - SQL.csv`
- *    falham ao decodificar como cp1252. Ler com a codificação errada não dá erro — só
- *    grava razão social com acento quebrado.
+ * 3. É UTF-8 COM BOM, não cp1252 — MAS CAMPO A CAMPO ISSO NÃO SE SUSTENTA. Os arquivos
+ *    falham ao decodificar como cp1252 (conferido em `FAT - SQL.csv` e `base_marco`), e
+ *    ainda assim carregam bytes cp1252 SOLTOS em valores isolados: 210 deles no
+ *    `199 - ULTIMO FATURAMENTO`, todos NBSP (`A0` sem o `C2`), vindos de texto colado no
+ *    cadastro do TOTVS. Um só derrubou a rodada inteira de produção em 2026-09-08, com
+ *    `1366 Incorrect string value` no meio do import — não no começo, quando seria fácil
+ *    relacionar. Por isso todo campo passa por `Normalizador::textoUtf8()`, e por isso a
+ *    conferência de encoding é do ARQUIVO, nunca prova sobre o CAMPO.
  *
  * 4. NOME E VALOR VÊM COM PADDING (`Codigo      `), resquício de export de largura
  *    fixa. Os dois são aparados.
@@ -125,7 +130,10 @@ class LeitorRelatorio
 
                 $linha = [];
                 foreach ($this->cabecalho as $pos => $nome) {
-                    $linha[$nome] = trim((string) ($campos[$pos] ?? ''));
+                    // `textoUtf8` ANTES do `trim`: o byte cp1252 solto derruba o import
+                    // inteiro no MySQL (ver o docblock lá), e o NBSP que ele vira espaço
+                    // é justamente o padding que o `trim` precisa alcançar.
+                    $linha[$nome] = trim(Normalizador::textoUtf8($campos[$pos] ?? ''));
                 }
 
                 yield $numero => $linha;
@@ -235,7 +243,9 @@ class LeitorRelatorio
         $vistos = [];
 
         foreach ($cabecalho as $pos => $bruto) {
-            $nome = trim((string) $bruto);
+            // Mesmo tratamento das células de dado: um NBSP no nome da coluna faria
+            // `exigirColunas` acusar `Descricao` faltando num arquivo que a tem.
+            $nome = trim(Normalizador::textoUtf8($bruto));
 
             if ($nome === '') {
                 $nome = 'coluna_'.($pos + 1);
