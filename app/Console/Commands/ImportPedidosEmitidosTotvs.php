@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Pedidos\StatusPedidoResolver;
 use App\Services\Totvs\ClientesLookup;
 use App\Services\Totvs\LeitorRelatorio;
 use App\Services\Totvs\Normalizador;
@@ -202,7 +203,15 @@ class ImportPedidosEmitidosTotvs extends Command
                     'data_pcp' => Normalizador::data($linha['DATA_PCP']),
                     'carga' => Normalizador::valorOuNull($linha['CARGA']),
                     'condicao_pagamento' => Normalizador::valorOuNull($linha['CONDPAGTO']),
-                    'status' => 'faturado',
+                    /*
+                     * ⚠️ Este import NÃO mexe em `historico_totvs`/`historico_em` — as
+                     * colunas ficam de fora do upsert de propósito. Um pedido que passou
+                     * pelo relatório 200 antes de faturar guarda ali o último movimento
+                     * em aberto (um bloqueio, uma carga), com a data em que aconteceu. É
+                     * histórico legítimo e a tela sempre o mostra datado; zerar aqui
+                     * apagaria o único registro que o CRM tem de por onde o pedido passou.
+                     */
+                    'status' => StatusPedidoResolver::FATURADO,
                     'tipo_faturamento' => $tipoFaturamento,
                     // Só preenchido para serviço, com o número que NOTA_FISCAL carrega
                     // quando SERIE=RPS — ver o cabeçalho da classe.

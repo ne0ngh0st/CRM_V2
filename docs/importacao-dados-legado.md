@@ -435,16 +435,67 @@ Quem "inventa" status é o JS do front (`assets/js/pedidos-abertos.js`): pega o 
 `separacao/bloqueio/wms/liberado` que já existia no schema do v2 foi um chute de quem
 desenhou o mock, sem corresponder a nada real.
 
-**Solução acordada**: em vez de inventar uma tradução arbitrária do texto pro enum antigo,
-adicionamos um 6º valor **`pendente_totvs`** ("Aguardando classificação do TOTVS") —
-todo pedido em aberto recebe esse status até existir um código estruturado de verdade na
-origem. **Ação pendente, fora do CRM-V2**: pedir pro Adriano incluir uma coluna de código
-de status estruturado no relatório "Pedidos em Aberto com Status" do TOTVS (ex.: separação,
-aguardando arte, bloqueio de estoque, WMS, liberado — os nomes reais do processo interno,
-que o Tony conhece mas que hoje só existem como texto livre não padronizado no `HISTORICO`).
-Quando isso existir, o `legado:import-pedidos` passa a ler esse código em vez de forçar
-`pendente_totvs` pra tudo. Migration `2026_07_29_090549_add_pendente_totvs_status_to_pedidos_table`
-documenta isso no comentário.
+**Solução acordada em 2026-07-29**: em vez de inventar uma tradução arbitrária do texto
+pro enum antigo, adicionamos um 6º valor **`pendente_totvs`** ("Aguardando classificação
+do TOTVS") — todo pedido em aberto recebia esse status até existir um código estruturado
+de verdade na origem.
+
+#### ⚠️ REVISADO EM 2026-09-09: o status agora SAI do `HISTORICO`, e a premissa acima estava errada
+
+O remédio conservador teve um efeito colateral que só apareceu no uso: a coluna Status
+passou a ter **um valor único em 100% das linhas**. Conferido no banco de produção em
+09/09 — 3.478 pedidos em aberto, todos `pendente_totvs`; 88.486 faturados, todos
+`faturado`. Ou seja, `status` era uma função de `data_faturamento IS NULL`, ao lado de
+outra coluna que já dizia exatamente isso. E o filtro da tela oferecia 6 opções das quais
+**5 devolviam tela vazia**.
+
+**O que mudou não foi a opinião, foi a evidência.** Contados os moldes do `HISTORICO` no
+arquivo real (relatório 200 de 08/09, 3.478 pedidos), o texto não é livre no começo — é
+livre só na CAUDA:
+
+| molde | pedidos | % |
+|---|---:|---:|
+| `PEDIDO # INCLUIDO NA CARGA #` | 1.529 | 44,0% |
+| `PEDIDO # COM BLOQUEIO DE ESTOQUE` | 1.025 | 29,5% |
+| `PEDIDO # LIBERADO PARA MONTAGEM DE CARGA / FATURAMENTO` | 419 | 12,0% |
+| `ENVIO DO PEDIDO PARA O WMS - ORDEM DE SEPARACAO #` | 249 | 7,2% |
+| `PEDIDO # COM BLOQUEIO DE CREDITO` | 128 | 3,7% |
+| `PEDIDO # COM REJEICAO DE CREDITO - <cauda livre>` | 71 | 2,0% |
+| `PEDIDO # COM BLOQUEIO DE ARTE` | 20 | 0,6% |
+| `IMPRESSAO DE NF` / `BOLETO` / `FATURADO POR PEDIDO NA NF` | 18 | 0,5% |
+| `RETORNO DO WMS ... COLETADO` | 14 | 0,4% |
+| não reconhecidos (NF cancelada, resíduo, entrega via SAC) | 5 | 0,1% |
+
+A tradução mora em **`App\Services\Pedidos\StatusPedidoResolver`**, aferido contra o
+arquivo inteiro pelo leitor de produção antes de virar código: **99,86% de cobertura**.
+
+**A sequência do processo veio do Tony, não do nome dos moldes:** *"incluído na carga
+significa que montaram a carga, o próximo estágio é a separação"*. Por isso `em_carga`
+vem ANTES de `separacao` no enum — a leitura ingênua de "carga = está saindo" inverteria
+os dois.
+
+⚠️ **Por que isto não repete a gambiarra do legado** (que fazia a mesma coisa por regex):
+o legado casava por substring solta (`BLOQ|CANCEL` contra `LIBER|FATUR`) espalhada pelo
+JS do front, e pintava de cinza o que não reconhecia — fingindo classificação. Aqui é um
+lugar só, cada molde é uma frase inteira e específica, os moldes são **mutuamente
+exclusivos** (travado por teste), e o que não casa **não vira etapa nenhuma**: a pill some
+da tela e o texto cru continua gravado em `pedidos.historico_totvs`, visível ao expandir
+a linha. Classificar nunca destrói informação.
+
+⚠️ **A defesa contra o TOTVS mudar a redação é o AVISO DO IMPORT, não o resolver.** Se
+"COM BLOQUEIO DE ESTOQUE" virar outra frase amanhã, mil pedidos perdem a pill e **nada
+quebra em vermelho** — nenhum teste falha, nenhum alarme dispara. Quem denuncia é o bloco
+que `totvs:import-pedidos-abertos` imprime no fim, contando os movimentos não reconhecidos
+com exemplos. Se esse bloco sair de lá, a feature passa a degradar em silêncio.
+
+**Ação com o Adriano (segue de pé, mas deixou de ser bloqueante)**: um código de status
+estruturado no relatório continua sendo melhor que ler frase. Quando existir, o resolver
+passa a lê-lo e os moldes viram fallback. Não é mais urgente: hoje 99,86% dos pedidos já
+têm etapa.
+
+**⚠️ O espelho do legado NÃO tem `HISTORICO`.** `legado:import-pedidos` continua gravando
+tudo sem classificação, e isso não é regressão — é a fonte que não carrega o dado. Status
+de verdade só vem pelo relatório 200 (`totvs:import-pedidos-abertos`).
 
 **Teste de performance real (Regra de ouro nº 6) — feito de verdade, não só superficial**:
 testei os 5 caminhos de query que `PedidoController` realmente executa pra visão "todos os

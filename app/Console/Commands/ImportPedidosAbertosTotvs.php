@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Pedidos\StatusPedidoResolver;
 use App\Services\Totvs\ClientesLookup;
 use App\Services\Totvs\Normalizador;
 use App\Services\Totvs\Relatorios;
@@ -37,11 +38,17 @@ use Illuminate\Support\Facades\DB;
  *      cancelados no TOTVS. Sem este passo, pedido faturado ficaria eternamente na
  *      tela de "em aberto", que é o defeito mais visível que este import poderia ter.
  *
- * ⚠️ O relatório traz `HISTORICO` preenchido em 100% das linhas, mas é TEXTO LIVRE, sem
- * código estruturado — por isso todo pedido em aberto continua entrando como
- * `pendente_totvs`, e não com um status de verdade. É o ajuste que está pendente com o
- * Adriano (ver docs/importacao-dados-legado.md §8.3). Não adivinhar status a partir da
- * frase: "COM BLOQUEIO DE ESTOQUE" hoje pode virar outra redação amanhã.
+ * ⚠️ O STATUS DO PEDIDO SAI DO `HISTORICO`, e este comentário já disse o contrário.
+ * Ele mandava não adivinhar status a partir da frase, porque a redação poderia mudar —
+ * e o efeito foi todo pedido em aberto entrar como `pendente_totvs`, deixando a tela com
+ * uma coluna de valor único. Contados os moldes no arquivo real (2026-09-09), 99,7% dos
+ * 3.478 pedidos caem em 11 frases estáveis, então a tradução passou a ser feita por
+ * {@see StatusPedidoResolver} — que é onde mora o mapa e a defesa contra a redação nova.
+ *
+ * ⚠️ O QUE SOBROU DAQUELE CUIDADO, e é o que não pode ser removido: este comando CONTA
+ * quantos movimentos não foram reconhecidos e IMPRIME exemplos. Sem esse aviso, o TOTVS
+ * mudar uma frase viraria uma coluna esvaziando aos poucos, sem erro nenhum. O texto cru
+ * fica gravado em `pedidos.historico_totvs` de qualquer jeito, então nada se perde.
  */
 class ImportPedidosAbertosTotvs extends Command
 {
@@ -49,6 +56,11 @@ class ImportPedidosAbertosTotvs extends Command
         {--dry-run : lê e conta, sem escrever nada}';
 
     protected $description = 'Importa os pedidos em aberto do relatório 200 do TOTVS, direto do arquivo';
+
+    public function __construct(private readonly StatusPedidoResolver $status)
+    {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -58,7 +70,7 @@ class ImportPedidosAbertosTotvs extends Command
         $leitor->exigirColunas([
             'COD_CLI', 'LOJA_CLI', 'COD_REPRES', 'N_PEDIDO', 'DATA_PED', 'DT_PREVFAT',
             'DT_ENTREGA', 'DT_PCP', 'CARGA', 'COND_PAGTO', 'COD_PROD', 'DESC_PROD',
-            'QTD_VENDA', 'QTD_LIBER', 'VLR_PEDIDO',
+            'QTD_VENDA', 'QTD_LIBER', 'VLR_PEDIDO', 'DATA_HIST', 'HORA_HIST', 'HISTORICO',
         ]);
 
         $clientePorChave = ClientesLookup::porChave();
@@ -67,6 +79,10 @@ class ImportPedidosAbertosTotvs extends Command
         $itens = [];
         $linhas = 0;
         $semCliente = 0;
+
+        // Movimentos que nenhum molde reconheceu, contados por frase normalizada para o
+        // aviso do fim: uma redação nova aparece como um número grande numa linha só.
+        $naoReconhecidos = [];
 
         foreach ($leitor->linhas() as $linha) {
             $numero = $linha['N_PEDIDO'];
@@ -94,9 +110,16 @@ class ImportPedidosAbertosTotvs extends Command
                     'data_pcp' => Normalizador::data($linha['DT_PCP']),
                     'carga' => Normalizador::valorOuNull($linha['CARGA']),
                     'condicao_pagamento' => Normalizador::valorOuNull($linha['COND_PAGTO']),
-                    'status' => 'pendente_totvs',
+                    'status' => $status = $this->status->resolver($linha['HISTORICO']),
+                    'historico_totvs' => Normalizador::valorOuNull($linha['HISTORICO']),
+                    'historico_em' => Normalizador::dataHora($linha['DATA_HIST'], $linha['HORA_HIST']),
                     'valor_total' => 0,
                 ];
+
+                if ($status === StatusPedidoResolver::DESCONHECIDO && trim($linha['HISTORICO']) !== '') {
+                    $frase = trim($linha['HISTORICO']);
+                    $naoReconhecidos[$frase] = ($naoReconhecidos[$frase] ?? 0) + 1;
+                }
             }
 
             $valor = Normalizador::numero($linha['VLR_PEDIDO']);
@@ -171,7 +194,70 @@ class ImportPedidosAbertosTotvs extends Command
             $this->warn("Ignorados (sem data de pedido): {$semData}");
         }
 
+        $this->resumirClassificacao($cabecalhos, $naoReconhecidos);
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Mostra em que etapa os pedidos caíram e denuncia molde que o CRM não conhece.
+     *
+     * ⚠️ ESTE AVISO É A ÚNICA DEFESA contra o TOTVS mudar a redação de um movimento. Se
+     * "COM BLOQUEIO DE ESTOQUE" virar outra frase amanhã, mil pedidos deixam de ter pill
+     * na tela — e nada quebra, nada fica vermelho, nenhum teste falha. O que denuncia é
+     * este bloco imprimindo uma frase desconhecida com contagem alta. Se ele sair daqui,
+     * a feature passa a degradar em silêncio, que é o defeito que ela nasceu evitando.
+     *
+     * @param  array<string, array<string, mixed>>  $cabecalhos
+     * @param  array<string, int>  $naoReconhecidos
+     */
+    private function resumirClassificacao(array $cabecalhos, array $naoReconhecidos): void
+    {
+        if ($cabecalhos === []) {
+            return;
+        }
+
+        $porStatus = array_count_values(array_column($cabecalhos, 'status'));
+        $total = count($cabecalhos);
+
+        $this->line('');
+        $this->line('Etapa no TOTVS:');
+
+        foreach (StatusPedidoResolver::todos() as $status) {
+            $quantos = $porStatus[$status] ?? 0;
+
+            if ($quantos === 0) {
+                continue;
+            }
+
+            // ⚠️ `str_pad` conta BYTES: "Rejeição de crédito" tem 19 caracteres e 22
+            // bytes, e a coluna sai torta justamente nas etapas acentuadas. O padding
+            // aqui é medido em caracteres.
+            $rotulo = $this->status->rotulo($status) ?? 'Sem classificação';
+            $rotulo .= str_repeat(' ', max(0, 22 - mb_strlen($rotulo)));
+
+            $this->line(sprintf(
+                '  %s %6s  (%s%%)',
+                $rotulo,
+                number_format($quantos, 0, ',', '.'),
+                number_format($quantos * 100 / $total, 1, ',', '.')
+            ));
+        }
+
+        if ($naoReconhecidos === []) {
+            return;
+        }
+
+        arsort($naoReconhecidos);
+
+        $this->line('');
+        $this->warn('Movimentos que o CRM não reconheceu: '.number_format(array_sum($naoReconhecidos), 0, ',', '.'));
+        $this->line('  → esses pedidos ficam SEM pill de status na tela (o texto do TOTVS continua gravado).');
+        $this->line('  → se algum abaixo tiver contagem alta, é redação nova: ensinar o molde ao StatusPedidoResolver.');
+
+        foreach (array_slice($naoReconhecidos, 0, 10, true) as $frase => $quantos) {
+            $this->line(sprintf('     %5s × %s', $quantos, mb_strimwidth($frase, 0, 90, '…')));
+        }
     }
 
     /**
@@ -199,7 +285,8 @@ class ImportPedidosAbertosTotvs extends Command
             DB::table('pedidos')->upsert($pedaco, ['numero_pedido'], [
                 'cliente_id', 'cod_vendedor', 'data_pedido', 'data_previsao_faturamento',
                 'data_faturamento', 'data_entrega_prevista', 'data_pcp', 'carga',
-                'condicao_pagamento', 'status', 'valor_total', 'updated_at',
+                'condicao_pagamento', 'status', 'historico_totvs', 'historico_em',
+                'valor_total', 'updated_at',
             ]);
         }
 

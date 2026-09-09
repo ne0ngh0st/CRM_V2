@@ -214,6 +214,29 @@ class Normalizador
     }
 
     /**
+     * Data e hora vindas de duas colunas separadas do relatório (`DATA_HIST`/`HORA_HIST`).
+     *
+     * ⚠️ Sem hora ainda vale como data: no relatório 200 as duas colunas andam juntas,
+     * mas descartar o movimento inteiro por falta da hora trocaria uma informação
+     * imprecisa por nenhuma. Meia-noite é o menor palpite que preserva o dia.
+     *
+     * O guard de 01/01/1900 vem de graça: `data()` já o aplica.
+     */
+    public static function dataHora(mixed $data, mixed $hora): ?string
+    {
+        $dia = self::data($data);
+
+        if ($dia === null) {
+            return null;
+        }
+
+        $hora = trim((string) $hora);
+        $valida = preg_match('/^(\d{2}):(\d{2})(:(\d{2}))?$/', $hora) === 1;
+
+        return $dia.' '.($valida ? substr($hora.':00', 0, 8) : '00:00:00');
+    }
+
+    /**
      * PESO_LIQ do relatório do TOTVS é o peso UNITÁRIO do produto (confirmado sobre a
      * base real: nenhum produto distinto tem mais de um valor). Zero vira null de
      * propósito: mais da metade das linhas vem com "0,00", que significa "o TOTVS não

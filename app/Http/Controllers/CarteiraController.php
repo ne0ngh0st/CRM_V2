@@ -17,6 +17,7 @@ use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Carteira\ClienteStatusResolver;
+use App\Services\Pedidos\StatusPedidoResolver;
 use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Potencial\FamiliaProduto;
@@ -38,6 +39,7 @@ class CarteiraController extends Controller
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly CarteiraAderenciaResolver $aderenciaResolver,
         private readonly ClienteStatusResolver $statusResolver,
+        private readonly StatusPedidoResolver $statusPedido,
         private readonly CacheDeAgregacao $cache,
         private readonly DashboardBlocos $blocos,
         private readonly PotencialCarteiraResolver $potencial,
@@ -628,7 +630,7 @@ class CarteiraController extends Controller
                 'numeroPedido' => $p->numero_pedido,
                 'dataPedido' => optional($p->data_pedido)->format('d/m/Y'),
                 'dataFaturamento' => optional($p->data_faturamento)->format('d/m/Y'),
-                'status' => $p->status,
+                ...$this->statusPedido->paraTela($p),
                 'valorTotal' => (float) $p->valor_total,
                 'itensCount' => $p->itens_count,
                 'emAberto' => $p->data_faturamento === null,

@@ -1,7 +1,9 @@
 <script setup>
 import { ref } from 'vue';
 import StatusPill from '@/Components/StatusPill.vue';
-import { ROTULOS_STATUS_PEDIDO, TONS_STATUS_PEDIDO, ROTULOS_SITUACAO_PEDIDO, TONS_SITUACAO_PEDIDO } from '@/constants/pedidos.js';
+import StatusPedidoPill from '@/Components/Pedidos/StatusPedidoPill.vue';
+import MovimentoTotvs from '@/Components/Pedidos/MovimentoTotvs.vue';
+import { ROTULOS_SITUACAO_PEDIDO, TONS_SITUACAO_PEDIDO } from '@/constants/pedidos.js';
 
 defineProps({
     pedidos: { type: Array, required: true },
@@ -67,7 +69,7 @@ function formatQuantidade(valor) {
                         </td>
                         <td class="tbl-td font-medium text-gray-800">{{ formatBRL(pedido.valorTotal) }}</td>
                         <td class="tbl-td">
-                            <StatusPill :tone="TONS_STATUS_PEDIDO[pedido.status]" size="sm">{{ ROTULOS_STATUS_PEDIDO[pedido.status] }}</StatusPill>
+                            <StatusPedidoPill :status="pedido.status" :rotulo="pedido.statusRotulo" />
                         </td>
                         <td class="tbl-td">{{ pedido.itens.length }}</td>
                     </tr>
@@ -101,38 +103,42 @@ function formatQuantidade(valor) {
                                         </tbody>
                                     </table>
                                 </div>
-                                <div>
-                                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Detalhes</p>
-                                    <dl class="mt-2 space-y-1.5 text-xs text-gray-600">
-                                        <div class="flex justify-between gap-2">
-                                            <dt class="text-gray-400">CNPJ</dt>
-                                            <dd class="text-right">{{ pedido.cliente?.cnpj ?? '—' }}</dd>
-                                        </div>
-                                        <div class="flex justify-between gap-2">
-                                            <dt class="text-gray-400">Telefone</dt>
-                                            <dd class="text-right">{{ pedido.cliente?.telefone ?? '—' }}</dd>
-                                        </div>
-                                        <div class="flex justify-between gap-2">
-                                            <dt class="text-gray-400">E-mail</dt>
-                                            <dd class="truncate text-right" :title="pedido.cliente?.email">{{ pedido.cliente?.email ?? '—' }}</dd>
-                                        </div>
-                                        <div class="flex justify-between gap-2">
-                                            <dt class="text-gray-400">Entrega prevista</dt>
-                                            <dd class="text-right">{{ pedido.dataEntregaPrevista ?? '—' }}</dd>
-                                        </div>
-                                        <div class="flex justify-between gap-2">
-                                            <dt class="text-gray-400">Data PCP</dt>
-                                            <dd class="text-right">{{ pedido.dataPcp ?? '—' }}</dd>
-                                        </div>
-                                        <div class="flex justify-between gap-2">
-                                            <dt class="text-gray-400">Carga</dt>
-                                            <dd class="text-right">{{ pedido.carga ?? '—' }}</dd>
-                                        </div>
-                                        <div class="flex justify-between gap-2">
-                                            <dt class="text-gray-400">Condição pagto.</dt>
-                                            <dd class="text-right">{{ pedido.condicaoPagamento ?? '—' }}</dd>
-                                        </div>
-                                    </dl>
+                                <div class="space-y-4">
+                                    <MovimentoTotvs :movimento="pedido.movimento" :movimento-em="pedido.movimentoEm" />
+
+                                    <div>
+                                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Detalhes</p>
+                                        <dl class="mt-2 space-y-1.5 text-xs text-gray-600">
+                                            <div class="flex justify-between gap-2">
+                                                <dt class="text-gray-400">CNPJ</dt>
+                                                <dd class="text-right">{{ pedido.cliente?.cnpj ?? '—' }}</dd>
+                                            </div>
+                                            <div class="flex justify-between gap-2">
+                                                <dt class="text-gray-400">Telefone</dt>
+                                                <dd class="text-right">{{ pedido.cliente?.telefone ?? '—' }}</dd>
+                                            </div>
+                                            <div class="flex justify-between gap-2">
+                                                <dt class="text-gray-400">E-mail</dt>
+                                                <dd class="truncate text-right" :title="pedido.cliente?.email">{{ pedido.cliente?.email ?? '—' }}</dd>
+                                            </div>
+                                            <div class="flex justify-between gap-2">
+                                                <dt class="text-gray-400">Entrega prevista</dt>
+                                                <dd class="text-right">{{ pedido.dataEntregaPrevista ?? '—' }}</dd>
+                                            </div>
+                                            <div class="flex justify-between gap-2">
+                                                <dt class="text-gray-400">Data PCP</dt>
+                                                <dd class="text-right">{{ pedido.dataPcp ?? '—' }}</dd>
+                                            </div>
+                                            <div class="flex justify-between gap-2">
+                                                <dt class="text-gray-400">Carga</dt>
+                                                <dd class="text-right">{{ pedido.carga ?? '—' }}</dd>
+                                            </div>
+                                            <div class="flex justify-between gap-2">
+                                                <dt class="text-gray-400">Condição pagto.</dt>
+                                                <dd class="text-right">{{ pedido.condicaoPagamento ?? '—' }}</dd>
+                                            </div>
+                                        </dl>
+                                    </div>
                                 </div>
                             </div>
                         </td>

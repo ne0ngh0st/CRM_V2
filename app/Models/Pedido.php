@@ -32,6 +32,8 @@ class Pedido extends Model
         'carga',
         'condicao_pagamento',
         'status',
+        'historico_totvs',
+        'historico_em',
         'valor_total',
     ];
 
@@ -43,6 +45,10 @@ class Pedido extends Model
             'data_faturamento' => 'date',
             'data_entrega_prevista' => 'date',
             'data_pcp' => 'date',
+            // `datetime`, não `date`: a hora é metade da informação. Dois pedidos com
+            // bloqueio de estoque "hoje" contam histórias diferentes se um foi às 07h e
+            // o outro há dez minutos.
+            'historico_em' => 'datetime',
             'valor_total' => 'decimal:2',
         ];
     }

@@ -43,6 +43,52 @@ Não existe "essa página é lenta porque é pesada". Existe página que ainda n
 
 > ⚠️ **Este corolário dizia "o banco inteiro tem 337 MB e cabe em RAM em qualquer instância: overprovisionar o RDS não rende nada". Isso valeu até 2026-08-31 e deixou de valer.** Com a carga do histórico de faturamento (2018-2025), o banco foi para **1,66 GB** numa `db.t4g.small` de 2 GB. A frase sobrevive como princípio — hardware não conserta agregação cara —, mas não como diagnóstico: hoje existe um caso real neste projeto em que RAM é exatamente o recurso que falta. Ver "Carga do histórico de faturamento" mais abaixo, e **medir antes de decidir** (`FreeableMemory`, `SwapUsage`, `ReadIOPS`, `ReadLatency`), nunca repetir de cabeça nenhuma das duas versões desta linha.
 
+## 🔀 Regra de ouro nº 10: sessão paralela trabalha em worktree própria
+
+Confirmado pelo Tony (2026-09-09), depois do que aconteceu em 2026-09-08: duas sessões
+editando a MESMA pasta ao mesmo tempo — o dev local chegou a responder 500 no meio de uma
+edição alheia, e um `infra/deploy.sh` levou junto um commit feito de outra janela.
+
+**A regra:** se já existe outra sessão/agente trabalhando neste repositório, a sessão nova
+**não** trabalha na pasta principal — cria uma worktree própria antes de encostar em
+qualquer arquivo. Pasta compartilhada por dois agentes não tem como dar commit limpo: cada
+um vê no `git status` o trabalho pela metade do outro.
+
+```bash
+git worktree add /c/Users/antonio.barbosa/worktrees/CRM_V2-<assunto> -b <branch>
+```
+
+- ⚠️ **Criar a worktree FORA do OneDrive** (`~/worktrees/`, não ao lado do projeto): pasta
+  irmã dentro do OneDrive vira uma cópia inteira do repositório sendo sincronizada pra
+  nuvem, e o OneDrive já mexe em arquivo debaixo do processo que está escrevendo.
+- No Claude Code dá pra usar `/worktree` (e sair com `/exit-worktree`), que faz o mesmo por
+  baixo.
+- Ao terminar: merge/PR em `main` e `git worktree remove <caminho>`. Worktree abandonada é
+  branch esquecida.
+
+### O que a worktree isola — e o que NÃO isola
+
+**Isola** (é o ponto): árvore de arquivos, índice, branch e commits. Acaba o `git add -A`
+levando arquivo alheio junto, e o deploy levando commit que não é da sessão.
+
+**NÃO isola — continuam sendo recurso único desta máquina:**
+- **O banco.** `palma_v2` e, principalmente, `palma_v2_test`: dois `php artisan test`
+  simultâneos derrubam as tabelas um do outro no meio do `migrate:fresh` e produzem
+  centenas de `QueryException` que não são bug de código nenhum. **Combinar quem roda a
+  suíte**; worktree não resolve isso.
+- **O Docker.** O compose sobe da pasta principal, com as portas 3306/6379/8000/8082/5173
+  já tomadas e o bind-mount apontando pra lá — então o app que está de pé **não enxerga** o
+  que a worktree edita. Não subir um segundo stack; pra ver a mudança rodando, mergear ou
+  trabalhar na pasta principal.
+- **`vendor/` e `node_modules/`.** São volumes nomeados do Docker, não estão no git: a
+  worktree nasce sem eles. Vale pra checagem estática e edição; não pra `artisan` ali
+  dentro.
+- **O Redis** (cache, sessão e fila são compartilhados).
+
+⚠️ **`infra/deploy.sh` puxa a branch inteira do remoto.** Com mais de uma sessão aberta,
+conferir `git log` antes de deployar — o deploy leva o que estiver na branch, não o que
+esta sessão fez.
+
 ## Stack e convenções
 - Backend: **Laravel 11** (travado em v11.55.0, não v12+; o `composer` precisou de `--no-security-blocking` por advisories abertos na branch 11.x — XSS refletido só com `APP_DEBUG=true`, então **`APP_DEBUG=false` é crítico antes de qualquer deploy real**).
 - Frontend: **Inertia.js + Vue 3**, scaffold via **Breeze** (stack Vue).
@@ -1519,13 +1565,81 @@ Bugs de dado corrigidos no caminho, todos encontrados por auditoria e não por t
 - ⚠️ **A suíte roda contra um `palma_v2_test` único nesta máquina.** Em 08/09 uma sessão
   paralela do Tony estava editando a MESMA pasta (`FrescorDoDado`, `/atualizacoes`) e o dev
   local chegou a responder 500 no meio de uma edição de lá. Não é bug: é working tree
-  compartilhado. **Commitar só os próprios arquivos**, nunca `git add -A`.
+  compartilhado. **Commitar só os próprios arquivos**, nunca `git add -A`. → foi daqui que
+  nasceu a **Regra de ouro nº 10** (sessão paralela em worktree própria), no topo deste
+  arquivo.
 - ⚠️ **`infra/deploy.sh` puxa a branch inteira.** Um deploy meu levou junto o commit
   `87f6cc9` do Tony, feito de outra janela. Não foi problema — era um fix que ele queria em
   produção —, mas **conferir `git log` antes de deployar** quando há mais de uma sessão
   aberta.
 
 Suíte inteira verde ao fim: **415 testes**.
+
+### O status do pedido deixou de ser constante — 2026-09-09
+
+A coluna Status de `/pedidos-abertos` mostrava **"Aguardando classificação do TOTVS" em
+100% das linhas**. O Tony sugeriu escondê-la ("se não tivermos nada a mostrar talvez seja
+melhor não mostrar nada") e, medindo, a sugestão estava certa sobre o sintoma e o dado
+existia o tempo todo — sendo jogado fora no import.
+
+**O diagnóstico, conferido no banco de PRODUÇÃO:** 3.478 pedidos em aberto, todos
+`pendente_totvs`; 88.486 faturados, todos `faturado`. `status` era uma função de
+`data_faturamento IS NULL`, ao lado de colunas que já diziam isso. Os outros quatro
+valores do enum (`separacao`/`bloqueio`/`wms`/`liberado`) tinham **zero linhas** — só o
+seeder os escrevia. E o filtro oferecia 6 opções das quais **5 devolviam tela vazia**.
+
+**⚠️ A documentação afirmava que o `HISTORICO` era "texto livre sem padrão", e estava
+errada.** Contados os moldes no arquivo real, o texto é livre só na CAUDA: 11 frases-molde
+cobrem **99,86%** dos 3.478 pedidos (`INCLUIDO NA CARGA` 44%, `COM BLOQUEIO DE ESTOQUE`
+29,5%, `LIBERADO PARA MONTAGEM DE CARGA` 12%, `ENVIO PARA O WMS` 7,2%…). O campo estava
+preenchido em 100% das linhas e o import **nem o lia** — não estava sequer em
+`exigirColunas`.
+
+Detalhe completo em `docs/importacao-dados-legado.md` §8.3. Aqui fica o que muda decisão:
+
+- **`App\Services\Pedidos\StatusPedidoResolver`** é o único lugar que traduz. Também é o
+  dono da LISTA de status e dos RÓTULOS — o front não tem cópia de mapa nenhum: o servidor
+  manda `statusRotulo` pronto e `constants/pedidos.js` guarda só a COR. Antes o rótulo
+  vivia em duas cópias, e a do front já tinha ficado para trás uma vez (Regra nº 8).
+- ⚠️ **A sequência do processo veio do Tony, não dos nomes**: *"incluído na carga significa
+  que montaram a carga, o próximo estágio é a separação"*. `em_carga` vem ANTES de
+  `separacao`; a leitura ingênua inverteria os dois. Há teste travando isso.
+- ⚠️ **Bloqueio é separado por MOTIVO** (estoque / crédito / arte / rejeição de crédito),
+  decisão do Tony: a ação é diferente em cada caso — PCP, financeiro, artes. É **um terço
+  da carteira de pedidos em aberto** travada por motivo acionável, que antes era invisível.
+- ⚠️ **O que não é reconhecido NÃO vira etapa chutada.** A pill some da tela e o texto cru
+  fica em `pedidos.historico_totvs`, visível ao expandir a linha, com a data do movimento.
+  Foi assim que o pedido do Tony ("não mostrar nada") continuou valendo para os 0,14% em
+  que realmente não há o que mostrar. Classificar nunca destrói informação.
+- 🚨 **A defesa contra o TOTVS mudar a redação é o AVISO DO IMPORT, não o resolver.** Se
+  "COM BLOQUEIO DE ESTOQUE" virar outra frase, mil pedidos perdem a pill e **nada quebra em
+  vermelho** — nenhum teste falha, nenhum alarme dispara. Quem denuncia é o bloco que
+  `totvs:import-pedidos-abertos` imprime no fim, com contagem e exemplos. Se esse bloco
+  sair de lá, a feature passa a degradar em silêncio. É o mesmo formato da fila parada de
+  29/08 e da badge "0 online" de 31/08: **dado que some não acende luz vermelha.**
+- ⚠️ **Por que isto não repete a gambiarra do legado** (que derivava status do mesmo texto):
+  lá era regex genérica (`BLOQ|CANCEL` contra `LIBER|FATUR`) espalhada pelo JS do front, e
+  "PEDIDO FATURADO POR PEDIDO NA NF - WMS" casava em duas regras ao mesmo tempo. Aqui é um
+  lugar só, cada molde é uma frase específica, e **os moldes são mutuamente exclusivos** —
+  travado por teste, e é a invariante que importa.
+- ⚠️ **A ordem da lista de MOLDES não decide nada** (ao contrário do que a primeira versão
+  do código afirmava). Descoberto por mutação: inverter a lista mantinha o teste verde.
+  Encurtar um molde para algo genérico é que quebra a exclusividade — e aí a ordem passa a
+  decidir em silêncio.
+- **`pendente_totvs` continua no enum**, com significado novo: era "ninguém classificou
+  ainda", virou "o CRM não reconheceu este movimento". Manter a string evitou um UPDATE em
+  massa nas 3.478 linhas de produção que não compraria nada.
+- **A ação com o Adriano segue de pé mas deixou de ser bloqueante**: código estruturado no
+  relatório continua sendo melhor que ler frase. Hoje 99,86% já têm etapa.
+
+**⚠️ Lição de teste que se confirmou de novo: cinco dos meus testes passavam com o código
+quebrado.** Oito mutações foram aplicadas de propósito (ordem dos moldes, molde genérico,
+rótulo cru, import não gravando o texto, filtro sem whitelist, fallback chutando etapa).
+Sete morderam; **a oitava não**, e foi ela que revelou que meu próprio comentário sobre a
+ordem da lista estava errado. O teste falso foi substituído por um de exclusividade mútua,
+que morde. Verificar por mutação não é zelo — foi o que corrigiu a documentação.
+
+Suíte inteira verde: **488 testes**.
 
 ## Pendências
 - 🔴 **As metas de VENDA em produção são, na maioria, lixo de seed.** Conferido no RDS em
@@ -1611,5 +1725,5 @@ Suíte inteira verde ao fim: **415 testes**.
 - ~~Revisitar `GrpVendas` no redesenho de banco.~~ Feito em 2026-08-10 — virou `clientes.cod_grupo` + `grupos_cliente`, ver seção "Grupo de cliente + densidade das tabelas".
 - ~~E-mail transacional (planejado, não feito): AWS SES + PHPMailer via `antonio.barbosa@autopel.com`, notificando Cadastros e PCP.~~ **Feito em 2026-08-28** — ver seção "E-mail transacional de Cadastros" abaixo. Não foi AWS SES: Tony recebeu credenciais de um SMTP relay dedicado (`smtplw.com.br`) e usamos isso via mailer `smtp` nativo do Laravel.
 - **Importação de dado real**: concluída pra todos os domínios comerciais — `clientes`, `faturamentos`, `pedidos`+`pedido_itens`, `leads`, `produtos` (rotina recorrente) e `orcamentos`+`orcamento_itens` (migração pontual, `legado:import-orcamentos-historico`, 1.885 orçamentos históricos — não roda de novo, orçamento novo nasce direto na tela). Detalhe completo (mapeamento de coluna por domínio, achados de performance, decisões de escopo) em `docs/importacao-dados-legado.md`.
-- **Ação pendente fora do CRM-V2**: pedir pro Adriano incluir um código de status estruturado no relatório "Pedidos em Aberto com Status" do TOTVS (hoje só existe como texto livre no `HISTORICO`, sem padrão — por isso todo pedido em aberto importado recebe `status = 'pendente_totvs'` provisoriamente, ver `docs/importacao-dados-legado.md` seção 8.3).
+- **Ação fora do CRM-V2, já não bloqueante**: pedir pro Adriano incluir um código de status estruturado no relatório "Pedidos em Aberto com Status" do TOTVS. ⚠️ **Deixou de ser urgente em 2026-09-09**: o `HISTORICO` acabou se revelando bem mais estruturado do que esta linha supunha, e 99,86% dos pedidos em aberto já ganham etapa por ele (`StatusPedidoResolver`). Um código de verdade continua sendo melhor que ler frase — quando existir, o resolver passa a lê-lo e os moldes viram fallback. Ver `docs/importacao-dados-legado.md` §8.3.
 - Considerar cachear a agregação de aderência (`CarteiraAderenciaResolver`) também dentro do `CarteiraController::index()` — é o próximo alvo se `/carteira`/`/equipe` ainda incomodarem sob carga real (ver seção "Ambiente Docker de teste de carga" acima; o mesmo fix já foi aplicado no Dashboard).

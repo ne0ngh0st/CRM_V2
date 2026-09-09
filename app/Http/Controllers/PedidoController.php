@@ -7,6 +7,7 @@ use App\Models\Pedido;
 use App\Models\VendedorPerfil;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Metas\MetaRankingResolver;
+use App\Services\Pedidos\StatusPedidoResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -19,11 +20,10 @@ class PedidoController extends Controller
 {
     use ExportaPlanilha;
 
-    private const STATUSES = ['separacao', 'bloqueio', 'wms', 'liberado', 'faturado', 'pendente_totvs'];
-
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly MetaRankingResolver $metaRanking,
+        private readonly StatusPedidoResolver $statusPedido,
     ) {}
 
     public function index(Request $request): Response
@@ -94,7 +94,7 @@ class PedidoController extends Controller
                 ? (int) $p->data_previsao_faturamento->diffInDays(now())
                 : null,
             'valorTotal' => (float) $p->valor_total,
-            'status' => $p->status,
+            ...$this->statusPedido->paraTela($p),
             'itens' => $p->itens->map(fn ($item) => [
                 'codProduto' => $item->cod_produto,
                 'descricao' => $item->descricao,
@@ -118,7 +118,20 @@ class PedidoController extends Controller
                 'ordenar' => $ordenar,
             ],
             'opcoes' => [
-                'status' => self::STATUSES,
+                /*
+                 * ⚠️ Só os status que um pedido EM ABERTO pode ter, e cada um com o
+                 * rótulo já resolvido no servidor.
+                 *
+                 * A versão anterior mandava os 6 valores do enum e 5 deles devolviam
+                 * tela vazia: `faturado` é excluído pelo `whereNull('data_faturamento')`
+                 * da query, e `separacao`/`bloqueio`/`wms`/`liberado` nunca foram
+                 * escritos por import nenhum — só pelo seeder. Filtro que devolve vazio
+                 * é pior que filtro ausente, porque parece defeito da busca.
+                 */
+                'status' => array_map(
+                    fn (string $valor) => ['valor' => $valor, 'rotulo' => $this->statusPedido->rotulo($valor)],
+                    StatusPedidoResolver::statusEmAberto()
+                ),
             ],
             'visao' => [
                 'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
@@ -175,7 +188,13 @@ class PedidoController extends Controller
             });
         }
 
-        if ($status !== '') {
+        /*
+         * ⚠️ Whitelist, não decoração. O valor vem da query string e, sem a checagem,
+         * um status que não existe mais (um link salvo com `?status=wms`, por exemplo)
+         * devolve a tela vazia como se a carteira não tivesse pedido nenhum. Ignorar o
+         * filtro desconhecido mostra a lista completa, que é o comportamento honesto.
+         */
+        if ($status !== '' && in_array($status, StatusPedidoResolver::todos(), true)) {
             $query->where('status', $status);
         }
 
@@ -312,7 +331,7 @@ class PedidoController extends Controller
             'condicaoPagamento' => $p->condicao_pagamento,
             'faturado' => $p->data_faturamento !== null,
             'valorTotal' => (float) $p->valor_total,
-            'status' => $p->status,
+            ...$this->statusPedido->paraTela($p),
             'itens' => $p->itens->map(fn ($item) => [
                 'codProduto' => $item->cod_produto,
                 'descricao' => $item->descricao,

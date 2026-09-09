@@ -9,7 +9,6 @@ import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import PedidosTabela from '@/Components/Pedidos/PedidosTabela.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
-import { ROTULOS_STATUS_PEDIDO } from '@/constants/pedidos.js';
 
 const props = defineProps({
     role: String,
@@ -80,7 +79,14 @@ const temFiltrosAtivos = computed(() =>
                         </svg>
                     </template>
                     <template #subtitle>
-                        Pedidos ainda não faturados — separação, bloqueio, WMS ou liberados.
+                        <!--
+                            ⚠️ Não listar as etapas aqui. A frase anterior era "separação,
+                            bloqueio, WMS ou liberados" — o enum inventado do mock, que
+                            nunca existiu no TOTVS. Lista de valores no subtítulo envelhece
+                            sozinha; quem mostra as etapas de verdade é o filtro ao lado,
+                            alimentado pelo servidor.
+                        -->
+                        Pedidos ainda não faturados, com a etapa em que cada um está no TOTVS.
                     </template>
                     <template #meta>
                         <KpiTile :value="kpis.totalAberto" label="Em aberto" />
@@ -108,9 +114,14 @@ const temFiltrosAtivos = computed(() =>
                             <option value="no_prazo">No prazo</option>
                         </FilterField>
 
-                        <FilterField label="Status" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; aplicarFiltros(); }">
-                            <option value="">Todos</option>
-                            <option v-for="s in opcoes.status" :key="s" :value="s">{{ ROTULOS_STATUS_PEDIDO[s] }}</option>
+                        <!--
+                            As opções vêm do servidor já como { valor, rotulo }, e só as que
+                            um pedido em aberto pode ter. Antes eram os 6 valores crus do
+                            enum, dos quais 5 devolviam a tela vazia.
+                        -->
+                        <FilterField label="Etapa no TOTVS" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; aplicarFiltros(); }">
+                            <option value="">Todas</option>
+                            <option v-for="s in opcoes.status" :key="s.valor" :value="s.valor">{{ s.rotulo }}</option>
                         </FilterField>
 
                         <div class="flex min-w-[130px] flex-col gap-1">

@@ -8,10 +8,14 @@ import StatusPill from '@/Components/StatusPill.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira.js';
-// Esta página mantinha uma cópia local destes dois mapas, e a cópia não incluía
-// `pendente_totvs` — todo pedido em aberto mostrava a string crua na coluna Status.
+// Esta página já manteve uma cópia local do mapa de rótulos de status, e a cópia não
+// incluía `pendente_totvs` — todo pedido em aberto mostrava a string crua na coluna
+// Status. Desde 2026-09-09 não existe mapa de rótulo em lugar nenhum do front: o
+// servidor manda `statusRotulo` pronto e `StatusPedidoPill` só escolhe a cor.
 // (Regra de ouro nº 8: rótulo é decisão que mora num lugar só.)
-import { ROTULOS_STATUS_PEDIDO, TONS_STATUS_PEDIDO, ROTULOS_TIPO_FATURAMENTO } from '@/constants/pedidos.js';
+import StatusPedidoPill from '@/Components/Pedidos/StatusPedidoPill.vue';
+import MovimentoTotvs from '@/Components/Pedidos/MovimentoTotvs.vue';
+import { ROTULOS_TIPO_FATURAMENTO } from '@/constants/pedidos.js';
 
 const props = defineProps({
     cliente: Object,
@@ -175,15 +179,19 @@ const campos = [
                                         <td class="tbl-td">{{ pedido.dataPedido }}</td>
                                         <td class="tbl-td">{{ pedido.dataFaturamento ?? 'Em aberto' }}</td>
                                         <td class="tbl-td">
-                                            <StatusPill :tone="TONS_STATUS_PEDIDO[pedido.status] || 'neutral'" size="sm">
-                                                {{ ROTULOS_STATUS_PEDIDO[pedido.status] || pedido.status }}
-                                            </StatusPill>
+                                            <StatusPedidoPill :status="pedido.status" :rotulo="pedido.statusRotulo" />
                                         </td>
                                         <td class="tbl-td">{{ pedido.itensCount }}</td>
                                         <td class="tbl-td font-medium text-gray-800">{{ formatBRL(pedido.valorTotal) }}</td>
                                     </tr>
                                     <tr v-if="expandido === pedido.id" class="bg-gray-50">
                                         <td colspan="7" class="p-4">
+                                            <MovimentoTotvs
+                                                :movimento="pedido.movimento"
+                                                :movimento-em="pedido.movimentoEm"
+                                                class="mb-4"
+                                            />
+
                                             <!--
                                                 Bloco inteiro condicionado a `temDadosDoPedido`: enquanto o RLT 232
                                                 não fornecer estes campos, ele simplesmente não existe na tela.

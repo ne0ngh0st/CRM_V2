@@ -1,19 +1,30 @@
-export const ROTULOS_STATUS_PEDIDO = {
-    separacao: 'Separação',
-    bloqueio: 'Bloqueio',
-    wms: 'WMS',
-    liberado: 'Liberado',
-    faturado: 'Faturado',
-    pendente_totvs: 'Aguardando classificação do TOTVS',
-};
-
+/*
+ * A COR de cada etapa do pedido no TOTVS.
+ *
+ * ⚠️ O RÓTULO NÃO MORA MAIS AQUI. Ele vem pronto do servidor, em `pedido.statusRotulo`,
+ * de `App\Services\Pedidos\StatusPedidoResolver` — que é também quem decide quais status
+ * existem. Enquanto o mapa de rótulos era duplicado entre PHP e JS, a cópia do front
+ * ficou para trás pelo menos uma vez: `Detalhes.vue` chegou a exibir a string crua
+ * `pendente_totvs` porque não conhecia um valor novo do enum (Regra de ouro nº 8).
+ *
+ * A cor fica no front porque é decisão de front, e a leitura é simples: VERMELHO é o
+ * pedido travado, que precisa de alguém; o resto é o processo andando. Verde só quando
+ * já saiu da fábrica.
+ *
+ * ⚠️ Status sem entrada aqui cai em 'neutral' na tela, nunca quebra — mas se um status
+ * novo for criado no resolver, é aqui que ele ganha cor.
+ */
 export const TONS_STATUS_PEDIDO = {
+    bloqueio_estoque: 'danger',
+    bloqueio_credito: 'danger',
+    rejeicao_credito: 'danger',
+    bloqueio_arte: 'danger',
+    liberado: 'neutral',
+    em_carga: 'neutral',
     separacao: 'neutral',
-    bloqueio: 'danger',
-    wms: 'neutral',
-    liberado: 'ok',
+    separado: 'ok',
+    faturando: 'ok',
     faturado: 'ok',
-    pendente_totvs: 'neutral',
 };
 
 export const ROTULOS_SITUACAO_PEDIDO = {

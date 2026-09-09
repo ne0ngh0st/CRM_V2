@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Legado\LegadoConexao;
+use App\Services\Pedidos\StatusPedidoResolver;
 use DateTime;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -54,9 +55,13 @@ class ImportPedidosLegado extends Command
     }
 
     /**
-     * PEDIDOS_EM_ABERTO: grão de item, tem COD_CLIENT+LOJA direto. Nenhum pedido aqui tem
-     * status estruturado de verdade (ver migration 2026_07_29_090549) — todos recebem
-     * 'pendente_totvs' até o relatório de origem expor um código real.
+     * PEDIDOS_EM_ABERTO: grão de item, tem COD_CLIENT+LOJA direto.
+     *
+     * ⚠️ Todo pedido daqui entra SEM classificação, e por um motivo diferente do que este
+     * comentário dizia antes: a tabela do espelho não traz a coluna `HISTORICO`, que é de
+     * onde `totvs:import-pedidos-abertos` tira a etapa real desde 2026-09-09. Não é que o
+     * status não exista — é que esta fonte não o carrega. Quem quiser status de verdade
+     * importa pelo relatório 200, não pelo espelho do legado.
      */
     private function importarAbertos(PDO $pdo): int
     {
@@ -83,7 +88,7 @@ class ImportPedidosLegado extends Command
                     'data_pcp' => self::dataOuNull($primeira['DATA_PCP']),
                     'carga' => self::valorOuNull($primeira['CARGA']),
                     'condicao_pagamento' => self::valorOuNull($primeira['CONDICAO_PAGAMENTO']),
-                    'status' => 'pendente_totvs',
+                    'status' => StatusPedidoResolver::DESCONHECIDO,
                 ];
             },
             function (array $linhas) {
@@ -141,7 +146,7 @@ class ImportPedidosLegado extends Command
                     'data_pcp' => null,
                     'carga' => null,
                     'condicao_pagamento' => null,
-                    'status' => 'faturado',
+                    'status' => StatusPedidoResolver::FATURADO,
                 ];
             },
             function (array $linhas) {
