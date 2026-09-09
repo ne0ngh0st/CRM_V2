@@ -21,6 +21,7 @@ use App\Http\Controllers\PedidoController;
 use App\Http\Controllers\TabelaPrecoController;
 use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
+use App\Services\Carteira\SegmentosDoVendedorResolver;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
 
@@ -180,7 +181,11 @@ class CatalogoDeExportacoes
 
         $query = $controller->queryFiltrada($request, $user);
 
-        return new PlanoDeExportacao(new EquipeExport($query), 'equipe', (clone $query)->count());
+        return new PlanoDeExportacao(
+            new EquipeExport($query, app(SegmentosDoVendedorResolver::class)),
+            'equipe',
+            (clone $query)->count(),
+        );
     }
 
     private function metas(Request $request, User $user): PlanoDeExportacao
