@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\OrcamentoExport;
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\Cliente;
 use App\Models\EtiquetaMateriaPrima;
@@ -28,7 +27,6 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Maatwebsite\Excel\Facades\Excel;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class OrcamentoController extends Controller
@@ -144,20 +142,18 @@ class OrcamentoController extends Controller
         ]);
     }
 
-    public function exportar(Request $request): BinaryFileResponse
+    public function exportar(Request $request): RedirectResponse
     {
-        $this->prepararExport('orcamentos');
-
-        $query = $this->baseQuery($request)->with('user:id,name,display_name')->latest();
-
-        return Excel::download(
-            new OrcamentoExport($query),
-            'orcamentos-'.now()->format('Y-m-d-His').'.xlsx',
-        );
+        return $this->entregarPlanilha('orcamentos', $request);
     }
 
-    /** Escopo (user_id) + busca/status/nivel/data. Usado por index() (KPIs e lista) e exportar(). */
-    protected function baseQuery(Request $request): Builder
+    /** Escopo (user_id) + busca/status/nivel/data. Usado por index() (KPIs e lista) e pelo CatalogoDeExportacoes. */
+    /**
+     * ⚠️ Público porque o CatalogoDeExportacoes monta a mesma query em dois contextos: a
+     * requisição e o job de exportação. Uma segunda cópia divergiria da tela no dia em
+     * que um filtro novo entrasse aqui (Regra de ouro nº 8).
+     */
+    public function baseQuery(Request $request): Builder
     {
         $user = $request->user();
         $role = $user->getRoleNames()->first();

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\CadastroExport;
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Mail\CadastroSolicitacaoMail;
 use App\Models\ClienteParaCadastro;
@@ -25,11 +24,12 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use Maatwebsite\Excel\Facades\Excel;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class CadastroController extends Controller
 {
+    /** As quatro abas de solicitação que viram planilha. */
+    private const RECURSOS_EXPORTAVEIS = ['bobina', 'etiqueta', 'cliente', 'lead'];
+
     use ExportaPlanilha;
 
     /**
@@ -161,26 +161,41 @@ class CadastroController extends Controller
             : $pdf->stream($nomeArquivo);
     }
 
-    public function exportar(Request $request): BinaryFileResponse
+    /**
+     * Uma rota, quatro planilhas — a aba escolhida vira o recurso (`?recurso=bobina`).
+     *
+     * ⚠️ Os quatro entram na central como recursos DISTINTOS (`cadastros-bobina`, …), e
+     * não como um "Cadastros" só: cada um tem colunas próprias, e quem exportar duas abas
+     * no mesmo dia precisa distinguir os arquivos na lista.
+     */
+    public function exportar(Request $request): RedirectResponse
     {
-        $this->prepararExport('cadastros');
+        $tipo = (string) $request->string('recurso');
+        abort_unless(in_array($tipo, self::RECURSOS_EXPORTAVEIS, true), 404);
 
-        $user = $request->user();
+        return $this->entregarPlanilha("cadastros-{$tipo}", $request);
+    }
+
+    /**
+     * A query de uma das quatro abas, para o CatalogoDeExportacoes.
+     *
+     * ⚠️ Concentra aqui o `isGestor` que define o escopo (quem não é gestor só vê as
+     * próprias solicitações). Repetir essa derivação no catálogo seria repetir a regra de
+     * quem enxerga o quê — o tipo de duplicação que faz um vendedor acabar exportando
+     * pedido de outro sem ninguém perceber.
+     */
+    public function queryDoRecurso(string $tipo, Request $request, User $user): Builder
+    {
+        abort_unless(in_array($tipo, self::RECURSOS_EXPORTAVEIS, true), 404);
+
         $isGestor = in_array($user->getRoleNames()->first(), ['admin', 'diretor', 'supervisor'], true);
-        $recurso = (string) $request->string('recurso');
-        abort_unless(in_array($recurso, ['bobina', 'etiqueta', 'cliente', 'lead'], true), 404);
 
-        $query = match ($recurso) {
+        return match ($tipo) {
             'bobina' => $this->bobinasQuery($request, $user, $isGestor),
             'etiqueta' => $this->etiquetasQuery($request, $user, $isGestor),
             'cliente' => $this->clientesQuery($request, $user, $isGestor),
             'lead' => $this->leadsQuery($request, $user, $isGestor),
         };
-
-        return Excel::download(
-            new CadastroExport($query, $recurso),
-            "cadastros-{$recurso}-".now()->format('Y-m-d-His').'.xlsx',
-        );
     }
 
     /** Escopo (user_id se não gestor) + busca/status. Usado por index() e exportar(). */

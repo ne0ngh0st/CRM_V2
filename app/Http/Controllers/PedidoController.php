@@ -9,12 +9,11 @@ use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Metas\MetaRankingResolver;
 use App\Services\Pedidos\StatusPedidoResolver;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
-use Maatwebsite\Excel\Facades\Excel;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PedidoController extends Controller
 {
@@ -145,19 +144,9 @@ class PedidoController extends Controller
         ]);
     }
 
-    public function exportarAbertos(Request $request): BinaryFileResponse
+    public function exportarAbertos(Request $request): RedirectResponse
     {
-        $this->prepararExport('pedidos-abertos');
-
-
-        $query = $this->listaQueryAbertos($request)
-            ->with('cliente:id,razao_social,cnpj')
-            ->withCount('itens');
-
-        return Excel::download(
-            new \App\Exports\PedidoAbertoExport($query),
-            'pedidos-abertos-'.now()->format('Y-m-d-His').'.xlsx',
-        );
+        return $this->entregarPlanilha('pedidos-abertos', $request);
     }
 
     /** Escopo (cod_vendedor) + busca/status/data. Pedidos em aberto (data_faturamento nula). Usado por index() (KPIs e lista) e exportarAbertos(). */
@@ -209,8 +198,13 @@ class PedidoController extends Controller
         return $query;
     }
 
-    /** baseQueryAbertos() + situação + ordenação. Usado por index() (lista) e exportarAbertos(). */
-    protected function listaQueryAbertos(Request $request): Builder
+    /** baseQueryAbertos() + situação + ordenação. Usado por index() (lista) e pelo CatalogoDeExportacoes. */
+    /**
+     * ⚠️ Público porque o CatalogoDeExportacoes monta a mesma query em dois contextos: a
+     * requisição e o job de exportação. Uma segunda cópia divergiria da tela no dia em
+     * que um filtro novo entrasse aqui (Regra de ouro nº 8).
+     */
+    public function listaQueryAbertos(Request $request): Builder
     {
         $query = $this->baseQueryAbertos($request);
         $hoje = now()->toDateString();
@@ -373,22 +367,9 @@ class PedidoController extends Controller
         ]);
     }
 
-    public function exportarEmitidos(Request $request): BinaryFileResponse
+    public function exportarEmitidos(Request $request): RedirectResponse
     {
-        $this->prepararExport('pedidos-emitidos');
-
-
-        $ano = (int) ($request->integer('ano') ?: now()->year);
-        $mes = max(1, min(12, (int) ($request->integer('mes') ?: now()->month)));
-
-        $query = $this->listaQueryEmitidos($request)
-            ->with('cliente:id,razao_social,cnpj')
-            ->withCount('itens');
-
-        return Excel::download(
-            new \App\Exports\PedidoEmitidoExport($query),
-            "pedidos-emitidos-{$ano}-{$mes}-".now()->format('Y-m-d-His').'.xlsx',
-        );
+        return $this->entregarPlanilha('pedidos-emitidos', $request);
     }
 
     /** Escopo (cod_vendedor) + período (ano/mes) + busca/faturamento. Usado por emitidos() (lista) e exportarEmitidos(). */
@@ -433,8 +414,13 @@ class PedidoController extends Controller
         return $query;
     }
 
-    /** baseQueryEmitidos() + ordenação. Usado por emitidos() (lista) e exportarEmitidos(). */
-    protected function listaQueryEmitidos(Request $request): Builder
+    /** baseQueryEmitidos() + ordenação. Usado por emitidos() (lista) e pelo CatalogoDeExportacoes. */
+    /**
+     * ⚠️ Público porque o CatalogoDeExportacoes monta a mesma query em dois contextos: a
+     * requisição e o job de exportação. Uma segunda cópia divergiria da tela no dia em
+     * que um filtro novo entrasse aqui (Regra de ouro nº 8).
+     */
+    public function listaQueryEmitidos(Request $request): Builder
     {
         $query = $this->baseQueryEmitidos($request);
         $ordenar = (string) $request->string('ordenar') ?: 'data_pedido_desc';

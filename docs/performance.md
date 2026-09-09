@@ -268,6 +268,10 @@ Três problemas de uma vez:
 **Correção definitiva:** export vira Job na fila, e o usuário recebe notificação (o sistema de notificações já existe) com link pro arquivo no S3.
 **Remendo aceitável pro beta:** subir o idle timeout do ALB pra 300 s.
 
+✅ **Feito em 2026-08-27 para a Carteira, e generalizado em 2026-09-09 para as nove
+exportações** — ver §1.18, que traz o custo medido por linha e por que o corte não podia
+ser "esta tela é pesada".
+
 ## 1.5 🟠 Hidratação de Eloquent em volume
 
 Instanciar um model Eloquent por linha é caro: cada objeto carrega atributos originais, casts, relações e flags de estado. Para 89 mil linhas de export, o custo de hidratação compete com o da query.
@@ -702,12 +706,68 @@ Infra e deploy:
 - [ ] Redis e RDS primário na mesma AZ do app
 
 Aplicação:
+## 1.18 🔴 Gerar planilha custa ~0,75 ms por linha — e o corte é por VOLUME, não por tela
+
+Medido em 2026-09-09, em dev sob Docker/WSL2, com volume real, ao fazer as nove
+exportações passarem pelo mesmo caminho (a central de downloads):
+
+| Planilha | Linhas | Geração | ms/linha |
+|---|---:|---:|---:|
+| Metas | 127 | 180 ms | 1,42 |
+| Equipe | 134 | 219 ms | 1,63 |
+| Orçamentos | 1.864 | 1.422 ms | 0,76 |
+| Pedidos em aberto | 3.478 | 2.602 ms | 0,75 |
+| Leads | 17.173 | 14.075 ms | 0,82 |
+| Tabela de preços | 26.989 | 18.720 ms | 0,69 |
+| Carteira (admin) | 92.209 | ~95 s | ~1,03 |
+
+**O custo é linear e quase independente da tabela de origem.** Quem domina não é a query:
+é o PhpSpreadsheet, que mantém toda célula como objeto em memória até escrever o arquivo.
+`WithChunkReading` reduz idas ao banco, não o trabalho por célula — por isso "esta tela é
+leve" não diz nada sobre o custo do export dela.
+
+**Consequência prática, e o erro que quase entrou:** o corte entre gerar na requisição e
+enfileirar é `config('exportacoes.limite_linhas_sincrono')`. O primeiro palpite foi 5.000
+linhas; a 0,75 ms/linha isso seria **3,7 s de aba travada**, dentro do limite e fora do
+orçamento de 2 s da Regra de ouro nº 9. O valor correto, derivado da medição, é **2.500**
+(~1,9 s no pior caso, e produção é mais rápida que o WSL2).
+
+⚠️ **Três exportações já violavam a Regra nº 9 sem ninguém ter medido**: Leads (14 s),
+Tabela de Preços (19 s) e Pedidos em aberto (2,6 s) travavam a aba de quem clicava. Só a
+Carteira tinha sido tratada, porque só ela dava erro visível (504 do ALB). **Lentidão que
+não estoura não vira chamado** — vira gente que aprende a não clicar no botão.
+
+### O que decidir o caminho custa
+
+Para escolher entre gerar agora e enfileirar é preciso contar as linhas antes. Medido,
+mediana de 5 execuções intercaladas (montar o plano + `count()`):
+
+| Recurso | Plano + contagem |
+|---|---:|
+| Carteira (92.209 linhas, escopo admin) | 47,4 ms |
+| Leads (17.173) | 15,6 ms |
+| Pedidos em aberto (3.478) | 11,7 ms |
+| Tabela de preços (26.989) | 10,0 ms |
+| Orçamentos (1.864) | 10,1 ms |
+
+Dentro do orçamento de 500 ms de uma ação de escrita, com folga larga.
+
+⚠️ **A primeira medição da Carteira deu 650 ms e era ruído de cache frio** — repetida
+intercalada, ficou em 47 ms. Mesma lição de 2026-09-04: medição sequencial única, neste
+ambiente, erra por mais de 10×.
+
+⚠️ **Chegou a ser avaliado um `COUNT` com teto** (`SELECT COUNT(*) FROM (… LIMIT n+1)`),
+que responde "passa do limite?" sem contar tudo: 11,6 ms contra 23,0 ms. **Não foi
+adotado** — 2× sobre uma base de 23 ms não paga perder o número exato, que a central e a
+notificação exibem ("92.209 linhas"). Fica registrado caso a Carteira cresça uma ordem de
+grandeza.
+
 
 - [ ] Job de cache warming dos escopos de gestor (10 min / TTL 30 min)
 - [ ] Cache da aderência no `CarteiraController::index()`
 - [ ] Deferred props no Dashboard
 - [ ] `<Link prefetch>` na navegação principal
-- [ ] Export de Excel para a fila, entrega por notificação + S3
+- [x] Export de Excel para a fila, entrega por notificação + S3 (2026-09-09, ver §1.18)
 
 Observabilidade (sem isto, nada acima é verificável):
 

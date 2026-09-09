@@ -291,6 +291,11 @@ const catalogoAtivo = computed(() =>
                                         <DropdownLink :href="route('profile.edit')">
                                             Perfil
                                         </DropdownLink>
+                                        <!-- Fica no menu do usuário, e não na navegação principal, porque a
+                                             lista é PESSOAL: cada um vê só as próprias planilhas. -->
+                                        <DropdownLink :href="route('exportacoes.index')">
+                                            Meus downloads
+                                        </DropdownLink>
                                         <DropdownLink v-if="isAdmin" :href="route('atualizacoes.index')">
                                             Atualização de dados
                                         </DropdownLink>
@@ -485,6 +490,9 @@ const catalogoAtivo = computed(() =>
                         <div class="mt-3 space-y-1">
                             <ResponsiveNavLink :href="route('profile.edit')">
                                 Perfil
+                            </ResponsiveNavLink>
+                            <ResponsiveNavLink :href="route('exportacoes.index')">
+                                Meus downloads
                             </ResponsiveNavLink>
                             <ResponsiveNavLink
                                 :href="route('logout')"
