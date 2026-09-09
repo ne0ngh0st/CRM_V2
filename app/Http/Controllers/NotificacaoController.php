@@ -23,7 +23,7 @@ class NotificacaoController extends Controller
             ->latest()
             ->limit(30)
             ->get()
-            ->map(fn (Notificacao $n) => $this->mapear($n));
+            ->map(fn (Notificacao $n) => $n->paraOSino());
 
         return response()->json([
             'naoLidas' => $naoLidas,
@@ -48,18 +48,5 @@ class NotificacaoController extends Controller
             ->update(['lida_em' => now()]);
 
         return response()->json(['ok' => true]);
-    }
-
-    /** @return array{id: int, tipo: string, titulo: string, mensagem: ?string, link: ?string, criadoEm: string} */
-    private function mapear(Notificacao $n): array
-    {
-        return [
-            'id' => $n->id,
-            'tipo' => $n->tipo,
-            'titulo' => $n->titulo,
-            'mensagem' => $n->mensagem,
-            'link' => $n->link,
-            'criadoEm' => $n->created_at->toIso8601String(),
-        ];
     }
 }

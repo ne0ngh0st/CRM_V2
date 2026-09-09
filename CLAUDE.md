@@ -1737,6 +1737,19 @@ chamá-lo. A tela passou a mostrar "Interrompida" pela idade (`Exportacao::travo
 e o `ExpurgarExportacoesJob` corrige o estado no banco. Mesma família da fila parada de
 29/08 e da badge "0 online" de 31/08: **dado que some não acende luz vermelha.**
 
+#### Relação com o fix do sino de 2026-09-08
+
+O commit `7d02bed` (feito no dia anterior, de outra janela) corrigiu o clique na
+notificação de planilha, que abria pelo Inertia e descartava o `.xlsx` em silêncio. Ele
+diagnosticou o mesmo buraco por outro lado — *"não existe tela de exportações para
+reencontrá-lo"* — e as duas peças são **complementares, não redundantes**: o sino é o
+atalho de quem está com a notificação na frente; a central é onde se reencontra a planilha
+depois. Os três testes dele foram portados para `CentralDeDownloadsTest`.
+
+⚠️ **`Notificacao::TIPOS_DOWNLOAD` contém só `exportacao_pronta`, e tem que continuar
+assim.** A notificação de ERRO aponta para a central (uma página HTML): se alguém a
+incluir ali, o clique passa a tentar baixar a página. Travado por teste.
+
 #### Detalhes que vão surpreender depois
 
 - **`GerarExportacaoCarteiraJob` virou um shim `@deprecated`** que só delega. Existe para
@@ -1768,7 +1781,7 @@ e o GET recusado com 405.
 ⚠️ **Sete mutações aplicadas de propósito; a primeira rodada revelou um teste falso** (o do
 modo de visão). Verificar por mutação continua sendo o que separa teste de decoração.
 
-Suíte inteira verde: **498 testes**.
+Suíte inteira verde: **503 testes**.
 
 ## Pendências
 - 🔴 **As metas de VENDA em produção são, na maioria, lixo de seed.** Conferido no RDS em

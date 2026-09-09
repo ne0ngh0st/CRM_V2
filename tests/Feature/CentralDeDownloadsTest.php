@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\GerarExportacaoJob;
 use App\Models\Cliente;
 use App\Models\Exportacao;
+use App\Models\Notificacao;
 use App\Models\User;
 use App\Models\VendedorPerfil;
 use App\Services\Escopo\ModoVisao;
@@ -300,6 +301,109 @@ class CentralDeDownloadsTest extends TestCase
         $this->actingAs($user)
             ->get(route('exportacoes.download', $exportacao))
             ->assertNotFound();
+    }
+
+    // ------------------------------------------------- o sino (fix de 2026-09-08)
+
+    /*
+     * Os três casos abaixo vieram de `ExportacaoCarteiraTest`, que esta classe substituiu.
+     * Eles cobrem o fix do sino: o clique numa notificação de planilha precisa ENTREGAR o
+     * arquivo ao navegador, e não abrir pelo Inertia (que descartava o .xlsx em silêncio).
+     *
+     * ⚠️ Continuam valendo depois da central de downloads, e são complementares a ela: a
+     * central é onde se REENCONTRA a planilha; o sino é o atalho de quem está com ela na
+     * frente. Se um dia `exportacao_pronta` sair de `Notificacao::TIPOS_DOWNLOAD`, o
+     * clique volta a não baixar nada — e é este teste que acusa.
+     */
+
+    public function test_notificacao_de_planilha_e_marcada_como_download(): void
+    {
+        $user = $this->usuario();
+        $exportacao = $this->exportacaoPronta($user);
+
+        Notificacao::create([
+            'user_id' => $user->id,
+            'tipo' => 'exportacao_pronta',
+            'titulo' => 'Planilha da Carteira pronta',
+            'link' => route('exportacoes.download', $exportacao->id, false),
+        ]);
+
+        $payload = $this->actingAs($user)
+            ->getJson(route('notificacoes.index'))
+            ->assertOk()
+            ->json('naoLidas.0');
+
+        $this->assertTrue($payload['download']);
+        $this->assertSame("/exportacoes/{$exportacao->id}/download", $payload['link']);
+    }
+
+    /** A contraprova: notificação que aponta pra uma página continua abrindo pelo Inertia. */
+    public function test_notificacao_de_pagina_nao_e_marcada_como_download(): void
+    {
+        $user = $this->usuario();
+
+        Notificacao::create([
+            'user_id' => $user->id,
+            'tipo' => 'orcamento_pendente',
+            'titulo' => 'Orçamento aguardando aprovação',
+            'link' => route('orcamentos.index', [], false),
+        ]);
+
+        $payload = $this->actingAs($user)
+            ->getJson(route('notificacoes.index'))
+            ->assertOk()
+            ->json('naoLidas.0');
+
+        $this->assertFalse($payload['download']);
+    }
+
+    /**
+     * O sino monta uma lista só com duas fontes — o GET do histórico e o broadcast do
+     * Reverb. Se os payloads divergirem, a mesma notificação se comporta diferente
+     * conforme tenha chegado ao vivo ou depois de um F5.
+     */
+    public function test_broadcast_em_tempo_real_leva_o_mesmo_payload_do_historico(): void
+    {
+        $user = $this->usuario();
+        $exportacao = $this->exportacaoPronta($user);
+
+        $notificacao = Notificacao::create([
+            'user_id' => $user->id,
+            'tipo' => 'exportacao_pronta',
+            'titulo' => 'Planilha da Carteira pronta',
+            'link' => route('exportacoes.download', $exportacao->id, false),
+        ]);
+
+        $doHistorico = $this->actingAs($user)
+            ->getJson(route('notificacoes.index'))
+            ->json('naoLidas.0');
+
+        $this->assertSame($doHistorico, (new \App\Events\NotificacaoCriada($notificacao))->broadcastWith());
+    }
+
+    /**
+     * ⚠️ A notificação de ERRO aponta para a central, não para um arquivo — ela não pode
+     * entrar em TIPOS_DOWNLOAD, senão o clique tentaria baixar uma página HTML.
+     */
+    public function test_notificacao_de_erro_de_exportacao_nao_e_download(): void
+    {
+        $user = $this->usuario();
+        $exportacao = Exportacao::create([
+            'user_id' => $user->id,
+            'recurso' => 'carteira',
+            'status' => Exportacao::STATUS_PROCESSANDO,
+        ]);
+
+        (new GerarExportacaoJob($exportacao->id))->failed(new \RuntimeException('estourou'));
+
+        $payload = $this->actingAs($user)
+            ->getJson(route('notificacoes.index'))
+            ->assertOk()
+            ->json('naoLidas.0');
+
+        $this->assertSame('exportacao_erro', $payload['tipo']);
+        $this->assertFalse($payload['download']);
+        $this->assertSame(route('exportacoes.index', absolute: false), $payload['link']);
     }
 
     // ---------------------------------------------------------------- a tela
