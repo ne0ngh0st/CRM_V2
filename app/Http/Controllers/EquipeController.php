@@ -16,9 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use Maatwebsite\Excel\Facades\Excel;
 use Spatie\Permission\Models\Role;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EquipeController extends Controller
 {
@@ -144,26 +142,29 @@ class EquipeController extends Controller
         ]);
     }
 
-    public function exportar(Request $request): BinaryFileResponse
+    public function exportar(Request $request): RedirectResponse
     {
-        $this->prepararExport('equipe');
+        return $this->entregarPlanilha('equipe', $request);
+    }
 
-        $user = $request->user();
-        abort_unless($this->scope->podeAcessar($user), 403);
-
-        $query = $this->queryFiltrada($request, $user);
-
-        return Excel::download(
-            new \App\Exports\EquipeExport($query),
-            'equipe-'.now()->format('Y-m-d-His').'.xlsx',
-        );
+    /**
+     * ⚠️ Existe para o CatalogoDeExportacoes aplicar a MESMA autorização da tela, nos dois
+     * caminhos (requisição e fila) — sem que ele precise conhecer o EquipeScopeResolver.
+     */
+    public function podeExportar(User $user): bool
+    {
+        return $this->scope->podeAcessar($user);
     }
 
     /**
      * Escopo (codigosEquipe) + filtros de busca/perfil/supervisor/estado/tipo/status/online/login.
-     * Usado por index() (lista e opções de filtro) e exportar().
+     * Usado por index() (lista e opções de filtro) e pelo CatalogoDeExportacoes.
+     *
+     * ⚠️ Público porque a mesma query é montada em dois contextos: a requisição e o job
+     * de exportação. Uma segunda cópia divergiria da tela no dia em que um filtro novo
+     * entrasse aqui (Regra de ouro nº 8).
      */
-    protected function queryFiltrada(Request $request, User $user, bool $apenasEscopo = false): Builder
+    public function queryFiltrada(Request $request, User $user, bool $apenasEscopo = false): Builder
     {
         $codigosEquipe = $this->scope->codigosEquipe($user);
 

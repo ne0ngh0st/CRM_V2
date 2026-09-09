@@ -46,13 +46,21 @@ Route::middleware('auth')->group(function () {
     Route::delete('/sugestoes/{sugestao}', [SugestaoController::class, 'destroy'])->name('sugestoes.destroy');
 
     Route::get('/pedidos-abertos', [PedidoController::class, 'index'])->name('pedidos.index');
-    Route::get('/pedidos-abertos/exportar', [PedidoController::class, 'exportarAbertos'])->name('pedidos.exportar');
+    Route::post('/pedidos-abertos/exportar', [PedidoController::class, 'exportarAbertos'])->name('pedidos.exportar');
     Route::get('/pedidos-emitidos', [PedidoController::class, 'emitidos'])->name('pedidos.emitidos');
-    Route::get('/pedidos-emitidos/exportar', [PedidoController::class, 'exportarEmitidos'])->name('pedidos.exportarEmitidos');
+    Route::post('/pedidos-emitidos/exportar', [PedidoController::class, 'exportarEmitidos'])->name('pedidos.exportarEmitidos');
 
     Route::get('/carteira', [CarteiraController::class, 'index'])->name('carteira.index');
-    // POST porque deixou de ser uma leitura: dispara um job (ver CarteiraController::exportar).
+    /*
+     * ⚠️ TODO endpoint de exportação é POST, não GET, e isso não é purismo REST: pedir uma
+     * planilha CRIA um registro em `exportacoes` e pode enfileirar um job. Como GET, um
+     * prefetch do navegador ou um link colado em conversa geraria arquivo sozinho.
+     */
     Route::post('/carteira/exportar', [CarteiraController::class, 'exportar'])->name('carteira.exportar');
+
+    // Meus downloads: a única forma de reaver uma planilha depois que a notificação sai
+    // do sino. Aberta a todos os perfis — cada um vê só as próprias.
+    Route::get('/exportacoes', [ExportacaoController::class, 'index'])->name('exportacoes.index');
     Route::get('/exportacoes/{exportacao}/download', [ExportacaoController::class, 'download'])->name('exportacoes.download');
     Route::get('/carteira/{cliente}/detalhes', [CarteiraController::class, 'detalhes'])->name('carteira.detalhes');
     Route::post('/carteira/{cliente}/motivo-inatividade', [CarteiraController::class, 'registrarMotivoInatividade'])->name('carteira.motivoInatividade');
@@ -61,7 +69,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/carteira/agendamentos/{agendamento}', [CarteiraController::class, 'atualizarAgendamento'])->name('carteira.agendamentoStatus');
 
     Route::get('/leads', [LeadController::class, 'index'])->name('leads.index');
-    Route::get('/leads/exportar', [LeadController::class, 'exportar'])->name('leads.exportar');
+    Route::post('/leads/exportar', [LeadController::class, 'exportar'])->name('leads.exportar');
     Route::post('/leads/wordpress/teste', [LeadController::class, 'enviarTesteWordpress'])->name('leads.wordpress.teste');
     // ⚠️ Antes de /leads/{lead}: senão o model binding tentaria achar um lead chamado
     // "funil" e devolveria 404. Mesma armadilha da rota de encerrar simulação.
@@ -74,7 +82,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/leads/{lead}', [LeadController::class, 'excluir'])->name('leads.destroy');
 
     Route::get('/tabela-precos', [TabelaPrecoController::class, 'index'])->name('tabela-precos.index');
-    Route::get('/tabela-precos/exportar', [TabelaPrecoController::class, 'exportar'])->name('tabela-precos.exportar');
+    Route::post('/tabela-precos/exportar', [TabelaPrecoController::class, 'exportar'])->name('tabela-precos.exportar');
 
     Route::get('/catalogo-facas', [CatalogoFacaController::class, 'index'])->name('catalogo-facas.index');
     // CRUD admin-only (checado no controller, como no EtiquetaMateriaPrimaController).
@@ -86,7 +94,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/cadastros', [CadastroController::class, 'index'])->name('cadastros.index');
     Route::get('/cadastros/titularidade', [CadastroController::class, 'titularidade'])->name('cadastros.titularidade');
-    Route::get('/cadastros/exportar', [CadastroController::class, 'exportar'])->name('cadastros.exportar');
+    Route::post('/cadastros/exportar', [CadastroController::class, 'exportar'])->name('cadastros.exportar');
     Route::post('/cadastros/bobinas', [CadastroController::class, 'storeBobina'])->name('cadastros.bobinas.store');
     Route::get('/cadastros/bobinas/{bobina}/pdf', [CadastroController::class, 'pdfBobina'])->name('cadastros.bobinas.pdf');
     Route::post('/cadastros/bobinas/{bobina}/enviar', [CadastroController::class, 'enviarBobina'])->name('cadastros.bobinas.enviar');
@@ -101,7 +109,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/cadastros/leads/{lead}', [CadastroController::class, 'destroyLead'])->name('cadastros.leads.destroy');
 
     Route::get('/orcamentos', [OrcamentoController::class, 'index'])->name('orcamentos.index');
-    Route::get('/orcamentos/exportar', [OrcamentoController::class, 'exportar'])->name('orcamentos.exportar');
+    Route::post('/orcamentos/exportar', [OrcamentoController::class, 'exportar'])->name('orcamentos.exportar');
     Route::get('/orcamentos/novo', [OrcamentoController::class, 'novo'])->name('orcamentos.novo');
     Route::get('/orcamentos/busca-clientes', [OrcamentoController::class, 'buscarClientes'])->name('orcamentos.buscaClientes');
     Route::get('/orcamentos/busca-produtos', [OrcamentoController::class, 'buscarProdutos'])->name('orcamentos.buscaProdutos');
@@ -127,7 +135,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/observacoes/{observacao}/fixar', [ObservacaoController::class, 'togglePin'])->name('observacoes.fixar');
 
     Route::get('/equipe', [EquipeController::class, 'index'])->name('equipe.index');
-    Route::get('/equipe/exportar', [EquipeController::class, 'exportar'])->name('equipe.exportar');
+    Route::post('/equipe/exportar', [EquipeController::class, 'exportar'])->name('equipe.exportar');
     Route::post('/equipe', [EquipeController::class, 'store'])->name('equipe.store');
     Route::patch('/equipe/supervisor-massa', [EquipeController::class, 'reatribuirSupervisorMassa'])->name('equipe.supervisorMassa');
     Route::patch('/equipe/{usuario}', [EquipeController::class, 'update'])->name('equipe.update');
@@ -147,7 +155,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/visao-gestor', [VisaoGestorController::class, 'index'])->name('visao-gestor.index');
     Route::get('/metas', [MetaController::class, 'index'])->name('metas.index');
-    Route::get('/metas/exportar', [MetaController::class, 'exportar'])->name('metas.exportar');
+    Route::post('/metas/exportar', [MetaController::class, 'exportar'])->name('metas.exportar');
     Route::patch('/metas', [MetaController::class, 'update'])->name('metas.update');
 
     // Atualizacao de dados do TOTVS. Admin-only checado no controller, como no

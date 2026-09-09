@@ -5,9 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\AgendamentoLigacao;
 use App\Models\CarteiraMotivoInatividade;
-use App\Jobs\GerarExportacaoCarteiraJob;
 use App\Models\Cliente;
-use App\Models\Exportacao;
 use App\Models\GrupoCliente;
 use App\Models\Ligacao;
 use App\Models\Pedido;
@@ -28,8 +26,6 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use Maatwebsite\Excel\Facades\Excel;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class CarteiraController extends Controller
 {
@@ -295,23 +291,13 @@ class CarteiraController extends Controller
      * — com o servidor seguindo ocupado por mais 35 s produzindo um arquivo que ninguém
      * receberia. O usuário é avisado pelo sino quando ficar pronto.
      *
-     * As outras oito exportações do sistema continuam síncronas: nenhuma tem volume que
-     * justifique a assincronia, e download imediato é melhor experiência quando cabe.
+     * ⚠️ Desde 2026-09-09 quem decide entre gerar agora e enfileirar é o VOLUME, não a
+     * tela: o vendedor com 283 clientes recebe o arquivo na hora, o admin com 92 mil
+     * espera o sino. As outras oito exportações passam pelo mesmo caminho.
      */
     public function exportar(Request $request): RedirectResponse
     {
-        $exportacao = Exportacao::create([
-            'user_id' => $request->user()->id,
-            'recurso' => 'carteira',
-            // Só os filtros da tela: o job reconstrói a query a partir deles, e guardá-los
-            // deixa o arquivo auditável depois ("por que este Excel tem 300 linhas?").
-            'filtros' => $request->only(['busca', 'estado', 'segmento', 'status', 'aderencia', 'ordenar', 'visao_supervisor', 'visao_vendedor']),
-            'status' => Exportacao::STATUS_PROCESSANDO,
-        ]);
-
-        GerarExportacaoCarteiraJob::dispatch($exportacao->id);
-
-        return back()->with('status', 'exportacao-enfileirada');
+        return $this->entregarPlanilha('carteira', $request);
     }
 
     /** Escopo (cod_vendedor) puro, sem filtros de busca/estado/segmento/status. */

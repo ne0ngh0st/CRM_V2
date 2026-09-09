@@ -287,13 +287,14 @@ function limparSemFamilia() {
                             </svg>
                         </template>
                         <template #actions>
-                            <!-- assincrono: a carteira completa leva ~95s, mais que o idle
-                                 timeout do ALB. Gera em fila e avisa no sino. -->
+                            <!-- Sem `assincrono`: quem decide entre baixar na hora e ir
+                                 para a fila é o volume, no servidor. Esta mesma tela leva
+                                 ~95 s para um admin (92 mil clientes) e menos de 1 s para
+                                 um vendedor com 283 — a prop fixa acertava só um dos dois. -->
                             <ExportarExcelButton
                                 rota="carteira.exportar"
                                 :filtros="filtros"
                                 :tem-filtros-ativos="temFiltrosAtivos"
-                                assincrono
                             />
                         </template>
 

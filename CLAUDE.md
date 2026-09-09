@@ -1641,6 +1641,135 @@ que morde. Verificar por mutação não é zelo — foi o que corrigiu a documen
 
 Suíte inteira verde: **488 testes**.
 
+### Central de downloads: toda planilha registra, e o volume decide o caminho — 2026-09-09
+
+Pedido do Tony: *"as planilhas ficam disponíveis por 7 dias mas não tem lugar nenhum pra
+acessar depois que já saiu a notificação"*. Estava certo, e o buraco era maior que isso.
+
+**O diagnóstico:** existiam duas realidades. A Carteira gerava em fila, guardava em
+`exportacoes` e avisava pelo sino — mas o ÚNICO ponteiro para o arquivo era essa
+notificação, que some ao ser lida; depois disso a planilha ficava mais 7 dias no disco
+inalcançável. As outras **oito** exportações nem registro tinham: `Excel::download()`
+direto, arquivo na pasta do navegador de quem clicou, nada no servidor.
+
+**`/exportacoes` ("Meus downloads", no menu do usuário)** lista as planilhas da própria
+pessoa com estado, filtros do pedido, linhas, tamanho, prazo e botão de baixar.
+
+#### 🥇 O achado que mudou o escopo: três exportações já violavam a Regra nº 9
+
+Ao medir para decidir o desenho, apareceu o que ninguém tinha medido (Regra de ouro nº 6):
+
+| Planilha | Linhas | Geração |
+|---|---:|---:|
+| Tabela de preços | 26.989 | **18,7 s** |
+| Leads | 17.173 | **14,1 s** |
+| Pedidos em aberto | 3.478 | **2,6 s** |
+| Orçamentos | 1.864 | 1,4 s |
+| Equipe / Metas | ~130 | ~0,2 s |
+
+⚠️ **Lentidão que não estoura não vira chamado.** Só a Carteira tinha sido tratada, porque
+só ela dava erro visível (504 do ALB aos 60 s). As outras apenas travavam a aba por 15-19 s
+— e o usuário aprende a não clicar no botão, o que ninguém reporta.
+
+**Por isso o caminho passou a ser escolhido pelo VOLUME, não pela tela**
+(`config('exportacoes.limite_linhas_sincrono')`, 2.500 linhas): até lá baixa na hora, acima
+vai para a fila e avisa pelo sino. A mesma Carteira leva ~95 s para um admin (92 mil
+clientes) e menos de 1 s para um vendedor com 283 — a prop fixa `assincrono` por página só
+podia acertar um dos dois casos.
+
+⚠️ **O primeiro corte foi 5.000 e estava errado**: a 0,75 ms/linha daria 3,7 s de aba
+travada, dentro do limite e fora do orçamento. Só apareceu medindo a GERAÇÃO, não estimando.
+Números completos em `docs/performance.md` §1.18.
+
+#### Onde cada decisão mora (Regra de ouro nº 8)
+
+| O que se repete | Onde mora |
+|---|---|
+| Como montar cada planilha (query + export + nome) | `CatalogoDeExportacoes` |
+| Autorização de cada exportação | o mesmo catálogo |
+| Registrar, gerar, expirar, notificar | `GeradorDeExportacao` |
+| Prazo de validade e corte de volume | `config/exportacoes.php` |
+| Rótulo de cada recurso | `CatalogoDeExportacoes::RECURSOS` |
+| A resposta ao clique (pronta / fila / erro) | `ExportaPlanilha::entregarPlanilha()` |
+
+- ⚠️ **O catálogo existe porque a mesma planilha é montada em DOIS contextos** — a
+  requisição e o job. Com a montagem no controller, o job carrega uma segunda cópia da
+  regra, e `GerarExportacaoCarteiraJob` já era essa segunda cópia: um filtro novo na tela
+  deixaria o Excel para trás em silêncio.
+- ⚠️ **A autorização mora no catálogo, não no controller**, pelo mesmo motivo: precisa valer
+  nos dois caminhos, senão a fila vira porta lateral. Como o plano é sempre montado dentro
+  da requisição (é ele que conta as linhas), o 403 continua saindo na hora do clique.
+- Nove métodos de query viraram **públicos** para o catálogo chamá-los — cada um com o
+  docblock dizendo por quê. É o mesmo motivo de `CarteiraController::listaQuery` já ser.
+- **O arquivo é SEMPRE escrito no disco, mesmo no caminho síncrono**, e a resposta é o link.
+  Streamar direto seria uma linha a menos, mas o arquivo não existiria depois — e "existir
+  depois" é a feature inteira. De quebra, todo download sai por um ponto só, com uma
+  checagem de dono só.
+- ⚠️ **Todo endpoint de exportação virou POST** (oito eram GET): pedir uma planilha CRIA um
+  registro e pode enfileirar um job. Como GET, um prefetch do navegador geraria arquivo
+  sozinho. Travado por teste (405 no GET).
+- ⚠️ **O botão não sabe qual caminho vai acontecer** e não deve saber: faz sempre a mesma
+  requisição Inertia e reage ao flash `exportacao` (`pronta` dispara o download,
+  `enfileirada` abre o aviso, `erro` avisa). A prop `assincrono` foi removida.
+- **O caminho síncrono NÃO notifica**: o arquivo já desceu no navegador, e um sino dizendo
+  "está pronto aquilo que você acabou de baixar" é ruído — ruído é o que faz as pessoas
+  pararem de olhar o sino. Travado por teste.
+
+#### 🔴 Dois defeitos silenciosos corrigidos no caminho
+
+**1. O supervisor em "Minha carteira" recebia a planilha da EQUIPE INTEIRA.** O job
+reconstrói a query com uma Request sintética e **sem sessão** — e o modo Equipe/Pessoal mora
+exatamente na sessão, com `ModoVisao::atual()` devolvendo EQUIPE fora de HTTP (de propósito,
+por causa do aquecimento de cache). Escopo mais amplo que o da tela, num arquivo com a base
+de clientes de outras pessoas, sem erro nenhum aparecer. Corrigido com a coluna
+`exportacoes.modo_visao` + restauração do modo no gerador, via sessão sintética.
+
+⚠️ **O teste disso passava com o bug.** Rodando no mesmo processo, ele enxergava a sessão
+que a requisição anterior deixou no container e acertava por acidente. Só passou a morder
+com um `session()->flush()` antes de invocar o job — que é o que o worker realmente tem.
+**Descoberto por mutação**, não por leitura.
+
+**2. Exportação órfã ficava "Preparando" para sempre.** Aconteceu durante esta própria
+sessão: o container `queue` morreu com `ProcessTimedOutException` (o timeout de 700 s do
+`queue:listen`, já conhecido) e, como o Redis de dev não persiste, o job evaporou junto.
+⚠️ **O `failed()` do job não cobre esse caso** — ele só roda se o worker estiver vivo para
+chamá-lo. A tela passou a mostrar "Interrompida" pela idade (`Exportacao::travou()`, 60 min)
+e o `ExpurgarExportacoesJob` corrige o estado no banco. Mesma família da fila parada de
+29/08 e da badge "0 online" de 31/08: **dado que some não acende luz vermelha.**
+
+#### Detalhes que vão surpreender depois
+
+- **`GerarExportacaoCarteiraJob` virou um shim `@deprecated`** que só delega. Existe para
+  sobreviver ao deploy: um job de exportação vive minutos na fila, e a classe sumindo faria
+  o payload em voo cair em `failed_jobs` — o usuário esperando para sempre. Pode ser apagado
+  algumas horas depois de subir.
+- **Cadastros entra como quatro recursos** (`cadastros-bobina`, `-etiqueta`, `-cliente`,
+  `-lead`), não um só: cada aba gera colunas diferentes, e quem exportar duas no mesmo dia
+  precisa distinguir os arquivos.
+- **`ordenar` não aparece nos filtros da central**: muda a ordem, não quais linhas entram. A
+  coluna existe para responder "por que este arquivo tem 300 linhas?", e `Ordenação: nome_asc`
+  só acrescentava jargão a uma resposta que era, corretamente, "base completa".
+- **A linha vencida continua na lista**, sem o botão. Esconder o histórico faria a pessoa
+  achar que nunca exportou aquilo e gerar de novo.
+- **A tela se recarrega sozinha só enquanto há planilha em preparo** (mesmo desenho de
+  `/atualizacoes`).
+- `LIMITE_LINHAS_SINCRONO = 20000` era uma constante **declarada no trait e nunca usada por
+  ninguém**. Virou o config, agora com número medido.
+
+#### Testes
+
+`tests/Feature/CentralDeDownloadsTest.php` (18 casos): volume decidindo o caminho nos dois
+sentidos, síncrono não notificando, job gerando/notificando/falhando, modo de visão
+atravessando a fila, download só do dono (nem admin), expirada e processando não baixáveis,
+listagem escopada, rótulo e filtros vindos prontos do servidor, órfã aparecendo como
+interrompida e sendo fechada pelo expurgo, autorização de Equipe/Metas valendo no catálogo,
+e o GET recusado com 405.
+
+⚠️ **Sete mutações aplicadas de propósito; a primeira rodada revelou um teste falso** (o do
+modo de visão). Verificar por mutação continua sendo o que separa teste de decoração.
+
+Suíte inteira verde: **498 testes**.
+
 ## Pendências
 - 🔴 **As metas de VENDA em produção são, na maioria, lixo de seed.** Conferido no RDS em
   2026-09-04, logo após o deploy: `metas_mensais` só tem os meses **8 a 12** (nada de

@@ -7,12 +7,11 @@ use App\Models\Produto;
 use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
-use Maatwebsite\Excel\Facades\Excel;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class TabelaPrecoController extends Controller
 {
@@ -107,15 +106,9 @@ class TabelaPrecoController extends Controller
         ]);
     }
 
-    public function exportar(Request $request): BinaryFileResponse
+    public function exportar(Request $request): RedirectResponse
     {
-        $this->prepararExport('tabela-precos');
-
-
-        return Excel::download(
-            new \App\Exports\TabelaPrecoExport($this->listaQuery($request)),
-            'tabela-precos-'.now()->format('Y-m-d-His').'.xlsx',
-        );
+        return $this->entregarPlanilha('tabela-precos', $request);
     }
 
     /** Busca/categoria/preço, sem escopo por perfil (catálogo é igual pra todo mundo). Usado por index() (KPIs e lista) e exportar(). */
@@ -147,8 +140,13 @@ class TabelaPrecoController extends Controller
         return $query;
     }
 
-    /** baseQuery() + ordenação. Usado por index() (lista) e exportar(). */
-    protected function listaQuery(Request $request): Builder
+    /** baseQuery() + ordenação. Usado por index() (lista) e pelo CatalogoDeExportacoes. */
+    /**
+     * ⚠️ Público porque o CatalogoDeExportacoes monta a mesma query em dois contextos: a
+     * requisição e o job de exportação. Uma segunda cópia divergiria da tela no dia em
+     * que um filtro novo entrasse aqui (Regra de ouro nº 8).
+     */
+    public function listaQuery(Request $request): Builder
     {
         $query = $this->baseQuery($request);
         $ordenar = (string) $request->string('ordenar') ?: 'codigo_asc';

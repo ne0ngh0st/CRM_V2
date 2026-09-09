@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\MetasExport;
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\MetaMensal;
 use App\Models\User;
@@ -15,8 +14,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Maatwebsite\Excel\Facades\Excel;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class MetaController extends Controller
 {
@@ -74,14 +71,25 @@ class MetaController extends Controller
         ]);
     }
 
-    public function exportar(Request $request): BinaryFileResponse
+    public function exportar(Request $request): RedirectResponse
     {
-        $this->prepararExport('metas');
+        return $this->entregarPlanilha('metas', $request);
+    }
 
-        $user = $request->user();
-        abort_unless($this->podeAcessar($user), 403);
-
+    /**
+     * O ranking já resolvido, para o CatalogoDeExportacoes montar a planilha.
+     *
+     * ⚠️ Devolve ano e mês junto porque eles vêm de `parametrosRanking()` (que aplica
+     * defaults e limites) e compõem o NOME do arquivo. Reparseá-los no catálogo seria uma
+     * segunda cópia dessa normalização — e bastaria um default mudar aqui para o arquivo
+     * passar a se chamar de um mês e conter outro.
+     *
+     * @return array{0: array<int, array<string, mixed>>, 1: int, 2: int}
+     */
+    public function linhasDoRanking(Request $request, User $user): array
+    {
         $p = $this->parametrosRanking($request, $user);
+
         $resultado = $this->rankingResolver->ranking(
             $p['scope']['codVendedores'],
             $p['ano'],
@@ -91,10 +99,17 @@ class MetaController extends Controller
             $p['faixa'],
         );
 
-        return Excel::download(
-            new MetasExport($resultado['linhas']),
-            "metas-{$p['ano']}-{$p['mes']}-".now()->format('Y-m-d-His').'.xlsx',
-        );
+        return [$resultado['linhas'], $p['ano'], $p['mes']];
+    }
+
+    /**
+     * ⚠️ Existe para o catálogo aplicar a MESMA autorização da tela, nos dois caminhos
+     * (requisição e fila). `podeAcessar()` continua privado: quem é de fora pergunta
+     * sobre exportar, não sobre a tela.
+     */
+    public function podeExportar(User $user): bool
+    {
+        return $this->podeAcessar($user);
     }
 
     /** Parsing de ano/mes/modo/busca/faixa + escopo. Usado por index() e exportar(). */

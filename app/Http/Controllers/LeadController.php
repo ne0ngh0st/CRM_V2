@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\LeadExport;
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\AgendamentoLigacao;
 use App\Models\Lead;
@@ -21,8 +20,6 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use Maatwebsite\Excel\Facades\Excel;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class LeadController extends Controller
 {
@@ -218,14 +215,9 @@ class LeadController extends Controller
         ]);
     }
 
-    public function exportar(Request $request): BinaryFileResponse
+    public function exportar(Request $request): RedirectResponse
     {
-        $this->prepararExport('leads');
-
-        return Excel::download(
-            new LeadExport($this->listaQuery($request)),
-            'leads-'.now()->format('Y-m-d-His').'.xlsx',
-        );
+        return $this->entregarPlanilha('leads', $request);
     }
 
     public function enviarTesteWordpress(Request $request): RedirectResponse
@@ -511,8 +503,14 @@ class LeadController extends Controller
         return $query;
     }
 
-    /** baseQuery() + ordenação. Usado por index() (lista) e exportar(). */
-    protected function listaQuery(Request $request): Builder
+    /**
+     * baseQuery() + ordenação. Usado por index() (lista) e pelo CatalogoDeExportacoes.
+     *
+     * ⚠️ Público porque a mesma query é montada em dois contextos: a requisição e o job
+     * de exportação. Uma segunda cópia dela no catálogo divergiria da tela no dia em que
+     * um filtro novo entrasse aqui (Regra de ouro nº 8).
+     */
+    public function listaQuery(Request $request): Builder
     {
         $query = $this->baseQuery($request);
         $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';

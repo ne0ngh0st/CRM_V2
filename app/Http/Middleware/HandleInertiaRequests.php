@@ -41,6 +41,15 @@ class HandleInertiaRequests extends Middleware
             // continuar operando nele (ex.: anexar imagens à faca logo após cadastrar).
             'flash' => [
                 'recursoCriadoId' => fn () => $request->session()->get('recursoCriadoId'),
+                /*
+                 * Desfecho de um pedido de exportação: `{estado, url, rotulo, linhas}`.
+                 *
+                 * ⚠️ Existe porque quem decide se a planilha sai na hora ou vai para a
+                 * fila é o VOLUME, e o front não tem como saber isso antes de pedir. O
+                 * botão faz sempre a mesma requisição Inertia e reage ao que voltar:
+                 * `pronta` dispara o download, `enfileirada` abre o aviso do sino.
+                 */
+                'exportacao' => fn () => $request->session()->get('exportacao'),
             ],
             // Banner de simulação de usuário. Lê SÓ da sessão (o nome do admin é gravado
             // lá no início) — nenhuma query por request, em nenhuma página.
