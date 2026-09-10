@@ -14,7 +14,7 @@ const props = defineProps({
     podeExcluir: { type: Boolean, default: false },
 });
 
-defineEmits(['editar', 'copiar', 'aprovar', 'rejeitar', 'excluir']);
+defineEmits(['editar', 'copiar', 'aprovar', 'rejeitar', 'excluir', 'enviar-ao-portal']);
 
 const expandido = ref(null);
 
@@ -142,6 +142,61 @@ function pdfUrl(orcamento, download) {
                                         <path d="M14 3v4h4" stroke-linecap="round" stroke-linejoin="round" />
                                     </svg>
                                 </a>
+                                <!--
+                                    Âmbar porque a função é a mesma família de "enviar
+                                    p/ setor": manda o documento para FORA do CRM. A
+                                    Regra de ouro nº 5 permite cor repetida entre
+                                    funções; o que não pode é a mesma função mudar de
+                                    cor entre telas.
+                                -->
+                                <button
+                                    v-if="orcamento.podeEnviarAoPortal"
+                                    type="button"
+                                    title="Transformar em pedido no Portal"
+                                    class="tbl-acao tbl-acao-amber"
+                                    @click="$emit('enviar-ao-portal', orcamento)"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 3 10.5 13.5M21 3l-6.5 18-4-8-8-4L21 3Z" stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
+                                </button>
+                                <!--
+                                    🚧 Em homologação: só admin dispara. Para os demais o
+                                    botão aparece DESABILITADO em vez de sumir — assim a
+                                    função se anuncia, e a tela não muda do nada no dia
+                                    em que liberar. O estado desabilitado vem do token
+                                    `.tbl-acao:disabled`, não de classes soltas aqui.
+                                -->
+                                <button
+                                    v-else-if="orcamento.portalEmBreve"
+                                    type="button"
+                                    title="Transformar em pedido — em breve (em homologação com o time)"
+                                    class="tbl-acao tbl-acao-amber"
+                                    disabled
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 3 10.5 13.5M21 3l-6.5 18-4-8-8-4L21 3Z" stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
+                                </button>
+                                <!--
+                                    Já virou pedido: some o botão e entra o número, que
+                                    é a única referência que liga este orçamento ao
+                                    pedido do outro lado — a API não tem consulta.
+                                -->
+                                <span
+                                    v-else-if="orcamento.portalPedidoId"
+                                    class="inline-flex items-center rounded border border-green-300 bg-green-50 px-1.5 text-[0.65rem] font-medium leading-5 text-green-700"
+                                    :title="`Pedido criado no Portal em ${orcamento.portalEnviadoEm}`"
+                                >
+                                    nº {{ orcamento.portalPedidoId }}
+                                </span>
+                                <span
+                                    v-else-if="orcamento.portalErro"
+                                    class="inline-flex items-center rounded border border-red-300 bg-red-50 px-1.5 text-[0.65rem] font-medium leading-5 text-red-700"
+                                    :title="orcamento.portalErro"
+                                >
+                                    falhou
+                                </span>
                                 <button
                                     v-if="podeExcluir"
                                     type="button"

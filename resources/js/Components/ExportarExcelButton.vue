@@ -1,8 +1,8 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import Modal from '@/Components/Modal.vue';
-import SecondaryButton from '@/Components/SecondaryButton.vue';
+import ModalPadrao from '@/Components/ModalPadrao.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 
 /*
@@ -102,68 +102,65 @@ const linhas = computed(() =>
         </svg>
     </button>
 
-    <Modal :show="mostrarAviso" max-width="md" @close="mostrarAviso = false">
-        <div class="p-6">
-            <h2 class="text-lg font-semibold text-gray-800">Exportar com filtros ativos</h2>
-            <p class="mt-2 text-sm text-gray-500">
-                Você tem filtros ativos na tela — o Excel será gerado só com os dados filtrados, não com a base
-                completa. Deseja continuar?
-            </p>
-            <div class="mt-6 flex justify-end gap-3">
-                <SecondaryButton type="button" @click="mostrarAviso = false">Cancelar</SecondaryButton>
-                <PrimaryButton type="button" @click="exportar">Exportar</PrimaryButton>
-            </div>
-        </div>
-    </Modal>
+    <ConfirmacaoModal
+        :show="mostrarAviso"
+        titulo="Exportar com filtros ativos"
+        mensagem="Você tem filtros ativos na tela."
+        detalhe="O Excel sai só com os dados filtrados, não com a base completa."
+        rotulo-confirmar="Exportar"
+        @confirmar="exportar"
+        @close="mostrarAviso = false"
+    />
 
     <!-- Sem este aviso, o clique que cai na fila não produziria retorno visível nenhum e o
          usuário clicaria de novo achando que falhou. -->
-    <Modal :show="mostrarPreparando" max-width="md" @close="mostrarPreparando = false">
-        <div class="p-6">
-            <div class="flex items-start gap-3">
-                <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5">
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M12 7v5l3 2" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                </span>
-                <div>
-                    <h2 class="text-lg font-semibold text-gray-800">Preparando sua planilha</h2>
-                    <p class="mt-2 text-sm text-gray-500">
-                        <template v-if="linhas">São <strong>{{ linhas }}</strong> linhas — </template>
-                        <template v-else>O volume é grande — </template>
-                        gerar leva alguns minutos. Você pode continuar usando o sistema; avisaremos no sino
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="inline h-4 w-4 align-text-bottom">
-                            <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 1 1-6 0" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-                        assim que estiver pronta.
-                    </p>
-                    <p class="mt-2 text-xs text-gray-400">
-                        Ela também fica guardada em
-                        <Link :href="route('exportacoes.index')" class="font-medium text-teal underline">Meus downloads</Link>,
-                        onde dá para baixar de novo enquanto não expirar.
-                    </p>
-                </div>
-            </div>
-            <div class="mt-6 flex justify-end">
-                <PrimaryButton type="button" @click="mostrarPreparando = false">Entendi</PrimaryButton>
-            </div>
-        </div>
-    </Modal>
+    <ModalPadrao :show="mostrarPreparando" titulo="Preparando sua planilha" max-width="md" @close="mostrarPreparando = false">
+        <template #icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </template>
+
+        <p class="text-sm leading-relaxed text-gray-700">
+            <template v-if="linhas">São <strong>{{ linhas }}</strong> linhas — </template>
+            <template v-else>O volume é grande — </template>
+            gerar leva alguns minutos. Você pode continuar usando o sistema; avisaremos no sino
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="inline h-4 w-4 align-text-bottom">
+                <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 1 1-6 0" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            assim que estiver pronta.
+        </p>
+        <p class="mt-3 rounded border-l-2 border-l-cyan bg-gray-50 px-3 py-2 text-xs leading-snug text-gray-600">
+            Ela também fica guardada em
+            <Link :href="route('exportacoes.index')" class="font-medium text-teal underline">Meus downloads</Link>,
+            onde dá para baixar de novo enquanto não expirar.
+        </p>
+
+        <template #footer>
+            <PrimaryButton type="button" @click="mostrarPreparando = false">Entendi</PrimaryButton>
+        </template>
+    </ModalPadrao>
 
     <!-- Falhar em silêncio seria pior que falhar: sem isto o usuário fica esperando um
          arquivo que nunca vem. -->
-    <Modal :show="mostrarErro" max-width="md" @close="mostrarErro = false">
-        <div class="p-6">
-            <h2 class="text-lg font-semibold text-gray-800">Não foi possível gerar a planilha</h2>
-            <p class="mt-2 text-sm text-gray-500">
-                Tente de novo. Se continuar falhando, aplique um filtro para reduzir o volume — o registro da
-                tentativa fica em
-                <Link :href="route('exportacoes.index')" class="font-medium text-teal underline">Meus downloads</Link>.
-            </p>
-            <div class="mt-6 flex justify-end">
-                <PrimaryButton type="button" @click="mostrarErro = false">Entendi</PrimaryButton>
-            </div>
-        </div>
-    </Modal>
+    <ModalPadrao :show="mostrarErro" titulo="Não foi possível gerar a planilha" max-width="md" @close="mostrarErro = false">
+        <template #icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5 text-red-400">
+                <path d="M10.3 3.9 2.5 17.4a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke-linejoin="round" />
+                <path d="M12 9v4.2" stroke-linecap="round" />
+                <circle cx="12" cy="16.8" r="0.7" fill="currentColor" stroke="none" />
+            </svg>
+        </template>
+
+        <p class="text-sm leading-relaxed text-gray-700">
+            Tente de novo. Se continuar falhando, aplique um filtro para reduzir o volume — o registro da
+            tentativa fica em
+            <Link :href="route('exportacoes.index')" class="font-medium text-teal underline">Meus downloads</Link>.
+        </p>
+
+        <template #footer>
+            <PrimaryButton type="button" @click="mostrarErro = false">Entendi</PrimaryButton>
+        </template>
+    </ModalPadrao>
 </template>

@@ -240,6 +240,8 @@ O que **continua legitimamente inline** (varia por tabela, não é gambiarra): `
 
 **Padronização concluída em 2026-08-10** nas 14 tabelas de dados do sistema: Carteira, Leads, Orçamentos, Pedidos (Abertos + Emitidos), Tabela de Preços, Equipe, Matéria-Prima, as 4 de Cadastros, Metas, Visão Gestor e Carteira/Detalhes.
 - **Fora do padrão de propósito**: a mini-tabela do `Dashboard/CarteiraSegmentoCard.vue`. Não é tabela de dados — é a legenda de um KPI dentro de card, com alinhamento esquerda/direita, sem divisórias e com a linha inteira sendo um `<Link>`. Aplicar os tokens ali (centralizar tudo, pôr `divide-x`) pioraria. **Não "padronizar" essa depois achando que ficou pra trás.**
+  - **Mesmo caso, e o contrário aconteceu**: `Dashboard/SegmentosInativosCard.vue` nasceu (05/09/2026) USANDO os tokens e ficou visivelmente errado — corrigido em 2026-09-10, a pedido do Tony ("mal formatado, fora do padrão do resto da página"). O card é faixa de 1800px com três colunas: o `divide-x` desenhava duas réguas verticais no meio do vazio, e os números paravam no centro da faixa, longe do nome que explicam. Além de adotar a linguagem de card, a folga da largura passou a ir para uma **barra de ranking** (proporcional ao MAIOR potencial, não ao total — com 20+ segmentos, fatia do total vira fiapo invisível), porque numa faixa dessa largura o problema não é só o estilo da célula: é ter 60% do card sem informação nenhuma.
+  - **A regra que sai daí**: dentro de card, `.tbl*` é o padrão ERRADO — os tokens existem para tabela de dados de página cheia. Card usa alinhamento esquerda/direita, filete `border-gray-100` entre linhas e nenhuma divisória vertical.
 - **Pendente (não é tabela, mas fica visivelmente diferente na mesma tela)**: os botões de ação do `Carteira/CalendarioAgendamentos.vue` continuam `h-7 w-7` e só coloridos no hover. Ficam na aba Calendário da mesma página `/carteira`, ao lado da tabela já padronizada. Resolver junto de um token genérico de botão-ícone fora de tabela (`ExportarExcelButton` e os cards do Catálogo de Facas cairiam no mesmo).
 
 - **Por que centralizado**: é a Regra de ouro nº 8 aplicada às tabelas. O literal `px-3 py-2.5` estava copiado à mão em 14 componentes/páginas, então todo ajuste de densidade driftava entre eles. Mudar a altura de linha do sistema inteiro agora é editar `app.css`.
@@ -491,7 +493,54 @@ Rodada de acabamento visual, com uma feature de dado junto.
 **`ModalPadrao.vue` é a casca padrão de modal do sistema** (criada em 2026-08-10). Header preto com ícone/título/subtítulo + botão de fechar, corpo, e slot `#footer` opcional pras ações. Todo modal novo usa ele; `Modal.vue` direto só quando não quiser header preto. Props: `titulo` (obrigatório), `subtitulo`, `maxWidth`, `closeable`.
 - **Por que é componente e não classe no `app.css`:** aqui o que se repete é *marcação* (header, X, estrutura de 3 blocos), não um punhado de classes — ver o critério na Regra de ouro nº 8.
 - Ação no `#footer` que precisa submeter um `<form>` do corpo: usar `form="id-do-form"` no botão (é o que o `ObservacoesModal` faz), senão o submit não alcança o form de outro slot.
-- Os ~14 modais que já existiam (`MotivoInatividadeModal`, `AgendarLigacaoModal`, `EditarUsuarioModal`, `FacaFormModal`, etc.) **ainda não foram migrados** — continuam com `Modal.vue` direto e cabeçalho próprio. Migrar quando encostar em cada um.
+- Os modais de FORMULÁRIO que já existiam (`MotivoInatividadeModal`, `AgendarLigacaoModal`, `EditarUsuarioModal`, `NovoUsuarioModal`, `TrocarSenhaModal`, `SupervisorMassaModal`, `MateriaPrimaFormModal`, `FacaFormModal`, `RejeitarOrcamentoModal`, `ItemTipoModal`, `CadastroDetalhesModal`) **ainda não foram migrados** — continuam com `Modal.vue` direto e cabeçalho próprio. Migrar quando encostar em cada um. Os de CONFIRMAÇÃO já foram (ver abaixo).
+
+### 🚫 `confirm()` do navegador não existe mais neste projeto — 2026-09-10
+
+**Nenhuma tela chama `window.confirm()`/`alert()`/`prompt()`.** Eram 9 pontos (excluir lead,
+excluir solicitação de cadastro, excluir faca, remover recorte da faca, excluir
+matéria-prima, remover foto de perfil, simular usuário, reimportar tudo e transformar
+orçamento em pedido no Portal) e todos passaram a usar a mesma casca.
+
+**Por que não é só estética:** o diálogo nativo muda de cara em cada navegador, não sabe
+distinguir "excluir" de "só conferir" — e no Chrome ele oferece *"não deixar este site
+abrir mais caixas de diálogo"*. Marcada, `confirm()` passa a devolver `false` **sem
+perguntar nada**: a ação some em silêncio e o usuário jura que clicou.
+
+| O que se repete | Onde mora |
+|---|---|
+| A casca visual da confirmação (header preto, ícone, botões) | `Components/ConfirmacaoModal.vue` |
+| O `await` que mantém o call-site parecido com o antigo | `composables/useConfirmacao.js` |
+| Empilhamento de modal aberto dentro de modal | `Components/Modal.vue` (const `pilha`) |
+
+O call-site fica assim, e o template leva **uma linha**:
+
+```js
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+if (! await confirmar({ titulo: 'Excluir lead', mensagem: '…', tom: 'danger' })) return;
+```
+```html
+<ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
+```
+
+- **O tom é a única decisão de cor**: `danger` (destrói dado) · `atencao` (irreversível ou
+  pesado, mas não destrutivo — ação para fora do CRM, reimportação em massa, simular
+  usuário) · `neutro` (só um "tem certeza?").
+- **`mensagem` diz o que vai acontecer; `detalhe` diz a consequência**, no bloco tingido. É
+  o que o `confirm()` nativo empurrava para dentro de um `\n\n` que ninguém lia.
+- **Quando NÃO usar o composable**: se a confirmação tem `useForm` e o servidor pode
+  recusar com erro de validação, ela vira componente próprio usando o `ConfirmacaoModal`
+  direto (é o caso de `ExcluirOrcamentoModal` e `ExcluirUsuarioModal`, que eram dois
+  modais brancos escritos à mão e hoje só passam props).
+- ⚠️ **A `pilha` do `Modal.vue` fica num `<script>` normal, NÃO no `<script setup>`.**
+  Aquele bloco é o corpo do `setup()` e roda uma vez por instância — a pilha nasceria vazia
+  em cada modal e todos se achariam o do topo. Foi exatamente esse o primeiro erro aqui, e
+  o sintoma era o ESC fechar a confirmação E o formulário por baixo dela, levando junto o
+  que estava sendo editado. Sem a pilha, fechar o de cima também destravava o scroll da
+  página com o de baixo ainda aberto.
+- Os três modais de aviso do `ExportarExcelButton` também deixaram de ser marcação
+  própria: o de "filtros ativos" virou `ConfirmacaoModal` e os dois informativos ganharam o
+  header preto do `ModalPadrao`.
 
 **Modal de observações unificado.** Existiam dois componentes com a mesma função e layouts divergentes (`Carteira/ObservacaoModal.vue` com histórico em cima, `Leads/ObservacaoLeadModal.vue` com histórico embaixo). Os dois foram apagados e substituídos por **`Components/Observacoes/ObservacoesModal.vue`**, que recebe `subtitulo`, `historicoUrl` e `payload` — header preto no padrão `DarkCard`, histórico em lista com borda cyan à esquerda, form embaixo. Reusar esse em qualquer página nova que precise de observação. (O form livre de observação do Home, em `Dashboard/LigacoesStatsCards.vue`, é um card inline e **não** usa esse modal — continua como estava.)
 
@@ -1784,6 +1833,86 @@ modo de visão). Verificar por mutação continua sendo o que separa teste de de
 Suíte inteira verde: **503 testes**.
 
 ## Pendências
+- 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA em 2026-09-10,
+  falta só dado no de-para para homologar.** **Análise, mapa e armadilhas em
+  `docs/integracao-portal-pedidos.md`** — ler de lá antes de encostar no assunto; o PDF
+  original está em `docs/API-Pedidos-Autopel.pdf`.
+  - **O que existe**: botão "Transformar em pedido" em `/orcamentos` (só em orçamento
+    **aprovado**) → `POST /orcamentos/{id}/portal` → `GeradorDePedidoNoPortal` →
+    `EnviarPedidoAoPortalJob`. Config em `config/portal.php`, 4 tabelas de espelho
+    `portal_*`, e `orcamentos` ganhou `cliente_id` + `portal_*`. 30 testes,
+    **verificados por mutação** (5 mutações, todas mordidas).
+  - 🚧 **Restrito a ADMIN durante a homologação** (decisão do Tony, 10/09). Dono e diretor
+    veem o botão desabilitado com "em breve". **Para liberar**: em
+    `OrcamentoController::podeEnviarAoPortal()`, trocar o `=== 'admin'` pela linha
+    comentada logo acima. A restrição guarda a ROTA, não só o botão.
+  - ⚠️ **O interruptor mestre `PORTAL_PEDIDOS_HABILITADO` nasce DESLIGADO**, e a rota
+    responde 404 quando desligado. Ligar por engano cria pedido de verdade no Portal.
+  - ⚠️ **A divisão em dois tempos é o desenho, não detalhe**: de-para e montagem do
+    payload rodam DENTRO da requisição (é onde o vendedor precisa ver "falta o
+    representante"); só a chamada HTTP vai para a fila, porque sozinha custa ~500 ms e
+    estouraria o orçamento de escrita da Regra nº 9.
+  - ⚠️ **O payload é congelado em `orcamentos.portal_payload`.** O contrato de
+    idempotência deles é "reenvie a requisição IDÊNTICA com a mesma chave" — remontar o
+    corpo na retentativa faria uma edição no meio virar 409 sem motivo aparente.
+  - ⚠️ **Erro do Portal notifica TODA vez; sucesso só uma.** O `NotificacaoService`
+    deduplica por `referenciaTipo`+`referenciaId`; usar isso no erro deixaria a segunda
+    falha MUDA e o vendedor concluiria que deu certo. Travado por teste.
+  - 🔴 **Falta para homologar: as tabelas `portal_*` estão VAZIAS.** Não há token do
+    integrador nem endpoint de resolução, então a carga inicial é manual. O que o Marcelo
+    precisa mandar está na §4.5 do doc: uma tripla válida do homolog (`createdBy`,
+    `clientId`, o `clientRepresentativeId` que pertence a esse cliente) e um `productId`.
+  - 🟢 **O DE-PARA FOI ENCONTRADO em 2026-09-10 — e o Portal é o `sic`.** A API identifica
+    tudo por id interno e não tem endpoint de listagem, mas o schema foi lido pela página
+    **`/descoberta`** do próprio app do Lovable (que é um explorador de metadados sobre a
+    Integrador API — não precisou do token do nosso lado). O mapa completo, com amostra
+    real e as armadilhas, está na **§4.3 do doc**. Resumo: `clients` casa por
+    **`code` + `store`** (↔ `cod_cliente` + `loja`), `products` por **`code`**, `users`
+    por **`email`/`protheus_seller_code`**.
+    - ⚠️ **NÃO usar `autopel_code` nem `external_id`**: `clients` tem três colunas
+      parecidas com código e duas com loja; `autopel_code` é nulo em parte das linhas.
+    - ✅ **Verificado contra o `palma_v2`** (§4.4 do doc): os 9 pares da amostra existem
+      aqui e **8 batem** com CNPJ e razão social idênticos. **Um divergiu**: o par
+      `000001/0001` aponta para empresas DIFERENTES nos dois lados.
+    - 🚨 **Daí a regra obrigatória: o de-para NUNCA confia só em `code`+`store`.** Um
+      `clientId` errado cria pedido para a empresa errada, e o `201` volta bonito — nada
+      no CRM acusaria. Conferir SEMPRE o CNPJ (`clients.document` × dígitos de
+      `clientes.cnpj`); divergiu, **recusa o envio e sinaliza**. Mesmo para produto.
+    - ⚠️ **`clients.seller_one` NÃO espelha o nosso `cod_vendedor`** — formato igual,
+      valores divergentes em 3 dos 9 casos. Não usar para nada; o vendedor sai de
+      `users.email`/`protheus_seller_code`.
+  - 🟢 **Mas existe um caminho já no ar, achado no mesmo dia: a `api-integrador.autopel.com`**
+    (zip em `docs/autopel-integrador-api-*.zip`, feita para o projeto do Lovable). É uma API
+    **somente leitura** com metadados e `SELECT` parametrizado sobre **quatro bancos MySQL —
+    `sac`, `b2b`, `easy`, `sic`** —, confirmados de pé por chamada real ao `/health` em
+    2026-09-09. Se o banco do Portal for um deles (`sic` é o candidato: o pedido "passa pelo
+    SAC/SIC depois pro TOTVS"), o de-para sai de lá sem eles construírem nada. **Falta o
+    `API_TOKEN`** — sem ele só o `/health` responde. Ver §4.2 do doc.
+    - ⚠️ **Isso não substitui pedir os endpoints de resolução (§4.1).** Ler as tabelas
+      deles por HTTP é o mesmo acoplamento de schema que eles quiseram evitar, só que por
+      outro transporte — serve para destravar e descobrir, não para virar produção sem
+      combinar. E o token é **único e global**: quem o tem lê os quatro bancos inteiros.
+    - 🔎 **Achado colateral que pode valer mais**: a view `sac.sacautopel.ConsultaBasePedidos`
+      tem **status estruturado** (`status`, `data_bip`, `data_embarque`, `previsao_entrega`,
+      `nota_fiscal`) e até uma timeline pronta. É candidata a substituir a leitura de frases
+      do `HISTORICO` (`StatusPedidoResolver`, 09/09) e a ser a fonte do histórico de pedidos
+      emitidos que está pendente. ⚠️ Esbarra na Regra de ouro nº 2 — decisão do Tony.
+  - ⚠️ **Duas armadilhas que a própria documentação deles sinaliza**: `unitPrice` é em
+    **centavos** e mandar reais **não dá erro** (grava R$ 0,12 no lugar de R$ 12,50); e
+    retentar com `Idempotency-Key` NOVA é o único caminho que ainda duplica pedido — a
+    chave tem que nascer persistida no orçamento, nunca ser gerada na hora do envio.
+  - ⚠️ **Pergunta em aberto que muda o valor do pedido**: o CRM guarda `valor_unitario` com
+    o IPI de 3,25% embutido e a API não tem campo de IPI. Confirmar com eles qual valor vai
+    no `unitPrice` **antes** do primeiro envio real. Desde 10/09 sabe-se que
+    `autopel_sic.products` tem `ipi`/`ipi_rate`/`ncm` — o Portal calcula imposto sozinho,
+    então provavelmente é SEM IPI. **Provável não basta**: errar custa 3,25% por pedido.
+  - ✅ **`clientRepresentativeId` respondido pelo schema**: é a pessoa da **Autopel**
+    (`clients_representatives.user_id` → `users.id`), não contato do cliente. ⚠️ Se o
+    vendedor não estiver cadastrado como representante daquele cliente no Portal, a API
+    recusa com 404 — cadastro do lado deles, mas aparece como "não deixa enviar" na
+    nossa tela.
+  - ⚠️ O token de homologação veio por WhatsApp em texto puro: serve para homologar, mas
+    pedir outro para produção. Nunca versionar — mora no `.env`, lido por `config()`.
 - 🔴 **As metas de VENDA em produção são, na maioria, lixo de seed.** Conferido no RDS em
   2026-09-04, logo após o deploy: `metas_mensais` só tem os meses **8 a 12** (nada de
   janeiro a julho), e as metas de venda valem **R$ 1.874 (ago), R$ 1.817 (out), R$ 1.930

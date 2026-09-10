@@ -1,10 +1,12 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
-import Modal from '@/Components/Modal.vue';
-import InputError from '@/Components/InputError.vue';
-import DangerButton from '@/Components/DangerButton.vue';
-import SecondaryButton from '@/Components/SecondaryButton.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 
+/*
+ * Confirmação com componente próprio (e não pelo `useConfirmacao`) porque aqui existe
+ * `useForm`: o servidor recusa a exclusão em alguns casos, e o motivo tem que aparecer
+ * dentro do modal.
+ */
 const props = defineProps({
     show: { type: Boolean, default: false },
     usuario: { type: Object, default: null },
@@ -28,19 +30,17 @@ function excluir() {
 </script>
 
 <template>
-    <Modal :show="show" max-width="sm" @close="fechar">
-        <div v-if="usuario" class="p-6">
-            <h2 class="text-lg font-semibold text-gray-800">Excluir usuário?</h2>
-            <p class="mt-2 text-sm text-gray-600">
-                Tem certeza que quer excluir <strong>{{ usuario.nome }}</strong> permanentemente? Essa ação não pode ser desfeita.
-            </p>
-
-            <InputError :message="form.errors.usuario" class="mt-2" />
-
-            <div class="mt-6 flex justify-end gap-3">
-                <SecondaryButton type="button" @click="fechar">Cancelar</SecondaryButton>
-                <DangerButton type="button" :disabled="form.processing" @click="excluir">Excluir</DangerButton>
-            </div>
-        </div>
-    </Modal>
+    <ConfirmacaoModal
+        :show="show"
+        titulo="Excluir usuário"
+        :subtitulo="usuario?.nome ?? ''"
+        :mensagem="usuario ? `Excluir ${usuario.nome} permanentemente?` : ''"
+        detalhe="Se a pessoa só saiu da equipe, prefira desativar — assim o histórico dela continua ligado a um usuário."
+        rotulo-confirmar="Excluir"
+        tom="danger"
+        :processando="form.processing"
+        :erro="form.errors.usuario ?? ''"
+        @confirmar="excluir"
+        @close="fechar"
+    />
 </template>

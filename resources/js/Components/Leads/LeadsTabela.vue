@@ -2,6 +2,8 @@
 import { router } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import BotoesContato from '@/Components/Contato/BotoesContato.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao.js';
 import { ROTULOS_ETAPA_LEAD, TONS_ETAPA_LEAD, ROTULOS_ORIGEM_LEAD, TONS_ORIGEM_LEAD } from '@/constants/leads.js';
 
 defineProps({
@@ -33,8 +35,19 @@ function criarOrcamento(lead) {
     });
 }
 
-function excluir(lead) {
-    if (!confirm(`Excluir o lead "${lead.razaoSocial || lead.nome}"?`)) return;
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+
+async function excluir(lead) {
+    const ok = await confirmar({
+        titulo: 'Excluir lead',
+        subtitulo: lead.razaoSocial || lead.nome,
+        mensagem: `Excluir o lead "${lead.razaoSocial || lead.nome}"?`,
+        detalhe: 'O histórico de contatos e observações deste lead sai da sua lista junto.',
+        rotuloConfirmar: 'Excluir',
+        tom: 'danger',
+    });
+    if (!ok) return;
+
     router.delete(route('leads.destroy', lead.id), { preserveScroll: true });
 }
 </script>
@@ -150,4 +163,6 @@ function excluir(lead) {
             </tbody>
         </table>
     </div>
+
+    <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
 </template>

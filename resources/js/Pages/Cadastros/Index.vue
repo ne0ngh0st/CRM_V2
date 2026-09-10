@@ -17,6 +17,8 @@ import CadastroLeadForm from '@/Components/Cadastros/CadastroLeadForm.vue';
 import CadastroLeadTabela from '@/Components/Cadastros/CadastroLeadTabela.vue';
 import CadastroDetalhesModal from '@/Components/Cadastros/CadastroDetalhesModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao.js';
 
 const props = defineProps({
     role: String,
@@ -121,8 +123,18 @@ function abrirDetalhes(titulo, item, mapa) {
     detalhes.show = true;
 }
 
-function excluir(routeName, id) {
-    if (!confirm('Excluir este registro?')) return;
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+
+async function excluir(routeName, id, rotulo) {
+    const ok = await confirmar({
+        titulo: `Excluir ${rotulo}`,
+        mensagem: `Excluir esta ${rotulo} da lista?`,
+        detalhe: 'A solicitação some daqui. Se ela já foi enviada por e-mail, o setor continua com a mensagem.',
+        rotuloConfirmar: 'Excluir',
+        tom: 'danger',
+    });
+    if (!ok) return;
+
     router.delete(route(routeName, id), { preserveScroll: true });
 }
 
@@ -242,7 +254,7 @@ const tabBtn = (ativo) =>
                                 v-if="clientesFila.data.length"
                                 :clientes="clientesFila.data"
                                 @detalhes="(i) => abrirDetalhes('Cliente #' + i.id, i, [['CNPJ','cnpjFaturamento'],['Razão','razaoSocial'],['Fantasia','nomeFantasia'],['Segmento','segmentoAtuacao'],['UF','estado'],['Telefone','telefone'],['E-mail','email'],['Status','status'],['Solicitante','nomeSolicitante'],['Obs.','observacoes']])"
-                                @excluir="(i) => excluir('cadastros.clientes.destroy', i.id)"
+                                @excluir="(i) => excluir('cadastros.clientes.destroy', i.id, 'solicitação de cliente')"
                             />
                             <p v-else class="text-sm text-gray-400">Nenhuma solicitação de cliente.</p>
                             <div class="mt-4"><Pagination :meta="clientesFila" :only="['clientesFila']" /></div>
@@ -265,7 +277,7 @@ const tabBtn = (ativo) =>
                             <CadastroLeadTabela
                                 v-if="leads.data.length"
                                 :leads="leads.data"
-                                @excluir="(i) => excluir('cadastros.leads.destroy', i.id)"
+                                @excluir="(i) => excluir('cadastros.leads.destroy', i.id, 'solicitação de lead')"
                             />
                             <p v-else class="text-sm text-gray-400">Nenhum lead manual.</p>
                             <div class="mt-4"><Pagination :meta="leads" :only="['leads']" /></div>
@@ -292,7 +304,7 @@ const tabBtn = (ativo) =>
                             :bobinas="bobinas.data"
                             @copiar="(i) => { prefillBobina = { ...i }; window.scrollTo({ top: 0, behavior: 'smooth' }); }"
                             @enviar="enviarBobina"
-                            @excluir="(i) => excluir('cadastros.bobinas.destroy', i.id)"
+                            @excluir="(i) => excluir('cadastros.bobinas.destroy', i.id, 'solicitação de bobina')"
                             @detalhes="(i) => abrirDetalhes('Bobina #' + i.id, i, [['Título','tituloPadronizado'],['Nomenclatura','nomenclatura'],['Papel','papel'],['Largura','largura'],['Metragem','metragem'],['Status','status'],['Obs.','observacoes']])"
                         />
                         <p v-else class="text-sm text-gray-400">Nenhuma solicitação de bobina.</p>
@@ -319,7 +331,7 @@ const tabBtn = (ativo) =>
                             :etiquetas="etiquetas.data"
                             @copiar="(i) => { prefillEtiqueta = { ...i }; window.scrollTo({ top: 0, behavior: 'smooth' }); }"
                             @enviar="enviarEtiqueta"
-                            @excluir="(i) => excluir('cadastros.etiquetas.destroy', i.id)"
+                            @excluir="(i) => excluir('cadastros.etiquetas.destroy', i.id, 'solicitação de etiqueta')"
                             @detalhes="(i) => abrirDetalhes('Etiqueta #' + i.id, i, [['Título','tituloPadronizado'],['Nomenclatura','nomenclatura'],['Medidas','medidas'],['Adesivo','tipoAdesivo'],['Saída','saidaRolo'],['Status','status'],['Obs.','observacoes']])"
                         />
                         <p v-else class="text-sm text-gray-400">Nenhuma solicitação de etiqueta.</p>
@@ -335,5 +347,7 @@ const tabBtn = (ativo) =>
             :campos="detalhes.campos"
             @close="detalhes.show = false"
         />
+
+        <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
     </AuthenticatedLayout>
 </template>

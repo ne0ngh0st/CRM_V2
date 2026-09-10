@@ -13,6 +13,8 @@ import EditarUsuarioModal from '@/Components/Equipe/EditarUsuarioModal.vue';
 import TrocarSenhaModal from '@/Components/Equipe/TrocarSenhaModal.vue';
 import SupervisorMassaModal from '@/Components/Equipe/SupervisorMassaModal.vue';
 import ExcluirUsuarioModal from '@/Components/Equipe/ExcluirUsuarioModal.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao.js';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import { ROTULOS_PERFIL } from '@/constants/perfis.js';
 
@@ -120,11 +122,21 @@ function abrirExcluir(usuario) {
     modalExcluir.value = true;
 }
 
-function simularUsuario(usuario) {
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+
+async function simularUsuario(usuario) {
     const nome = usuario.displayName || usuario.nome || usuario.name;
-    if (!confirm(`Ver o sistema como "${nome}"?\n\nVocê passa a enxergar exatamente o que este usuário vê, e suas ações ficam registradas na auditoria. Use o banner no topo para voltar.`)) {
-        return;
-    }
+    const ok = await confirmar({
+        titulo: 'Ver o sistema como outro usuário',
+        subtitulo: nome,
+        mensagem: `Você passa a enxergar o sistema exatamente como "${nome}" vê.`,
+        detalhe: 'Tudo o que você fizer durante a simulação fica registrado na auditoria. '
+            + 'Use o banner no topo da tela para voltar a ser você.',
+        rotuloConfirmar: 'Simular usuário',
+        tom: 'atencao',
+    });
+    if (!ok) return;
+
     // Sem preserveState: a simulação troca o usuário autenticado, então a página inteira
     // precisa ser remontada com os dados do alvo.
     router.post(route('simulacao.iniciar', usuario.id));
@@ -306,5 +318,7 @@ function alternarStatus(usuario) {
             <SupervisorMassaModal :show="modalMassa" :usuarios="usuariosSelecionados" :opcoes="opcoes" @close="modalMassa = false; selecionados = []" />
             <ExcluirUsuarioModal :show="modalExcluir" :usuario="usuarioAtivo" @close="modalExcluir = false" />
         </template>
+
+        <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
     </AuthenticatedLayout>
 </template>

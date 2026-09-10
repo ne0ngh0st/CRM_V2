@@ -29,6 +29,10 @@ function registrarContato(cliente, tipo) {
 
 function criarOrcamento(cliente) {
     router.get(route('orcamentos.novo'), {
+        // ⚠️ O id é o que amarra o orçamento ao cliente do TOTVS. Sem ele o documento
+        // nasce só com nome e CNPJ em texto e NÃO consegue virar pedido no Portal, cujo
+        // de-para é por cod_cliente + loja.
+        cliente_id: cliente.id,
         cliente_nome: cliente.razaoSocial,
         cliente_cnpj: cliente.cnpj ?? '',
         cliente_contato: cliente.telefone ?? '',

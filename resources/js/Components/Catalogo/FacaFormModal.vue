@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue';
 import { router, useForm, usePage } from '@inertiajs/vue3';
 import Modal from '@/Components/Modal.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao.js';
 
 const page = usePage();
 
@@ -160,10 +162,19 @@ function removerPendente(indice) {
     pendentes.value.splice(indice, 1);
 }
 
-function removerRecurso(recurso) {
-    if (!confirm('Remover esta imagem/descrição da faca?')) {
-        return;
-    }
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+
+async function removerRecurso(recurso) {
+    const ok = await confirmar({
+        titulo: 'Remover recorte',
+        subtitulo: recurso.descricao || '',
+        mensagem: 'Remover esta imagem/descrição da faca?',
+        detalhe: 'Se a imagem foi enviada por esta tela, o arquivo sai do servidor junto.',
+        rotuloConfirmar: 'Remover',
+        tom: 'danger',
+    });
+    if (!ok) return;
+
     router.post(route('catalogo-facas.recursos.destroy', recurso.id), {}, { preserveScroll: true });
 }
 
@@ -383,4 +394,8 @@ function onArquivo(evento) {
             </div>
         </div>
     </Modal>
+
+    <!-- Confirmação ABERTA DE DENTRO deste modal. Funciona porque `Modal.vue` mantém
+         uma pilha: o ESC fecha só a de cima, e não leva junto o formulário por baixo. -->
+    <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
 </template>

@@ -54,7 +54,7 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
 
     public function headings(): array
     {
-        return ['Cliente', 'CNPJ', 'Grupo', 'Vendedor', 'Estado', 'Segmento', 'Status', 'Aderência', 'Última Compra'];
+        return ['Cliente', 'CNPJ', 'Telefone', 'E-mail', 'Grupo', 'Vendedor', 'Estado', 'Segmento', 'Status', 'Aderência', 'Última Compra'];
     }
 
     /** @param  Cliente  $cliente */
@@ -71,6 +71,8 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
         return [
             $cliente->razao_social,
             $cliente->cnpj,
+            $cliente->telefone,
+            $cliente->email,
             $cliente->cod_grupo ? ($this->nomePorGrupo[$cliente->cod_grupo] ?? $cliente->cod_grupo) : null,
             $this->nomesPorCodVendedor[$cliente->cod_vendedor] ?? $cliente->cod_vendedor,
             $cliente->estado,

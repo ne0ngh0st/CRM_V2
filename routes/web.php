@@ -125,6 +125,9 @@ Route::middleware('auth')->group(function () {
     Route::patch('/orcamentos/{orcamento}', [OrcamentoController::class, 'update'])->name('orcamentos.update');
     Route::patch('/orcamentos/{orcamento}/aprovar', [OrcamentoController::class, 'aprovar'])->name('orcamentos.aprovar');
     Route::patch('/orcamentos/{orcamento}/rejeitar', [OrcamentoController::class, 'rejeitar'])->name('orcamentos.rejeitar');
+    // Transforma o orçamento APROVADO em pedido no Portal Autopel. POST porque cria
+    // registro do outro lado — e a rota responde 404 com a integração desligada.
+    Route::post('/orcamentos/{orcamento}/portal', [OrcamentoController::class, 'enviarAoPortal'])->name('orcamentos.portal');
     Route::delete('/orcamentos/{orcamento}', [OrcamentoController::class, 'destroy'])->name('orcamentos.destroy');
     Route::get('/orcamentos/{orcamento}/pdf', [OrcamentoController::class, 'pdf'])->name('orcamentos.pdf');
 
