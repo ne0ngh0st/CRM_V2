@@ -118,10 +118,35 @@ const linhasVisiveis = computed(() => (aberto.value
 
 const ocultas = computed(() => Math.max(0, props.segmentosInativos.linhas.length - VISIVEIS));
 
+const maiorPotencial = computed(
+    () => props.segmentosInativos.linhas.reduce((maior, l) => Math.max(maior, l.potencial), 0),
+);
+
 /**
  * Peso inteiro sai sem casas ("8", não "8,00"); só mostra decimal se a diretoria mandar um
  * peso quebrado algum dia. A coluna é estreita e "8,00" polui sem informar nada.
  */
+/**
+ * Largura da barra da linha, proporcional ao MAIOR potencial da lista.
+ *
+ * ⚠️ Relativo ao maior, e não ao total: a lista pode ter 20+ segmentos, e aí fatia do
+ * total daria barra de 2px em todas as linhas — desenho sem leitura. Assim a primeira
+ * linha é a régua e as outras se leem contra ela, que é a pergunta do quadro ("por onde
+ * começo"). Potencial 0 fica com barra vazia de propósito: é o segmento que a diretoria
+ * marcou como fora do alvo.
+ */
+function larguraBarra(linha) {
+    if (maiorPotencial.value <= 0) {
+        return '0%';
+    }
+
+    // Piso de 2% para o que tem potencial > 0 não desaparecer ao lado de um líder muito
+    // maior — barra invisível se confunde com peso 0, que é outra coisa.
+    const pct = (linha.potencial / maiorPotencial.value) * 100;
+
+    return `${linha.potencial > 0 ? Math.max(pct, 2) : 0}%`;
+}
+
 function formatarPeso(peso) {
     return Number.isInteger(peso) ? String(peso) : formatar.format(peso);
 }
@@ -144,27 +169,59 @@ function formatarPeso(peso) {
             >i</span>
         </template>
 
-        <div v-if="temLinhas" class="tbl-wrap">
-            <table class="tbl min-w-[320px]">
+        <div v-if="temLinhas" class="overflow-x-auto">
+            <!--
+                ⚠️ Esta tabela NÃO usa os tokens `.tbl*` (Regra de ouro nº 5), e isso é
+                deliberado: aqueles são de tabela de dados de página cheia — células
+                centradas e `divide-x`. Aqui é legenda dentro de card, e num card de faixa
+                inteira (1800px) o `divide-x` desenhava duas réguas verticais no meio do
+                vazio e os números paravam no centro da faixa, longe do nome que explicam.
+                Mesma razão que já mantém a mini-tabela do `CarteiraSegmentoCard` fora dos
+                tokens — a linguagem de card é esta: alinhamento esquerda/direita, filete
+                claro entre linhas, sem divisória vertical.
+
+                ⚠️ A BARRA existe para o card não ficar 60% vazio numa faixa desta largura:
+                ocupa a folga entre o nome e os números com informação em vez de espaço, e
+                mostra de relance a ordem por potencial. É proporcional ao MAIOR potencial
+                da lista (ranking), não ao total — com 20+ segmentos, fatia do total viraria
+                fiapo invisível em todas as linhas.
+            -->
+            <table class="w-full min-w-[520px] text-sm">
+                <!--
+                    ⚠️ A FOLGA DA LARGURA VAI PARA A BARRA, não para o nome. A primeira
+                    versão deixava a coluna do nome absorver a sobra e, numa faixa de
+                    1800px, reaparecia o defeito original: ~700px de vazio entre o nome e o
+                    resto da linha. Com o nome preso em 22% (o maior segmento tem 28
+                    caracteres, cabe folgado, e `table-auto` ainda estica se algum crescer)
+                    quem estica é a coluna sem largura — a da barra.
+                -->
+                <colgroup>
+                    <col class="w-[22%]" />
+                    <col />
+                    <col class="w-[150px]" />
+                    <col class="w-[130px]" />
+                </colgroup>
                 <thead>
-                    <tr class="tbl-head-row">
-                        <th class="tbl-th text-left">Segmento</th>
+                    <tr class="text-[0.65rem] uppercase tracking-wide text-gray-400">
+                        <th class="pb-1 text-left font-semibold">Segmento</th>
+                        <th class="pb-1" />
                         <!--
-                            ⚠️ POTENCIAL vem PRIMEIRO e é o número em destaque: é ele que
-                            ordena a tabela e responde "por onde começo". Inativos fica à
-                            direita, em tom de apoio, como o insumo da conta.
+                            ⚠️ POTENCIAL vem antes de inativos e é o número em destaque: é
+                            ele que ordena a tabela e responde "por onde começo". Inativos
+                            fica à direita, em tom de apoio, como o insumo da conta.
                         -->
-                        <th class="tbl-th text-right">Potencial <span class="font-normal normal-case text-gray-400">(caixas)</span></th>
-                        <th class="tbl-th text-right">Clientes inativos</th>
+                        <th class="pb-1 text-right font-semibold">
+                            Potencial <span class="font-normal normal-case text-gray-400">(cx)</span>
+                        </th>
+                        <th class="pb-1 text-right font-semibold">Clientes inativos</th>
                     </tr>
                 </thead>
-                <tbody class="tbl-body">
+                <tbody>
                     <!--
                         ⚠️ A LINHA INTEIRA é o alvo de clique, não só o número. Foi a lição
                         de 2026-09-05: um link de 60×21px funcionava e mesmo assim ninguém
                         acertava nele. O fundo que acende no hover e a seta que aparece à
-                        direita anunciam "isto abre algo" sem precisar de underline em cada
-                        célula — que é o "sem ser too much" pedido.
+                        direita anunciam "isto abre algo" sem underline em cada célula.
                     -->
                     <component
                         :is="href(linha) ? Link : 'tr'"
@@ -172,8 +229,8 @@ function formatarPeso(peso) {
                         :key="linha.nome"
                         :href="href(linha) ?? undefined"
                         :as="href(linha) ? 'tr' : undefined"
-                        class="tbl-row"
-                        :class="href(linha) ? 'group cursor-pointer' : ''"
+                        class="border-t border-gray-100 transition"
+                        :class="href(linha) ? 'group cursor-pointer hover:bg-gray-50' : ''"
                         :title="href(linha) ? `${linha.potencial} caixas = ${linha.inativos} clientes inativos × ${linha.peso} caixas por cliente. Clique para ver esses clientes na Carteira.` : null"
                     >
                         <!--
@@ -182,8 +239,15 @@ function formatarPeso(peso) {
                             (`invisible`, não `v-if`): sem isso os nomes das linhas não
                             atendidas começam deslocados e a coluna vira um zigue-zague.
                         -->
-                        <td class="tbl-td text-left font-medium text-gray-800">
-                            <span class="inline-flex items-center gap-1.5">
+                        <!--
+                            ⚠️ `whitespace-nowrap`: os 22% da coluna são folga em tela
+                            cheia, mas em card estreito o nome de 22+ caracteres quebrava em
+                            duas linhas e só AQUELA linha ficava mais alta que as vizinhas.
+                            Com nowrap o navegador respeita o min-content e alarga a coluna;
+                            se nem assim couber, quem rola é o `overflow-x-auto` de fora.
+                        -->
+                        <td class="whitespace-nowrap py-1.5 pr-3">
+                            <span class="inline-flex items-center gap-1.5 font-medium text-gray-700">
                                 <span
                                     class="h-1.5 w-1.5 shrink-0 rounded-full bg-teal"
                                     :class="linha.atendido ? '' : 'invisible'"
@@ -192,13 +256,22 @@ function formatarPeso(peso) {
                                 {{ linha.nome }}
                             </span>
                         </td>
+                        <td class="py-1.5 pr-4">
+                            <div class="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                                <div
+                                    class="h-full rounded-full"
+                                    :class="linha.atendido ? 'bg-teal' : 'bg-gray-300'"
+                                    :style="{ width: larguraBarra(linha) }"
+                                />
+                            </div>
+                        </td>
                         <!--
                             ⚠️ O peso aparece embaixo do número, em miúdo. Sem ele o
                             potencial é um número que caiu do céu: com ele o vendedor lê
                             "188 × 8" e confere de cabeça — e entende por que o segmento de
                             peso 0 fica no fim da lista mesmo cheio de inativo.
                         -->
-                        <td class="tbl-td text-right">
+                        <td class="py-1.5 text-right">
                             <span class="block font-semibold leading-4 tabular-nums text-navy">
                                 {{ formatar.format(linha.potencial) }}
                             </span>
@@ -206,7 +279,7 @@ function formatarPeso(peso) {
                                 {{ formatarPeso(linha.peso) }} cx/cliente
                             </span>
                         </td>
-                        <td class="tbl-td text-right tabular-nums text-gray-600">
+                        <td class="py-1.5 text-right tabular-nums text-gray-600">
                             <span class="inline-flex items-center justify-end gap-1">
                                 {{ formatar.format(linha.inativos) }}
                                 <svg
@@ -226,17 +299,18 @@ function formatarPeso(peso) {
                     </component>
                 </tbody>
                 <tfoot>
-                    <tr class="border-t-2 border-gray-300 bg-gray-50">
-                        <td class="tbl-td text-left text-[0.7rem] font-semibold uppercase tracking-wide text-gray-500">
+                    <tr class="border-t border-gray-300">
+                        <td class="py-2 text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">
                             Total
                         </td>
-                        <td class="tbl-td text-right">
-                            <span class="text-base font-bold tabular-nums text-navy">
+                        <td class="py-2" />
+                        <td class="py-2 text-right">
+                            <span class="font-bold tabular-nums text-navy">
                                 {{ formatar.format(segmentosInativos.totalPotencial) }}
                             </span>
-                            <span class="ml-1 text-[0.65rem] text-gray-500">cx</span>
+                            <span class="ml-1 text-[0.65rem] text-gray-400">cx</span>
                         </td>
-                        <td class="tbl-td text-right text-sm font-semibold tabular-nums text-gray-600">
+                        <td class="py-2 text-right font-semibold tabular-nums text-gray-600">
                             {{ formatar.format(segmentosInativos.total) }}
                         </td>
                     </tr>

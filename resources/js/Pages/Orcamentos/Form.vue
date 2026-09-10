@@ -62,6 +62,7 @@ const form = useForm({
     // responder "quantos orçamentos saíram deste lead?" e o que faz o funil avançar
     // sozinho para a etapa Orçamento — etapa que depende só de disciplina não é movida.
     lead_id: fonte?.leadId ?? props.prefillCliente?.leadId ?? null,
+    cliente_id: fonte?.clienteId ?? props.prefillCliente?.clienteId ?? null,
     cliente_cnpj: fonte?.clienteCnpj ?? props.prefillCliente?.cnpj ?? '',
     cliente_contato: fonte?.clienteContato ?? props.prefillCliente?.contato ?? '',
     forma_pagamento: fonte?.formaPagamento ?? '',
@@ -105,9 +106,13 @@ function selecionarFormaPagamento(valor) {
 }
 
 function selecionarCliente(cliente) {
-    // Só lead tem vínculo; escolher um cliente do TOTVS depois de um lead tem que limpar,
-    // senão o orçamento ficaria atribuído a um lead que não é mais o do documento.
+    // Os dois vínculos são mutuamente exclusivos: trocar de lead para cliente (ou o
+    // contrário) tem que limpar o outro, senão o orçamento ficaria atribuído a alguém
+    // que não é mais o do documento.
     form.lead_id = cliente.origem === 'lead' ? (cliente.leadId ?? null) : null;
+    // ⚠️ Sem este vínculo o orçamento não vira pedido no Portal: o de-para do `clientId`
+    // é por cod_cliente + loja, que só existem em `clientes`.
+    form.cliente_id = cliente.origem === 'cliente' ? (cliente.clienteId ?? null) : null;
     form.cliente_nome = cliente.nome ?? '';
     form.cliente_cnpj = cliente.cnpj ?? '';
     form.cliente_contato = cliente.telefone ?? '';

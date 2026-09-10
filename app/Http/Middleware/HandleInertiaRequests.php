@@ -42,6 +42,15 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'recursoCriadoId' => fn () => $request->session()->get('recursoCriadoId'),
                 /*
+                 * Desfecho do "Transformar em pedido": `{tipo: ok|erro, mensagem}`.
+                 *
+                 * ⚠️ É flash e não notificação porque a validação do de-para roda DENTRO
+                 * da requisição — "falta o representante" ou "o CNPJ não bate" precisa
+                 * aparecer na hora do clique. Só a chamada HTTP ao Portal é assíncrona,
+                 * e o desfecho DELA sim vem pelo sino.
+                 */
+                'portalAviso' => fn () => $request->session()->get('portalAviso'),
+                /*
                  * Desfecho de um pedido de exportação: `{estado, url, rotulo, linhas}`.
                  *
                  * ⚠️ Existe porque quem decide se a planilha sai na hora ou vai para a

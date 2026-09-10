@@ -8,6 +8,8 @@ import FilterField from '@/Components/FilterField.vue';
 import Pagination from '@/Components/Pagination.vue';
 import MateriasPrimaTabela from '@/Components/Etiquetas/MateriasPrimaTabela.vue';
 import MateriaPrimaFormModal from '@/Components/Etiquetas/MateriaPrimaFormModal.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao.js';
 
 const props = defineProps({
     materiasPrimas: Object,
@@ -47,8 +49,18 @@ function editarMateriaPrima(mp) {
     modalForm.value = true;
 }
 
-function excluirMateriaPrima(mp) {
-    if (!confirm(`Excluir "${mp.descMp}"? Se estiver em uso em algum orçamento, desative em vez de excluir.`)) return;
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+
+async function excluirMateriaPrima(mp) {
+    const ok = await confirmar({
+        titulo: 'Excluir matéria-prima',
+        subtitulo: mp.descMp,
+        mensagem: `Excluir "${mp.descMp}" do cadastro?`,
+        detalhe: 'Se ela estiver em uso em algum orçamento, desative em vez de excluir.',
+        rotuloConfirmar: 'Excluir',
+        tom: 'danger',
+    });
+    if (!ok) return;
 
     router.delete(route('etiquetas.materiaPrima.destroy', mp.id), { preserveScroll: true });
 }
@@ -124,6 +136,8 @@ function excluirMateriaPrima(mp) {
                 </DarkCard>
 
                 <MateriaPrimaFormModal :show="modalForm" :materia-prima="materiaPrimaAtiva" @close="modalForm = false" />
+
+                <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
             </div>
         </div>
     </AuthenticatedLayout>

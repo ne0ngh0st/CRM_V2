@@ -1,6 +1,6 @@
 <script setup>
 import { computed, reactive, ref } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
@@ -10,12 +10,15 @@ import Pagination from '@/Components/Pagination.vue';
 import OrcamentosTabela from '@/Components/Orcamentos/OrcamentosTabela.vue';
 import RejeitarOrcamentoModal from '@/Components/Orcamentos/RejeitarOrcamentoModal.vue';
 import ExcluirOrcamentoModal from '@/Components/Orcamentos/ExcluirOrcamentoModal.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao.js';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import { ROTULOS_STATUS_ORCAMENTO, ROTULOS_NIVEL_APROVACAO } from '@/constants/orcamentos.js';
 
 const props = defineProps({
     role: String,
     podeExcluir: Boolean,
+    portalHabilitado: { type: Boolean, default: false },
     orcamentos: Object,
     kpis: Object,
     filtros: Object,
@@ -81,6 +84,32 @@ function abrirExcluir(orcamento) {
 
 function aprovar(orcamento) {
     router.patch(route('orcamentos.aprovar', orcamento.id), {}, { preserveScroll: true, preserveState: true });
+}
+
+// Aviso do envio ao Portal. Vem do flash porque a validação do de-para acontece
+// DENTRO da requisição: "falta o representante" ou "o CNPJ não bate" precisa aparecer
+// na hora, e não pelo sino minutos depois.
+const portalAviso = computed(() => usePage().props.flash?.portalAviso ?? null);
+
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+
+async function enviarAoPortal(orcamento) {
+    // ⚠️ Confirmação explícita: isto cria um pedido no Portal, que é ação para fora do
+    // CRM e não tem desfazer por aqui.
+    const ok = await confirmar({
+        titulo: 'Transformar em pedido',
+        subtitulo: orcamento.clienteNome,
+        mensagem: `O orçamento #${orcamento.id} (${formatBRL(orcamento.valorTotal)}) vira um pedido no Portal Autopel.`,
+        detalhe: 'O pedido é criado fora do CRM e não há como desfazer por aqui.',
+        rotuloConfirmar: 'Transformar em pedido',
+        tom: 'atencao',
+    });
+    if (!ok) return;
+
+    router.post(route('orcamentos.portal', orcamento.id), {}, {
+        preserveScroll: true,
+        preserveState: true,
+    });
 }
 </script>
 
@@ -194,6 +223,21 @@ function aprovar(orcamento) {
                         </Link>
                     </template>
 
+                    <!--
+                        Aviso do envio ao Portal. Verde = foi para a fila (o número do
+                        pedido chega pelo sino); vermelho = recusado ANTES de sair, e a
+                        mensagem diz o que fazer.
+                    -->
+                    <div
+                        v-if="portalAviso"
+                        class="mb-3 rounded border px-3 py-2 text-sm"
+                        :class="portalAviso.tipo === 'ok'
+                            ? 'border-green-300 bg-green-50 text-green-800'
+                            : 'border-red-300 bg-red-50 text-red-800'"
+                    >
+                        {{ portalAviso.mensagem }}
+                    </div>
+
                     <OrcamentosTabela
                         v-if="orcamentos.data.length"
                         :orcamentos="orcamentos.data"
@@ -203,6 +247,7 @@ function aprovar(orcamento) {
                         @aprovar="aprovar"
                         @rejeitar="abrirRejeitar"
                         @excluir="abrirExcluir"
+                        @enviar-ao-portal="enviarAoPortal"
                     />
                     <p v-else class="text-sm text-gray-400">Nenhum orçamento encontrado com os filtros atuais.</p>
 
@@ -215,5 +260,7 @@ function aprovar(orcamento) {
 
         <RejeitarOrcamentoModal :show="modalRejeitar" :orcamento="orcamentoAtivo" @close="modalRejeitar = false" />
         <ExcluirOrcamentoModal :show="modalExcluir" :orcamento="orcamentoAtivo" @close="modalExcluir = false" />
+
+        <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
     </AuthenticatedLayout>
 </template>

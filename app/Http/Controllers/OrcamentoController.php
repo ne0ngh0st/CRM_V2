@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ExportaPlanilha;
+use App\Jobs\EnviarPedidoAoPortalJob;
 use App\Models\Cliente;
 use App\Models\EtiquetaMateriaPrima;
 use App\Models\Lead;
@@ -14,6 +15,8 @@ use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Notificacao\NotificacaoService;
 use App\Services\Orcamento\NivelAprovacaoCalculator;
 use App\Services\Orcamento\OrcamentoCalculoService;
+use App\Services\Portal\GeradorDePedidoNoPortal;
+use App\Services\Portal\PortalPedidoInvalidoException;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -66,6 +69,8 @@ class OrcamentoController extends Controller
         $dataInicio = (string) $request->string('data_inicio');
         $dataFim = (string) $request->string('data_fim');
 
+        $portalHabilitado = (bool) config('portal.habilitado');
+
         $baseQuery = fn () => $this->baseQuery($request);
 
         $kpis = [
@@ -106,6 +111,26 @@ class OrcamentoController extends Controller
             'criadoEm' => $o->created_at->format('d/m/Y'),
             'podeDecidir' => $o->status_gestor === 'pendente' && $this->podeDecidir($user, $o->nivel_aprovacao),
             'podeEditar' => $o->user_id === $user->id || in_array($role, ['admin', 'diretor'], true),
+            /*
+             * ⚠️ Quem decide se o botão aparece é o SERVIDOR, não um v-if no Vue: a
+             * mesma condição guarda a rota, e as duas precisam ser a mesma frase.
+             */
+            'podeEnviarAoPortal' => $portalHabilitado
+                && $o->portal_pedido_id === null
+                && $this->podeEnviarAoPortal($user, $o),
+            /*
+             * 🚧 Botão desabilitado com "Em breve": quem já teria a função se ela não
+             * estivesse em homologação. Mostrar desabilitado em vez de esconder é
+             * deliberado — avisa que a função existe e está chegando, em vez de a tela
+             * mudar do nada quando liberar.
+             */
+            'portalEmBreve' => $portalHabilitado
+                && $o->portal_pedido_id === null
+                && ! $this->podeEnviarAoPortal($user, $o)
+                && $this->podeVerBotaoDoPortal($user, $o),
+            'portalPedidoId' => $o->portal_pedido_id,
+            'portalErro' => $o->portal_erro,
+            'portalEnviadoEm' => optional($o->portal_enviado_em)->format('d/m/Y H:i'),
             'itens' => $o->itens->map(fn (OrcamentoItem $i) => [
                 'id' => $i->id,
                 'tipoItem' => $i->tipo_item,
@@ -120,6 +145,7 @@ class OrcamentoController extends Controller
 
         return Inertia::render('Orcamentos/Index', [
             'role' => $role,
+            'portalHabilitado' => $portalHabilitado,
             'podeExcluir' => in_array($role, ['admin', 'diretor'], true),
             'orcamentos' => $orcamentos,
             'kpis' => $kpis,
@@ -213,6 +239,9 @@ class OrcamentoController extends Controller
         $prefillCliente = null;
         if ($request->filled('cliente_nome')) {
             $prefillCliente = [
+                // A Carteira manda o id junto; sem ele o orçamento criado a partir de um
+                // cliente da carteira nasceria sem vínculo e não viraria pedido.
+                'clienteId' => $request->integer('cliente_id') ?: null,
                 'nome' => (string) $request->string('cliente_nome'),
                 'cnpj' => (string) $request->string('cliente_cnpj'),
                 'contato' => (string) $request->string('cliente_contato'),
@@ -270,6 +299,7 @@ class OrcamentoController extends Controller
         DB::transaction(function () use ($request, $data) {
             $orcamento = Orcamento::create([
                 'user_id' => $request->user()->id,
+                'cliente_id' => $data['cliente_id'] ?? null,
                 'cliente_nome' => $data['cliente_nome'],
                 'cliente_cnpj' => $data['cliente_cnpj'] ?? null,
                 'cliente_contato' => $data['cliente_contato'] ?? null,
@@ -314,6 +344,7 @@ class OrcamentoController extends Controller
 
         DB::transaction(function () use ($orcamento, $data) {
             $orcamento->update([
+                'cliente_id' => $data['cliente_id'] ?? null,
                 'cliente_nome' => $data['cliente_nome'],
                 'cliente_cnpj' => $data['cliente_cnpj'] ?? null,
                 'cliente_contato' => $data['cliente_contato'] ?? null,
@@ -373,6 +404,50 @@ class OrcamentoController extends Controller
         $this->notificarDecisao($orcamento, aprovado: false);
 
         return back();
+    }
+
+    /**
+     * Transforma o orçamento aprovado em pedido no Portal Autopel.
+     *
+     * ⚠️ O trabalho é dividido em dois tempos DE PROPÓSITO (ver GeradorDePedidoNoPortal):
+     * a validação do de-para e a montagem do payload rodam AQUI, síncronas, porque são
+     * locais e é aqui que o vendedor precisa ver "falta o representante" ou "o CNPJ não
+     * bate". Só a chamada HTTP vai para a fila — ela sozinha custa ~500 ms e estouraria
+     * o orçamento de escrita da Regra de ouro nº 9.
+     */
+    public function enviarAoPortal(Request $request, Orcamento $orcamento, GeradorDePedidoNoPortal $gerador): RedirectResponse
+    {
+        /*
+         * 404 e não 403: com a integração desligada esta rota não existe do ponto de
+         * vista de quem usa. Nasce desligada — ligar por engano cria pedido de verdade.
+         */
+        abort_unless((bool) config('portal.habilitado'), 404);
+
+        abort_unless($this->podeEnviarAoPortal($request->user(), $orcamento), 403);
+
+        if ($orcamento->foiEnviadoAoPortal()) {
+            return back()->with('portalAviso', [
+                'tipo' => 'erro',
+                'mensagem' => "Este orçamento já virou o pedido nº {$orcamento->portal_pedido_id} no Portal.",
+            ]);
+        }
+
+        try {
+            $gerador->preparar($orcamento);
+        } catch (PortalPedidoInvalidoException $e) {
+            /*
+             * Nada foi gravado. A mensagem é escrita para o vendedor e diz o que fazer,
+             * não o nome do campo que falhou.
+             */
+            return back()->with('portalAviso', ['tipo' => 'erro', 'mensagem' => $e->getMessage()]);
+        }
+
+        EnviarPedidoAoPortalJob::dispatch($orcamento->id);
+
+        return back()->with('portalAviso', [
+            'tipo' => 'ok',
+            'mensagem' => 'Enviando ao Portal. Você recebe o número do pedido pelo sino em alguns segundos.',
+        ]);
     }
 
     public function destroy(Request $request, Orcamento $orcamento): RedirectResponse
@@ -435,6 +510,14 @@ class OrcamentoController extends Controller
             ->get()
             ->map(fn (Cliente $c) => [
                 'origem' => 'cliente',
+                /*
+                 * O id vem junto pelo MESMO motivo do `leadId` logo abaixo: sem ele o
+                 * orçamento só copiava nome e CNPJ como texto, e sem vínculo real com
+                 * `clientes` não há `cod_cliente` + `loja` — logo, não há como resolver
+                 * o `clientId` do Portal. Era o que fazia todo orçamento falhar no
+                 * primeiro passo de "Transformar em pedido".
+                 */
+                'clienteId' => $c->id,
                 'nome' => $c->razao_social,
                 'cnpj' => $c->cnpj,
                 'telefone' => $c->telefone,
@@ -501,6 +584,7 @@ class OrcamentoController extends Controller
             'cliente_nome' => ['required', 'string', 'max:255'],
             'lead_id' => ['nullable', 'integer', 'exists:leads,id'],
             'cliente_cnpj' => ['nullable', 'string', 'max:18'],
+            'cliente_id' => ['nullable', 'integer', 'exists:clientes,id'],
             'cliente_contato' => ['nullable', 'string', 'max:255'],
             'forma_pagamento' => ['nullable', 'string', 'max:50'],
             'tipo_frete' => ['required', Rule::in(['CIF', 'FOB'])],
@@ -679,6 +763,47 @@ class OrcamentoController extends Controller
         );
     }
 
+    /**
+     * Quem pode transformar o orçamento em pedido no Portal AGORA.
+     *
+     * ⚠️ A condição de APROVADO não é permissão, é regra de negócio, e por isso mora
+     * aqui e não numa role: o pedido no Portal representa uma venda fechada, e mandar
+     * orçamento pendente criaria rascunho para algo que a gestão ainda pode rejeitar.
+     *
+     * 🚧 **RESTRITO A ADMIN durante a homologação** (decisão do Tony, 2026-09-10).
+     * Enquanto não se sabe se o "homolog" do Portal compartilha banco com produção, um
+     * envio bem-sucedido pode virar pedido de verdade — então quem dispara tem que ser
+     * quem sabe desfazer. Para os demais o botão aparece desabilitado como "em breve"
+     * (ver `podeVerBotaoDoPortal`), o que também serve de aviso de que a função existe.
+     *
+     * **Para liberar geral**: trocar o `=== 'admin'` pela linha comentada abaixo, que é
+     * a regra definitiva — dono do orçamento, admin ou diretor.
+     */
+    private function podeEnviarAoPortal(User $user, Orcamento $orcamento): bool
+    {
+        if ($orcamento->status_gestor !== 'aprovado') {
+            return false;
+        }
+
+        // Regra definitiva, hoje desativada:
+        // return $orcamento->user_id === $user->id
+        //     || in_array($user->getRoleNames()->first(), ['admin', 'diretor'], true);
+
+        return $user->getRoleNames()->first() === 'admin';
+    }
+
+    /**
+     * Quem VERÁ o botão quando a homologação terminar — é a audiência da etiqueta
+     * "em breve". Mantida separada de `podeEnviarAoPortal` de propósito: quando a
+     * restrição cair, esta continua sendo a regra de quem enxerga, e some só o rótulo.
+     */
+    private function podeVerBotaoDoPortal(User $user, Orcamento $orcamento): bool
+    {
+        return $orcamento->status_gestor === 'aprovado'
+            && ($orcamento->user_id === $user->id
+                || in_array($user->getRoleNames()->first(), ['admin', 'diretor'], true));
+    }
+
     private function podeDecidir(User $user, string $nivel): bool
     {
         $role = $user->getRoleNames()->first();
@@ -729,6 +854,9 @@ class OrcamentoController extends Controller
             'statusGestor' => $orcamento->status_gestor,
             // Sem isto, reeditar um orçamento perderia o vínculo com o lead de origem.
             'leadId' => $orcamento->lead_id,
+            // Idem para o cliente — e aqui perder o vínculo custa mais: sem ele o
+            // orçamento deixa de poder virar pedido no Portal.
+            'clienteId' => $orcamento->cliente_id,
             'clienteNome' => $orcamento->cliente_nome,
             'clienteCnpj' => $orcamento->cliente_cnpj,
             'clienteContato' => $orcamento->cliente_contato,

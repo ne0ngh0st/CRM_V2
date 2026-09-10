@@ -6,6 +6,8 @@ import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import StatusPill from '@/Components/StatusPill.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao.js';
 
 const props = defineProps({
     frescor: { type: Array, default: () => [] },
@@ -47,12 +49,20 @@ onBeforeUnmount(pararPoll);
 
 const enviando = ref(false);
 
-function atualizar(forcar = false) {
-    if (forcar && !confirm(
-        'Reimportar tudo mesmo sem relatório novo?\n\n'
-        + 'Reescreve ~600 mil linhas de itens de pedido sem necessidade. '
-        + 'Use só se desconfiar que uma importação anterior ficou pela metade.',
-    )) return;
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+
+async function atualizar(forcar = false) {
+    if (forcar) {
+        const ok = await confirmar({
+            titulo: 'Reimportar tudo',
+            mensagem: 'Reimportar mesmo sem relatório novo?',
+            detalhe: 'Reescreve ~600 mil linhas de itens de pedido sem necessidade. '
+                + 'Use só se desconfiar que uma importação anterior ficou pela metade.',
+            rotuloConfirmar: 'Reimportar tudo',
+            tom: 'atencao',
+        });
+        if (!ok) return;
+    }
 
     enviando.value = true;
     router.post(route('atualizacoes.disparar'), { forcar }, {
@@ -350,5 +360,7 @@ const numero = (n) => (n ?? 0).toLocaleString('pt-BR');
                 </div>
             </div>
         </div>
+
+    <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
     </AuthenticatedLayout>
 </template>

@@ -8,6 +8,8 @@ import FilterField from '@/Components/FilterField.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import Modal from '@/Components/Modal.vue';
 import FacaFormModal from '@/Components/Catalogo/FacaFormModal.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao.js';
 
 const props = defineProps({
     role: String,
@@ -48,11 +50,21 @@ function aoCadastrar(novoId) {
     }
 }
 
-function excluirFaca(faca) {
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+
+async function excluirFaca(faca) {
     const rotulo = `${faca.tipoNome} · item ${String(faca.item).padStart(2, '0')}`;
-    if (!confirm(`Excluir a faca "${rotulo}"? As imagens enviadas por esta tela também serão apagadas.`)) {
-        return;
-    }
+    const ok = await confirmar({
+        titulo: 'Excluir faca',
+        subtitulo: rotulo,
+        mensagem: `Excluir a faca "${rotulo}"?`,
+        detalhe: 'As imagens enviadas por esta tela também são apagadas do servidor. '
+            + 'As que vieram do catálogo original continuam onde estão.',
+        rotuloConfirmar: 'Excluir faca',
+        tom: 'danger',
+    });
+    if (!ok) return;
+
     router.delete(route('catalogo-facas.destroy', faca.id), { preserveScroll: true });
 }
 
@@ -318,5 +330,7 @@ function abrirZoom(faca, recurso) {
                 </div>
             </div>
         </Modal>
+
+        <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
     </AuthenticatedLayout>
 </template>

@@ -1,6 +1,8 @@
 <script setup>
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao.js';
 import { router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
@@ -61,8 +63,17 @@ function salvarFoto() {
     });
 }
 
-function removerFoto() {
-    if (!confirm('Tem certeza que deseja remover sua foto de perfil?')) return;
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+
+async function removerFoto() {
+    const ok = await confirmar({
+        titulo: 'Remover foto de perfil',
+        mensagem: 'Remover sua foto de perfil?',
+        detalhe: 'Você volta a aparecer com o ícone padrão até enviar outra.',
+        rotuloConfirmar: 'Remover foto',
+        tom: 'danger',
+    });
+    if (!ok) return;
 
     router.delete(route('profile.foto.destroy'), { preserveScroll: true });
 }
@@ -155,4 +166,6 @@ const user = usePage().props.auth.user;
             </Transition>
         </div>
     </div>
+
+    <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
 </template>
