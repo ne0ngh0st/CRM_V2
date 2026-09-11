@@ -179,9 +179,38 @@ function criarOrcamento(cliente) {
                         <span v-else class="text-gray-400">Nunca</span>
                     </td>
                     <td class="tbl-td">
+                        <!--
+                          🚨 CLIENTE COM MAIS DE UMA LOJA NÃO TEM AÇÃO NA LINHA — ela fica
+                          em cada filial, dentro da expansão.
+
+                          O motivo não é estético: toda ação daqui é sobre uma filial
+                          concreta. O telefone e o e-mail são da filial, `observacoes` e
+                          `ligacoes` gravam `cliente_id` (que é a filial), e o orçamento
+                          carrega o par `cod_cliente + loja` que o Portal Autopel usa como
+                          de-para. Deixar os botões na linha agrupada faria todos eles
+                          apontarem para a ÂNCORA: o vendedor que quisesse orçar a loja
+                          0004 criaria o documento na 0002 sem nada indicar o engano, e o
+                          erro só apareceria como pedido errado lá na frente.
+
+                          Para cliente de uma loja só — 87,7% da base — a linha É a filial,
+                          não há ambiguidade e os botões continuam aqui, como sempre.
+                        -->
+                        <button
+                            v-if="expansivel(cliente)"
+                            type="button"
+                            class="mx-auto inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-[0.65rem] font-medium text-gray-500 transition hover:bg-gray-100"
+                            :title="`Este cliente tem ${cliente.lojas} lojas — escolha em qual agir`"
+                            @click.stop="alternar(cliente)"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3 transition-transform" :class="expandido === cliente.codCliente ? 'rotate-90' : ''">
+                                <polyline points="9,6 15,12 9,18" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            Escolher filial
+                        </button>
+
                         <!-- .stop: a linha inteira expande, mas os botões têm ação própria.
                              Sem isto, ligar para um cliente também abriria as filiais dele. -->
-                        <div class="tbl-acoes" @click.stop>
+                        <div v-else class="tbl-acoes" @click.stop>
                             <Link
                                 v-if="podeVerDetalhes"
                                 :href="route('carteira.detalhes', cliente.id)"
@@ -259,6 +288,7 @@ function criarOrcamento(cliente) {
                                         <th class="tbl-itens-th">UF</th>
                                         <th class="tbl-itens-th">Status</th>
                                         <th class="tbl-itens-th">Última compra</th>
+                                        <th class="tbl-itens-th">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody class="tbl-body">
@@ -278,6 +308,68 @@ function criarOrcamento(cliente) {
                                             </StatusPill>
                                         </td>
                                         <td class="tbl-itens-td">{{ filial.dataUltimaCompra ?? 'Nunca' }}</td>
+                                        <td class="tbl-itens-td">
+                                            <!-- Os mesmos botões da linha, agora sobre a filial
+                                                 de verdade. `filial` já traz id/telefone/email/
+                                                 cnpj, que é tudo o que as ações consomem. -->
+                                            <div class="tbl-acoes" @click.stop>
+                                                <Link
+                                                    v-if="podeVerDetalhes"
+                                                    :href="route('carteira.detalhes', filial.id)"
+                                                    title="Ver detalhes desta filial"
+                                                    class="tbl-acao tbl-acao-neutro"
+                                                >
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" stroke-linecap="round" stroke-linejoin="round" />
+                                                        <circle cx="12" cy="12" r="3" />
+                                                    </svg>
+                                                </Link>
+                                                <BotoesContato
+                                                    v-if="podeLigar"
+                                                    :telefone="filial.telefone"
+                                                    :email="filial.email"
+                                                    @contato="registrarContato(filial, $event)"
+                                                />
+                                                <button
+                                                    v-if="podeAgendar"
+                                                    type="button"
+                                                    title="Agendar ligação"
+                                                    class="tbl-acao tbl-acao-cyan"
+                                                    @click="emit('agendar-ligacao', filial)"
+                                                >
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                        <rect x="3" y="4.5" width="18" height="16" rx="1.5" />
+                                                        <path d="M3 9h18M8 3v3M16 3v3" stroke-linecap="round" stroke-linejoin="round" />
+                                                        <path d="m9 15 2 2 4-4" stroke-linecap="round" stroke-linejoin="round" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    v-if="podeOrcamento"
+                                                    type="button"
+                                                    title="Criar orçamento para esta filial"
+                                                    class="tbl-acao tbl-acao-navy"
+                                                    @click="criarOrcamento(filial)"
+                                                >
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                        <path d="M7 3h7l4 4v14H7Z" stroke-linecap="round" stroke-linejoin="round" />
+                                                        <path d="M14 3v4h4M9.5 13h5M9.5 16.5h5" stroke-linecap="round" stroke-linejoin="round" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    v-if="podeObservar"
+                                                    type="button"
+                                                    title="Observações"
+                                                    class="tbl-acao tbl-acao-amber"
+                                                    @click="emit('observacao', filial)"
+                                                >
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                        <path d="M4 4h16v12H8l-4 4V4Z" stroke-linecap="round" stroke-linejoin="round" />
+                                                        <line x1="8" y1="9" x2="16" y2="9" stroke-linecap="round" />
+                                                        <line x1="8" y1="12.5" x2="13" y2="12.5" stroke-linecap="round" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>

@@ -422,6 +422,34 @@ class CarteiraAgrupadaTest extends TestCase
         $this->assertCount(100, $r->json('filiais'));
     }
 
+    public function test_filiais_trazem_o_que_as_acoes_consomem(): void
+    {
+        /*
+         * ⚠️ Cliente com mais de uma loja NÃO tem ação na linha agrupada: ligar, agendar,
+         * orçar e observar acontecem na FILIAL, dentro da expansão (senão tudo apontaria
+         * para a âncora e o orçamento nasceria na loja errada — o de-para do Portal é
+         * `cod_cliente + loja`).
+         *
+         * Isso faz destes campos parte do contrato, não enfeite: sem `telefone` e `email`
+         * os botões de WhatsApp e e-mail ficam desabilitados em silêncio, e sem `id` não
+         * há como registrar contato nem abrir observações.
+         */
+        $cliente = Cliente::where('cod_cliente', '100')->where('loja', '0001')->firstOrFail();
+        $cliente->update(['telefone' => '(11) 91234-5678', 'email' => 'compras@alfa.com.br']);
+
+        $filial = collect(
+            $this->actingAs($this->vendedor)->getJson(route('carteira.filiais', '100'))->json('filiais')
+        )->firstWhere('loja', '0001');
+
+        foreach (['id', 'loja', 'razaoSocial', 'cnpj', 'telefone', 'email'] as $campo) {
+            $this->assertArrayHasKey($campo, $filial, "as ações por filial dependem de '{$campo}'");
+        }
+
+        $this->assertSame($cliente->id, $filial['id']);
+        $this->assertSame('(11) 91234-5678', $filial['telefone']);
+        $this->assertSame('compras@alfa.com.br', $filial['email']);
+    }
+
     public function test_filiais_exige_login(): void
     {
         $this->getJson(route('carteira.filiais', '100'))->assertUnauthorized();
