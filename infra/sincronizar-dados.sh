@@ -45,7 +45,31 @@ DB_PASS=${DB_PASS:-palma}
 PACOTE=$(mktemp -t sync-XXXXXX.sql)
 
 DRY_RUN=0
-[ "${1:-}" = "--dry-run" ] && DRY_RUN=1
+SOMENTE_INCREMENTAIS=0
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=1 ;;
+    --somente-incrementais) SOMENTE_INCREMENTAIS=1 ;;
+    *) echo "Uso: $0 [--dry-run] [--somente-incrementais]" >&2; exit 1 ;;
+  esac
+done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ --somente-incrementais: leva SÓ orcamentos/observacoes (+ itens), deixando
+# clientes, produtos, segmentos, grupos_cliente e pedidos exatamente como estão lá.
+#
+# Não é conveniência: desde 04/09 a produção alimenta `pedidos` sozinha, de hora em
+# hora, pelo `totvs:atualizar` — e passou na frente do banco local. Medido em 11/09:
+#
+#     pedidos       produção 92.632   ×   local (05/09) 69.454
+#     pedido_itens  produção 1.190.349 ×  local          905.228
+#
+# O bloco ESPELHO_SUBSTITUI faz `DELETE FROM pedidos` e reinsere o que há aqui, o que
+# hoje APAGARIA ~23 mil pedidos e ~285 mil itens que só existem lá. O pacote completo
+# deixou de ser seguro quando a produção ganhou uma fonte de dados própria; use-o
+# apenas depois de conferir que o local está à frente em TODAS as tabelas que ele
+# substitui, e nunca só porque "é o script da sincronização".
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Espelho puro do TOTVS: nada nasce no v2, mas OUTRAS tabelas apontam para elas.
 # Entram por upsert — linha some daqui não some de lá, de propósito: apagar cliente
@@ -93,9 +117,18 @@ colunas() { mysql_local -e "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POS
 # As tabelas incrementais carregam user_id/cliente_id/lead_id. clientes e leads vão no
 # próprio pacote, então ficam consistentes por construção; `users` NÃO vai — é a tabela
 # que guarda senha e foto dos beta testers e nunca é sobrescrita. Se o mapeamento
-# id↔e-mail divergir entre os dois bancos, a observação gruda na pessoa errada.
+# id↔pessoa divergir entre os dois bancos, a observação gruda na pessoa errada.
 # Por isso a assinatura é conferida no servidor ANTES de aplicar qualquer coisa.
-ASSINATURA_LOCAL=$(mysql_local -e "SELECT SUM(CRC32(CONCAT_WS(0x7c,id,LOWER(email)))) FROM users")
+#
+# ⚠️ A assinatura é por `username`, NÃO por `email` — e a diferença não é cosmética.
+# O e-mail é editável pelo próprio usuário em /profile; o username não é (é a mesma
+# razão pela qual o CLAUDE.md aponta o username como a chave estável para o risco
+# conhecido do `import-usuarios`). Medido em 11/09: o id 176 é `murilo.sampaio` nos
+# dois bancos, mas em produção a pessoa trocou o e-mail para `venda.interna@` — com a
+# assinatura por e-mail o script ABORTAVA, alegando divergência de mapeamento, numa
+# conta que estava perfeitamente alinhada. Um preflight que dá falso positivo a cada
+# troca de e-mail acaba sendo contornado à mão, e aí não protege mais nada.
+ASSINATURA_LOCAL=$(mysql_local -e "SELECT SUM(CRC32(CONCAT_WS(0x7c,id,LOWER(username)))) FROM users")
 IDS_USERS=$(mysql_local -e "SELECT GROUP_CONCAT(id) FROM users")
 
 echo "==> Assinatura local de users: $ASSINATURA_LOCAL"
@@ -105,7 +138,7 @@ echo "==> Assinatura local de users: $ASSINATURA_LOCAL"
   echo "SET NAMES utf8mb4;"
   echo "START TRANSACTION;"
 
-  for t in $ESPELHO_UPSERT; do
+  for t in $([ "$SOMENTE_INCREMENTAIS" = 1 ] || echo "$ESPELHO_UPSERT"); do
     cols=$(colunas "$t")
     sets=$(echo "$cols" | tr ',' '\n' | grep -vx 'id' | sed 's/^\(.*\)$/\1=VALUES(\1)/' | paste -sd, -)
     echo ""
@@ -116,13 +149,15 @@ echo "==> Assinatura local de users: $ASSINATURA_LOCAL"
     echo "DROP TEMPORARY TABLE _stg_$t;"
   done
 
-  echo ""
-  echo "-- pedidos + itens: substituição total (só pedido_itens referencia pedidos)"
-  echo "DELETE FROM pedido_itens;"
-  echo "DELETE FROM pedidos;"
-  for t in $ESPELHO_SUBSTITUI; do
-    dump_local "$DB_LOCAL" "$t" | grep '^INSERT INTO'
-  done
+  if [ "$SOMENTE_INCREMENTAIS" = 0 ]; then
+    echo ""
+    echo "-- pedidos + itens: substituição total (só pedido_itens referencia pedidos)"
+    echo "DELETE FROM pedido_itens;"
+    echo "DELETE FROM pedidos;"
+    for t in $ESPELHO_SUBSTITUI; do
+      dump_local "$DB_LOCAL" "$t" | grep '^INSERT INTO'
+    done
+  fi
 
   for t in $INCREMENTAIS; do
     cols=$(colunas "$t" | tr ',' '\n' | grep -vx 'id' | paste -sd, -)
@@ -185,7 +220,7 @@ val() { grep "^$1=" .env | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 DBH=$(val DB_HOST); DBU=$(val DB_USERNAME); DBP=$(val DB_PASSWORD); DBN=$(val DB_DATABASE)
 
 ASSINATURA_PROD=$(mysql -h "$DBH" -u "$DBU" -p"$DBP" -N "$DBN" \
-  -e "SELECT SUM(CRC32(CONCAT_WS(0x7c,id,LOWER(email)))) FROM users WHERE id IN ($IDS_USERS)" 2>/dev/null)
+  -e "SELECT SUM(CRC32(CONCAT_WS(0x7c,id,LOWER(username)))) FROM users WHERE id IN ($IDS_USERS)" 2>/dev/null)
 
 if [ "$ASSINATURA_PROD" != "$ASSINATURA_ESPERADA" ]; then
   echo "ABORTADO: o mapeamento id↔e-mail de users diverge entre os dois bancos."
