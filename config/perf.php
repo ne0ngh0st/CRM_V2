@@ -73,6 +73,10 @@ return [
         // diferentes: a listagem simples, a ordenação que força LEFT JOIN + filesort
         // (medida em 510-655ms no escopo admin), e a aba que dispara os agendamentos.
         'carteira' => ['rota' => 'carteira.index', 'partial' => ['clientes']],
+        // Uma linha por cliente, filiais contadas. Faz três consultas de listagem no
+        // lugar de uma (códigos, resumo, âncoras), então é aqui que um N+1 de filiais
+        // apareceria — ver CarteiraController::linhasAgrupadas().
+        'carteira:agrupada' => ['rota' => 'carteira.index', 'params' => ['agrupar' => 1], 'partial' => ['clientes']],
         'carteira:ordenada' => ['rota' => 'carteira.index', 'params' => ['ordenar' => 'segmento_asc']],
         'carteira:calendario' => ['rota' => 'carteira.index', 'params' => ['aba' => 'calendario']],
 

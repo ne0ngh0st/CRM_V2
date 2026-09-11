@@ -62,6 +62,17 @@ Route::middleware('auth')->group(function () {
     // do sino. Aberta a todos os perfis — cada um vê só as próprias.
     Route::get('/exportacoes', [ExportacaoController::class, 'index'])->name('exportacoes.index');
     Route::get('/exportacoes/{exportacao}/download', [ExportacaoController::class, 'download'])->name('exportacoes.download');
+    /*
+     * As filiais de um cliente, para a linha expansível da Carteira agrupada.
+     *
+     * ⚠️ Declarada ANTES das rotas `{cliente}` e com o segmento literal `cliente/` no
+     * caminho: o `{cliente}` das outras é model binding por `id`, e aqui o parâmetro é o
+     * `cod_cliente` (texto, não único na tabela). Sem o literal, uma futura rota de três
+     * segmentos passaria a competir com esta e o binding tentaria achar um cliente de id
+     * "cliente" — mesmo cuidado de `leads.funil.mais`.
+     */
+    Route::get('/carteira/cliente/{codCliente}/filiais', [CarteiraController::class, 'filiais'])->name('carteira.filiais');
+
     Route::get('/carteira/{cliente}/detalhes', [CarteiraController::class, 'detalhes'])->name('carteira.detalhes');
     Route::post('/carteira/{cliente}/motivo-inatividade', [CarteiraController::class, 'registrarMotivoInatividade'])->name('carteira.motivoInatividade');
     Route::post('/carteira/{cliente}/ligacao', [CarteiraController::class, 'registrarLigacao'])->name('carteira.ligacao');

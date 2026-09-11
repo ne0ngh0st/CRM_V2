@@ -57,12 +57,42 @@ const filtros = reactive({
     // filtros — é anunciado por uma faixa acima da tabela, com "limpar".
     sem_familia: props.filtros.semFamilia || '',
     ordenar: props.filtros.ordenar || 'nome_asc',
+    /*
+     * Precisa viajar junto de todo filtro, ordenação e troca de aba: `paramsComAba()`
+     * monta a query string a partir DESTE objeto, e o que não estiver aqui se perde na
+     * próxima visita. Sem isto, filtrar por estado devolvia a pessoa para a lista por
+     * filial sem nada explicar.
+     */
+    // Vazio = padrão (agrupado). Só o modo por filial precisa ser dito na URL.
+    agrupar: props.filtros.agrupado ? '' : '0',
     visao_supervisor: props.visao.visaoSupervisor || '',
     visao_vendedor: props.visao.visaoVendedor || '',
 });
 
 function paramsComAba(aba = props.aba) {
     return { ...filtros, aba };
+}
+
+/*
+ * ⚠️ Nome próprio, e não `filtros.agrupado`: no template `filtros` é o objeto REACTIVE
+ * LOCAL, cuja chave é `agrupar` (o nome do parâmetro da URL), enquanto quem diz se a
+ * lista VEIO agrupada é `props.filtros.agrupado`, resposta do servidor. Passar
+ * `filtros.agrupado` devolve undefined em silêncio — a tabela renderiza sem a coluna de
+ * expansão, sem erro no console, e parece que a feature não foi aplicada. Foi
+ * exatamente o que aconteceu na primeira versão. Mesma família da colisão
+ * `modoVisao`/`visao` de 2026-09-03.
+ */
+const listaAgrupada = computed(() => !! props.filtros.agrupado);
+
+/*
+ * Troca a unidade da lista (cliente ↔ filial) e volta para a página 1: a paginação
+ * de um modo não corresponde à do outro — a página 12 por filial não é a página 12
+ * por cliente —, e manter o offset deixaria a pessoa no meio de uma lista que não é
+ * mais a mesma. Mesmo raciocínio do `ordenarPor()`.
+ */
+function alternarAgrupamento() {
+    filtros.agrupar = listaAgrupada.value ? '0' : '';
+    aplicarFiltros();
 }
 
 // `agendamentos` é uma prop opcional no servidor (Inertia::optional): só vem quando
@@ -167,7 +197,17 @@ function limparSemFamilia() {
                         </svg>
                     </template>
                     <template #subtitle>
-                        {{ kpis.total }} cliente{{ kpis.total !== 1 ? 's' : '' }} · {{ kpis.pctDentro }}% no segmento
+                        {{ kpis.total }} cliente{{ kpis.total !== 1 ? 's' : '' }}<!--
+                        ⚠️ No modo "ver filiais separadas" a contagem do KPI (clientes) e a
+                        da paginação (filiais) são DIFERENTES por definição, e ficam a cinco
+                        centímetros uma da outra. A saída é dizer as duas unidades, nunca
+                        esconder uma: número que precisa de legenda para não parecer errado
+                        já perdeu a confiança, mas dois números rotulados não competem.
+                        Agrupado — o padrão — este trecho some, porque aí os dois batem.
+                     --><template v-if="! listaAgrupada">
+                            · {{ clientes.total }} filiais
+                        </template>
+                        · {{ kpis.pctDentro }}% no segmento
                     </template>
                     <template #filtros>
                         <div class="flex min-w-[200px] max-w-[280px] flex-1 flex-col gap-1">
@@ -241,6 +281,25 @@ function limparSemFamilia() {
                     >
                         Calendário
                     </button>
+
+                    <!-- Alternador de unidade da lista. Fica à direita das abas porque não
+                         é uma aba: não troca de conteúdo, troca como o MESMO conteúdo é
+                         contado. Só aparece na aba Clientes, que é a única que lista. -->
+                    <button
+                        v-if="aba === 'clientes'"
+                        type="button"
+                        class="ml-auto inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
+                        :title="listaAgrupada
+                            ? 'Mostrar uma linha por filial, como era antes'
+                            : 'Agrupar as filiais de cada cliente numa linha só'"
+                        @click="alternarAgrupamento"
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-3.5 w-3.5">
+                            <path v-if="listaAgrupada" d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+                            <path v-else d="M4 6h16M8 12h12M8 18h12" stroke-linecap="round" />
+                        </svg>
+                        {{ listaAgrupada ? 'Ver filiais separadas' : 'Agrupar por cliente' }}
+                    </button>
                 </div>
 
                 <template v-if="aba === 'clientes'">
@@ -263,7 +322,13 @@ function limparSemFamilia() {
                                 fiscal não registra a loja. Sem dizer isso aqui, quem clica
                                 em "40" e encontra 86 conclui que o filtro está errado.
                             -->
-                            <span v-if="props.filtros.semFamiliaEmpresas" class="text-gray-500">
+                            <!-- A reconciliação "são N empresas, listadas abaixo por filial"
+                                 saiu em 2026-09-11: existia só porque o card contava empresas
+                                 e a tabela listava filiais. Agrupada, a tabela lista as mesmas
+                                 N empresas do card e não há nada a reconciliar. Ela volta a
+                                 fazer falta se alguém estiver no modo "ver filiais separadas",
+                                 e é por isso que o aviso continua, condicionado a ele. -->
+                            <span v-if="! listaAgrupada && props.filtros.semFamiliaEmpresas" class="text-gray-500">
                                 São {{ props.filtros.semFamiliaEmpresas }}
                                 {{ props.filtros.semFamiliaEmpresas === 1 ? 'empresa' : 'empresas' }},
                                 listadas abaixo por filial.
@@ -306,6 +371,7 @@ function limparSemFamilia() {
                             :pode-agendar="podeOperar"
                             :pode-orcamento="podeOperar"
                             :pode-observar="true"
+                            :agrupado="listaAgrupada"
                             :ordenar="filtros.ordenar"
                             @ordenar="ordenarPor"
                             @motivo-inatividade="abrirMotivo"

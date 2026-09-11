@@ -61,8 +61,15 @@ final readonly class ChaveEscopo
      *   (virou igual a `total`) e entraram `atendido` por linha e `atendidos` no topo.
      *   Dois bumps no mesmo dia é o custo de mudar de ideia sobre o formato com o bloco já
      *   no ar — e é mais barato que o card mutilado.
+     *
+     *   v6 → v7 (2026-09-11) — `carteira-segmento` (e o `carteira-kpis` da própria
+     *   Carteira, que compartilha o resolver) passou a contar CLIENTES em vez de FILIAIS:
+     *   92.209 viram 39.692 no escopo empresa. Aqui o payload não mudou de FORMA, mudou
+     *   de VALOR — e é por isso que o bump importa ainda mais: sem ele o card seguiria
+     *   mostrando a contagem velha por até 30 min, ao lado de uma tabela já agrupada, e
+     *   ninguém suspeitaria de cache. Não haveria nada quebrado para acusar.
      */
-    public const VERSAO = 'v6';
+    public const VERSAO = 'v7';
 
     private const PREFIXO = 'agg';
 

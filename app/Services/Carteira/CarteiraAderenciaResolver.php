@@ -3,6 +3,7 @@
 namespace App\Services\Carteira;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Aderência de carteira: cada vendedor atende 0+ segmentos (setor do cliente —
@@ -27,6 +28,32 @@ use Illuminate\Database\Eloquent\Builder;
  * limiares de data já indexados. Isso é o que permite essa mesma classe atender
  * tanto o widget da Home quanto a página cheia de Carteira (até ~90k clientes) sem
  * carregar nada em memória.
+ *
+ * ⚠️ CONTA CLIENTES (`cod_cliente`), NÃO FILIAIS — desde 2026-09-11, quando a Carteira
+ * passou a listar uma linha por cliente. Os dois têm que contar a mesma coisa: o KPI
+ * fica cinco centímetros acima da tabela, e "92.209 clientes" sobre uma lista de 39.692
+ * é o caso que o Tony recusou em 08/09 no Segmentos Atendidos. Número que precisa de
+ * legenda para não parecer errado já perdeu a confiança.
+ *
+ * ⚠️ O PREÇO DISSO É REAL E FOI MEDIDO — agrupar por cliente obriga a materializar os
+ * grupos, e com os dois LEFT JOINs o MySQL desiste do índice (`type: ALL`):
+ *
+ *   escopo de um vendedor .....   2 ms ->    18 ms   (o caso dominante)
+ *   escopo de supervisor ......   5 ms ->   197 ms
+ *   escopo empresa ............   5 ms -> 1.385 ms
+ *
+ * Aceito, e o motivo é a distribuição: quase todo acesso é de vendedor. O escopo
+ * empresa é UM só, cacheado e aquecido por `AquecerCacheDashboardJob` — quem paga os
+ * 1,4 s é o job, não a pessoa. Está abaixo dos 2 s que a Regra de ouro nº 9 manda
+ * tornar assíncrono, e já roda em fila de qualquer forma.
+ *
+ * ⚠️ Tentado e DESCARTADO: índice `(cod_cliente, cod_vendedor, cod_segmento,
+ * data_ultima_compra)` para cobrir os joins. Rendeu de forma instável (754-1.492 ms
+ * contra 1.213-1.905 ms) e não valeu mais 10 MB de índice. Se um dia isto incomodar, o
+ * caminho medido é outro: reduzir a uma linha por cliente ANTES dos joins, usando a
+ * filial-âncora (o `ancora_id` que `CarteiraController::resumoDosCodigos()` já calcula)
+ * — mas aí a aderência passa a ser a da âncora, e deixa de bater com o filtro
+ * `?aderencia=`, que casa qualquer filial.
  */
 class CarteiraAderenciaResolver
 {
@@ -39,7 +66,19 @@ class CarteiraAderenciaResolver
         $limiteAtivo = $this->statusResolver->limiteAtivo()->toDateString();
         $limiteInativando = $this->statusResolver->limiteInativando()->toDateString();
 
-        $linhas = (clone $query)
+        /*
+         * PASSO 1 — uma linha por CLIENTE (`cod_cliente`), não por filial.
+         *
+         * 🚨 Trocar o `COUNT(*)` por `COUNT(DISTINCT cod_cliente)` no agrupamento final
+         * NÃO resolveria, e o erro seria silencioso: um cliente com uma filial ativa e
+         * outra inativa apareceria nos DOIS grupos, cada um contando 1, e a soma das
+         * quebras passaria do total de clientes. O card mostraria partes que não fecham
+         * com o próprio todo.
+         *
+         * Por isso a redução acontece ANTES da classificação: primeiro cada cliente vira
+         * uma linha com o seu estado consolidado, depois essas linhas é que são contadas.
+         */
+        $porCliente = (clone $query)
             ->leftJoin('segmentos', 'segmentos.codigo', '=', 'clientes.cod_segmento')
             ->leftJoin('segmentos_vendedor', function ($join) {
                 $join->on('segmentos_vendedor.cod_vendedor', '=', 'clientes.cod_vendedor')
@@ -50,14 +89,37 @@ class CarteiraAderenciaResolver
             // isso, colunas não agregadas fora do GROUP BY quebram em sql_mode=only_full_group_by.
             ->select([])
             ->selectRaw('
+                clientes.cod_cliente,
+                MAX(clientes.data_ultima_compra) as ultima_compra,
+                MAX(CASE WHEN segmentos_vendedor.id IS NOT NULL THEN 1 ELSE 0 END) as alguma_dentro,
+                MAX(CASE WHEN EXISTS (SELECT 1 FROM segmentos_vendedor sv2 WHERE sv2.cod_vendedor = clientes.cod_vendedor) THEN 1 ELSE 0 END) as vendedor_tem_segmento
+            ')
+            ->groupBy('clientes.cod_cliente');
+
+        /*
+         * PASSO 2 — classifica e conta os clientes.
+         *
+         * ⚠️ "Dentro do segmento" é QUALQUER filial dentro, e não o segmento da âncora
+         * (que era o desenho original). O motivo é coerência com o que o clique faz: o
+         * filtro `?aderencia=dentro` lista o cliente se qualquer filial casar, então
+         * contá-lo pela âncora faria o card dizer um número e a lista entregar outro.
+         * Os dois têm que bater em todos os casos.
+         *
+         * ⚠️ A data é a MAIS RECENTE entre as filiais — a mesma regra da listagem
+         * agrupada. Se divergirem, um cliente aparece "ativo" na tabela e "inativo" no
+         * card logo acima, na mesma tela.
+         */
+        $linhas = \DB::query()
+            ->fromSub($porCliente, 'clientes_agrupados')
+            ->selectRaw('
                 CASE
-                    WHEN clientes.data_ultima_compra >= ? THEN \'ativo\'
-                    WHEN clientes.data_ultima_compra >= ? THEN \'inativando\'
+                    WHEN ultima_compra >= ? THEN \'ativo\'
+                    WHEN ultima_compra >= ? THEN \'inativando\'
                     ELSE \'inativo\'
                 END as status_carteira,
                 CASE
-                    WHEN NOT EXISTS (SELECT 1 FROM segmentos_vendedor sv2 WHERE sv2.cod_vendedor = clientes.cod_vendedor) THEN \'sem_segmento\'
-                    WHEN segmentos_vendedor.id IS NOT NULL THEN \'dentro\'
+                    WHEN vendedor_tem_segmento = 0 THEN \'sem_segmento\'
+                    WHEN alguma_dentro = 1 THEN \'dentro\'
                     ELSE \'fora\'
                 END as aderencia,
                 COUNT(*) as total

@@ -470,12 +470,19 @@ class PotencialCarteiraTest extends TestCase
     }
 
     /**
-     * ⚠️ A tela lista FILIAIS e o card do Painel conta EMPRESAS. Sem os dois números na
-     * faixa, quem clica em "40 ativos" e encontra 86 linhas conclui que o filtro furou.
-     * Aqui um código com 3 filiais tem que virar "1 empresa, 3 linhas".
+     * ⚠️ INVERTIDO EM 2026-09-11, e de propósito.
+     *
+     * Este teste afirmava o contrário: que a tela listava FILIAIS enquanto o card contava
+     * EMPRESAS, e que a faixa tinha de reconciliar os dois ("1 empresa, 3 linhas"). Com a
+     * Carteira agrupada por cliente, essa divergência deixou de existir — o recorte de
+     * família sempre foi por `cod_cliente` (`faturamentos` não guarda `loja`), e agora a
+     * listagem também é.
+     *
+     * Mantido em vez de apagado porque agora protege a decisão: se alguém voltar a fazer
+     * a listagem contar filiais enquanto o card conta empresas, é aqui que aparece.
      */
     #[Test]
-    public function test_faixa_reconcilia_empresas_com_filiais_listadas(): void
+    public function test_recorte_de_familia_conta_o_mesmo_no_card_e_na_lista(): void
     {
         $vendedor = User::factory()->create();
         $vendedor->assignRole('vendedor');
@@ -492,7 +499,10 @@ class PotencialCarteiraTest extends TestCase
             ->viewData('page')['props'];
 
         $this->assertSame(1, $props['filtros']['semFamiliaEmpresas'], 'um código de cliente');
-        $this->assertSame(3, $props['kpis']['total'], 'três filiais na listagem');
+        $this->assertSame(1, $props['kpis']['total'], 'e o card conta o mesmo: uma empresa');
+        $this->assertSame(1, $props['clientes']['total'], 'a lista agrupada traz a mesma empresa');
+        $this->assertCount(1, $props['clientes']['data'], 'as 3 filiais viram uma linha só');
+        $this->assertSame(3, $props['clientes']['data'][0]['lojas'], 'com as 3 contadas na linha');
     }
 
     /**
