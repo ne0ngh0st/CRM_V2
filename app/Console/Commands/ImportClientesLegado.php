@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Services\Legado\LegadoConexao;
+use App\Services\Totvs\ClientesLookup;
+use App\Services\Totvs\Normalizador;
 use DateTime;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -32,8 +34,14 @@ class ImportClientesLegado extends Command
         $this->info("Lendo clientes ({$fonte})...");
         $stmt = $pdo->query(
             'SELECT COD_CLIENT, LOJA, CNPJ, CLIENTE, NOME_FANTASIA, COD_VENDEDOR, COD_SEG, GrpVendas, '
-            .'Estado, CEP, DDD, Telefone, EMailNFe FROM CLIENTES'
+            // Endereco/MUNICIPIO alimentam o endereço do orçamento (sugestão do Vagner,
+            // 10/09/2026). Entram aqui E no `totvs:import-clientes` porque os dois
+            // caminhos escrevem a MESMA tabela: só num deles, o valor do cliente mudaria
+            // conforme quem rodou o import por último.
+            .'Endereco, MUNICIPIO, Estado, CEP, DDD, Telefone, EMailNFe FROM CLIENTES'
         );
+
+        $chavesGravadas = ClientesLookup::formaGravadaPorChave();
 
         $lote = [];
         $total = 0;
@@ -50,6 +58,24 @@ class ImportClientesLegado extends Command
                 continue;
             }
 
+            /*
+             * ⚠️ Grava com a chave que JÁ está no banco quando o cliente existe —
+             * exatamente o que o `totvs:import-clientes` faz, e por isto ser a MESMA
+             * decisão ("o que identifica um cliente") ela não pode divergir entre os
+             * dois caminhos (Regra de ouro nº 8).
+             *
+             * Sem isto, o zero à esquerda da loja transforma um cliente em dois: o
+             * banco guarda `008710` (forma herdada do espelho do v1) e o espelho hoje
+             * devolve `8710`. Medido em 11/09, rodando este comando sobre uma base que
+             * veio do `totvs:import-clientes`: 8.408 clientes DUPLICADOS, sem erro
+             * nenhum — e um cliente duplicado racha a carteira do vendedor, porque
+             * metade do histórico fica pendurada na linha que ninguém vê.
+             */
+            $chave = Normalizador::chaveCliente($codCliente, $loja);
+            if (isset($chavesGravadas[$chave])) {
+                [$codCliente, $loja] = $chavesGravadas[$chave];
+            }
+
             $lote[] = [
                 'cod_cliente' => $codCliente,
                 'loja' => $loja,
@@ -59,6 +85,8 @@ class ImportClientesLegado extends Command
                 'cod_vendedor' => self::valorOuNull($row['COD_VENDEDOR'] ?? ''),
                 'cod_segmento' => self::normalizarSegmento($row['COD_SEG'] ?? ''),
                 'cod_grupo' => self::normalizarCodigo($row['GrpVendas'] ?? ''),
+                'endereco' => self::valorOuNull($row['Endereco'] ?? ''),
+                'municipio' => self::valorOuNull($row['MUNICIPIO'] ?? ''),
                 'estado' => self::valorOuNull($row['Estado'] ?? ''),
                 'cep' => self::valorOuNull($row['CEP'] ?? ''),
                 'telefone' => self::montarTelefone($row['DDD'] ?? '', $row['Telefone'] ?? ''),
@@ -166,7 +194,7 @@ class ImportClientesLegado extends Command
             ['cod_cliente', 'loja'],
             [
                 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor', 'cod_segmento', 'cod_grupo',
-                'estado', 'cep', 'telefone', 'email', 'data_ultima_compra', 'updated_at',
+                'endereco', 'municipio', 'estado', 'cep', 'telefone', 'email', 'data_ultima_compra', 'updated_at',
             ]
         );
     }

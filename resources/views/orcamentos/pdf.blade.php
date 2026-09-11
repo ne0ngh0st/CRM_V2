@@ -183,6 +183,30 @@
                     <td class="rotulo">CNPJ</td>
                     <td class="valor">{{ $orcamento->cliente_cnpj ?: '—' }}</td>
                 </tr>
+                {{--
+                    Endereço do CNPJ orçado — sugestão do Vagner Sabelli (10/09/2026).
+
+                    ⚠️ Vem de `enderecoDoDocumento()`, nunca de `$orcamento->cliente->…`:
+                    é lá que mora a regra de usar a cópia gravada e, nos orçamentos
+                    anteriores a esta feature, cair para o endereço atual do cliente.
+                    Ler o relacionamento aqui furaria os dois regimes de uma vez.
+
+                    ⚠️ Estas três linhas e as do OrcamentoSheet/Form são um PAR (ver o
+                    aviso no topo deste arquivo): mesmo rótulo, mesma ordem.
+                --}}
+                @php($endereco = $orcamento->enderecoDoDocumento())
+                <tr>
+                    <td class="rotulo">Endereço</td>
+                    <td class="valor">{{ $endereco['logradouro'] ?: '—' }}</td>
+                </tr>
+                <tr>
+                    <td class="rotulo">Município/UF</td>
+                    <td class="valor">{{ collect([$endereco['municipio'], $endereco['estado']])->filter()->implode('/') ?: '—' }}</td>
+                </tr>
+                <tr>
+                    <td class="rotulo">CEP</td>
+                    <td class="valor">{{ $endereco['cep'] ?: '—' }}</td>
+                </tr>
                 <tr>
                     <td class="rotulo">Contato</td>
                     <td class="valor">{{ $orcamento->cliente_contato ?: '—' }}</td>

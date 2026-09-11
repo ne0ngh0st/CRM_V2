@@ -64,6 +64,13 @@ const form = useForm({
     lead_id: fonte?.leadId ?? props.prefillCliente?.leadId ?? null,
     cliente_id: fonte?.clienteId ?? props.prefillCliente?.clienteId ?? null,
     cliente_cnpj: fonte?.clienteCnpj ?? props.prefillCliente?.cnpj ?? '',
+    // Endereço do CNPJ orçado (sugestão do Vagner, 10/09/2026). Ao reabrir um orçamento
+    // antigo, `fonte` já traz o endereço atual do cliente resolvido pelo servidor — ver
+    // Orcamento::enderecoDoDocumento().
+    cliente_endereco: fonte?.clienteEndereco ?? props.prefillCliente?.endereco ?? '',
+    cliente_municipio: fonte?.clienteMunicipio ?? props.prefillCliente?.municipio ?? '',
+    cliente_estado: fonte?.clienteEstado ?? props.prefillCliente?.estado ?? '',
+    cliente_cep: fonte?.clienteCep ?? props.prefillCliente?.cep ?? '',
     cliente_contato: fonte?.clienteContato ?? props.prefillCliente?.contato ?? '',
     forma_pagamento: fonte?.formaPagamento ?? '',
     tipo_frete: fonte?.tipoFrete ?? 'CIF',
@@ -115,6 +122,13 @@ function selecionarCliente(cliente) {
     form.cliente_id = cliente.origem === 'cliente' ? (cliente.clienteId ?? null) : null;
     form.cliente_nome = cliente.nome ?? '';
     form.cliente_cnpj = cliente.cnpj ?? '';
+    // ⚠️ Atribuir SEMPRE, inclusive vazio: trocar de cliente tem que limpar o endereço
+    // do anterior. Um `?? form.cliente_endereco` deixaria o endereço velho na folha
+    // debaixo do nome novo — e ninguém confere um campo que já está preenchido.
+    form.cliente_endereco = cliente.endereco ?? '';
+    form.cliente_municipio = cliente.municipio ?? '';
+    form.cliente_estado = cliente.estado ?? '';
+    form.cliente_cep = cliente.cep ?? '';
     form.cliente_contato = cliente.telefone ?? '';
 }
 
@@ -195,6 +209,22 @@ function salvar() {
                                 <DocLinha rotulo="CNPJ">
                                     <input v-model="form.cliente_cnpj" type="text" class="doc-campo" placeholder="00.000.000/0000-00" />
                                     <InputError :message="form.errors.cliente_cnpj" />
+                                </DocLinha>
+                                <DocLinha rotulo="Endereço">
+                                    <input v-model="form.cliente_endereco" type="text" class="doc-campo" placeholder="Logradouro e número" />
+                                    <InputError :message="form.errors.cliente_endereco" />
+                                </DocLinha>
+                                <DocLinha rotulo="Município/UF">
+                                    <div class="flex gap-1">
+                                        <input v-model="form.cliente_municipio" type="text" class="doc-campo flex-1" placeholder="Município" />
+                                        <input v-model="form.cliente_estado" type="text" maxlength="2" class="doc-campo w-12 uppercase" placeholder="UF" />
+                                    </div>
+                                    <InputError :message="form.errors.cliente_municipio" />
+                                    <InputError :message="form.errors.cliente_estado" />
+                                </DocLinha>
+                                <DocLinha rotulo="CEP">
+                                    <input v-model="form.cliente_cep" type="text" maxlength="10" class="doc-campo" placeholder="00000-000" />
+                                    <InputError :message="form.errors.cliente_cep" />
                                 </DocLinha>
                                 <DocLinha rotulo="Contato">
                                     <input v-model="form.cliente_contato" type="text" class="doc-campo" placeholder="Telefone ou e-mail" />

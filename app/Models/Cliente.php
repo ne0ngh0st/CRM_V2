@@ -13,6 +13,8 @@ class Cliente extends Model
         'cnpj',
         'razao_social',
         'nome_fantasia',
+        'endereco',
+        'municipio',
         'cod_vendedor',
         'cod_segmento',
         'cod_grupo',

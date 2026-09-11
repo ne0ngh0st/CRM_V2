@@ -29,7 +29,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class OrcamentoController extends Controller
@@ -302,6 +301,10 @@ class OrcamentoController extends Controller
                 'cliente_id' => $data['cliente_id'] ?? null,
                 'cliente_nome' => $data['cliente_nome'],
                 'cliente_cnpj' => $data['cliente_cnpj'] ?? null,
+                'cliente_endereco' => $data['cliente_endereco'] ?? null,
+                'cliente_municipio' => $data['cliente_municipio'] ?? null,
+                'cliente_estado' => $data['cliente_estado'] ?? null,
+                'cliente_cep' => $data['cliente_cep'] ?? null,
                 'cliente_contato' => $data['cliente_contato'] ?? null,
                 'forma_pagamento' => $data['forma_pagamento'] ?? null,
                 'tipo_frete' => $data['tipo_frete'],
@@ -347,6 +350,10 @@ class OrcamentoController extends Controller
                 'cliente_id' => $data['cliente_id'] ?? null,
                 'cliente_nome' => $data['cliente_nome'],
                 'cliente_cnpj' => $data['cliente_cnpj'] ?? null,
+                'cliente_endereco' => $data['cliente_endereco'] ?? null,
+                'cliente_municipio' => $data['cliente_municipio'] ?? null,
+                'cliente_estado' => $data['cliente_estado'] ?? null,
+                'cliente_cep' => $data['cliente_cep'] ?? null,
                 'cliente_contato' => $data['cliente_contato'] ?? null,
                 'forma_pagamento' => $data['forma_pagamento'] ?? null,
                 'tipo_frete' => $data['tipo_frete'],
@@ -522,6 +529,11 @@ class OrcamentoController extends Controller
                 'cnpj' => $c->cnpj,
                 'telefone' => $c->telefone,
                 'email' => $c->email,
+                // Endereço do CNPJ orçado (sugestão do Vagner, 10/09/2026). Vem na
+                // MESMA resposta da busca de propósito: uma ida ao servidor a menos, e
+                // o vendedor nunca vê a folha meio preenchida.
+                'endereco' => $c->endereco,
+                'municipio' => $c->municipio,
                 'estado' => $c->estado,
                 'cep' => $c->cep,
             ]);
@@ -545,6 +557,10 @@ class OrcamentoController extends Controller
                 'cnpj' => $l->cnpj,
                 'telefone' => $l->telefone,
                 'email' => $l->email,
+                // Lead tem endereço e cidade próprios (vêm do formulário do site), mas
+                // nunca CEP — a coluna não existe em `leads`.
+                'endereco' => $l->endereco,
+                'municipio' => $l->cidade,
                 'estado' => $l->estado,
                 'cep' => null,
             ]);
@@ -584,6 +600,10 @@ class OrcamentoController extends Controller
             'cliente_nome' => ['required', 'string', 'max:255'],
             'lead_id' => ['nullable', 'integer', 'exists:leads,id'],
             'cliente_cnpj' => ['nullable', 'string', 'max:18'],
+            'cliente_endereco' => ['nullable', 'string', 'max:255'],
+            'cliente_municipio' => ['nullable', 'string', 'max:120'],
+            'cliente_estado' => ['nullable', 'string', 'max:2'],
+            'cliente_cep' => ['nullable', 'string', 'max:10'],
             'cliente_id' => ['nullable', 'integer', 'exists:clientes,id'],
             'cliente_contato' => ['nullable', 'string', 'max:255'],
             'forma_pagamento' => ['nullable', 'string', 'max:50'],
@@ -849,6 +869,8 @@ class OrcamentoController extends Controller
     /** @return array{id: int, statusGestor: string, clienteNome: string, clienteCnpj: ?string, clienteContato: ?string, formaPagamento: ?string, tipoFrete: ?string, tipoProdutoServico: string, dataValidade: ?string, observacoes: ?string, variacaoProducaoPersonalizado: ?string, prazoProducao: ?string, garantiaImagem: ?string, textoImportante: ?string, itens: array} */
     private function mapOrcamentoParaForm(Orcamento $orcamento, bool $isAdmin): array
     {
+        $endereco = $orcamento->enderecoDoDocumento();
+
         return [
             'id' => $orcamento->id,
             'statusGestor' => $orcamento->status_gestor,
@@ -859,6 +881,16 @@ class OrcamentoController extends Controller
             'clienteId' => $orcamento->cliente_id,
             'clienteNome' => $orcamento->cliente_nome,
             'clienteCnpj' => $orcamento->cliente_cnpj,
+            /*
+             * Endereço pela MESMA porta que a tela e o PDF usam — inclusive o fallback.
+             * Abrir um orçamento anterior a esta feature mostra o endereço atual do
+             * cliente já preenchido no formulário, e salvar converte esse valor em
+             * cópia. É assim que o histórico ganha snapshot: pelo uso, sem backfill.
+             */
+            'clienteEndereco' => $endereco['logradouro'],
+            'clienteMunicipio' => $endereco['municipio'],
+            'clienteEstado' => $endereco['estado'],
+            'clienteCep' => $endereco['cep'],
             'clienteContato' => $orcamento->cliente_contato,
             'formaPagamento' => $orcamento->forma_pagamento,
             'tipoFrete' => $orcamento->tipo_frete,
