@@ -293,6 +293,54 @@ class OrcamentoEnderecoTest extends TestCase
             );
     }
 
+    #[Test]
+    public function cnpj_em_mais_de_uma_filial_com_enderecos_diferentes_nao_exibe_nada(): void
+    {
+        /*
+         * 🚨 O caso que quase passou batido, e o mais perigoso da feature.
+         *
+         * CNPJ não identifica cliente nesta base — o grão é a filial. Em produção
+         * (11/09/2026) são 8.142 CNPJs repetidos, 7.518 com endereços diferentes e
+         * 2.334 em municípios diferentes. Um `first()` imprimiria a filial errada,
+         * às vezes de outra cidade, num documento que vai para o cliente.
+         */
+        $this->cliente(['cod_cliente' => '000123', 'loja' => '0001', 'endereco' => 'RUA NOVE 420', 'municipio' => 'CONTAGEM']);
+        $this->cliente(['cod_cliente' => '000123', 'loja' => '0002', 'endereco' => 'AVENIDA OUTRA 99', 'municipio' => 'SOROCABA']);
+
+        $orcamento = Orcamento::create($this->dadosBase() + ['cliente_cnpj' => '16729628000162']);
+
+        $this->assertNull($orcamento->enderecoDoDocumentoEmLinha(), 'Ambíguo tem que sair vazio, nunca com a filial errada.');
+    }
+
+    #[Test]
+    public function filiais_repetidas_com_o_mesmo_endereco_continuam_resolvendo(): void
+    {
+        // O contraveneno: cautela demais deixaria sem endereço o caso mais comum —
+        // a mesma empresa cadastrada duas vezes, no mesmo lugar.
+        $this->cliente(['cod_cliente' => '000123', 'loja' => '0001']);
+        $this->cliente(['cod_cliente' => '000123', 'loja' => '0002']);
+
+        $orcamento = Orcamento::create($this->dadosBase() + ['cliente_cnpj' => '16729628000162']);
+
+        $this->assertSame('RUA NOVE 420', $orcamento->enderecoDoDocumento()['logradouro']);
+    }
+
+    #[Test]
+    public function o_vinculo_direto_vence_a_ambiguidade_do_cnpj(): void
+    {
+        // Orçamento NOVO guarda `cliente_id`: aponta para a filial exata que o vendedor
+        // escolheu, então CNPJ repetido não é ambiguidade nenhuma para ele.
+        $matriz = $this->cliente(['cod_cliente' => '000123', 'loja' => '0001', 'endereco' => 'RUA NOVE 420', 'municipio' => 'CONTAGEM']);
+        $this->cliente(['cod_cliente' => '000123', 'loja' => '0002', 'endereco' => 'AVENIDA OUTRA 99', 'municipio' => 'SOROCABA']);
+
+        $orcamento = Orcamento::create($this->dadosBase() + [
+            'cliente_id' => $matriz->id,
+            'cliente_cnpj' => '16729628000162',
+        ]);
+
+        $this->assertSame('CONTAGEM', $orcamento->enderecoDoDocumento()['municipio']);
+    }
+
     /** @return array<string, mixed> */
     private function dadosBase(): array
     {

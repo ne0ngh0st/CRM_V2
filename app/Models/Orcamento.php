@@ -172,12 +172,53 @@ class Orcamento extends Model
         return $partes->isEmpty() ? null : $partes->implode(' — ');
     }
 
+    /**
+     * O cliente daquele CNPJ — **só quando a resposta é inequívoca**.
+     *
+     * 🚨 CNPJ NÃO IDENTIFICA UM CLIENTE NESTA BASE. O grão de `clientes` é a filial
+     * (`cod_cliente` + `loja`) justamente porque o mesmo CNPJ se repete entre filiais —
+     * é a razão de a Regra de ouro nº 3 existir. Medido em produção (11/09/2026):
+     *
+     *     8.142 CNPJs aparecem em mais de um cliente
+     *     7.518 deles com ENDEREÇOS diferentes entre si
+     *     2.334 deles em MUNICÍPIOS diferentes
+     *
+     * Pegar o `first()` num desses carimbaria no orçamento o endereço de outra filial —
+     * às vezes de outra cidade — num documento que vai para o cliente e que ninguém
+     * tem como conferir. Endereço errado é pior que endereço ausente: o vendedor
+     * confia no que está impresso, e o campo em branco ao menos se denuncia.
+     *
+     * Por isso: divergiu, devolve nada. O vendedor digita, e o que ele digitar vira a
+     * cópia do documento.
+     *
+     * ⚠️ Isto vale só para o FALLBACK, que existe para o acervo histórico sem vínculo.
+     * Orçamento novo não passa por aqui — ele guarda a cópia da linha exata que o
+     * vendedor escolheu na busca, então filial repetida não é ambiguidade nenhuma.
+     */
     private function clientePeloCnpj(): ?Cliente
     {
         $mascarado = Normalizador::documento($this->cliente_cnpj);
 
-        return $mascarado === null
-            ? null
-            : Cliente::query()->where('cnpj', $mascarado)->first();
+        if ($mascarado === null) {
+            return null;
+        }
+
+        $candidatos = Cliente::query()
+            ->where('cnpj', $mascarado)
+            // Teto pequeno de propósito: não é paginação, é um guarda contra CNPJ
+            // "coringa" do TOTVS (o 00.000.000/xxxx-xx chega a agrupar dezenas de
+            // entregas). Passando de 2 já se sabe que é ambíguo.
+            ->limit(25)
+            ->get();
+
+        if ($candidatos->isEmpty()) {
+            return null;
+        }
+
+        $enderecosDistintos = $candidatos
+            ->map(fn (Cliente $c) => implode('|', [$c->endereco, $c->municipio, $c->estado, $c->cep]))
+            ->unique();
+
+        return $enderecosDistintos->count() === 1 ? $candidatos->first() : null;
     }
 }
