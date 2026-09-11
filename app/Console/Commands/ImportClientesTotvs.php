@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Totvs\ClientesLookup;
 use App\Services\Totvs\LeitorRelatorio;
 use App\Services\Totvs\Normalizador;
 use App\Services\Totvs\Relatorios;
@@ -72,14 +73,14 @@ class ImportClientesTotvs extends Command
 
         $atualizaveis = [
             'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor', 'cod_segmento', 'cod_grupo',
-            'estado', 'cep', 'telefone', 'email', 'updated_at',
+            'endereco', 'municipio', 'estado', 'cep', 'telefone', 'email', 'updated_at',
         ];
 
         if ($temUltimoFaturamento) {
             $atualizaveis[] = 'data_ultima_compra';
         }
 
-        $chavesGravadas = $this->chavesJaGravadas();
+        $chavesGravadas = ClientesLookup::formaGravadaPorChave();
 
         $agora = now();
         $lote = [];
@@ -119,6 +120,10 @@ class ImportClientesTotvs extends Command
                 'cnpj' => Normalizador::documento($linha['CNPJ/CPF']),
                 'razao_social' => $linha['Nome'],
                 'nome_fantasia' => Normalizador::valorOuNull($linha['N Fantasia'] ?? ''),
+                // Logradouro + número vêm juntos da origem; não há bairro no relatório.
+                // Alimentam o endereço do orçamento (sugestão do Vagner, 10/09/2026).
+                'endereco' => Normalizador::valorOuNull($linha['Endereco'] ?? ''),
+                'municipio' => Normalizador::valorOuNull($linha['Municipio'] ?? ''),
                 'cod_vendedor' => Normalizador::valorOuNull($linha['Vendedor']),
                 'cod_segmento' => Normalizador::codigo($linha['Segmento 1']),
                 'cod_grupo' => Normalizador::codigo($linha['Grp.Vendas']),
@@ -160,27 +165,6 @@ class ImportClientesTotvs extends Command
         }
 
         return self::SUCCESS;
-    }
-
-    /**
-     * Mapa `chave normalizada => [cod_cliente, loja] como estão gravados`.
-     *
-     * Custa ~10 MB de memória para 91 mil clientes e evita o upsert errar o alvo por
-     * causa de zero à esquerda. Carregar de uma vez é muito mais barato que consultar
-     * por linha: seriam 92 mil SELECTs.
-     *
-     * @return array<string, array{0: string, 1: string}>
-     */
-    private function chavesJaGravadas(): array
-    {
-        $mapa = [];
-
-        DB::table('clientes')->select('cod_cliente', 'loja')->orderBy('id')->cursor()
-            ->each(function ($c) use (&$mapa) {
-                $mapa[Normalizador::chaveCliente($c->cod_cliente, $c->loja)] = [$c->cod_cliente, $c->loja];
-            });
-
-        return $mapa;
     }
 
     /**
