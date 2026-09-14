@@ -4,14 +4,23 @@
 > interruptor `PORTAL_PEDIDOS_HABILITADO` ausente do `.env` de lá — a rota responde 404 e o
 > botão não existe. **Ver §7** para o que foi construído e como ligar.
 >
-> Falta uma coisa só para homologar: **dado nas tabelas `portal_*`**, que hoje estão vazias.
-> O que o Marcelo precisa mandar está na §4.5.
+> ✅ **Homologado ponta a ponta em 2026-09-14** — pedido **1129** criado no Portal pelo
+> nosso próprio caminho (`preparar()` → `enviar()`), com o payload congelado e a chave de
+> idempotência persistida. Ver **§4.7**, inclusive o que falta conferir no total do pedido
+> (é a prova do IPI) e o que esse teste deliberadamente **não** prova.
 >
-> 🚨 **E uma pergunta ainda sem resposta que é PRÉ-REQUISITO, não curiosidade**: ninguém
-> confirmou se o "homolog" do Portal compartilha banco com produção. Enquanto isso não for
-> respondido, o primeiro envio bem-sucedido pode criar pedido de verdade no SIC. Nenhum
-> pedido foi criado até aqui — as 24 sondagens todas voltaram 4xx, e isso foi verificado
-> ativamente reenviando a chave de idempotência (§4.5).
+> Falta para liberar de verdade: **dado real nas tabelas `portal_*`**. As linhas de hoje
+> foram semeadas à mão para o teste. O que o Marcelo precisa mandar está na §4.5.
+>
+> ✅ **A pergunta que era pré-requisito foi respondida em 2026-09-14: o
+> `api-portal.autopel.com` é ambiente de homologação DE VERDADE, com base separada da
+> produção.** Isso libera criar pedido à vontade ali para testar — e é por isso que ela
+> era pré-requisito, não curiosidade: sem a resposta, todo envio bem-sucedido seria um
+> registro possivelmente real no SIC.
+>
+> ⚠️ **Vale para o homolog, não para o dia do go-live.** Quando existir URL de produção,
+> ela entra só no `.env` do servidor de produção e o interruptor volta a ser a única
+> proteção.
 >
 > As §§1-6 são a análise original (2026-09-09) da documentação recebida do time do Portal
 > (`docs/API-Pedidos-Autopel.pdf`) cruzada com o schema real do CRM-V2.
@@ -439,6 +448,110 @@ de que o resto do payload está aceitável para a API.
 produz um erro de validação FALSO (`products: Expected number, received nan`). Mandar
 sempre por arquivo (`-d @arquivo.json`).
 
+## 4.6 ✅ Primeiro pedido criado — 2026-09-14
+
+O time do Portal mandou uma tripla válida e autorizou o teste. **Deu `201`.**
+
+```
+POST /v1/api/orders
+{ "createdBy": 188, "clientId": 47575, "clientRepresentativeId": 108,
+  "deliveryClientId": 47575, "orderReference": "TESTE-INTEGRACAO-001",
+  "products": [{ "productId": 12, "quantity": 10, "unitPrice": 1250, "invoiceTypeId": 2 }] }
+
+201 → { "payload": { "id": 1128, "clientId": 47575,
+                     "clientCompanyName": "SUPERMERCADO PINHEIRAO LOJA 2" } }
+```
+
+**Pedido nº 1128**, criado em 751 ms. ⚠️ É pedido REAL — se precisar sumir, quem apaga é
+o time do Portal.
+
+### 🚨 O contrato de idempotência, verificado na prática
+
+Isto não é mais "o que a documentação deles diz". Foi medido:
+
+| Reenvio | Resposta |
+|---|---|
+| Mesma chave, **mesmo** corpo | `201` com o **mesmo `id` 1128** e `Idempotent-Replay: true` — **nenhum segundo pedido** |
+| Mesma chave, corpo **diferente** (quantidade 10 → 11) | `409 "Idempotency-Key já utilizada para um pedido com outro conteúdo"` |
+
+**Essas duas linhas são a justificativa inteira de duas decisões de desenho:**
+
+1. **A chave nasce persistida e é reusada** → é o que torna a retentativa segura. Sem
+   isso, cada tentativa criaria um pedido.
+2. **O payload é congelado em `orcamentos.portal_payload`** → é o que evita o 409 da
+   segunda linha. Se a retentativa remontasse o corpo a partir do orçamento, qualquer
+   edição no meio do caminho (uma quantidade corrigida, um item a mais) transformaria uma
+   retentativa legítima num `409` que ninguém saberia explicar.
+
+⚠️ **A chave NÃO expira.** `crmv2-teste-integracao-001` está gasta para sempre: qualquer
+reenvio com ela devolve o pedido 1128. Chave de teste queimada é chave que não volta.
+
+### O que ainda NÃO foi provado
+
+O pedido 1128 nasceu de um `curl` com o payload DELES — provou o token, a tripla, o
+formato e a idempotência. **Não passou pelo nosso botão** (isso veio logo em seguida, na
+§4.7). Para o teste de ponta a ponta faltava popular as tabelas `portal_*`, e aí esbarra
+num detalhe honesto que continua de pé:
+
+⚠️ **O cliente 47575 é "SUPERMERCADO PINHEIRAO LOJA 2" e não casa com nenhum cliente
+nosso** (os PINHEIRAO da nossa base são "SUPERMERCADO NOVO PINHEIRAO", "PINHEIRAO MASTER"
+e uma churrascaria). Um de-para para ele seria **inventado** — e, pior, a guarda de CNPJ
+(§4.4) só passaria se o `document` da linha fosse preenchido com o CNPJ do nosso cliente,
+o que **desliga a guarda em vez de exercitá-la**.
+
+Ou seja: o teste de ponta a ponta com esses ids prova o encanamento (botão → autorização →
+resolver → payload → job → HTTP → 201 → sino), mas **não** prova o de-para. As duas coisas
+precisam de provas diferentes, e a do de-para depende de dado real — ou de um cliente de
+teste que exista dos dois lados.
+
+## 4.7 ✅ Ponta a ponta pelo NOSSO caminho — 2026-09-14
+
+O pedido 1128 nasceu de um `curl`. Este nasceu do código que vai para produção:
+`preparar()` (de-para + montagem + congelamento da chave) e `enviar()` (HTTP), exatamente
+as duas etapas que o botão dispara.
+
+```
+ORC-2374 → 10 × R$ 12,50, item com calcula_ipi = true, modo produto, aprovado
+
+payload congelado em orcamentos.portal_payload:
+{ "clientId": 47575, "createdBy": 188, "clientRepresentativeId": 108,
+  "deliveryClientId": 47575, "shippingType": "CIF", "orderReference": "ORC-2374",
+  "products": [{ "productId": 12, "quantity": 10, "unitPrice": 1250,
+                 "invoiceTypeId": 2, "orderLine": "3650" }] }
+
+chave: crmv2-orc-2374-c96f7d95-…   →   201, pedido nº 1129
+```
+
+**Os números foram escolhidos iguais aos do exemplo deles** (10 × R$ 12,50) para que o
+total do Portal seja comparável sem conta nenhuma.
+
+### 🚨 O que ESTE pedido serve para verificar: o IPI
+
+`unitPrice: 1250` saiu de um item **que participa de IPI**, com o interruptor já no
+comportamento que eles pediram ("o preço deve vir já com IPI") — ou seja, mandamos o
+`valor_unitario` cheio, sem descontar os 3,25%.
+
+⚠️ **A API não devolve total**, então a conferência não sai daqui: alguém precisa abrir o
+pedido **1129** no Portal e olhar.
+
+| O que aparecer lá | O que significa |
+|---|---|
+| **R$ 125,00** | ✅ certo — eles usam o preço como mandamos |
+| **R$ 129,06** (+3,25%) | ❌ eles aplicam o `ipi_rate` do produto POR CIMA → `PORTAL_PEDIDOS_PRECO_COM_IPI=false` |
+
+É uma linha de `.env` em qualquer um dos dois casos. Foi para isto que o interruptor
+existe.
+
+### ⚠️ O que este teste NÃO prova (continua valendo o da §4.6)
+
+O de-para foi **semeado à mão** com os ids do homolog deles apontando para um cliente
+nosso. A linha `portal_clientes.document` foi preenchida com o CNPJ desse mesmo cliente —
+então a guarda de CNPJ (§4.4) passa **trivialmente**, porque está comparando o valor com
+ele mesmo. O encanamento está provado; a guarda não.
+
+Para exercitá-la de verdade falta o que já está pedido na §4.1: um `clientId` de
+homologação que corresponda a um cliente que exista **dos dois lados**.
+
 ## 5. Lacunas de schema — medidas, não estimadas
 
 Números tirados do `palma_v2` de desenvolvimento em 2026-09-09 (1.864 orçamentos,
@@ -467,13 +580,24 @@ percebe olhando a tela do CRM. Isso precisa ser confirmado com o time do Portal 
 primeiro envio real**, e travado por teste comparando total do orçamento × total do pedido
 criado. É o mesmo tipo de divergência silenciosa da §3.1, só que com uma causa a mais.
 
-> ⚠️ **Atualização de 2026-09-10 — a pergunta ficou muito mais precisa.** Lendo o schema
-> (§4.3), `autopel_sic.products` tem **`ipi`, `ipi_rate`, `iva_st`, `icms_rate` e `ncm`**.
-> Ou seja: **o Portal guarda a tributação por produto** e tem tudo para calcular o IPI
-> sozinho. Isso torna muito provável que o `unitPrice` deva ir **SEM IPI** — mas
-> **provável não é confirmado**, e errar aqui custa 3,25% em cada pedido. A pergunta ao
-> Marcelo agora é fechada e verificável: *"o `ipi_rate` do produto é aplicado por cima do
-> `unitPrice` que eu mando, ou o `unitPrice` já tem que vir com o imposto embutido?"*
+> ✅ **RESPONDIDO em 2026-09-14 pelo time do Portal: "o preço deve vir já com IPI".**
+> `config('portal.preco_com_ipi')` passou a `true` (default do config, não só do `.env`,
+> porque produção não tem a variável). O `unitPrice` leva o `valor_unitario` como está.
+>
+> ⚠️ **E a resposta foi o OPOSTO do que a evidência de schema sugeria.** O raciocínio
+> abaixo era razoável e estava errado — fica registrado como lembrete de que inferência
+> sobre sistema alheio é hipótese, não conclusão:
+>
+> > Lendo o schema (§4.3), `autopel_sic.products` tem `ipi`, `ipi_rate`, `iva_st`,
+> > `icms_rate` e `ncm` — ou seja, o Portal teria tudo para calcular o imposto sozinho.
+>
+> **O que salvou foi o desenho, não o palpite**: isso nasceu como um interruptor de uma
+> linha, então a correção custou trocar um default em vez de caçar `/1.0325` espalhado.
+>
+> 🚨 **A conferência já tem um pedido com nome e sobrenome: o nº 1129** (§4.7), criado a
+> partir de um item que participa de IPI. Se o total lá for R$ 125,00, está certo; se for
+> R$ 129,06, eles aplicam o `ipi_rate` por cima do que mandamos e o interruptor volta a
+> `false`.
 
 ## 6. Decisões em aberto (para o Tony)
 

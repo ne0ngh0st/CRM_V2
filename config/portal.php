@@ -38,19 +38,23 @@ return [
     |---------------------------------------------------------------------------
     | O IPI vai embutido no unitPrice?
     |---------------------------------------------------------------------------
-    | 🚨 PERGUNTA EM ABERTO COM O MARCELO (10/09/2026). Errar aqui custa 3,25%
-    | em TODO pedido, e o `201` volta bonito do mesmo jeito — ninguém percebe.
+    | ✅ RESPONDIDO pelo time do Portal em 14/09/2026: **"o preço deve vir já com
+    | IPI"**. Ou seja, o `unitPrice` leva o `valor_unitario` do orçamento como
+    | está — o CRM já o guarda com os 3,25% embutidos.
     |
-    | O default é `false` (manda SEM IPI) por causa da evidência de schema:
-    | `autopel_sic.products` tem `ipi`, `ipi_rate`, `iva_st`, `icms_rate` e `ncm`,
-    | ou seja, o Portal guarda a tributação por produto e tem tudo para calcular
-    | o imposto sozinho. Evidência é hipótese, não confirmação — por isso isto é
-    | um interruptor de uma linha, e não uma decisão espalhada pelo código.
+    | ⚠️ E a resposta foi o OPOSTO do que a evidência de schema sugeria. Havia um
+    | palpite razoável em contrário (`autopel_sic.products` tem `ipi`, `ipi_rate`,
+    | `iva_st`, `icms_rate` e `ncm`, então o Portal teria como calcular sozinho) —
+    | e ele estava errado. É o melhor argumento possível para isto ter nascido
+    | como interruptor de uma linha em vez de regra espalhada pelo código: a
+    | correção custou trocar um default, não caçar `/1.0325` em cinco arquivos.
     |
-    | Como confirmar em homologação: enviar um orçamento com item que participa
-    | de IPI e comparar o total que o Portal calcula com o total do orçamento.
+    | 🚨 Continua valendo conferir no PRIMEIRO pedido real: comparar o total que o
+    | Portal calcula com o total do orçamento. Se vier 3,25% acima, é sinal de que
+    | eles aplicam o `ipi_rate` do produto POR CIMA do que mandamos — e aí a
+    | resposta muda de novo.
     */
-    'preco_com_ipi' => (bool) env('PORTAL_PEDIDOS_PRECO_COM_IPI', false),
+    'preco_com_ipi' => (bool) env('PORTAL_PEDIDOS_PRECO_COM_IPI', true),
 
     /*
     |---------------------------------------------------------------------------

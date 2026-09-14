@@ -77,7 +77,12 @@ class PortalPedidoPayloadTest extends TestCase
         $this->assertIsInt($corpo['products'][0]['unitPrice']);
     }
 
-    public function test_item_com_ipi_vai_sem_o_imposto_por_padrao(): void
+    /**
+     * O interruptor DESLIGADO continua coberto: a resposta do time do Portal pode
+     * mudar (se um dia eles aplicarem o `ipi_rate` do produto por cima), e a volta
+     * precisa ser um `.env`, não código novo.
+     */
+    public function test_interruptor_desligado_manda_o_valor_sem_ipi(): void
     {
         config()->set('portal.preco_com_ipi', false);
 
@@ -89,7 +94,8 @@ class PortalPedidoPayloadTest extends TestCase
         $this->assertSame(1000, $corpo['products'][0]['unitPrice']);
     }
 
-    public function test_interruptor_de_ipi_manda_o_valor_cheio(): void
+    /** ✅ O comportamento de produção: "o preço deve vir já com IPI" (14/09/2026). */
+    public function test_preco_vai_com_ipi_embutido_como_o_portal_pede(): void
     {
         config()->set('portal.preco_com_ipi', true);
 
