@@ -49,10 +49,10 @@ return [
     | como interruptor de uma linha em vez de regra espalhada pelo código: a
     | correção custou trocar um default, não caçar `/1.0325` em cinco arquivos.
     |
-    | 🚨 Continua valendo conferir no PRIMEIRO pedido real: comparar o total que o
-    | Portal calcula com o total do orçamento. Se vier 3,25% acima, é sinal de que
-    | eles aplicam o `ipi_rate` do produto POR CIMA do que mandamos — e aí a
-    | resposta muda de novo.
+    | ✅ CONFERIDO na tela do Portal em 14/09/2026, pedido de homologação nº 1129:
+    | 10 × R$ 12,50 de um item que participa de IPI apareceu como **R$ 125,00**,
+    | exatamente o que mandamos. Eles NÃO somam imposto por cima do `unitPrice`.
+    | A pergunta está encerrada; o caminho desligado fica só como seguro.
     */
     'preco_com_ipi' => (bool) env('PORTAL_PEDIDOS_PRECO_COM_IPI', true),
 

@@ -6,8 +6,8 @@
 >
 > ✅ **Homologado ponta a ponta em 2026-09-14** — pedido **1129** criado no Portal pelo
 > nosso próprio caminho (`preparar()` → `enviar()`), com o payload congelado e a chave de
-> idempotência persistida. Ver **§4.7**, inclusive o que falta conferir no total do pedido
-> (é a prova do IPI) e o que esse teste deliberadamente **não** prova.
+> idempotência persistida. **O total bateu (R$ 125,00), o que fecha a questão do IPI.**
+> Ver **§4.7**, inclusive o que esse teste deliberadamente **não** prova.
 >
 > Falta para liberar de verdade: **dado real nas tabelas `portal_*`**. As linhas de hoje
 > foram semeadas à mão para o teste. O que o Marcelo precisa mandar está na §4.5.
@@ -525,22 +525,28 @@ chave: crmv2-orc-2374-c96f7d95-…   →   201, pedido nº 1129
 **Os números foram escolhidos iguais aos do exemplo deles** (10 × R$ 12,50) para que o
 total do Portal seja comparável sem conta nenhuma.
 
-### 🚨 O que ESTE pedido serve para verificar: o IPI
+### ✅ O IPI está FECHADO — conferido no pedido 1129
 
-`unitPrice: 1250` saiu de um item **que participa de IPI**, com o interruptor já no
-comportamento que eles pediram ("o preço deve vir já com IPI") — ou seja, mandamos o
+`unitPrice: 1250` saiu de um item **que participa de IPI**, com o interruptor no
+comportamento que eles pediram ("o preço deve vir já com IPI") — mandamos o
 `valor_unitario` cheio, sem descontar os 3,25%.
 
-⚠️ **A API não devolve total**, então a conferência não sai daqui: alguém precisa abrir o
-pedido **1129** no Portal e olhar.
+A API não devolve total, então a conferência teve que ser feita na tela deles. **O Portal
+mostra R$ 125,00** para o pedido 1129 — exatamente 10 × R$ 12,50, o que mandamos.
 
-| O que aparecer lá | O que significa |
+| Hipótese | Veredito |
 |---|---|
-| **R$ 125,00** | ✅ certo — eles usam o preço como mandamos |
-| **R$ 129,06** (+3,25%) | ❌ eles aplicam o `ipi_rate` do produto POR CIMA → `PORTAL_PEDIDOS_PRECO_COM_IPI=false` |
+| **R$ 125,00** — eles usam o preço como mandamos | ✅ **é o que aconteceu** |
+| **R$ 129,06** (+3,25%) — aplicariam o `ipi_rate` por cima | ❌ descartada |
 
-É uma linha de `.env` em qualquer um dos dois casos. Foi para isto que o interruptor
-existe.
+**O que isso encerra:** o Portal **não** soma imposto em cima do `unitPrice`, apesar de
+`autopel_sic.products` ter `ipi`/`ipi_rate`/`ncm`. `PORTAL_PEDIDOS_PRECO_COM_IPI` fica em
+`true` e o caminho desligado permanece só como seguro, coberto por teste.
+
+⚠️ **A prova vale para item que participa de IPI em modo produto**, que é o caso que
+podia dar errado. Item sem IPI e modo serviço nunca passaram pelo desconto de 3,25% de
+qualquer jeito — o `precoEmCentavos()` só mexe no valor quando `itemParticipaIpi()` é
+verdadeiro.
 
 ### ⚠️ O que este teste NÃO prova (continua valendo o da §4.6)
 
@@ -594,10 +600,9 @@ criado. É o mesmo tipo de divergência silenciosa da §3.1, só que com uma cau
 > **O que salvou foi o desenho, não o palpite**: isso nasceu como um interruptor de uma
 > linha, então a correção custou trocar um default em vez de caçar `/1.0325` espalhado.
 >
-> 🚨 **A conferência já tem um pedido com nome e sobrenome: o nº 1129** (§4.7), criado a
-> partir de um item que participa de IPI. Se o total lá for R$ 125,00, está certo; se for
-> R$ 129,06, eles aplicam o `ipi_rate` por cima do que mandamos e o interruptor volta a
-> `false`.
+> ✅ **CONFERIDO no pedido 1129 (§4.7): o Portal mostra R$ 125,00**, exatamente o que
+> mandamos. Eles não somam imposto por cima do `unitPrice`. O interruptor fica em `true`
+> e esta pergunta está encerrada.
 
 ## 6. Decisões em aberto (para o Tony)
 

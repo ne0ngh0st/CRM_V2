@@ -1986,7 +1986,8 @@ Fecha o arco da integração com o Portal. Detalhe completo em
    não uma refatoração.
 
 **Pedido 1129 criado pelo nosso próprio caminho** (`preparar()` → `enviar()`), com payload
-congelado e chave de idempotência persistida antes do envio. ⚠️ **O que ele prova é o
+congelado e chave de idempotência persistida antes do envio. **O total no Portal saiu
+R$ 125,00 — exatamente o que mandamos —, o que fecha a questão do IPI.** ⚠️ **O que ele prova é o
 encanamento, não o de-para**: a linha `portal_clientes` foi semeada à mão com o CNPJ do
 nosso próprio cliente, então a guarda de CNPJ passou comparando o valor com ele mesmo.
 São duas provas diferentes e só uma foi feita.
@@ -2025,10 +2026,10 @@ sempre — reenviá-la devolve o pedido antigo, nunca cria outro.
     separada da produção**. Dois pedidos criados lá: o **1128** por `curl` (provou token,
     tripla, formato e idempotência) e o **1129** pelo NOSSO caminho — `preparar()` monta e
     congela, `enviar()` manda —, com a chave persistida no orçamento antes do envio.
-    - 🚨 **A conferência do IPI ainda depende de olho humano**: a API não devolve total.
-      O pedido **1129** foi montado com 10 × R$ 12,50 de um item que participa de IPI. Se
-      o total no Portal for **R$ 125,00**, está certo; se for **R$ 129,06** (+3,25%), eles
-      aplicam o `ipi_rate` por cima e `PORTAL_PEDIDOS_PRECO_COM_IPI` volta a `false`.
+    - ✅ **O IPI foi conferido e bateu.** A API não devolve total, então a prova saiu da
+      tela deles: o pedido **1129** (10 × R$ 12,50 de um item que participa de IPI)
+      aparece como **R$ 125,00** no Portal — exatamente o que mandamos. Eles não somam
+      imposto por cima do `unitPrice`. `PORTAL_PEDIDOS_PRECO_COM_IPI` fica em `true`.
     - 🔴 **O que ainda falta para LIBERAR: dado real nas tabelas `portal_*`.** As linhas
       de hoje foram **semeadas à mão** para o teste — e, como o `document` da linha veio do
       nosso próprio cliente, a guarda de CNPJ passou comparando o valor com ele mesmo. O
