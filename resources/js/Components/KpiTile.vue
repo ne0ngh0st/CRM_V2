@@ -13,6 +13,22 @@ defineProps({
     href: { type: String, default: null },
 });
 
+/*
+ * ⚠️ `basis-auto`, NUNCA `basis-0` (e sem `min-w-[…]`): é o que impede o número de
+ * sair truncado.
+ *
+ * Com `flex-1 basis-0` todo tile da fileira recebia a MESMA largura, calculada a
+ * partir do zero — então o tile de dinheiro, que é o mais largo, era espremido ao
+ * tamanho do tile de contagem e o `truncate` comia o valor ("R$ 24.575…", "VALOR EM
+ * RIS…"), justamente no número que a pessoa abriu a tela para ler. O `min-w-[84px]`
+ * piorava: `min-width` explícito substitui o `auto` do flex e AUTORIZA o item a
+ * encolher abaixo do próprio conteúdo.
+ *
+ * Com `basis-auto` e o `min-width: auto` de volta, o tile nunca fica menor que o
+ * texto: quando a fileira não cabe, ele quebra linha (o container é `flex-wrap`),
+ * que é o comportamento previsto no Design System. O `truncate` continua aqui só
+ * como rede para o caso extremo de um tile sozinho mais largo que o card.
+ */
 const toneText = {
     default: 'text-navy',
     ok: 'text-emerald-600',
@@ -26,7 +42,7 @@ const toneText = {
     <component
         :is="href ? Link : 'div'"
         :href="href ?? undefined"
-        class="min-w-[84px] flex-1 basis-0 rounded border border-gray-200 bg-gray-50 px-2 py-2 text-center"
+        class="flex-1 basis-auto rounded border border-gray-200 bg-gray-50 px-2.5 py-2 text-center"
         :class="href ? 'cursor-pointer transition hover:border-navy hover:bg-white hover:shadow-sm' : ''"
     >
         <p

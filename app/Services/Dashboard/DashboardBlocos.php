@@ -553,7 +553,26 @@ class DashboardBlocos
                 $em7Dias = now()->addDays(7)->toDateString();
 
                 $atrasados = (clone $emAberto)->whereDate('data_previsao_faturamento', '<', $hoje);
-                $vencendo = (clone $emAberto)->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias]);
+
+                /*
+                 * ⚠️ Uma varredura só para os cinco números, em vez das quatro que havia
+                 * (dois COUNT e dois SUM sobre a mesma faixa). Foi o que permitiu o
+                 * "Valor em aberto" — o total da carteira de pedidos, que é a pergunta
+                 * que o vendedor faz antes de olhar o que está em risco — entrar sem
+                 * custo nenhum de query.
+                 *
+                 * ⚠️ `SUM(cond)` responde o mesmo que o `COUNT` que substitui: previsão
+                 * nula torna a comparação NULL e o SUM ignora NULL, igual ao WHERE.
+                 */
+                $emRisco = '(data_previsao_faturamento < ? OR data_previsao_faturamento BETWEEN ? AND ?)';
+
+                $linha = (clone $emAberto)
+                    ->selectRaw('COUNT(*) as total_aberto')
+                    ->selectRaw('COALESCE(SUM(valor_total), 0) as valor_em_aberto')
+                    ->selectRaw('COALESCE(SUM(data_previsao_faturamento < ?), 0) as atrasados', [$hoje])
+                    ->selectRaw('COALESCE(SUM(data_previsao_faturamento BETWEEN ? AND ?), 0) as vencendo', [$hoje, $em7Dias])
+                    ->selectRaw("COALESCE(SUM(CASE WHEN {$emRisco} THEN valor_total END), 0) as valor_em_risco", [$hoje, $hoje, $em7Dias])
+                    ->first();
 
                 $itens = (clone $atrasados)
                     ->with('cliente:id,razao_social')
@@ -570,9 +589,11 @@ class DashboardBlocos
                     ->values();
 
                 return [
-                    'atrasados' => (clone $atrasados)->count(),
-                    'vencendo' => (clone $vencendo)->count(),
-                    'valorEmRisco' => (float) (clone $atrasados)->sum('valor_total') + (float) (clone $vencendo)->sum('valor_total'),
+                    'totalAberto' => (int) ($linha->total_aberto ?? 0),
+                    'valorEmAberto' => (float) ($linha->valor_em_aberto ?? 0),
+                    'atrasados' => (int) ($linha->atrasados ?? 0),
+                    'vencendo' => (int) ($linha->vencendo ?? 0),
+                    'valorEmRisco' => (float) ($linha->valor_em_risco ?? 0),
                     'itens' => $itens,
                 ];
             },

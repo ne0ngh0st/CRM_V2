@@ -68,8 +68,14 @@ final readonly class ChaveEscopo
      *   de VALOR — e é por isso que o bump importa ainda mais: sem ele o card seguiria
      *   mostrando a contagem velha por até 30 min, ao lado de uma tabela já agrupada, e
      *   ninguém suspeitaria de cache. Não haveria nada quebrado para acusar.
+     *
+     *   v7 → v8 (2026-09-14) — `pedidos-atencao` passou a carregar `totalAberto` e
+     *   `valorEmAberto` (o total da carteira de pedidos, ao lado do que está em risco).
+     *   Bloco JÁ EM PRODUÇÃO: sem o bump, o tile novo apareceria vazio — `R$ NaN`, que é
+     *   o que `Intl.NumberFormat` faz com `undefined` — por até 30 min depois do deploy,
+     *   só para quem já estava logado.
      */
-    public const VERSAO = 'v7';
+    public const VERSAO = 'v8';
 
     private const PREFIXO = 'agg';
 

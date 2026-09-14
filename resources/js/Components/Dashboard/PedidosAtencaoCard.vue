@@ -27,7 +27,7 @@ function formatBRL(valor) {
 </script>
 
 <template>
-    <DarkCard title="Pedidos que Requerem Atenção" subtitle="Atrasados e vencendo nos próximos 7 dias"
+    <DarkCard title="Pedidos que Requerem Atenção" subtitle="Carteira em aberto, e o que está atrasado ou vence em 7 dias"
         :rotulo-detalhes="'Ver pedidos'"
         chave-detalhes="pedidos-atencao"
     >
@@ -39,12 +39,20 @@ function formatBRL(valor) {
             </svg>
         </template>
 
+        <!--
+            A primeira fileira é a carteira INTEIRA de pedidos em aberto (quantos e quanto);
+            a segunda é o recorte que precisa de ação. O total vem antes porque é a pergunta
+            que se faz primeiro — "quanto eu tenho em aberto?" — e porque sem ele o "valor em
+            risco" ficava sem régua: R$ 24 mil pode ser tudo ou quase nada da carteira.
+        -->
         <div class="flex flex-wrap gap-2">
-            <KpiTile :value="pedidosAtencao.atrasados" label="Atrasados" tone="danger" :href="pedidosHref({ situacao: 'atrasado' })" />
-            <KpiTile :value="pedidosAtencao.vencendo" label="Vencendo em 7d" tone="warn" :href="pedidosHref({ situacao: 'vencendo' })" />
+            <KpiTile :value="pedidosAtencao.totalAberto" label="Em aberto" :href="pedidosHref({})" />
+            <KpiTile :value="formatBRL(pedidosAtencao.valorEmAberto)" label="Valor em aberto" compact :href="pedidosHref({})" />
         </div>
         <div class="mt-2 flex flex-wrap gap-2">
-            <KpiTile :value="formatBRL(pedidosAtencao.valorEmRisco)" label="Valor em risco" :href="pedidosHref({ situacao: 'risco' })" />
+            <KpiTile :value="pedidosAtencao.atrasados" label="Atrasados" tone="danger" :href="pedidosHref({ situacao: 'atrasado' })" />
+            <KpiTile :value="pedidosAtencao.vencendo" label="Vencendo em 7d" tone="warn" :href="pedidosHref({ situacao: 'vencendo' })" />
+            <KpiTile :value="formatBRL(pedidosAtencao.valorEmRisco)" label="Valor em risco" compact :href="pedidosHref({ situacao: 'risco' })" />
         </div>
 
         <template #detalhes>

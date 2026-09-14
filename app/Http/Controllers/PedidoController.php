@@ -46,17 +46,7 @@ class PedidoController extends Controller
         $situacao = (string) $request->string('situacao') ?: 'todos';
         $ordenar = (string) $request->string('ordenar') ?: 'previsao_asc';
 
-        $kpis = [
-            'totalAberto' => $this->baseQueryAbertos($request)->count(),
-            'atrasados' => $this->baseQueryAbertos($request)->where('data_previsao_faturamento', '<', $hoje)->count(),
-            'vencendo' => $this->baseQueryAbertos($request)->whereBetween('data_previsao_faturamento', [$hoje, $em7Dias])->count(),
-            'valorEmRisco' => (float) $this->baseQueryAbertos($request)
-                ->where(function ($q) use ($hoje, $em7Dias) {
-                    $q->where('data_previsao_faturamento', '<', $hoje)
-                        ->orWhereBetween('data_previsao_faturamento', [$hoje, $em7Dias]);
-                })
-                ->sum('valor_total'),
-        ];
+        $kpis = $this->kpisAbertos($request, $hoje, $em7Dias);
 
         $pedidos = $this->listaQueryAbertos($request)
             ->with(['cliente:id,razao_social,cnpj,telefone,email', 'itens'])
@@ -147,6 +137,41 @@ class PedidoController extends Controller
     public function exportarAbertos(Request $request): RedirectResponse
     {
         return $this->entregarPlanilha('pedidos-abertos', $request);
+    }
+
+    /**
+     * Os 5 KPIs do topo de /pedidos-abertos, numa VARREDURA SÓ.
+     *
+     * ⚠️ Eram quatro chamadas a `baseQueryAbertos()` — quatro varreduras da mesma faixa de
+     * pedidos e quatro resoluções de escopo (cada `baseQueryAbertos()` chama o
+     * `DashboardScopeResolver`, que consulta roles/perfis). Agregar por `SUM(condição)` na
+     * mesma passada responde tudo de uma vez, e foi o que deixou o "Valor em aberto"
+     * entrar de graça — mesmo padrão de `DashboardBlocos::pedidosEmitidos()`.
+     *
+     * ⚠️ `SUM(cond)` dá o mesmo número que o `COUNT` que ele substitui: previsão nula torna
+     * a comparação NULL, e o SUM ignora NULL exatamente como o WHERE ignorava a linha.
+     *
+     * @return array{totalAberto: int, valorEmAberto: float, atrasados: int, vencendo: int, valorEmRisco: float}
+     */
+    private function kpisAbertos(Request $request, string $hoje, string $em7Dias): array
+    {
+        $emRisco = '(data_previsao_faturamento < ? OR data_previsao_faturamento BETWEEN ? AND ?)';
+
+        $linha = $this->baseQueryAbertos($request)
+            ->selectRaw('COUNT(*) as total_aberto')
+            ->selectRaw('COALESCE(SUM(valor_total), 0) as valor_em_aberto')
+            ->selectRaw('COALESCE(SUM(data_previsao_faturamento < ?), 0) as atrasados', [$hoje])
+            ->selectRaw('COALESCE(SUM(data_previsao_faturamento BETWEEN ? AND ?), 0) as vencendo', [$hoje, $em7Dias])
+            ->selectRaw("COALESCE(SUM(CASE WHEN {$emRisco} THEN valor_total END), 0) as valor_em_risco", [$hoje, $hoje, $em7Dias])
+            ->first();
+
+        return [
+            'totalAberto' => (int) ($linha->total_aberto ?? 0),
+            'valorEmAberto' => (float) ($linha->valor_em_aberto ?? 0),
+            'atrasados' => (int) ($linha->atrasados ?? 0),
+            'vencendo' => (int) ($linha->vencendo ?? 0),
+            'valorEmRisco' => (float) ($linha->valor_em_risco ?? 0),
+        ];
     }
 
     /** Escopo (cod_vendedor) + busca/status/data. Pedidos em aberto (data_faturamento nula). Usado por index() (KPIs e lista) e exportarAbertos(). */

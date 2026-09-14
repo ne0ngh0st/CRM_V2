@@ -92,6 +92,7 @@ const temFiltrosAtivos = computed(() =>
                         <KpiTile :value="kpis.totalAberto" label="Em aberto" />
                         <KpiTile :value="kpis.atrasados" label="Atrasados" tone="danger" />
                         <KpiTile :value="kpis.vencendo" label="Vencendo 7d" tone="warn" />
+                        <KpiTile :value="formatBRL(kpis.valorEmAberto)" label="Valor em aberto" compact />
                         <KpiTile :value="formatBRL(kpis.valorEmRisco)" label="Valor em risco" compact />
                     </template>
                     <template #filtros>
