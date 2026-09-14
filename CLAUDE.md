@@ -2056,6 +2056,15 @@ sempre — reenviá-la devolve o pedido antigo, nunca cria outro.
     - ⚠️ **`clients.seller_one` NÃO espelha o nosso `cod_vendedor`** — formato igual,
       valores divergentes em 3 dos 9 casos. Não usar para nada; o vendedor sai de
       `users.email`/`protheus_seller_code`.
+  - 🟢 **Achado em 2026-09-14 (varredura completa, §4.8 do doc): o próprio portal do
+    cliente já chama `GET /v1/clients/?search=<cnpj>&pageSize=99` no `api-portal`.** É o
+    endpoint de resolução de cliente por CNPJ que pedimos por WhatsApp — está no ar. Dá
+    para resolver `clientId` ao vivo em vez de esperar endpoint novo, MAS falta confirmar
+    se o NOSSO token tem escopo para `/clients` (só vi o front deles chamando, logado como
+    usuário). E `invoice_types` foi conferido na fonte: 1=Serviço, 2=Venda(Consumo),
+    3=Remessa, 4=Venda(Revenda), batendo com `config/portal.php`. ⚠️ Eles têm
+    `products_dedup_*` (deduplicando catálogo) e backups `bkp_20260910_*` — o de-para pode
+    mudar embaixo da gente; a guarda de CNPJ e o espelho local seguem sendo a proteção.
   - 🟢 **Mas existe um caminho já no ar, achado no mesmo dia: a `api-integrador.autopel.com`**
     (zip em `docs/autopel-integrador-api-*.zip`, feita para o projeto do Lovable). É uma API
     **somente leitura** com metadados e `SELECT` parametrizado sobre **quatro bancos MySQL —

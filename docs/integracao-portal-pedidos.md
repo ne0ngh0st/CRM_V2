@@ -558,6 +558,128 @@ ele mesmo. O encanamento está provado; a guarda não.
 Para exercitá-la de verdade falta o que já está pedido na §4.1: um `clientId` de
 homologação que corresponda a um cliente que exista **dos dois lados**.
 
+## 4.8 Varredura completa do portal e do explorador — 2026-09-14
+
+Feita pelo Chrome do Tony, logado. **Só leitura**: nenhum pedido foi criado ou editado
+por esta análise — o único envio do dia foi o 1129 (§4.7), antes daqui.
+
+### Os dois apps, e como se ligam à API
+
+| App | URL | Stack | Fala com |
+|---|---|---|---|
+| **Portal do cliente** | `portal-autopel.vercel.app` | Next.js | **`api-portal.autopel.com/v1`** (a MESMA API da nossa integração) |
+| **Order Insight Portal** (ferramenta interna) | preview `id-preview--ae32c831-…lovable.app`, editor `lovable.dev/projects/ae32c831-…` | Lovable/React + Supabase | `api-integrador.autopel.com` (via server functions do Supabase) |
+
+O Order Insight Portal é o dono do `/descoberta` (§4.2). O token do integrador vive como
+**secret do Supabase** (`INTEGRADORA_API_TOKEN`), nunca exposto ao browser; as consultas
+saem por `/_serverFn/*`. É read-only por desenho.
+
+### Portal do cliente — superfície da API (o que o front deles chama)
+
+Menu: Dashboard, Cotações (`/quotes`), Pedidos (`/orders`), Produtos (`/products`),
+Chamados (`/tickets`), Configurações, Sair.
+
+🔎 **Rotas fora do menu**: `/clients` (lista de clientes, existe e abre) e `/reports`
+(existe mas é **gated por permissão** — este usuário vê "você não tem permissão").
+
+Endpoints observados em `api-portal.autopel.com/v1`:
+
+| Endpoint | Para quê |
+|---|---|
+| **`GET /clients/?search=<cnpj>&pageSize=99`** | 🥇 **resolução de cliente por CNPJ — é o endpoint que a gente vem pedindo por WhatsApp, e já está no ar** |
+| `GET /products?page=&pageSize=` | catálogo |
+| `GET /quotations?search=&page=&pageSize=&direction=` | cotações |
+| `GET /tickets?search=&page=&pageSize=&direction=` | chamados |
+| `GET /users/my-profile` | perfil |
+
+Entidades citadas no bundle: `clients`, `clients_representatives`, `orders`, `products`,
+`quotations`, `tickets`, `users`, `payment_conditions`, `reports`.
+
+> **A consequência prática é grande**: dá para resolver `clientId` por CNPJ chamando
+> `GET /v1/clients/?search=<cnpj>` com o nosso próprio token, em vez de esperar eles
+> construírem endpoints de de-para. ⚠️ Duas ressalvas, as mesmas da §4.2: (a) continua
+> sendo acoplamento à API deles — combinar como contrato antes de virar produção; (b)
+> **falta confirmar se o nosso bearer tem escopo para `GET /clients`** (só vi o front
+> deles chamando, autenticado como usuário do portal, não como a nossa API key).
+
+### O Integrador expõe 4 bancos — inventário lido do `/descoberta`
+
+`api-integrador.autopel.com`, `/health` OK ~200-650 ms. Estrutura carregada:
+**4 conexões · 580 tabelas/views · 23 views · 4 schemas.**
+
+| Banco | Tabelas |
+|---|---:|
+| SAC | 220 |
+| B2B | 111 |
+| EASY | 167 |
+| **SIC** (`autopel_sic`, o Portal) | **82** |
+
+### SIC (`autopel_sic`) — é onde a nossa integração escreve
+
+Tabelas do fluxo de pedido, com contagem de colunas: `clients` (59), `clients_representatives`
+(8), `products` (56), `orders` (52), `order_products` (23), `order_status_histories` (7),
+`invoice_types` (6), `payment_conditions` (29), `addresses` (12), `invoices` (34),
+`invoice_items` (16), `carriers` (34), `departments` (9), `users` (21).
+
+🔎 **Achados que valem atenção:**
+- **`bkp_20260910_*`** — backups de `products`, `orders`, `quotation_products` e
+  `product_colors` feitos em **10/09**, o mesmo dia em que achamos o de-para. Sinal de que
+  mexem no schema; o de-para pode mudar embaixo da gente sem aviso (mais um motivo para o
+  espelho local nosso e a guarda de CNPJ).
+- **`products_dedup_canonical` / `_donor` / `_map`** — eles estão **deduplicando o
+  catálogo de produtos**. ⚠️ Impacto direto: o nosso de-para de produto casa por `code`;
+  se o mesmo `code` aparecer em produto canônico e doador, precisamos casar contra o
+  canônico. Verificar quando formos popular `portal_produtos`.
+- **`api_clients`** = `id, name, **token_hash**, status, created_by, created_at, updated_at`
+  — a API key (a nossa inclusive) é guardada **hasheada**, não em texto. Boa notícia de
+  segurança do lado deles.
+
+### Verificado contra o schema VIVO (não o PDF)
+
+**`invoice_types` (linhas reais):**
+
+| id | name | friendly_name |
+|---|---|---|
+| 1 | SERVICE | Serviço |
+| 2 | SALE | Venda (Consumo) |
+| 3 | SHIPMENT | Remessa |
+| 4 | RESALE | Venda (Revenda) |
+
+✅ Bate **exatamente** com `config/portal.php` (`servico=1, venda_consumo=2, remessa=3,
+venda_revenda=4`). O mapa que estava vindo do PDF agora está confirmado na fonte.
+
+**`clients` (59 colunas) — as que importam para o de-para:**
+- `id` → é o **`clientId`** do payload.
+- `document` (+ `document_type`) → o CNPJ da **guarda** (§4.4).
+- **`code` + `store`** → as chaves do de-para (↔ `cod_cliente` + `loja`). ✅
+- ⚠️ Confirmadas as duas armadilhas do doc: existem **`autopel_code` E `external_id`**
+  além de `code` (três colunas parecidas com código) — não usar nenhuma das duas.
+- ⚠️ São **cinco** slots de vendedor: `seller_one` … `seller_five`. `seller_one` **não**
+  espelha o nosso `cod_vendedor` (§4.3) — não usar para nada.
+- Referência/crédito: `market_segment`, `sales_group`, `price_table`,
+  `payment_condition_code`, `client_group`, `credit_limit`, `credit_class`, `risk`,
+  `last_purchase`, `number_of_purchases`.
+
+**`clients_representatives` (8 colunas) — com as FKs explícitas:**
+- `id` → é o **`clientRepresentativeId`** do payload.
+- `user_id` → `users.id` (a **pessoa da Autopel**, o vendedor).
+- `client_id` → `clients.id`.
+- `department`, `phone`, `created_by` → `users.id`.
+
+✅ Confirma o que o doc previa: `clientRepresentativeId` é a **linha de vínculo**, não o
+usuário nem o cliente. Se o vendedor não estiver cadastrado como representante **daquele
+cliente**, o vínculo não existe e a API recusa com 404 — cadastro do lado deles, mas
+aparece como "não deixa enviar" na nossa tela.
+
+### O que isto NÃO resolve
+
+- **Não popula o de-para sozinho.** Continua faltando dado real nas nossas `portal_*` — ou
+  a decisão de resolver `clientId` ao vivo pelo `GET /v1/clients/?search=`, que ainda
+  precisa de acordo de contrato e da confirmação de escopo do nosso token.
+- **`api-portal` ≠ `api-integrador`.** O endpoint de busca de cliente que achei é do
+  `api-portal` (a API de pedidos, onde temos token). O `/descoberta` lê o `api-integrador`
+  (token deles, só leitura). São dois acessos diferentes; não misturar.
+
 ## 5. Lacunas de schema — medidas, não estimadas
 
 Números tirados do `palma_v2` de desenvolvimento em 2026-09-09 (1.864 orçamentos,
