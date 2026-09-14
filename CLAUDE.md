@@ -1832,6 +1832,29 @@ modo de visão). Verificar por mutação continua sendo o que separa teste de de
 
 Suíte inteira verde: **503 testes**.
 
+### Ranking de clientes por faturamento — relatório pontual, fora do CRM — 2026-09-11
+
+`scripts/gerar-ranking-clientes-pdf.php` + `resources/views/internos/ranking-clientes.blade.php`.
+Gera um PDF com os **10 maiores clientes ativos** e os **10 maiores inativos** por
+faturamento, mais o texto pronto do e-mail, em `storage/app/relatorios/`. Sem argumento é
+a empresa inteira; com um código (`010767`) ou um nome (`"caroline silva"`) recorta a
+carteira daquele vendedor.
+
+```bash
+docker compose exec app php scripts/gerar-ranking-clientes-pdf.php "caroline silva"
+```
+
+- ⚠️ **NÃO é tela do CRM e não deve virar uma sem alguém pedir.** É um script de linha de
+  comando, sem rota, sem autorização e sem escopo por perfil — ele lê a base inteira. Foi
+  feito para um pedido pontual e vive no repositório para ser repetível, não para ser
+  exposto.
+- Reusa o `ClienteStatusResolver` (mesmo corte de ativo/inativo da Carteira), nunca uma
+  regra própria — Regra de ouro nº 8: "cliente inativo" tem uma definição só.
+- ⚠️ As restrições do dompdf já documentadas nos PDFs de bobina/etiqueta valem aqui:
+  layout em tabela, nada de `float` dentro de `position: fixed`. O script conta
+  `/Type /Page` no binário e imprime o número de páginas — é a verificação que separa
+  "gerou PDF válido" de "gerou o layout certo" (lição de 2026-08-10).
+
 ### O TOTVS estourou o contador de pedido e parou a importação por 5 dias — 2026-09-14
 
 O Tony abriu a `/atualizacoes` e viu **FALHOU em toda a lista**. Eram 94 rodadas seguidas,
@@ -1883,11 +1906,99 @@ O gap virou pendência própria (alarme de frescor de dado) — ver a lista abai
   contador: é que o formato de qualquer identificador de terceiro pode mudar sem aviso, e
   aqui o aviso veio em forma de tabela congelada.
 
+### Valor em aberto, e o KPI que vinha cortado — 2026-09-14
+
+Pedido do Tony: `/pedidos-abertos` mostrava o **valor em risco** e não mostrava o total —
+"devemos ter de fato o valor em ABERTO". E o tile vinha **truncado** (`R$ 24.575…`,
+`VALOR EM RIS…`), num card do Painel.
+
+**O número sozinho não se interpreta.** Em dev, R$ 27,1 mi em risco sobre R$ 38,3 mi em
+aberto é 71% da carteira; sem o total ao lado, o mesmo R$ 27 mi poderia ser 7%. É a mesma
+régua da regra "os números da tela têm que bater": um valor sem denominador visível não
+informa, só alarma.
+
+- **Tela** (`/pedidos-abertos`): tile "Valor em aberto" ao lado do "Valor em risco".
+- **Painel** (`PedidosAtencaoCard`): a primeira fileira virou a carteira INTEIRA
+  (`Em aberto` + `Valor em aberto`) e a segunda o recorte que pede ação (atrasados,
+  vencendo, valor em risco). O subtítulo do card acompanhou.
+
+#### ⚠️ O truncamento era do `KpiTile`, e valia para o sistema inteiro
+
+O tile era `flex-1 basis-0 min-w-[84px]`: **todos os tiles da fileira recebiam a mesma
+largura, calculada a partir do zero**, então o de dinheiro — o mais largo — era espremido
+ao tamanho do de contagem e o `truncate` comia justamente o número que a pessoa abriu a
+tela para ler. O `min-w-[84px]` piorava: `min-width` explícito substitui o `auto` do flex
+e **autoriza** o item a encolher abaixo do próprio conteúdo.
+
+Agora é `flex-1 basis-auto`, sem `min-w`: com o `min-width: auto` de volta, o tile nunca
+fica menor que o texto e a fileira **quebra linha** quando não cabe — que é o
+comportamento que o Design System já previa ("os tiles encolhem e quebram linha", nunca
+scroll nem corte). O `truncate` ficou só como rede.
+
+⚠️ **Isso conserta os 27 tiles do sistema de uma vez** — `Valor aprovado` dos Orçamentos e
+`Valor total` dos Pedidos Emitidos vinham cortados pelo mesmo motivo. Verificado no
+navegador comparando `scrollWidth` × `clientWidth` de cada `p.truncate`: **zero cortados**
+em Painel, Pedidos (abertos e emitidos), Orçamentos e Metas, **e zero overflow horizontal
+a 400px**.
+
+#### Os KPIs viraram UMA varredura (e foi isso que pagou o tile novo)
+
+`/pedidos-abertos` fazia **quatro** chamadas a `baseQueryAbertos()` — quatro varreduras da
+mesma faixa e quatro resoluções de escopo, cada uma consultando roles/perfis. Agora é um
+`SELECT` só com `SUM(condição)`, mesmo padrão de `DashboardBlocos::pedidosEmitidos()`.
+Medido no `palma_v2` (3.478 pedidos em aberto), escopo empresa, medições intercaladas:
+**31,3 ms → 15,9 ms** de mediana, e os cinco números conferidos um a um contra a versão
+antiga. O bloco do Painel caiu de 6 para **3 queries** (142 ms frio, 1,3 ms quente).
+
+⚠️ `SUM(cond)` dá o mesmo que o `COUNT` que substitui: previsão nula torna a comparação
+NULL e o SUM ignora NULL, igual ao WHERE ignorava a linha. E `data_previsao_faturamento` é
+`date`, então trocar o `whereDate()` pela comparação crua não muda semântica — só deixa de
+envolver a coluna numa função.
+
+⚠️ **`ChaveEscopo::VERSAO` foi para `v8`**: `pedidos-atencao` é bloco cacheado JÁ EM
+PRODUÇÃO e ganhou dois campos. Sem o bump, o tile novo mostraria `R$ NaN` por até 30 min
+depois do deploy, só para quem já estava logado.
+
+Testes: `tests/Feature/PedidosValorEmAbertoTest.php` (7 casos — o total somando só o que
+está em aberto, faturado de fora, escopo do vendedor, filtro da tela, e o bloco do Painel
+batendo número a número com a tela). ⚠️ Os valores do fixture são todos diferentes e
+nenhum subconjunto soma o mesmo que outro: com números parecidos, trocar "todos os
+abertos" por "os em risco" passaria verde. **Três mutações aplicadas, três mordidas.**
+⚠️ Dinheiro é comparado com `assertEqualsWithDelta`: os KPIs chegam ao teste pelo payload
+JSON do Inertia, e float redondo volta como int — `assertSame` ali viraria asserção sobre
+o transporte, não sobre o número.
+
+Suíte inteira verde: **593 testes**.
+
+### O orçamento virou pedido de verdade no homolog — 2026-09-14
+
+Fecha o arco da integração com o Portal. Detalhe completo em
+`docs/integracao-portal-pedidos.md` §4.6 e §4.7; aqui fica só o que muda decisão.
+
+**Duas respostas do time do Portal chegaram no mesmo dia**, e as duas eram pré-requisito:
+
+1. **`api-portal.autopel.com` tem base separada da produção.** Sem isso, todo envio
+   bem-sucedido durante a homologação seria um registro possivelmente real no SIC.
+   ⚠️ Vale para o homolog, **não** para o go-live: quando existir URL de produção, o
+   interruptor `PORTAL_PEDIDOS_HABILITADO` volta a ser a única proteção.
+2. **"O preço deve vir já com IPI"** — o oposto do que a leitura do schema deles sugeria.
+   Ver a pendência da integração, abaixo, para o porquê de isso ter custado um default e
+   não uma refatoração.
+
+**Pedido 1129 criado pelo nosso próprio caminho** (`preparar()` → `enviar()`), com payload
+congelado e chave de idempotência persistida antes do envio. ⚠️ **O que ele prova é o
+encanamento, não o de-para**: a linha `portal_clientes` foi semeada à mão com o CNPJ do
+nosso próprio cliente, então a guarda de CNPJ passou comparando o valor com ele mesmo.
+São duas provas diferentes e só uma foi feita.
+
+⚠️ **A chave de idempotência não expira.** Toda chave usada em teste fica queimada para
+sempre — reenviá-la devolve o pedido antigo, nunca cria outro.
+
 ## Pendências
 - 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA em 2026-09-10,
-  falta só dado no de-para para homologar.** **Análise, mapa e armadilhas em
-  `docs/integracao-portal-pedidos.md`** — ler de lá antes de encostar no assunto; o PDF
-  original está em `docs/API-Pedidos-Autopel.pdf`.
+  HOMOLOGADA ponta a ponta em 2026-09-14, falta dado REAL no de-para para liberar.**
+  **Análise, mapa e armadilhas em `docs/integracao-portal-pedidos.md`** — ler de lá antes
+  de encostar no assunto; o PDF original está em `docs/API-Pedidos-Autopel.pdf`.
   - **O que existe**: botão "Transformar em pedido" em `/orcamentos` (só em orçamento
     **aprovado**) → `POST /orcamentos/{id}/portal` → `GeradorDePedidoNoPortal` →
     `EnviarPedidoAoPortalJob`. Config em `config/portal.php`, 4 tabelas de espelho
@@ -1909,10 +2020,22 @@ O gap virou pendência própria (alarme de frescor de dado) — ver a lista abai
   - ⚠️ **Erro do Portal notifica TODA vez; sucesso só uma.** O `NotificacaoService`
     deduplica por `referenciaTipo`+`referenciaId`; usar isso no erro deixaria a segunda
     falha MUDA e o vendedor concluiria que deu certo. Travado por teste.
-  - 🔴 **Falta para homologar: as tabelas `portal_*` estão VAZIAS.** Não há token do
-    integrador nem endpoint de resolução, então a carga inicial é manual. O que o Marcelo
-    precisa mandar está na §4.5 do doc: uma tripla válida do homolog (`createdBy`,
-    `clientId`, o `clientRepresentativeId` que pertence a esse cliente) e um `productId`.
+  - ✅ **Homologado ponta a ponta em 2026-09-14 (§4.7 do doc).** O time do Portal mandou
+    uma tripla válida do homolog e confirmou que `api-portal.autopel.com` tem **base
+    separada da produção**. Dois pedidos criados lá: o **1128** por `curl` (provou token,
+    tripla, formato e idempotência) e o **1129** pelo NOSSO caminho — `preparar()` monta e
+    congela, `enviar()` manda —, com a chave persistida no orçamento antes do envio.
+    - 🚨 **A conferência do IPI ainda depende de olho humano**: a API não devolve total.
+      O pedido **1129** foi montado com 10 × R$ 12,50 de um item que participa de IPI. Se
+      o total no Portal for **R$ 125,00**, está certo; se for **R$ 129,06** (+3,25%), eles
+      aplicam o `ipi_rate` por cima e `PORTAL_PEDIDOS_PRECO_COM_IPI` volta a `false`.
+    - 🔴 **O que ainda falta para LIBERAR: dado real nas tabelas `portal_*`.** As linhas
+      de hoje foram **semeadas à mão** para o teste — e, como o `document` da linha veio do
+      nosso próprio cliente, a guarda de CNPJ passou comparando o valor com ele mesmo. O
+      encanamento está provado; **a guarda não**. Pedir ao Marcelo um `clientId` de
+      homologação que corresponda a um cliente que exista **dos dois lados** (§4.1/§4.5).
+    - ⚠️ **A chave de idempotência não expira.** Toda chave usada em teste está queimada
+      para sempre: reenviá-la devolve o pedido antigo, nunca um novo.
   - 🟢 **O DE-PARA FOI ENCONTRADO em 2026-09-10 — e o Portal é o `sic`.** A API identifica
     tudo por id interno e não tem endpoint de listagem, mas o schema foi lido pela página
     **`/descoberta`** do próprio app do Lovable (que é um explorador de metadados sobre a
@@ -1952,11 +2075,17 @@ O gap virou pendência própria (alarme de frescor de dado) — ver a lista abai
     **centavos** e mandar reais **não dá erro** (grava R$ 0,12 no lugar de R$ 12,50); e
     retentar com `Idempotency-Key` NOVA é o único caminho que ainda duplica pedido — a
     chave tem que nascer persistida no orçamento, nunca ser gerada na hora do envio.
-  - ⚠️ **Pergunta em aberto que muda o valor do pedido**: o CRM guarda `valor_unitario` com
-    o IPI de 3,25% embutido e a API não tem campo de IPI. Confirmar com eles qual valor vai
-    no `unitPrice` **antes** do primeiro envio real. Desde 10/09 sabe-se que
-    `autopel_sic.products` tem `ipi`/`ipi_rate`/`ncm` — o Portal calcula imposto sozinho,
-    então provavelmente é SEM IPI. **Provável não basta**: errar custa 3,25% por pedido.
+  - ✅ **O IPI foi respondido em 2026-09-14, e a resposta foi o OPOSTO do palpite: "o
+    preço deve vir já com IPI".** O `unitPrice` leva o `valor_unitario` do orçamento como
+    está. `config('portal.preco_com_ipi')` passou a `true` **no default do config**, não só
+    no `.env.example` — produção não tem a variável, e um default errado ali faria todo
+    pedido sair 3,25% mais barato com `201` bonito de volta.
+    - ⚠️ A inferência de schema (`autopel_sic.products` tem `ipi`/`ipi_rate`/`ncm`, logo o
+      Portal calcularia sozinho) era razoável e **estava errada**. Fica como lembrete de
+      que leitura de schema alheio é hipótese, não conclusão.
+    - 🥇 **O que salvou foi o desenho**: isso nasceu como interruptor de uma linha, então a
+      correção custou trocar um default em vez de caçar `/1.0325` em cinco arquivos. O
+      caminho DESLIGADO continua coberto por teste, para a volta ser um `.env`.
   - ✅ **`clientRepresentativeId` respondido pelo schema**: é a pessoa da **Autopel**
     (`clients_representatives.user_id` → `users.id`), não contato do cliente. ⚠️ Se o
     vendedor não estiver cadastrado como representante daquele cliente no Portal, a API
@@ -1964,17 +2093,26 @@ O gap virou pendência própria (alarme de frescor de dado) — ver a lista abai
     nossa tela.
   - ⚠️ O token de homologação veio por WhatsApp em texto puro: serve para homologar, mas
     pedir outro para produção. Nunca versionar — mora no `.env`, lido por `config()`.
-- 🔴 **As metas de VENDA em produção são, na maioria, lixo de seed.** Conferido no RDS em
-  2026-09-04, logo após o deploy: `metas_mensais` só tem os meses **8 a 12** (nada de
-  janeiro a julho), e as metas de venda valem **R$ 1.874 (ago), R$ 1.817 (out), R$ 1.930
-  (nov), R$ 1.892 (dez)** — exatamente a faixa 500-4.000 do `MetaMensalSeeder` antigo, que
-  gerava escala de *quantidade de pedidos*. Só **setembro** tem valor plausível
-  (R$ 5,13 mi). Como a aba Venda virou a PADRÃO do gauge em 2026-09-04, esse lixo é a
-  primeira coisa que o vendedor vê: o acumulado do ano marca **485,7%**, comparando
-  R$ 24,9 mi de realizado contra uma meta de um mês só. O gauge está certo; a meta é que
-  não existe. **Cadastrar pelo `/metas`** (campo "Meta venda / pedidos emitidos (R$)",
-  admin ou diretor) — não há como o sistema distinguir seed de meta real sozinho. As metas
-  de faturamento estão melhores mas também só cobrem ago-dez.
+- ~~🔴 **As metas de VENDA em produção são, na maioria, lixo de seed.**~~ **Resolvido em
+  2026-09-14.** Até esta data `metas_mensais` só tinha os meses **8 a 12**, com a venda
+  valendo R$ 1.874 (ago), R$ 1.817 (out), R$ 1.930 (nov) e R$ 1.892 (dez) — a faixa
+  500-4.000 do `MetaMensalSeeder` antigo, que gerava escala de *quantidade de pedidos*.
+  Decisão do Tony: **setembro/venda é a única meta correta**; foi replicada para os
+  **12 meses de 2026** e o faturamento passou a ser **venda −10%**, tudo arredondado para
+  centena. Resultado: 4.104 linhas (171 códigos × 12 meses × 2 tipos), **R$ 13.083.000/mês
+  de venda** e **R$ 11.774.700/mês de faturamento** — meta anual de R$ 156.996.000 e
+  R$ 141.296.400. O acumulado do gauge caiu de **485,7% para 135,3%** (venda) e 155,7%
+  (faturamento) no escopo empresa.
+  - ⚠️ **Continua acima de 100%, e isso é informação, não defeito**: a meta de setembro é
+    menor que o realizado médio do ano. Se a diretoria quiser o gauge perto de 100%, o que
+    falta é meta por mês, não conserto de código — edita-se pelo `/metas` (campo "Meta
+    venda / pedidos emitidos (R$)", admin ou diretor).
+  - ⚠️ **A meta que o gauge soma é menor que a da tabela** (R$ 13.081.000 contra
+    R$ 13.083.000): `MetaRankingResolver::codigosDoEscopo()` só conta os **125** vendedores
+    ativos com código, e a tabela tem 171. Meta gravada em código inativo não some — só não
+    entra no somatório. Não procurar bug aí.
+  - Backup do estado anterior: `ubuntu@app-2:/home/ubuntu/metas_mensais_backup_20260914.sql`
+    (mysqldump da tabela inteira, 1.688 linhas).
 - ~~🔴 **Sincronização de dados parada desde 2026-08-10.**~~ **Resolvida em 2026-09-04.**
   O diagnóstico da linha antiga ("import automático travado no Adriano") estava errado: os
   importadores `totvs:import-*` e a ponte S3 já existiam e estavam deployados nos dois nós,
