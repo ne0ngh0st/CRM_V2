@@ -1832,6 +1832,57 @@ modo de visão). Verificar por mutação continua sendo o que separa teste de de
 
 Suíte inteira verde: **503 testes**.
 
+### O TOTVS estourou o contador de pedido e parou a importação por 5 dias — 2026-09-14
+
+O Tony abriu a `/atualizacoes` e viu **FALHOU em toda a lista**. Eram 94 rodadas seguidas,
+desde as **13h de 2026-09-10**, e o sistema seguia no ar com o painel normal.
+
+**O que aconteceu:** em **2026-09-08** o TOTVS estourou o contador numérico de pedido e
+passou a emitir a série `A00063`, `A00064`, … O import morria no DELETE de pedidos
+obsoletos com `SQLSTATE[22007] ... Truncated incorrect DOUBLE value: 'A00051'`.
+
+**A causa é do PHP, não do MySQL.** Chave de array que pareça número vira `int`:
+`$cabecalhos['992086']` vira a chave `992086`, enquanto `'A00051'` continua string. O
+`array_keys()` disso devolve **tipos mistos** — e o MySQL, ao ver inteiros numa comparação
+contra uma coluna varchar, passa a comparar **numericamente**. Aí `'A00051'` vira `0` e, em
+statement de escrita com strict mode, estoura.
+
+⚠️ **Em SELECT o sintoma é PIOR, porque não há erro.** A mesma comparação numérica converte
+todo alfanumérico da coluna para `0`, então um `whereIn` casa pedidos que não estavam na
+lista — e era esse resultado que decidia quais itens de pedido apagar no
+`totvs:import-pedidos-emitidos`. Aquele passo ficou verde o tempo todo.
+
+**A decisão mora em `Normalizador::numerosDePedido()`** — as chaves voltam sempre como
+texto. Os **7 pontos** que comparavam `numero_pedido` contra uma lista passam por ele
+(abertos, emitidos e o import do legado). Seguro comparar como texto nesta base: conferido
+em produção que nenhum `numero_pedido` tem zero à esquerda nem espaço.
+
+#### 🚨 O que realmente falhou foi a DETECÇÃO, e este é o quarto caso do mesmo formato
+
+Os 12 alarmes do CloudWatch ficaram verdes os quatro dias inteiros — e corretamente: CPU,
+ALB e 5xx não sabem que o último pedido em aberto é de quatro dias atrás. **Só a tela
+`/atualizacoes` sabia, e ela só fala com quem a abre.** Mesma família da fila parada de
+29/08, da badge "0 online" de 31/08 e do import parado de 04/09.
+
+⚠️ **Pior: a corrente não falha por igual.** `pedidos-abertos` é o ÚLTIMO dos quatro passos,
+então clientes e faturamento continuaram atualizando na hora certa — a tela mostrava
+FATURAMENTO fresco de hoje ao lado de PEDIDOS de três dias atrás. **Uma corrente que falha
+no fim parece meio saudável**, e é o que faz o alerta por olho não disparar.
+
+O gap virou pendência própria (alarme de frescor de dado) — ver a lista abaixo.
+
+#### Lições
+
+- ⚠️ **A suíte inteira ficou verde enquanto isso.** O defeito não estava numa linha de
+  código nova: estava esperando um dado que só o TOTVS emitiu. Até esta data, **nenhum
+  fixture de teste usava número de pedido alfanumérico** — e um teste 100% alfanumérico
+  também não morderia, porque sem nenhum número puro na lista a comparação nunca vira
+  numérica. **A mistura é o fixture.** (Verificado por mutação: revertendo a correção, os
+  dois testes novos falham com o mesmo `QueryException` da produção.)
+- ⚠️ **Campo "número" que vem de fora é TEXTO até prova em contrário.** Não é sobre este
+  contador: é que o formato de qualquer identificador de terceiro pode mudar sem aviso, e
+  aqui o aviso veio em forma de tabela congelada.
+
 ## Pendências
 - 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA em 2026-09-10,
   falta só dado no de-para para homologar.** **Análise, mapa e armadilhas em
@@ -1947,6 +1998,15 @@ Suíte inteira verde: **503 testes**.
     existe alarme de frescor de dado neste sistema; se um número precisa estar fresco,
     alguém tem que medir a idade dele. **Vale criar essa métrica** (é o mesmo caminho do
     `metricas:publicar`, que já publica idade do aquecimento de cache).
+- 🔴 **ALARME DE IMPORTAÇÃO QUEBRADA — a pendência acima deixou de ser teórica em
+  2026-09-14.** `totvs:atualizar` falhou **94 rodadas seguidas, por 4 dias**, e os 12
+  alarmes ficaram verdes o tempo todo; quem descobriu foi o Tony abrindo a
+  `/atualizacoes`. Duas métricas, as duas no caminho do `metricas:publicar` que já existe:
+  **(a) rodadas falhadas consecutivas** (alarme em ≥ 2 — uma falha isolada é ruído, duas é
+  padrão) e **(b) idade do dado por tabela**, que é o que a tela já calcula e ninguém
+  além dela lê. ⚠️ A (a) é a mais barata e teria pego este caso na segunda hora.
+  ⚠️ E vale `treat-missing-data=breaching`, como nos outros três da aplicação: se a
+  publicação parar, o silêncio significa que o detector morreu, não que está tudo bem.
 - **Carregar o histórico de pedidos emitidos** — **março a setembro/2026 já entraram**
   (04 e 05/09; de 15.523 para 69.454 pedidos e 905.228 itens). Falta **janeiro e
   fevereiro/2026** e **2025 inteiro**, este último o que a aba Venda do painel precisa para

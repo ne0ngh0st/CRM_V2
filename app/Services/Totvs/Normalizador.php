@@ -132,6 +132,39 @@ class Normalizador
         return self::semZeroAEsquerda($codCliente).'|'.self::semZeroAEsquerda($loja);
     }
 
+    /**
+     * As chaves de um array indexado por `numero_pedido`, devolvidas SEMPRE como texto.
+     *
+     * 🚨 ISTO NÃO É COSMÉTICO, e o custo de não ter foi a importação parada por 5 dias.
+     * O PHP converte para int toda chave de array que pareça um número: `$cab['992086']`
+     * vira a chave `992086` (int), enquanto `$cab['A00051']` continua string. Um
+     * `array_keys()` sobre isso devolve uma lista de TIPOS MISTOS.
+     *
+     * Entregue essa lista mista a um `whereIn`/`whereNotIn` sobre `pedidos.numero_pedido`
+     * (que é varchar) e o MySQL decide comparar NUMERICAMENTE por causa dos inteiros —
+     * aí `'A00051'` vira `0` e, em statement de escrita com strict mode, estoura
+     * `SQLSTATE[22007] ... Truncated incorrect DOUBLE value`. Foi exatamente o que
+     * aconteceu quando o TOTVS estourou o contador numérico e passou a emitir a série
+     * `A00063`, `A00064`, … em 2026-09-08: das 13h de 2026-09-10 em diante, 94 rodadas
+     * seguidas de `totvs:atualizar` morreram no DELETE de pedidos obsoletos, e os pedidos
+     * em aberto congelaram no retrato de 09/09.
+     *
+     * ⚠️ O sintoma em SELECT é PIOR que o erro, porque não há erro: a mesma comparação
+     * numérica converte todo alfanumérico da coluna para `0`, então um `whereIn` casa
+     * pedidos que não estavam na lista. Um `SELECT` não estoura — ele responde errado.
+     *
+     * Seguro comparar como texto nesta base: conferido em produção (2026-09-14) que
+     * nenhum `numero_pedido` tem zero à esquerda nem espaço, então o texto do relatório
+     * e o texto gravado são o mesmo byte a byte.
+     *
+     * @param  array<array-key, mixed>  $indexadoPorNumero
+     * @return list<string>
+     */
+    public static function numerosDePedido(array $indexadoPorNumero): array
+    {
+        return array_map(strval(...), array_keys($indexadoPorNumero));
+    }
+
     private static function semZeroAEsquerda(mixed $valor): string
     {
         $valor = trim((string) $valor);

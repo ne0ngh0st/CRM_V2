@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\Legado\LegadoConexao;
 use App\Services\Pedidos\StatusPedidoResolver;
+use App\Services\Totvs\Normalizador;
 use DateTime;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -229,7 +230,10 @@ class ImportPedidosLegado extends Command
             $total += count($lote);
         }
 
-        $idsPorNumero = DB::table('pedidos')->whereIn('numero_pedido', array_keys($itensPorNumero))->pluck('id', 'numero_pedido');
+        // ⚠️ Nunca `array_keys()` cru contra `numero_pedido` — ver Normalizador::numerosDePedido().
+        $idsPorNumero = DB::table('pedidos')
+            ->whereIn('numero_pedido', Normalizador::numerosDePedido($itensPorNumero))
+            ->pluck('id', 'numero_pedido');
 
         // Um pedido pode existir nas duas rodadas (aberto nesta carga, já faturado na outra
         // fonte) — o cabeçalho já foi upsertado acima, mas os itens da rodada anterior pra

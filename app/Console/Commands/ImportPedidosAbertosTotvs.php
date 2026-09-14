@@ -156,16 +156,19 @@ class ImportPedidosAbertosTotvs extends Command
             number_format(array_sum(array_map('count', $itens)), 0, ',', '.')
         ));
 
+        // ⚠️ Nunca `array_keys()` cru contra `numero_pedido` — ver Normalizador::numerosDePedido().
+        $numeros = Normalizador::numerosDePedido($cabecalhos);
+
         $obsoletos = DB::table('pedidos')
             ->whereNull('data_faturamento')
-            ->whereNotIn('numero_pedido', array_keys($cabecalhos))
+            ->whereNotIn('numero_pedido', $numeros)
             ->count();
 
         // Estavam faturados e voltaram a aparecer como abertos — ver o aviso no
         // cabeçalho da classe. Contado ANTES da escrita, senão já não dá para saber.
         $reabertos = DB::table('pedidos')
             ->whereNotNull('data_faturamento')
-            ->whereIn('numero_pedido', array_keys($cabecalhos))
+            ->whereIn('numero_pedido', $numeros)
             ->count();
 
         if ($dryRun) {
@@ -267,7 +270,10 @@ class ImportPedidosAbertosTotvs extends Command
     private function gravar(array $cabecalhos, array $itens): void
     {
         $agora = now();
-        $numeros = array_keys($cabecalhos);
+
+        // ⚠️ Nunca `array_keys()` cru contra `numero_pedido` — ver Normalizador::numerosDePedido().
+        // É este DELETE que estourou por 94 rodadas seguidas quando a série "A" apareceu.
+        $numeros = Normalizador::numerosDePedido($cabecalhos);
 
         // Estava aberto e sumiu do relatório: foi faturado ou cancelado no TOTVS.
         // Os itens vão junto pelo ON DELETE CASCADE de pedido_itens.
@@ -317,5 +323,4 @@ class ImportPedidosAbertosTotvs extends Command
             DB::table('pedido_itens')->insert($buffer);
         }
     }
-
 }

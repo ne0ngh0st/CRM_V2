@@ -9,6 +9,7 @@ use App\Models\VendedorPerfil;
 use App\Services\Pedidos\StatusPedidoResolver;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\EscreveRelatorio200;
 use Tests\TestCase;
 
 /**
@@ -26,13 +27,12 @@ use Tests\TestCase;
  */
 class PedidoStatusTotvsTest extends TestCase
 {
+    use EscreveRelatorio200;
     use RefreshDatabase;
 
     private User $admin;
 
     private Cliente $cliente;
-
-    private string $diretorio;
 
     protected function setUp(): void
     {
@@ -54,70 +54,19 @@ class PedidoStatusTotvsTest extends TestCase
             'cod_vendedor' => '010585',
         ]);
 
-        $this->diretorio = sys_get_temp_dir().'/totvs-teste-'.uniqid();
-        mkdir($this->diretorio.'/CSV', 0777, true);
-        config(['totvs.diretorio' => $this->diretorio]);
+        $this->prepararRelatorios();
     }
 
     protected function tearDown(): void
     {
-        foreach (glob($this->diretorio.'/CSV/*') ?: [] as $arquivo) {
-            @unlink($arquivo);
-        }
-        @rmdir($this->diretorio.'/CSV');
-        @rmdir($this->diretorio);
+        $this->removerRelatorios();
 
         parent::tearDown();
     }
 
-    /**
-     * Monta o relatório 200 com o cabeçalho real (34 colunas, na ordem do arquivo).
-     *
-     * @param  list<array{0: string, 1: string}>  $pedidos  [numero, historico]
-     */
-    private function escreverRelatorio(array $pedidos): void
-    {
-        $colunas = [
-            'FILIAL', 'COD_CLI', 'LOJA_CLI', 'GRP_CLIENT', 'CNPJ', 'CLIENTE', 'FANTASIA',
-            'MUNICIPIO', 'ESTADO', 'COD_REPRES', 'REPRES', 'DATA_PED', 'N_PEDIDO', 'DIGITACAO',
-            'CARGA', 'DT_ENTREGA', 'DT_PREVFAT', 'DT_PCP', 'ATRASO', 'TMP_VIAGEM', 'COND_PAGTO',
-            'COD_PROD', 'DESC_PROD', 'QTD_VENDA', 'QTD_LIBER', 'VLR_PEDIDO', 'EMAIL', 'CONTATO',
-            'DDD', 'TELEFONE', 'DATA_HIST', 'HORA_HIST', 'USUARIO', 'HISTORICO',
-        ];
-
-        // A primeira linha é o título do relatório, sozinho — o leitor detecta por forma.
-        $linhas = ['200 - PEDIDOS EM ABERTO COM STATUS.RLT'.str_repeat(';', 33)];
-        $linhas[] = implode(';', $colunas);
-
-        foreach ($pedidos as [$numero, $historico]) {
-            $valores = array_fill_keys($colunas, '');
-            $valores['FILIAL'] = '05';
-            $valores['COD_CLI'] = '042932';
-            $valores['LOJA_CLI'] = 'E004';
-            $valores['COD_REPRES'] = '010585';
-            $valores['DATA_PED'] = '14/08/2026';
-            $valores['N_PEDIDO'] = $numero;
-            $valores['DT_PREVFAT'] = '15/09/2026';
-            $valores['COD_PROD'] = 'V6045';
-            $valores['DESC_PROD'] = 'PAPEL A4 75G';
-            $valores['QTD_VENDA'] = '10';
-            $valores['QTD_LIBER'] = '10';
-            $valores['VLR_PEDIDO'] = '1.000,00';
-            $valores['DATA_HIST'] = '08/09/2026';
-            $valores['HORA_HIST'] = '07:10:21';
-            // Aspas porque o histórico do TOTVS às vezes tem `;` interno — é o caso que
-            // um split ingênuo por `;` erra, e o `fgetcsv` do leitor acerta.
-            $valores['HISTORICO'] = '"'.$historico.'"';
-
-            $linhas[] = implode(';', $valores);
-        }
-
-        file_put_contents($this->diretorio.'/CSV/Pedidos abertos - SQL.csv', implode("\n", $linhas)."\n");
-    }
-
     public function test_import_grava_a_etapa_e_o_texto_cru_do_totvs(): void
     {
-        $this->escreverRelatorio([
+        $this->escreverRelatorio200([
             ['990001', 'PEDIDO 990001 COM BLOQUEIO DE ESTOQUE'],
             ['990002', 'PEDIDO 990002 INCLUIDO NA CARGA 190050'],
             ['990003', 'ENVIO DO PEDIDO PARA O WMS - ORDEM DE SEPARACAO 876758'],
@@ -145,7 +94,7 @@ class PedidoStatusTotvsTest extends TestCase
      */
     public function test_movimento_desconhecido_importa_sem_classificacao_e_avisa(): void
     {
-        $this->escreverRelatorio([
+        $this->escreverRelatorio200([
             ['990004', 'NOTA FISCAL CANCELADA - NF 1  /001123689'],
             ['990005', 'PEDIDO 990005 COM BLOQUEIO DE ESTOQUE'],
         ]);

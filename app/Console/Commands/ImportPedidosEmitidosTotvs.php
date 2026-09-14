@@ -141,7 +141,10 @@ class ImportPedidosEmitidosTotvs extends Command
             return [0, 0];
         }
 
-        $existentes = DB::table('pedidos')->whereIn('numero_pedido', array_keys($cabecalhos))->count();
+        // ⚠️ Nunca `array_keys()` cru contra `numero_pedido` — ver Normalizador::numerosDePedido().
+        $existentes = DB::table('pedidos')
+            ->whereIn('numero_pedido', Normalizador::numerosDePedido($cabecalhos))
+            ->count();
         $this->line('  já existiam (serão atualizados): '.number_format($existentes, 0, ',', '.'));
 
         $totalItens = array_sum(array_map('count', $itens));
@@ -252,7 +255,12 @@ class ImportPedidosEmitidosTotvs extends Command
     private function gravar(array $cabecalhos, array $itens): void
     {
         $agora = now();
-        $numeros = array_keys($cabecalhos);
+
+        // ⚠️ Nunca `array_keys()` cru contra `numero_pedido` — ver Normalizador::numerosDePedido().
+        // Aqui a lista mista não estoura (só há SELECT), ela responde ERRADO: todo
+        // alfanumérico da coluna vira 0 na comparação numérica e casa por engano, e é
+        // esse resultado que decide quais itens de pedido são apagados logo abaixo.
+        $numeros = Normalizador::numerosDePedido($cabecalhos);
 
         $lote = [];
         foreach ($cabecalhos as $numero => $cab) {
