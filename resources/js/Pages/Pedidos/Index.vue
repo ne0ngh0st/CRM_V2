@@ -9,6 +9,7 @@ import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import PedidosTabela from '@/Components/Pedidos/PedidosTabela.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
+import { contarFiltrosAtivos } from '@/utils/filtros';
 
 const props = defineProps({
     role: String,
@@ -57,12 +58,19 @@ function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
 }
 
-const temFiltrosAtivos = computed(() =>
-    ['busca', 'status', 'data_inicio', 'data_fim'].some((k) => filtros[k] !== '')
-    || filtros.situacao !== 'todos'
-    || !!filtros.visao_supervisor
-    || !!filtros.visao_vendedor,
-);
+/*
+ * Uma lista de campos, dois consumidores: a contagem no botão "Filtros" do celular e o
+ * aviso do Excel. `situacao` tem 'todos' como valor neutro, não string vazia.
+ *
+ * ⚠️ O badge conta só o que o botão ESCONDE — a busca fica visível ao lado dele. O aviso
+ * do Excel responde outra pergunta ("o arquivo sai recortado?") e aí a busca conta.
+ */
+const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
+    'status', 'data_inicio', 'data_fim',
+    ['situacao', 'todos'], 'visao_supervisor', 'visao_vendedor',
+]));
+
+const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
 </script>
 
 <template>
@@ -71,7 +79,7 @@ const temFiltrosAtivos = computed(() =>
     <AuthenticatedLayout>
         <div class="py-4">
             <div class="mx-auto flex w-full max-w-[1800px] flex-col gap-4 px-3 sm:px-4 lg:px-6">
-                <PageHero title="Pedidos em Aberto">
+                <PageHero title="Pedidos em Aberto" :filtros-ativos="filtrosAtivos">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <rect x="3" y="7" width="18" height="14" rx="1" />
@@ -95,18 +103,32 @@ const temFiltrosAtivos = computed(() =>
                         <KpiTile :value="formatBRL(kpis.valorEmAberto)" label="Valor em aberto" compact />
                         <KpiTile :value="formatBRL(kpis.valorEmRisco)" label="Valor em risco" compact />
                     </template>
-                    <template #filtros>
-                        <div class="flex min-w-[200px] max-w-[280px] flex-1 flex-col gap-1">
+                    <!-- Busca e ordenação não colapsam no celular: abaixo de 640px a tabela
+                         vira cartão e o `<thead>` não está lá, então este select é o único
+                         acesso à ordenação. -->
+                    <template #filtrosFixos>
+                        <div class="flex w-full flex-col gap-1 sm:min-w-[200px] sm:max-w-[280px] sm:flex-1">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
                             <input
                                 v-model="filtros.busca"
                                 type="text"
                                 placeholder="Nº pedido, cliente, CNPJ ou produto..."
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @input="onBuscaInput"
                             />
                         </div>
 
+                        <FilterField label="Ordenar por" :model-value="filtros.ordenar" @update:model-value="(v) => { filtros.ordenar = v; aplicarFiltros(); }">
+                            <option value="previsao_asc">Previsão · mais urgente</option>
+                            <option value="previsao_desc">Previsão · mais distante</option>
+                            <option value="valor_desc">Valor · maior primeiro</option>
+                            <option value="valor_asc">Valor · menor primeiro</option>
+                            <option value="data_pedido_desc">Data do pedido · mais recente</option>
+                            <option value="data_pedido_asc">Data do pedido · mais antiga</option>
+                        </FilterField>
+                    </template>
+
+                    <template #filtros>
                         <FilterField label="Situação" :model-value="filtros.situacao" @update:model-value="(v) => { filtros.situacao = v; aplicarFiltros(); }">
                             <option value="todos">Todos</option>
                             <option value="atrasado">Atrasado</option>
@@ -125,22 +147,22 @@ const temFiltrosAtivos = computed(() =>
                             <option v-for="s in opcoes.status" :key="s.valor" :value="s.valor">{{ s.rotulo }}</option>
                         </FilterField>
 
-                        <div class="flex min-w-[130px] flex-col gap-1">
+                        <div class="flex flex-col gap-1 sm:min-w-[130px]">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Pedido de</label>
                             <input
                                 v-model="filtros.data_inicio"
                                 type="date"
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @change="aplicarFiltros"
                             />
                         </div>
 
-                        <div class="flex min-w-[130px] flex-col gap-1">
+                        <div class="flex flex-col gap-1 sm:min-w-[130px]">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Pedido até</label>
                             <input
                                 v-model="filtros.data_fim"
                                 type="date"
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @change="aplicarFiltros"
                             />
                         </div>
@@ -155,16 +177,7 @@ const temFiltrosAtivos = computed(() =>
                             <option v-for="v in visao.vendedores" :key="v.cod_vendedor" :value="v.cod_vendedor">{{ v.nome }}</option>
                         </FilterField>
 
-                        <FilterField label="Ordenar por" :model-value="filtros.ordenar" @update:model-value="(v) => { filtros.ordenar = v; aplicarFiltros(); }">
-                            <option value="previsao_asc">Previsão · mais urgente</option>
-                            <option value="previsao_desc">Previsão · mais distante</option>
-                            <option value="valor_desc">Valor · maior primeiro</option>
-                            <option value="valor_asc">Valor · menor primeiro</option>
-                            <option value="data_pedido_desc">Data do pedido · mais recente</option>
-                            <option value="data_pedido_asc">Data do pedido · mais antiga</option>
-                        </FilterField>
-
-                        <button type="button" class="self-end rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100" @click="limparFiltros">
+                        <button type="button" class="min-h-11 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:self-end" @click="limparFiltros">
                             Limpar filtros
                         </button>
                     </template>

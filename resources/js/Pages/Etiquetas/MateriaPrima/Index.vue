@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -10,6 +10,7 @@ import MateriasPrimaTabela from '@/Components/Etiquetas/MateriasPrimaTabela.vue'
 import MateriaPrimaFormModal from '@/Components/Etiquetas/MateriaPrimaFormModal.vue';
 import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao.js';
+import { contarFiltrosAtivos } from '@/utils/filtros';
 
 const props = defineProps({
     materiasPrimas: Object,
@@ -35,6 +36,13 @@ function onBuscaInput() {
     clearTimeout(timeoutBusca);
     timeoutBusca = setTimeout(aplicarFiltros, 300);
 }
+
+// A contagem que o botão "Filtros" do celular mostra. Sem ela, a faixa colapsada
+// esconderia um recorte ativo sem nenhuma pista na tela.
+//
+// ⚠️ Conta só o que o BOTÃO esconde: a busca fica visível ao lado dele, então somá-la
+// faria o badge dizer "1" com o modal de filtros aparentemente vazio.
+const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [['status', 'todos']]));
 
 const modalForm = ref(false);
 const materiaPrimaAtiva = ref(null);
@@ -72,7 +80,7 @@ async function excluirMateriaPrima(mp) {
     <AuthenticatedLayout>
         <div class="py-4">
             <div class="mx-auto flex w-full max-w-[1800px] flex-col gap-4 px-3 sm:px-4 lg:px-6">
-                <PageHero title="Matéria-Prima de Etiqueta">
+                <PageHero title="Matéria-Prima de Etiqueta" :filtros-ativos="filtrosAtivos">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <rect x="3" y="4" width="18" height="16" rx="1" />
@@ -82,18 +90,30 @@ async function excluirMateriaPrima(mp) {
                     <template #subtitle>
                         Custo R$/m² por material — alimenta a calculadora de precificação de etiqueta nos orçamentos. Admin-only.
                     </template>
-                    <template #filtros>
-                        <div class="flex min-w-[200px] max-w-[300px] flex-1 flex-col gap-1">
+                    <!-- Cadastrar é AÇÃO, não filtro: atrás do botão "Filtros" do celular
+                         ela ficaria escondida dentro de um modal que fala de outra coisa. -->
+                    <template #filtrosFixos>
+                        <div class="flex w-full flex-col gap-1 sm:min-w-[200px] sm:max-w-[300px] sm:flex-1">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
                             <input
                                 v-model="filtros.busca"
                                 type="text"
                                 placeholder="Descrição, código, fabricante..."
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @input="onBuscaInput"
                             />
                         </div>
 
+                        <button
+                            type="button"
+                            class="min-h-11 rounded bg-teal px-3 py-1.5 text-xs font-medium text-white hover:bg-teal/90 sm:min-h-0 sm:self-end"
+                            @click="novaMateriaPrima"
+                        >
+                            + Nova Matéria-Prima
+                        </button>
+                    </template>
+
+                    <template #filtros>
                         <FilterField
                             label="Status"
                             :model-value="filtros.status"
@@ -103,14 +123,6 @@ async function excluirMateriaPrima(mp) {
                             <option value="ativa">Ativas</option>
                             <option value="inativa">Inativas</option>
                         </FilterField>
-
-                        <button
-                            type="button"
-                            class="self-end rounded bg-teal px-3 py-1.5 text-xs font-medium text-white hover:bg-teal/90"
-                            @click="novaMateriaPrima"
-                        >
-                            + Nova Matéria-Prima
-                        </button>
                     </template>
                 </PageHero>
 

@@ -82,7 +82,14 @@ function formatBRL(valor) {
             </span>
         </div>
 
-        <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+        <!--
+            ⚠️ Uma coluna abaixo de `sm`. Os dois valores saem do `formatBRL` com moeda e
+            centavos, e no escopo empresa isso é "R$ 13.083.000,00" — ~125px de dígitos
+            `tabular-nums` numa coluna que a 320px tem 118px. Em duas colunas o valor
+            quebrava no espaço depois do "R$", deixando o símbolo sozinho numa linha e o
+            número noutra. Empilhado, cada um tem a largura do card.
+        -->
+        <div class="grid grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-2">
             <div class="min-w-0">
                 <span class="block text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">Realizado</span>
                 <span class="mt-0.5 block text-sm font-extrabold tabular-nums leading-tight text-gray-900">

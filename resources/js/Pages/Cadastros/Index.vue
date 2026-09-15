@@ -19,6 +19,7 @@ import CadastroDetalhesModal from '@/Components/Cadastros/CadastroDetalhesModal.
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao.js';
+import { contarFiltrosAtivos } from '@/utils/filtros.js';
 
 const props = defineProps({
     role: String,
@@ -70,7 +71,9 @@ const statusOpcoes = computed(() => {
     ];
 });
 
-const temFiltrosAtivos = computed(() => filtros.busca !== '' || filtros.status !== '');
+const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, ['status']));
+
+const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
 
 function filtrosExport(recurso) {
     return { busca: filtros.busca, status: filtros.status, recurso };
@@ -158,7 +161,7 @@ const tabBtn = (ativo) =>
     <AuthenticatedLayout>
         <div class="py-4">
             <div class="mx-auto flex w-full max-w-[1800px] flex-col gap-4 px-3 sm:px-4 lg:px-6">
-                <PageHero title="Cadastros">
+                <PageHero title="Cadastros" :filtros-ativos="filtrosAtivos">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <path d="M9 12h6M9 16h6M7 4h7l5 5v11a1 1 0 01-1 1H7a1 1 0 01-1-1V5a1 1 0 011-1z" stroke-linejoin="round" />
@@ -167,22 +170,24 @@ const tabBtn = (ativo) =>
                     <template #subtitle>
                         Cliente, lead, bobina e etiqueta — tudo numa página. Solicitações 1:1 com o legado.
                     </template>
-                    <template #filtros>
-                        <div class="flex min-w-[200px] max-w-[280px] flex-1 flex-col gap-1">
+                    <template #filtrosFixos>
+                        <div class="flex w-full flex-col gap-1 sm:min-w-[200px] sm:max-w-[280px] sm:flex-1">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
                             <input
                                 v-model="filtros.busca"
                                 type="text"
                                 placeholder="Buscar nas solicitações..."
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @input="onBuscaInput"
                             />
                         </div>
+                    </template>
+                    <template #filtros>
                         <FilterField label="Status" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; navegar(); }">
                             <option value="">Todos</option>
                             <option v-for="s in statusOpcoes" :key="s.value" :value="s.value">{{ s.label }}</option>
                         </FilterField>
-                        <button type="button" class="self-end rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100" @click="limparFiltros">
+                        <button type="button" class="min-h-11 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:self-end" @click="limparFiltros">
                             Limpar filtros
                         </button>
                     </template>

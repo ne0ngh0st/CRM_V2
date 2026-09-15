@@ -175,7 +175,16 @@ const linhas = computed(() => STATUS.map((s) => ({
             </div>
 
             <div class="space-y-2">
-                <div class="flex items-center gap-3 sm:gap-4">
+                <!--
+                    ⚠️ No celular a BARRA desce para uma linha própria (`order-last w-full`),
+                    e os dois números dividem a linha de cima. Até 2026-09-15 os três eram
+                    irmãos de um `flex` só, com a barra em `flex-1` entre dois `shrink-0` —
+                    a 320px os dois blocos laterais tomavam a largura inteira e a barra
+                    colapsava num toco de ~30px, que na tela parecia um interruptor ligado,
+                    não um gráfico. Mesma armadilha documentada no `PageHero`: quando os
+                    dois lados são `shrink-0`, quem tem `flex-1` é a vítima.
+                -->
+                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:flex-nowrap sm:gap-4">
                     <div class="shrink-0">
                         <p class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">No segmento</p>
                         <Link
@@ -188,7 +197,9 @@ const linhas = computed(() => STATUS.map((s) => ({
                             <span class="text-xs font-medium text-gray-400">({{ carteiraSegmento.pctDentro }}%)</span>
                         </Link>
                     </div>
-                    <div class="flex h-2.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                    <div
+                        class="order-last flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100 sm:order-none sm:w-auto sm:flex-1"
+                    >
                         <div class="bg-emerald-500" :style="{ width: carteiraSegmento.pctDentro + '%' }" />
                         <div class="bg-red-400" :style="{ width: carteiraSegmento.pctFora + '%' }" />
                     </div>

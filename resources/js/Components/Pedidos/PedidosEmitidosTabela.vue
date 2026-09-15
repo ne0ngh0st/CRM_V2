@@ -25,7 +25,7 @@ function formatQuantidade(valor) {
 
 <template>
     <div class="tbl-wrap">
-        <table class="tbl min-w-[900px]">
+        <table class="tbl tbl-cartoes sm:min-w-[900px]">
             <thead>
                 <tr class="tbl-head-row">
                     <th class="tbl-th w-8"></th>
@@ -45,39 +45,41 @@ function formatQuantidade(valor) {
                         class="tbl-row cursor-pointer"
                         @click="toggle(pedido.id)"
                     >
-                        <td class="tbl-td text-gray-400">
+                        <td class="tbl-td tbl-td-expandir text-gray-400">
                             <svg
                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                class="mx-auto h-3.5 w-3.5 transition-transform"
+                                class="h-3.5 w-3.5 shrink-0 transition-transform sm:mx-auto"
                                 :class="expandido === pedido.id ? 'rotate-90' : ''"
                             >
                                 <polyline points="9,6 15,12 9,18" stroke-linecap="round" stroke-linejoin="round" />
                             </svg>
+                            <span class="sm:hidden">{{ expandido === pedido.id ? 'Ocultar itens' : `Ver ${pedido.itens.length} ${pedido.itens.length === 1 ? 'item' : 'itens'}` }}</span>
                         </td>
-                        <td class="tbl-td font-medium text-gray-800">{{ pedido.numeroPedido }}</td>
-                        <td class="tbl-td">
-                            <span class="tbl-trunc max-w-[220px]" :title="pedido.cliente?.razaoSocial">{{ pedido.cliente?.razaoSocial ?? '—' }}</span>
+                        <td class="tbl-td font-medium text-gray-800" data-rotulo="Pedido">{{ pedido.numeroPedido }}</td>
+                        <td class="tbl-td tbl-td-titulo">
+                            <span class="tbl-trunc sm:max-w-[220px]" :title="pedido.cliente?.razaoSocial">{{ pedido.cliente?.razaoSocial ?? '—' }}</span>
                         </td>
-                        <td class="tbl-td">
-                            <span class="tbl-trunc max-w-[180px]" :title="pedido.vendedorNome">{{ pedido.vendedorNome }}</span>
+                        <td class="tbl-td" data-rotulo="Vendedor">
+                            <span class="tbl-trunc sm:max-w-[180px]" :title="pedido.vendedorNome">{{ pedido.vendedorNome }}</span>
                         </td>
-                        <td class="tbl-td">{{ pedido.dataPedido }}</td>
-                        <td class="tbl-td">
+                        <td class="tbl-td" data-rotulo="Data do pedido">{{ pedido.dataPedido }}</td>
+                        <td class="tbl-td" data-rotulo="Faturamento">
                             <StatusPill :tone="pedido.faturado ? 'ok' : 'warn'" size="sm">
                                 {{ pedido.faturado ? (pedido.dataFaturamento ?? 'Faturado') : 'Em aberto' }}
                             </StatusPill>
                         </td>
-                        <td class="tbl-td font-medium text-gray-800">{{ formatBRL(pedido.valorTotal) }}</td>
-                        <td class="tbl-td">
+                        <td class="tbl-td font-medium text-gray-800" data-rotulo="Valor total">{{ formatBRL(pedido.valorTotal) }}</td>
+                        <td class="tbl-td" data-rotulo="Status">
                             <StatusPedidoPill :status="pedido.status" :rotulo="pedido.statusRotulo" />
                         </td>
-                        <td class="tbl-td">{{ pedido.itens.length }}</td>
+                        <td class="tbl-td tbl-td-oculto">{{ pedido.itens.length }}</td>
                     </tr>
                     <tr v-if="expandido === pedido.id" class="bg-gray-50">
-                        <td colspan="9" class="p-4">
-                            <div class="grid gap-4 lg:grid-cols-3">
+                        <td colspan="9" class="tbl-td-expansao p-2 sm:p-4">
+                            <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
                                 <div class="lg:col-span-2">
                                     <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens do pedido</p>
+                                    <div class="tbl-wrap">
                                     <table class="tbl-itens">
                                         <thead>
                                             <tr class="tbl-itens-head-row">
@@ -102,6 +104,7 @@ function formatQuantidade(valor) {
                                             </tr>
                                         </tbody>
                                     </table>
+                                    </div>
                                 </div>
                                 <div class="space-y-4">
                                     <MovimentoTotvs :movimento="pedido.movimento" :movimento-em="pedido.movimentoEm" />

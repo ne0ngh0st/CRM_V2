@@ -141,10 +141,13 @@ onUnmounted(() => {
         content-classes="bg-white"
     >
         <template #trigger>
+            <!-- 44px no celular, 36 no desktop: com a navegação na barra inferior, o sino é
+                 um dos dois únicos alvos do topo, e 36px fica abaixo do mínimo de dedo. No
+                 desktop o ponteiro não precisa da folga. -->
             <button
                 type="button"
                 :key="tocou"
-                class="relative inline-flex h-9 w-9 items-center justify-center rounded-full text-white/80 transition duration-150 ease-in-out hover:bg-white/10 hover:text-white focus:outline-none"
+                class="relative inline-flex h-11 w-11 items-center justify-center rounded-full text-white/80 transition duration-150 ease-in-out hover:bg-white/10 hover:text-white focus:outline-none sm:h-9 sm:w-9"
                 :class="{ brilhar: tocou > 0 }"
                 title="Notificações"
             >

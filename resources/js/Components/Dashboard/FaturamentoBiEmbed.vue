@@ -71,7 +71,12 @@ defineProps({
 
         <span class="min-w-0 flex-1">
             <span class="block text-sm font-semibold leading-tight text-navy">Dashboard BI</span>
-            <span class="block overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-snug text-navy/60">
+            <!--
+                ⚠️ Corte com reticências só a partir de `sm`. Entre o ícone e o botão
+                "Abrir" (os dois `shrink-0`) sobram ~160px a 320px, e nessa largura o
+                `whitespace-nowrap` cortava a faixa em "Faturamento no Power BI · abre…".
+            -->
+            <span class="block text-xs leading-snug text-navy/60 sm:overflow-hidden sm:text-ellipsis sm:whitespace-nowrap">
                 Faturamento no Power BI · abre em nova aba
             </span>
         </span>

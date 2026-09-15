@@ -17,6 +17,7 @@ import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao.js';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import { ROTULOS_PERFIL } from '@/constants/perfis.js';
+import { contarFiltrosAtivos } from '@/utils/filtros.js';
 
 const props = defineProps({
     role: String,
@@ -51,9 +52,18 @@ function aplicarFiltros() {
     });
 }
 
-const temFiltrosAtivos = computed(() =>
-    ['busca', 'perfil', 'supervisor', 'estado', 'tipo', 'status', 'online', 'login'].some((k) => filtros[k] !== ''),
-);
+/*
+ * Uma lista de campos, dois consumidores: a contagem no botão "Filtros" do celular e o
+ * aviso do Excel.
+ *
+ * ⚠️ O badge conta só o que o botão ESCONDE — a busca fica visível ao lado dele. O aviso
+ * do Excel responde outra pergunta ("o arquivo sai recortado?") e aí a busca conta.
+ */
+const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
+    'perfil', 'supervisor', 'estado', 'tipo', 'status', 'online', 'login',
+]));
+
+const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
 
 let timeoutBusca;
 function onBuscaInput() {
@@ -153,7 +163,7 @@ function alternarStatus(usuario) {
     <AuthenticatedLayout>
         <div class="py-4">
             <div class="mx-auto flex w-full max-w-[1800px] flex-col gap-4 px-3 sm:px-4 lg:px-6">
-                <PageHero title="Equipe">
+                <PageHero title="Equipe" :filtros-ativos="filtrosAtivos">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <circle cx="9" cy="7" r="4" />
@@ -169,18 +179,20 @@ function alternarStatus(usuario) {
                     <template #meta>
                         <StatusPill tone="ok" surface="dark">{{ totalOnline }} online agora</StatusPill>
                     </template>
-                    <template #filtros>
-                        <div class="flex min-w-[180px] max-w-[260px] flex-1 flex-col gap-1">
+                    <template #filtrosFixos>
+                        <div class="flex w-full flex-col gap-1 sm:min-w-[180px] sm:max-w-[260px] sm:flex-1">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
                             <input
                                 v-model="filtros.busca"
                                 type="text"
                                 placeholder="Nome, e-mail ou código..."
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @input="onBuscaInput"
                             />
                         </div>
+                    </template>
 
+                    <template #filtros>
                         <FilterField label="Perfil" :model-value="filtros.perfil" @update:model-value="(v) => { filtros.perfil = v; aplicarFiltros(); }">
                             <option value="">Todos</option>
                             <option v-for="p in opcoes.perfis" :key="p" :value="p">{{ ROTULOS_PERFIL[p] || p }}</option>
@@ -221,7 +233,7 @@ function alternarStatus(usuario) {
                             <option value="nunca">Nunca logou</option>
                         </FilterField>
 
-                        <button type="button" class="self-end rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100" @click="limparFiltros">
+                        <button type="button" class="min-h-11 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:self-end" @click="limparFiltros">
                             Limpar filtros
                         </button>
                     </template>

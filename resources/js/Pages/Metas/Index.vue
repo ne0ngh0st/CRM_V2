@@ -15,6 +15,7 @@ import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
+import { contarFiltrosAtivos } from '@/utils/filtros.js';
 
 const props = defineProps({
     role: String,
@@ -85,7 +86,16 @@ function formatPct(v) {
     return `${Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 }
 
-const temFiltrosAtivos = computed(() => filtros.busca !== '' || filtros.faixa !== '' || !!filtros.visao_supervisor);
+/*
+ * `ano`/`mes`/`modo` estão de fora: são estruturais (sempre têm valor), então contá-los
+ * faria o badge nascer preenchido com a tela intocada. Quem declara o período é o
+ * subtítulo; o modo já tem a pastilha no header.
+ */
+const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
+    'faixa', 'visao_supervisor',
+]));
+
+const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
 
 function tonePct(v) {
     if (v === null || v === undefined) return 'neutral';
@@ -139,7 +149,7 @@ function salvarMeta() {
 
     <AuthenticatedLayout>
         <div class="mx-auto w-full max-w-[1800px] px-3 py-4 sm:px-4 lg:px-6">
-            <PageHero title="Gerenciar Metas">
+            <PageHero title="Gerenciar Metas" :filtros-ativos="filtrosAtivos">
                 <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5">
                         <circle cx="12" cy="12" r="9" />
@@ -154,6 +164,36 @@ function salvarMeta() {
                     <span class="rounded border border-white/20 bg-white/10 px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-wide text-gray-200">
                         {{ filtros.modo === 'acumulado' ? 'Acumulado YTD' : 'Mês a mês' }}
                     </span>
+                </template>
+                <template #filtrosFixos>
+                    <div class="flex w-full flex-col gap-1 sm:min-w-[180px] sm:max-w-[260px] sm:flex-1">
+                        <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Busca</label>
+                        <input
+                            v-model="filtros.busca"
+                            type="search"
+                            placeholder="Nome ou código"
+                            class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
+                            @input="onBuscaInput"
+                        />
+                    </div>
+                    <div class="flex w-full items-end gap-1 sm:w-auto">
+                        <button
+                            type="button"
+                            class="min-h-11 flex-1 rounded border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition sm:min-h-0 sm:flex-none"
+                            :class="filtros.modo === 'mensal' ? 'border-navy bg-navy text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'"
+                            @click="setModo('mensal')"
+                        >
+                            Mês
+                        </button>
+                        <button
+                            type="button"
+                            class="min-h-11 flex-1 rounded border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition sm:min-h-0 sm:flex-none"
+                            :class="filtros.modo === 'acumulado' ? 'border-navy bg-navy text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'"
+                            @click="setModo('acumulado')"
+                        >
+                            Acumulado
+                        </button>
+                    </div>
                 </template>
                 <template #filtros>
                     <FilterField v-model="filtros.ano" label="Ano" @update:model-value="aplicarFiltros()">
@@ -173,34 +213,6 @@ function salvarMeta() {
                             {{ s.nome }}
                         </option>
                     </FilterField>
-                    <div class="flex min-w-[180px] flex-1 flex-col gap-1">
-                        <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Busca</label>
-                        <input
-                            v-model="filtros.busca"
-                            type="search"
-                            placeholder="Nome ou código"
-                            class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
-                            @input="onBuscaInput"
-                        />
-                    </div>
-                    <div class="flex items-end gap-1 pb-0.5">
-                        <button
-                            type="button"
-                            class="rounded border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition"
-                            :class="filtros.modo === 'mensal' ? 'border-navy bg-navy text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'"
-                            @click="setModo('mensal')"
-                        >
-                            Mês
-                        </button>
-                        <button
-                            type="button"
-                            class="rounded border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition"
-                            :class="filtros.modo === 'acumulado' ? 'border-navy bg-navy text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'"
-                            @click="setModo('acumulado')"
-                        >
-                            Acumulado
-                        </button>
-                    </div>
                 </template>
             </PageHero>
 
@@ -238,8 +250,11 @@ function salvarMeta() {
                     />
                 </template>
 
-                <div class="tbl-wrap">
-                    <table class="tbl">
+                <p v-if="!linhas.length" class="px-1 py-8 text-center text-sm text-gray-400">
+                    Nenhum vendedor no filtro.
+                </p>
+                <div v-else class="tbl-wrap">
+                    <table class="tbl tbl-cartoes">
                         <thead>
                             <tr class="tbl-head-row">
                                 <th class="tbl-th">Vendedor</th>
@@ -259,21 +274,21 @@ function salvarMeta() {
                                 :key="linha.userId"
                                 class="tbl-row"
                             >
-                                <td class="tbl-td font-medium text-gray-800">{{ linha.nome }}</td>
-                                <td class="tbl-td">{{ linha.codVendedor }}</td>
-                                <td class="tbl-td">{{ formatMoney(linha.fatRealizado) }}</td>
-                                <td class="tbl-td">{{ formatMoney(linha.fatMeta) }}</td>
-                                <td class="tbl-td">
+                                <td class="tbl-td tbl-td-titulo font-medium text-gray-800">{{ linha.nome }}</td>
+                                <td class="tbl-td" data-rotulo="Código">{{ linha.codVendedor }}</td>
+                                <td class="tbl-td" data-rotulo="Fat. realizado">{{ formatMoney(linha.fatRealizado) }}</td>
+                                <td class="tbl-td" data-rotulo="Fat. meta">{{ formatMoney(linha.fatMeta) }}</td>
+                                <td class="tbl-td" data-rotulo="Fat. %">
                                     <StatusPill v-if="linha.fatPct !== null" :tone="tonePct(linha.fatPct)" size="sm">{{ formatPct(linha.fatPct) }}</StatusPill>
                                     <span v-else class="text-gray-400">—</span>
                                 </td>
-                                <td class="tbl-td">{{ formatMoney(linha.vendaRealizado) }}</td>
-                                <td class="tbl-td">{{ formatMoney(linha.vendaMeta) }}</td>
-                                <td class="tbl-td">
+                                <td class="tbl-td" data-rotulo="Venda realizado">{{ formatMoney(linha.vendaRealizado) }}</td>
+                                <td class="tbl-td" data-rotulo="Venda meta">{{ formatMoney(linha.vendaMeta) }}</td>
+                                <td class="tbl-td" data-rotulo="Venda %">
                                     <StatusPill v-if="linha.vendaPct !== null" :tone="tonePct(linha.vendaPct)" size="sm">{{ formatPct(linha.vendaPct) }}</StatusPill>
                                     <span v-else class="text-gray-400">—</span>
                                 </td>
-                                <td v-if="podeEditar" class="tbl-td">
+                                <td v-if="podeEditar" class="tbl-td tbl-td-acoes">
                                     <div class="tbl-acoes">
                                         <button
                                             type="button"
@@ -289,29 +304,27 @@ function salvarMeta() {
                                     </div>
                                 </td>
                             </tr>
-                            <tr v-if="!linhas.length">
-                                <td :colspan="podeEditar ? 9 : 8" class="px-3 py-8 text-center text-sm text-gray-400">
-                                    Nenhum vendedor no filtro.
-                                </td>
-                            </tr>
                         </tbody>
-                        <tfoot v-if="linhas.length">
-                            <!-- Linha de totais: só esta tabela tem, por isso não virou token. -->
+                        <tfoot>
+                            <!-- Linha de totais: só esta tabela tem, por isso não virou token.
+                                 O `tfoot` entra no mesmo reflow de cartão (app.css). -->
                             <tr class="divide-x divide-gray-200 border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-800">
-                                <td class="tbl-td text-gray-800" colspan="2">Totais</td>
-                                <td class="tbl-td text-gray-800">{{ formatMoney(totais.fatRealizado) }}</td>
-                                <td class="tbl-td text-gray-800">{{ formatMoney(totais.fatMeta) }}</td>
-                                <td class="tbl-td">
+                                <!-- `colspan` some no cartão (vira um `td` só); no desktop junta
+                                     vendedor+código, que é o rótulo da linha de totais. -->
+                                <td class="tbl-td tbl-td-titulo text-gray-800" colspan="2">Totais</td>
+                                <td class="tbl-td text-gray-800" data-rotulo="Fat. realizado">{{ formatMoney(totais.fatRealizado) }}</td>
+                                <td class="tbl-td text-gray-800" data-rotulo="Fat. meta">{{ formatMoney(totais.fatMeta) }}</td>
+                                <td class="tbl-td" data-rotulo="Fat. %">
                                     <StatusPill v-if="totais.fatPct !== null" :tone="tonePct(totais.fatPct)" size="sm">{{ formatPct(totais.fatPct) }}</StatusPill>
                                     <span v-else class="text-gray-400">—</span>
                                 </td>
-                                <td class="tbl-td text-gray-800">{{ formatMoney(totais.vendaRealizado) }}</td>
-                                <td class="tbl-td text-gray-800">{{ formatMoney(totais.vendaMeta) }}</td>
-                                <td class="tbl-td">
+                                <td class="tbl-td text-gray-800" data-rotulo="Venda realizado">{{ formatMoney(totais.vendaRealizado) }}</td>
+                                <td class="tbl-td text-gray-800" data-rotulo="Venda meta">{{ formatMoney(totais.vendaMeta) }}</td>
+                                <td class="tbl-td" data-rotulo="Venda %">
                                     <StatusPill v-if="totais.vendaPct !== null" :tone="tonePct(totais.vendaPct)" size="sm">{{ formatPct(totais.vendaPct) }}</StatusPill>
                                     <span v-else class="text-gray-400">—</span>
                                 </td>
-                                <td v-if="podeEditar" class="tbl-td" />
+                                <td v-if="podeEditar" class="tbl-td tbl-td-oculto" />
                             </tr>
                         </tfoot>
                     </table>

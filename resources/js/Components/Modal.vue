@@ -1,23 +1,12 @@
-<script>
-/*
- * Pilha dos modais abertos, COMPARTILHADA por todas as instâncias. Só o do topo responde
- * ao ESC, e o scroll da página só é devolvido quando o último fecha.
- *
- * ⚠️ Existe por causa do modal aberto DE DENTRO de outro — a confirmação de "remover esta
- * imagem" dentro do formulário de faca. O listener de ESC é global e um por instância:
- * sem a pilha, um ESC fechava a confirmação E o formulário por baixo dela, levando junto
- * o que estava sendo editado. O `overflow` tinha o mesmo defeito ao contrário — fechar o
- * de cima destravava o scroll com o de baixo ainda aberto.
- *
- * ⚠️ Fica NESTE bloco, e não no `<script setup>` de baixo: aquele é o corpo do `setup()`
- * e roda uma vez POR INSTÂNCIA — a pilha nasceria vazia em cada modal e todo mundo se
- * acharia o do topo. Foi exatamente esse o primeiro erro aqui.
- */
-const pilha = [];
-</script>
-
 <script setup>
+/*
+ * ⚠️ A pilha das camadas abertas NÃO mora mais aqui — mudou para
+ * `composables/usePilhaDeCamadas.js` em 2026-09-15, quando a gaveta do celular passou a
+ * precisar do mesmo controle de scroll e de "quem é a de cima". O histórico de por que ela
+ * existe, e por que é estado de MÓDULO e não de instância, está no docblock de lá.
+ */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { usePilhaDeCamadas } from '@/composables/usePilhaDeCamadas';
 
 const props = defineProps({
     show: {
@@ -38,23 +27,13 @@ const emit = defineEmits(['close']);
 const dialog = ref();
 const showSlot = ref(props.show);
 
-// Identidade desta instância dentro da `pilha` (que é do MÓDULO, ver o <script> acima).
-const token = {};
-
-const noTopo = () => pilha[pilha.length - 1] === token;
-
-function desempilhar() {
-    const i = pilha.indexOf(token);
-    if (i !== -1) pilha.splice(i, 1);
-    if (!pilha.length) document.body.style.overflow = '';
-}
+const { abrir, fechar: desempilhar, noTopo } = usePilhaDeCamadas();
 
 watch(
     () => props.show,
     () => {
         if (props.show) {
-            if (!pilha.includes(token)) pilha.push(token);
-            document.body.style.overflow = 'hidden';
+            abrir();
             showSlot.value = true;
 
             dialog.value?.showModal();
@@ -86,11 +65,8 @@ const closeOnEscape = (e) => {
 
 onMounted(() => document.addEventListener('keydown', closeOnEscape));
 
-onUnmounted(() => {
-    document.removeEventListener('keydown', closeOnEscape);
-
-    desempilhar();
-});
+// Sair da pilha no desmonte é do `usePilhaDeCamadas` — aqui sobra só a tecla.
+onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
 
 const maxWidthClass = computed(() => {
     return {

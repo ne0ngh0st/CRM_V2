@@ -14,6 +14,7 @@ import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao.js';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import { ROTULOS_STATUS_ORCAMENTO, ROTULOS_NIVEL_APROVACAO } from '@/constants/orcamentos.js';
+import { contarFiltrosAtivos } from '@/utils/filtros';
 
 const props = defineProps({
     role: String,
@@ -58,11 +59,19 @@ function limparFiltros() {
     aplicarFiltros();
 }
 
-const temFiltrosAtivos = computed(() =>
-    ['busca', 'status', 'nivel', 'data_inicio', 'data_fim'].some((k) => filtros[k] !== '')
-    || !!filtros.visao_supervisor
-    || !!filtros.visao_vendedor,
-);
+/*
+ * Uma lista de campos, dois consumidores: a contagem no botão "Filtros" do celular e o
+ * aviso do Excel.
+ *
+ * ⚠️ O badge conta só o que o botão ESCONDE — a busca fica visível ao lado dele. O aviso
+ * do Excel responde outra pergunta ("o arquivo sai recortado?") e aí a busca conta.
+ */
+const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
+    'status', 'nivel', 'data_inicio', 'data_fim',
+    'visao_supervisor', 'visao_vendedor',
+]));
+
+const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
 
 function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
@@ -119,7 +128,7 @@ async function enviarAoPortal(orcamento) {
     <AuthenticatedLayout>
         <div class="py-4">
             <div class="mx-auto flex w-full max-w-[1800px] flex-col gap-4 px-3 sm:px-4 lg:px-6">
-                <PageHero title="Orçamentos">
+                <PageHero title="Orçamentos" :filtros-ativos="filtrosAtivos">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <rect x="6" y="3" width="12" height="18" rx="1" />
@@ -139,18 +148,20 @@ async function enviarAoPortal(orcamento) {
                         <KpiTile :value="kpis.rejeitados" label="Rejeitados" tone="danger" />
                         <KpiTile :value="formatBRL(kpis.valorAprovado)" label="Valor aprovado" compact />
                     </template>
-                    <template #filtros>
-                        <div class="flex min-w-[200px] max-w-[280px] flex-1 flex-col gap-1">
+                    <template #filtrosFixos>
+                        <div class="flex w-full flex-col gap-1 sm:min-w-[200px] sm:max-w-[280px] sm:flex-1">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
                             <input
                                 v-model="filtros.busca"
                                 type="text"
                                 placeholder="Cliente ou CNPJ..."
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @input="onBuscaInput"
                             />
                         </div>
+                    </template>
 
+                    <template #filtros>
                         <FilterField label="Status" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; aplicarFiltros(); }">
                             <option value="">Todos</option>
                             <option v-for="(rotulo, valor) in ROTULOS_STATUS_ORCAMENTO" :key="valor" :value="valor">{{ rotulo }}</option>
@@ -161,22 +172,22 @@ async function enviarAoPortal(orcamento) {
                             <option v-for="(rotulo, valor) in ROTULOS_NIVEL_APROVACAO" :key="valor" :value="valor">{{ rotulo }}</option>
                         </FilterField>
 
-                        <div class="flex min-w-[130px] flex-col gap-1">
+                        <div class="flex flex-col gap-1 sm:min-w-[130px]">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Criado de</label>
                             <input
                                 v-model="filtros.data_inicio"
                                 type="date"
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @change="aplicarFiltros"
                             />
                         </div>
 
-                        <div class="flex min-w-[130px] flex-col gap-1">
+                        <div class="flex flex-col gap-1 sm:min-w-[130px]">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Criado até</label>
                             <input
                                 v-model="filtros.data_fim"
                                 type="date"
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @change="aplicarFiltros"
                             />
                         </div>
@@ -191,7 +202,7 @@ async function enviarAoPortal(orcamento) {
                             <option v-for="v in visao.vendedores" :key="v.cod_vendedor" :value="v.cod_vendedor">{{ v.nome }}</option>
                         </FilterField>
 
-                        <button type="button" class="self-end rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100" @click="limparFiltros">
+                        <button type="button" class="min-h-11 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:self-end" @click="limparFiltros">
                             Limpar filtros
                         </button>
                     </template>

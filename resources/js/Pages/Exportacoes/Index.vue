@@ -123,7 +123,7 @@ function numero(n) {
 
                 <template v-else>
                     <div class="tbl-wrap">
-                        <table class="tbl min-w-[900px]">
+                        <table class="tbl tbl-cartoes sm:min-w-[900px]">
                             <thead>
                                 <tr class="tbl-head-row">
                                     <th class="tbl-th">Planilha</th>
@@ -137,14 +137,14 @@ function numero(n) {
                             </thead>
                             <tbody class="tbl-body">
                                 <tr v-for="e in linhasDaPagina" :key="e.id" class="tbl-row">
-                                    <td class="tbl-td">
-                                        <span class="tbl-main max-w-[220px]">{{ e.recurso }}</span>
+                                    <td class="tbl-td tbl-td-titulo">
+                                        <span class="tbl-main sm:max-w-[220px]">{{ e.recurso }}</span>
                                     </td>
 
-                                    <td class="tbl-td">
+                                    <td class="tbl-td" data-rotulo="Filtros">
                                         <!-- Responde "por que este Excel tem 300 linhas e não 90 mil?" — a
                                              pergunta que faz alguém desconfiar do arquivo e regerá-lo à toa. -->
-                                        <div v-if="e.filtros.length" class="flex flex-wrap justify-center gap-1">
+                                        <div v-if="e.filtros.length" class="flex flex-wrap gap-1 sm:justify-center">
                                             <span
                                                 v-for="(f, i) in e.filtros"
                                                 :key="i"
@@ -156,23 +156,23 @@ function numero(n) {
                                         <span v-else class="tbl-sub">Base completa</span>
                                     </td>
 
-                                    <td class="tbl-td">{{ numero(e.linhas) }}</td>
-                                    <td class="tbl-td">{{ tamanho(e.bytes) }}</td>
+                                    <td class="tbl-td" data-rotulo="Linhas">{{ numero(e.linhas) }}</td>
+                                    <td class="tbl-td" data-rotulo="Tamanho">{{ tamanho(e.bytes) }}</td>
 
-                                    <td class="tbl-td">
+                                    <td class="tbl-td" data-rotulo="Gerada em">
                                         <span class="tbl-main">{{ e.criadoEm }}</span>
                                         <span v-if="e.disponivel" class="tbl-sub">expira {{ e.expiraEm }}</span>
                                     </td>
 
-                                    <td class="tbl-td">
+                                    <td class="tbl-td" data-rotulo="Situação">
                                         <StatusPill :tone="estado(e).tone" size="sm">{{ estado(e).texto }}</StatusPill>
                                         <span v-if="e.travou" class="tbl-sub">gere de novo</span>
-                                        <span v-else-if="e.status === 'erro' && e.erro" class="tbl-sub max-w-[200px] truncate" :title="e.erro">
+                                        <span v-else-if="e.status === 'erro' && e.erro" class="tbl-sub sm:max-w-[200px] sm:truncate" :title="e.erro">
                                             {{ e.erro }}
                                         </span>
                                     </td>
 
-                                    <td class="tbl-td">
+                                    <td class="tbl-td tbl-td-acoes">
                                         <div class="tbl-acoes">
                                             <!-- ⚠️ `<a>` e não `<Link>`: baixar é navegação do navegador, não
                                                  visita do Inertia — o XHR receberia o binário e quebraria. -->

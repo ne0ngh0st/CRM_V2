@@ -1,5 +1,5 @@
 <script setup>
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -8,6 +8,7 @@ import KpiTile from '@/Components/KpiTile.vue';
 import FilterField from '@/Components/FilterField.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import { CANAIS_CONTATO, ROTULOS_CANAL_CONTATO, ROTULOS_CANAL_CURTO } from '@/constants/contatos.js';
+import { contarFiltrosAtivos } from '@/utils/filtros.js';
 
 const props = defineProps({
     role: String,
@@ -62,6 +63,10 @@ function onBuscaInput() {
     timeoutBusca = setTimeout(() => aplicarFiltros(), 300);
 }
 
+const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
+    'so_atencao', 'visao_supervisor',
+]));
+
 function formatData(iso) {
     if (!iso) return 'Nunca';
     return new Date(iso).toLocaleString('pt-BR', {
@@ -79,7 +84,7 @@ function formatData(iso) {
 
     <AuthenticatedLayout>
         <div class="mx-auto w-full max-w-[1800px] px-3 py-4 sm:px-4 lg:px-6">
-            <PageHero title="Visão do Gestor">
+            <PageHero title="Visão do Gestor" :filtros-ativos="filtrosAtivos">
                 <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5">
                         <circle cx="9" cy="7" r="3" />
@@ -91,17 +96,19 @@ function formatData(iso) {
                     Produtividade da equipe no mês: ligações e observações. Atenção se sem ligação ≥{{ alertas.diasLigacao }} dias
                     ou sem observação ≥{{ alertas.diasObservacao }} dias.
                 </template>
-                <template #filtros>
-                    <div class="flex min-w-[180px] flex-1 flex-col gap-1">
+                <template #filtrosFixos>
+                    <div class="flex w-full flex-col gap-1 sm:min-w-[180px] sm:max-w-[260px] sm:flex-1">
                         <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Busca</label>
                         <input
                             v-model="filtros.busca"
                             type="search"
                             placeholder="Nome ou código"
-                            class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                            class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                             @input="onBuscaInput"
                         />
                     </div>
+                </template>
+                <template #filtros>
                     <FilterField
                         v-if="opcoes.supervisores?.length"
                         v-model="filtros.visao_supervisor"
@@ -153,8 +160,11 @@ function formatData(iso) {
                     </svg>
                 </template>
 
-                <div class="tbl-wrap">
-                    <table class="tbl">
+                <p v-if="!linhas.length" class="px-1 py-8 text-center text-sm text-gray-400">
+                    Nenhum vendedor no filtro.
+                </p>
+                <div v-else class="tbl-wrap">
+                    <table class="tbl tbl-cartoes">
                         <thead>
                             <tr class="tbl-head-row">
                                 <th class="tbl-th">Vendedor</th>
@@ -173,9 +183,9 @@ function formatData(iso) {
                                 :key="linha.userId"
                                 class="tbl-row"
                             >
-                                <td class="tbl-td font-medium text-gray-800">{{ linha.nome }}</td>
-                                <td class="tbl-td">{{ linha.codVendedor || '—' }}</td>
-                                <td class="tbl-td">
+                                <td class="tbl-td tbl-td-titulo font-medium text-gray-800">{{ linha.nome }}</td>
+                                <td class="tbl-td" data-rotulo="Código">{{ linha.codVendedor || '—' }}</td>
+                                <td class="tbl-td" data-rotulo="Status">
                                     <StatusPill :tone="linha.atencao ? 'danger' : 'ok'" size="sm">
                                         {{ linha.atencao ? 'Atenção' : 'Em dia' }}
                                     </StatusPill>
@@ -183,16 +193,16 @@ function formatData(iso) {
                                         {{ linha.motivoAtencao }}
                                     </div>
                                 </td>
-                                <td class="tbl-td">
+                                <td class="tbl-td" data-rotulo="Lig. mês">
                                     <span class="tbl-main">{{ linha.ligacoesMes }}</span>
                                     <span v-if="resumoCanais(linha.ligacoesPorCanal)" class="tbl-sub">
                                         {{ resumoCanais(linha.ligacoesPorCanal) }}
                                     </span>
                                 </td>
-                                <td class="tbl-td">{{ linha.observacoesMes }}</td>
-                                <td class="tbl-td">{{ formatData(linha.ultimaLigacao) }}</td>
-                                <td class="tbl-td">{{ formatData(linha.ultimaObservacao) }}</td>
-                                <td class="tbl-td">
+                                <td class="tbl-td" data-rotulo="Obs. mês">{{ linha.observacoesMes }}</td>
+                                <td class="tbl-td" data-rotulo="Última ligação">{{ formatData(linha.ultimaLigacao) }}</td>
+                                <td class="tbl-td" data-rotulo="Última obs.">{{ formatData(linha.ultimaObservacao) }}</td>
+                                <td class="tbl-td tbl-td-acoes">
                                     <div class="tbl-acoes">
                                         <Link
                                             v-if="linha.codVendedor"
@@ -206,11 +216,6 @@ function formatData(iso) {
                                             </svg>
                                         </Link>
                                     </div>
-                                </td>
-                            </tr>
-                            <tr v-if="!linhas.length">
-                                <td colspan="8" class="px-3 py-8 text-center text-sm text-gray-400">
-                                    Nenhum vendedor no filtro.
                                 </td>
                             </tr>
                         </tbody>

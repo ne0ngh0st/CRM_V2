@@ -9,6 +9,7 @@ import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import ProdutosTabela from '@/Components/TabelaPrecos/ProdutosTabela.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
+import { contarFiltrosAtivos } from '@/utils/filtros.js';
 
 const props = defineProps({
     role: String,
@@ -50,9 +51,12 @@ function limparFiltros() {
     aplicarFiltros();
 }
 
-const temFiltrosAtivos = computed(() =>
-    filtros.busca !== '' || filtros.categoria !== '' || filtros.preco !== 'todos',
-);
+// O badge conta só o que o botão "Filtros" esconde; busca e ordenação ficam na faixa.
+const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
+    'categoria', ['preco', 'todos'],
+]));
+
+const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
 </script>
 
 <template>
@@ -61,7 +65,7 @@ const temFiltrosAtivos = computed(() =>
     <AuthenticatedLayout>
         <div class="py-4">
             <div class="mx-auto flex w-full max-w-[1800px] flex-col gap-4 px-3 sm:px-4 lg:px-6">
-                <PageHero title="Tabela de Preços">
+                <PageHero title="Tabela de Preços" :filtros-ativos="filtrosAtivos">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <path d="M4 7h16M4 12h16M4 17h10" stroke-linecap="round" />
@@ -77,18 +81,36 @@ const temFiltrosAtivos = computed(() =>
                         <KpiTile :value="kpis.comPreco" label="Com preço" tone="ok" />
                         <KpiTile :value="kpis.semPreco" label="Sem preço" :tone="kpis.semPreco > 0 ? 'warn' : 'neutral'" />
                     </template>
-                    <template #filtros>
-                        <div class="flex min-w-[200px] max-w-[300px] flex-1 flex-col gap-1">
+                    <template #filtrosFixos>
+                        <div class="flex w-full flex-col gap-1 sm:min-w-[200px] sm:max-w-[300px] sm:flex-1">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
                             <input
                                 v-model="filtros.busca"
                                 type="text"
                                 placeholder="Código ou descrição..."
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @input="onBuscaInput"
                             />
                         </div>
 
+                        <!-- Ordenação fica fora do modal: ela não recorta a lista, reordena — e
+                             com a tabela em rolagem horizontal é o único caminho no celular. -->
+                        <FilterField
+                            label="Ordenar por"
+                            :model-value="filtros.ordenar"
+                            @update:model-value="(v) => { filtros.ordenar = v; aplicarFiltros(); }"
+                        >
+                            <option value="codigo_asc">Código · A→Z</option>
+                            <option value="codigo_desc">Código · Z→A</option>
+                            <option value="descricao_asc">Descrição · A→Z</option>
+                            <option value="descricao_desc">Descrição · Z→A</option>
+                            <option value="categoria_asc">Categoria</option>
+                            <option value="preco_asc">Preço · menor</option>
+                            <option value="preco_desc">Preço · maior</option>
+                        </FilterField>
+                    </template>
+
+                    <template #filtros>
                         <FilterField
                             label="Categoria"
                             :model-value="filtros.categoria"
@@ -114,23 +136,9 @@ const temFiltrosAtivos = computed(() =>
                             <option value="sem_preco">Sem preço</option>
                         </FilterField>
 
-                        <FilterField
-                            label="Ordenar por"
-                            :model-value="filtros.ordenar"
-                            @update:model-value="(v) => { filtros.ordenar = v; aplicarFiltros(); }"
-                        >
-                            <option value="codigo_asc">Código · A→Z</option>
-                            <option value="codigo_desc">Código · Z→A</option>
-                            <option value="descricao_asc">Descrição · A→Z</option>
-                            <option value="descricao_desc">Descrição · Z→A</option>
-                            <option value="categoria_asc">Categoria</option>
-                            <option value="preco_asc">Preço · menor</option>
-                            <option value="preco_desc">Preço · maior</option>
-                        </FilterField>
-
                         <button
                             type="button"
-                            class="self-end rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100"
+                            class="min-h-11 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:self-end"
                             @click="limparFiltros"
                         >
                             Limpar filtros

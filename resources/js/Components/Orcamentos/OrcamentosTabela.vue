@@ -37,7 +37,10 @@ function pdfUrl(orcamento, download) {
 
 <template>
     <div class="tbl-wrap">
-        <table class="tbl min-w-[1000px]">
+        <!-- `sm:min-w-`, nunca `min-w-`: a largura mínima é utility e venceria o
+             `@layer components`, então abaixo de 640px o cartão sairia certo dentro de uma
+             página rolando 1000px na horizontal. -->
+        <table class="tbl tbl-cartoes sm:min-w-[1000px]">
             <thead>
                 <tr class="tbl-head-row">
                     <th class="tbl-th w-8"></th>
@@ -54,36 +57,37 @@ function pdfUrl(orcamento, download) {
             <tbody class="tbl-body">
                 <template v-for="orcamento in orcamentos" :key="orcamento.id">
                     <tr class="tbl-row cursor-pointer" @click="toggle(orcamento.id)">
-                        <td class="tbl-td text-gray-400">
+                        <td class="tbl-td tbl-td-expandir text-gray-400">
                             <svg
                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                class="mx-auto h-3.5 w-3.5 transition-transform"
+                                class="h-3.5 w-3.5 shrink-0 transition-transform sm:mx-auto"
                                 :class="expandido === orcamento.id ? 'rotate-90' : ''"
                             >
                                 <polyline points="9,6 15,12 9,18" stroke-linecap="round" stroke-linejoin="round" />
                             </svg>
+                            <span class="sm:hidden">{{ expandido === orcamento.id ? 'Ocultar itens' : 'Ver itens' }}</span>
                         </td>
-                        <td class="tbl-td">
-                            <span class="tbl-main max-w-[220px]" :title="orcamento.clienteNome">{{ orcamento.clienteNome }}</span>
+                        <td class="tbl-td tbl-td-titulo">
+                            <span class="tbl-main sm:max-w-[220px]" :title="orcamento.clienteNome">{{ orcamento.clienteNome }}</span>
                             <span class="tbl-sub">{{ orcamento.clienteCnpj ?? '—' }}</span>
                         </td>
-                        <td class="tbl-td">{{ orcamento.vendedorNome }}</td>
-                        <td class="tbl-td font-medium text-gray-800">{{ formatBRL(orcamento.valorTotal) }}</td>
-                        <td class="tbl-td">
+                        <td class="tbl-td" data-rotulo="Vendedor">{{ orcamento.vendedorNome }}</td>
+                        <td class="tbl-td font-medium text-gray-800" data-rotulo="Valor total">{{ formatBRL(orcamento.valorTotal) }}</td>
+                        <td class="tbl-td" data-rotulo="Nível">
                             <StatusPill :tone="orcamento.nivelAprovacao === 'diretor' ? 'danger' : orcamento.nivelAprovacao === 'supervisor' ? 'warn' : 'neutral'" size="sm">
                                 {{ ROTULOS_NIVEL_APROVACAO[orcamento.nivelAprovacao] }}
                             </StatusPill>
                         </td>
-                        <td class="tbl-td">
+                        <td class="tbl-td" data-rotulo="Status">
                             <StatusPill :tone="TONS_STATUS_ORCAMENTO[orcamento.statusGestor]" size="sm">{{ ROTULOS_STATUS_ORCAMENTO[orcamento.statusGestor] }}</StatusPill>
                         </td>
-                        <td class="tbl-td">
+                        <td class="tbl-td" data-rotulo="Validade">
                             <StatusPill :tone="TONS_VALIDADE_ORCAMENTO[orcamento.validadeSituacao]" size="sm">
                                 {{ orcamento.dataValidadeFormatada ?? ROTULOS_VALIDADE_ORCAMENTO.sem_validade }}
                             </StatusPill>
                         </td>
-                        <td class="tbl-td">{{ orcamento.criadoEm }}</td>
-                        <td class="tbl-td" @click.stop>
+                        <td class="tbl-td" data-rotulo="Criado em">{{ orcamento.criadoEm }}</td>
+                        <td class="tbl-td tbl-td-acoes" @click.stop>
                             <div class="tbl-acoes">
                                 <button
                                     v-if="orcamento.podeDecidir"
@@ -212,10 +216,11 @@ function pdfUrl(orcamento, download) {
                         </td>
                     </tr>
                     <tr v-if="expandido === orcamento.id" class="bg-gray-50">
-                        <td colspan="9" class="p-4">
-                            <div class="grid gap-4 lg:grid-cols-3">
+                        <td colspan="9" class="tbl-td-expansao p-2 sm:p-4">
+                            <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
                                 <div class="lg:col-span-2">
                                     <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens do orçamento</p>
+                                    <div class="tbl-wrap">
                                     <table class="tbl-itens">
                                         <thead>
                                             <tr class="tbl-itens-head-row">
@@ -238,6 +243,7 @@ function pdfUrl(orcamento, download) {
                                             </tr>
                                         </tbody>
                                     </table>
+                                    </div>
                                 </div>
                                 <div>
                                     <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Detalhes</p>

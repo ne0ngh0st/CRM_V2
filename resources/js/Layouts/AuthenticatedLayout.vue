@@ -1,4 +1,17 @@
 <script setup>
+/**
+ * O shell de toda página autenticada.
+ *
+ * ⚠️ A ESTRUTURA DO MENU NÃO MORA AQUI desde 2026-09-15 — está em
+ * `constants/navegacao.js`. Antes era escrita duas vezes NESTE arquivo (nav desktop e
+ * hambúrguer) e as duas já divergiam: o link admin "Atualização de dados" existia só no
+ * desktop, então nenhum admin alcançava aquela tela pelo celular. Com a barra inferior
+ * seria uma terceira cópia. Item de menu novo entra LÁ, não aqui.
+ *
+ * ⚠️ Duas navegações, uma de cada vez: nav horizontal a partir de `sm`, `BarraInferior` +
+ * `GavetaMobile` abaixo disso. O hambúrguer não existe mais — o que era o menu inteiro
+ * virou o botão "Mais" da barra.
+ */
 import { computed, ref } from 'vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
@@ -6,29 +19,47 @@ import NavLink from '@/Components/NavLink.vue';
 import NotificationBell from '@/Components/NotificationBell.vue';
 import VisaoSupervisorToggle from '@/Components/VisaoSupervisorToggle.vue';
 import SimulacaoBanner from '@/Components/SimulacaoBanner.vue';
-import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
+import BarraInferior from '@/Components/Navegacao/BarraInferior.vue';
+import GavetaMobile from '@/Components/Navegacao/GavetaMobile.vue';
 import { Link, usePage } from '@inertiajs/vue3';
+import { estaAtivo, menuPrincipal, menuUsuario } from '@/constants/navegacao';
 
-const showingNavigationDropdown = ref(false);
+const gavetaAberta = ref(false);
 
 const page = usePage();
-const isGestor = computed(() =>
-    (page.props.auth?.roles ?? []).some((r) => ['admin', 'diretor', 'supervisor'].includes(r)),
-);
-const isAssistente = computed(() => (page.props.auth?.roles ?? []).includes('assistente'));
-// A tela de atualizacao de dados mostra estado de infraestrutura e dispara carga pesada
-// no banco -- so admin, igual a materia-prima de etiqueta e ao CRUD do Catalogo de Facas.
-const isAdmin = computed(() => (page.props.auth?.roles ?? []).includes('admin'));
-const visaoGestorAtiva = computed(() =>
-    route().current('equipe.*')
-    || route().current('visao-gestor.*')
-    || route().current('metas.*'),
-);
-const pedidosAtivo = computed(() => route().current('pedidos.*'));
-const carteiraAtiva = computed(() => route().current('carteira.*') || route().current('leads.*'));
-const catalogoAtivo = computed(() =>
-    route().current('tabela-precos.*') || route().current('catalogo-facas.*'),
-);
+const papeis = computed(() => page.props.auth?.roles ?? []);
+
+/**
+ * Um objeto só com os papéis, resolvido uma vez e passado adiante.
+ *
+ * ⚠️ É o contrato de `constants/navegacao.js`. Os três consumidores (este nav, a barra e a
+ * gaveta) recebem o MESMO objeto: se cada um decidisse "sou gestor?" por conta própria, o
+ * menu voltaria a poder diferir entre desktop e celular — que é exatamente o defeito que a
+ * extração consertou.
+ */
+const perfil = computed(() => ({
+    isGestor: papeis.value.some((r) => ['admin', 'diretor', 'supervisor'].includes(r)),
+    isAssistente: papeis.value.includes('assistente'),
+    isAdmin: papeis.value.includes('admin'),
+}));
+
+/*
+ * ⚠️ Depende de `page.url` de propósito, mesmo sem usar o valor: `route().current()` lê a
+ * URL do navegador, que não é reativa. Hoje o layout é remontado em cada visita do Inertia
+ * e o cálculo aconteceria de novo sozinho, mas o layout persistente está na lista de coisas
+ * a fazer — e no dia em que entrar, o menu congelaria no estado da primeira página, sem
+ * erro nenhum aparecer.
+ */
+const grupos = computed(() => {
+    void page.url;
+
+    return menuPrincipal(perfil.value).map((grupo) => ({
+        ...grupo,
+        ativo: estaAtivo(grupo.ativoEm),
+    }));
+});
+
+const itensDoUsuario = computed(() => menuUsuario(perfil.value));
 </script>
 
 <template>
@@ -38,201 +69,66 @@ const catalogoAtivo = computed(() =>
             <SimulacaoBanner />
 
             <nav class="bg-black">
-                <!-- Primary Navigation Menu -->
                 <div class="mx-auto max-w-[1800px] px-3 sm:px-4 lg:px-6">
                     <div class="flex h-16 justify-between">
                         <div class="flex min-w-0">
-                            <!-- Logo -->
                             <div class="flex shrink-0 items-center">
-                                <Link :href="route('dashboard')">
-                                    <img
-                                        src="/images/autopel-logo-white.png"
-                                        alt="Autopel"
-                                        class="h-8 w-auto"
-                                    />
+                                <Link :href="route('dashboard')" class="inline-flex min-h-11 items-center">
+                                    <img src="/images/autopel-logo-white.png" alt="Autopel" class="h-8 w-auto" />
                                 </Link>
                             </div>
 
-                            <!-- Navigation Links -->
+                            <!-- Navegação desktop -->
                             <div class="hidden sm:-my-px sm:ms-8 sm:flex sm:items-stretch sm:gap-x-6">
-                                <NavLink
-                                    :href="route('dashboard')"
-                                    :active="route().current('dashboard')"
-                                    prefetch="hover"
-                                    class="!text-white/80 hover:!text-white"
-                                    :class="route().current('dashboard') ? '!border-cyan !text-white' : '!border-transparent'"
-                                >
-                                    Início
-                                </NavLink>
+                                <template v-for="grupo in grupos" :key="grupo.chave">
+                                    <div v-if="grupo.itens?.length" class="relative inline-flex items-center">
+                                        <Dropdown align="left" :width="grupo.largura">
+                                            <template #trigger>
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none"
+                                                    :class="grupo.ativo
+                                                        ? 'border-cyan text-white'
+                                                        : 'border-transparent text-white/80 hover:text-white'"
+                                                >
+                                                    {{ grupo.rotulo }}
+                                                    <!--
+                                                        A seta era copiada em quatro gatilhos idênticos.
+                                                        Com os grupos vindo de dados, ela é escrita uma vez.
+                                                    -->
+                                                    <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path
+                                                            fill-rule="evenodd"
+                                                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                            clip-rule="evenodd"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                            </template>
+                                            <template #content>
+                                                <DropdownLink
+                                                    v-for="item in grupo.itens"
+                                                    :key="item.chave"
+                                                    :href="route(item.rota)"
+                                                    :prefetch="item.prefetch ?? false"
+                                                >
+                                                    {{ item.rotulo }}
+                                                </DropdownLink>
+                                            </template>
+                                        </Dropdown>
+                                    </div>
 
-                                <!-- Bloco gestor -->
-                                <div
-                                    v-if="isGestor"
-                                    class="relative inline-flex items-center"
-                                >
-                                    <Dropdown align="left" width="56">
-                                        <template #trigger>
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none"
-                                                :class="visaoGestorAtiva
-                                                    ? 'border-cyan text-white'
-                                                    : 'border-transparent text-white/80 hover:text-white'"
-                                            >
-                                                Visão Gestor
-                                                <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path
-                                                        fill-rule="evenodd"
-                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                                                        clip-rule="evenodd"
-                                                    />
-                                                </svg>
-                                            </button>
-                                        </template>
-                                        <template #content>
-                                            <DropdownLink :href="route('equipe.index')" prefetch="hover">
-                                                Equipe
-                                            </DropdownLink>
-                                            <DropdownLink :href="route('visao-gestor.index')" prefetch="hover">
-                                                Observações e ligações
-                                            </DropdownLink>
-                                            <DropdownLink :href="route('metas.index')" prefetch="hover">
-                                                Metas
-                                            </DropdownLink>
-                                        </template>
-                                    </Dropdown>
-                                </div>
-
-                                <!-- Bloco comercial: Início → Carteira → Pedidos → Orçamentos → Cadastros → Tabela -->
-                                <div
-                                    v-if="!isAssistente"
-                                    class="relative inline-flex items-center"
-                                >
-                                    <Dropdown align="left" width="48">
-                                        <template #trigger>
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none"
-                                                :class="carteiraAtiva
-                                                    ? 'border-cyan text-white'
-                                                    : 'border-transparent text-white/80 hover:text-white'"
-                                            >
-                                                Carteira
-                                                <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path
-                                                        fill-rule="evenodd"
-                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                                                        clip-rule="evenodd"
-                                                    />
-                                                </svg>
-                                            </button>
-                                        </template>
-                                        <template #content>
-                                            <DropdownLink :href="route('carteira.index')" prefetch="hover">
-                                                Clientes
-                                            </DropdownLink>
-                                            <DropdownLink :href="route('leads.index')" prefetch="hover">
-                                                Leads
-                                            </DropdownLink>
-                                        </template>
-                                    </Dropdown>
-                                </div>
-
-                                <div
-                                    v-if="!isAssistente"
-                                    class="relative inline-flex items-center"
-                                >
-                                    <Dropdown align="left" width="48">
-                                        <template #trigger>
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none"
-                                                :class="pedidosAtivo
-                                                    ? 'border-cyan text-white'
-                                                    : 'border-transparent text-white/80 hover:text-white'"
-                                            >
-                                                Pedidos
-                                                <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path
-                                                        fill-rule="evenodd"
-                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                                                        clip-rule="evenodd"
-                                                    />
-                                                </svg>
-                                            </button>
-                                        </template>
-                                        <template #content>
-                                            <DropdownLink :href="route('pedidos.index')" prefetch="hover">
-                                                Pedidos em aberto
-                                            </DropdownLink>
-                                            <DropdownLink :href="route('pedidos.emitidos')" prefetch="hover">
-                                                Pedidos emitidos
-                                            </DropdownLink>
-                                        </template>
-                                    </Dropdown>
-                                </div>
-
-                                <NavLink
-                                    v-if="isAssistente"
-                                    :href="route('leads.index')"
-                                    :active="route().current('leads.*')"
-                                    prefetch="hover"
-                                    class="!text-white/80 hover:!text-white"
-                                    :class="route().current('leads.*') ? '!border-cyan !text-white' : '!border-transparent'"
-                                >
-                                    Leads
-                                </NavLink>
-
-                                <NavLink
-                                    :href="route('orcamentos.index')"
-                                    :active="route().current('orcamentos.index')"
-                                    prefetch="click"
-                                    class="!text-white/80 hover:!text-white"
-                                    :class="route().current('orcamentos.index') ? '!border-cyan !text-white' : '!border-transparent'"
-                                >
-                                    Orçamentos
-                                </NavLink>
-                                <NavLink
-                                    :href="route('cadastros.index')"
-                                    :active="route().current('cadastros.*')"
-                                    prefetch="click"
-                                    class="!text-white/80 hover:!text-white"
-                                    :class="route().current('cadastros.*') ? '!border-cyan !text-white' : '!border-transparent'"
-                                >
-                                    Cadastros
-                                </NavLink>
-                                <div
-                                    class="relative inline-flex items-center"
-                                >
-                                    <Dropdown align="left" width="48">
-                                        <template #trigger>
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none"
-                                                :class="catalogoAtivo
-                                                    ? 'border-cyan text-white'
-                                                    : 'border-transparent text-white/80 hover:text-white'"
-                                            >
-                                                Catálogo
-                                                <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path
-                                                        fill-rule="evenodd"
-                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                                                        clip-rule="evenodd"
-                                                    />
-                                                </svg>
-                                            </button>
-                                        </template>
-                                        <template #content>
-                                            <DropdownLink :href="route('tabela-precos.index')" prefetch="hover">
-                                                Tabela de Preços
-                                            </DropdownLink>
-                                            <DropdownLink :href="route('catalogo-facas.index')" prefetch="hover">
-                                                Catálogo de Facas
-                                            </DropdownLink>
-                                        </template>
-                                    </Dropdown>
-                                </div>
+                                    <NavLink
+                                        v-else
+                                        :href="route(grupo.rota)"
+                                        :active="grupo.ativo"
+                                        :prefetch="grupo.prefetch ?? false"
+                                        class="!text-white/80 hover:!text-white"
+                                        :class="grupo.ativo ? '!border-cyan !text-white' : '!border-transparent'"
+                                    >
+                                        {{ grupo.rotulo }}
+                                    </NavLink>
+                                </template>
                             </div>
                         </div>
 
@@ -271,12 +167,7 @@ const catalogoAtivo = computed(() =>
                                                 </span>
                                                 {{ $page.props.auth.user.display_name || $page.props.auth.user.name }}
 
-                                                <svg
-                                                    class="-me-0.5 ms-2 h-4 w-4"
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    viewBox="0 0 20 20"
-                                                    fill="currentColor"
-                                                >
+                                                <svg class="-me-0.5 ms-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                                     <path
                                                         fill-rule="evenodd"
                                                         d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
@@ -288,22 +179,14 @@ const catalogoAtivo = computed(() =>
                                     </template>
 
                                     <template #content>
-                                        <DropdownLink :href="route('profile.edit')">
-                                            Perfil
-                                        </DropdownLink>
-                                        <!-- Fica no menu do usuário, e não na navegação principal, porque a
-                                             lista é PESSOAL: cada um vê só as próprias planilhas. -->
-                                        <DropdownLink :href="route('exportacoes.index')">
-                                            Meus downloads
-                                        </DropdownLink>
-                                        <DropdownLink v-if="isAdmin" :href="route('atualizacoes.index')">
-                                            Atualização de dados
-                                        </DropdownLink>
                                         <DropdownLink
-                                            :href="route('logout')"
-                                            method="post"
-                                            as="button"
+                                            v-for="item in itensDoUsuario"
+                                            :key="item.chave"
+                                            :href="route(item.rota)"
                                         >
+                                            {{ item.rotulo }}
+                                        </DropdownLink>
+                                        <DropdownLink :href="route('logout')" method="post" as="button">
                                             Sair
                                         </DropdownLink>
                                     </template>
@@ -311,149 +194,21 @@ const catalogoAtivo = computed(() =>
                             </div>
                         </div>
 
-                        <!-- Hamburger -->
-                        <div class="-me-2 flex items-center sm:hidden">
-                            <button
-                                @click="showingNavigationDropdown = !showingNavigationDropdown"
-                                class="inline-flex items-center justify-center rounded-md p-2 text-white/70 transition duration-150 ease-in-out hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white focus:outline-none"
+                        <!--
+                            Topo no celular: só sino e avatar. A navegação desceu para a
+                            `BarraInferior`, e o hambúrguer que ficava aqui deixou de existir —
+                            manter os dois seria oferecer dois caminhos para a mesma tela, com
+                            marcações de "página atual" independentes.
+                        -->
+                        <div class="-me-1 flex items-center gap-1 sm:hidden">
+                            <NotificationBell />
+                            <Link
+                                :href="route('profile.edit')"
+                                class="flex h-11 w-11 items-center justify-center"
+                                aria-label="Perfil"
                             >
-                                <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-                                    <path
-                                        :class="{
-                                            hidden: showingNavigationDropdown,
-                                            'inline-flex': !showingNavigationDropdown,
-                                        }"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M4 6h16M4 12h16M4 18h16"
-                                    />
-                                    <path
-                                        :class="{
-                                            hidden: !showingNavigationDropdown,
-                                            'inline-flex': showingNavigationDropdown,
-                                        }"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Responsive Navigation Menu -->
-                <div
-                    :class="{
-                        block: showingNavigationDropdown,
-                        hidden: !showingNavigationDropdown,
-                    }"
-                    class="sm:hidden"
-                >
-                    <div class="space-y-1 pb-3 pt-2">
-                        <ResponsiveNavLink
-                            :href="route('dashboard')"
-                            :active="route().current('dashboard')"
-                        >
-                            Início
-                        </ResponsiveNavLink>
-
-                        <template v-if="isGestor">
-                            <div class="px-4 pb-1 pt-3 text-[0.65rem] font-semibold uppercase tracking-wide text-white/40">
-                                Visão Gestor
-                            </div>
-                            <ResponsiveNavLink
-                                :href="route('equipe.index')"
-                                :active="route().current('equipe.*')"
-                            >
-                                Equipe
-                            </ResponsiveNavLink>
-                            <ResponsiveNavLink
-                                :href="route('visao-gestor.index')"
-                                :active="route().current('visao-gestor.*')"
-                            >
-                                Observações e ligações
-                            </ResponsiveNavLink>
-                            <ResponsiveNavLink
-                                :href="route('metas.index')"
-                                :active="route().current('metas.*')"
-                            >
-                                Metas
-                            </ResponsiveNavLink>
-                        </template>
-
-                        <template v-if="!isAssistente">
-                            <div class="px-4 pb-1 pt-3 text-[0.65rem] font-semibold uppercase tracking-wide text-white/40">
-                                Carteira
-                            </div>
-                            <ResponsiveNavLink
-                                :href="route('carteira.index')"
-                                :active="route().current('carteira.*')"
-                            >
-                                Clientes
-                            </ResponsiveNavLink>
-                            <ResponsiveNavLink
-                                :href="route('leads.index')"
-                                :active="route().current('leads.*')"
-                            >
-                                Leads
-                            </ResponsiveNavLink>
-                            <div class="px-4 pb-1 pt-3 text-[0.65rem] font-semibold uppercase tracking-wide text-white/40">
-                                Pedidos
-                            </div>
-                            <ResponsiveNavLink
-                                :href="route('pedidos.index')"
-                                :active="route().current('pedidos.index')"
-                            >
-                                Pedidos em aberto
-                            </ResponsiveNavLink>
-                            <ResponsiveNavLink
-                                :href="route('pedidos.emitidos')"
-                                :active="route().current('pedidos.emitidos')"
-                            >
-                                Pedidos emitidos
-                            </ResponsiveNavLink>
-                        </template>
-                        <ResponsiveNavLink
-                            v-if="isAssistente"
-                            :href="route('leads.index')"
-                            :active="route().current('leads.*')"
-                        >
-                            Leads
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            :href="route('orcamentos.index')"
-                            :active="route().current('orcamentos.index')"
-                        >
-                            Orçamentos
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            :href="route('cadastros.index')"
-                            :active="route().current('cadastros.*')"
-                        >
-                            Cadastros
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            :href="route('tabela-precos.index')"
-                            :active="route().current('tabela-precos.*')"
-                        >
-                            Catálogo · Tabela de Preços
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
-                            :href="route('catalogo-facas.index')"
-                            :active="route().current('catalogo-facas.*')"
-                        >
-                            Catálogo · Facas
-                        </ResponsiveNavLink>
-                    </div>
-
-                    <div class="border-t border-white/10 pb-1 pt-4">
-                        <div class="flex items-center justify-between px-4">
-                            <div class="flex items-center gap-3">
                                 <span
-                                    class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10"
+                                    class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10"
                                 >
                                     <img
                                         v-if="$page.props.auth.user.foto_url"
@@ -473,51 +228,34 @@ const catalogoAtivo = computed(() =>
                                         />
                                     </svg>
                                 </span>
-                                <div class="min-w-0">
-                                    <div class="truncate text-base font-medium text-white">
-                                        {{ $page.props.auth.user.display_name || $page.props.auth.user.name }}
-                                    </div>
-                                    <div class="truncate text-sm font-medium text-white/60">
-                                        {{ $page.props.auth.user.email }}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <VisaoSupervisorToggle />
-                            <NotificationBell />
-                        </div>
-
-                        <div class="mt-3 space-y-1">
-                            <ResponsiveNavLink :href="route('profile.edit')">
-                                Perfil
-                            </ResponsiveNavLink>
-                            <ResponsiveNavLink :href="route('exportacoes.index')">
-                                Meus downloads
-                            </ResponsiveNavLink>
-                            <ResponsiveNavLink
-                                :href="route('logout')"
-                                method="post"
-                                as="button"
-                            >
-                                Sair
-                            </ResponsiveNavLink>
+                            </Link>
                         </div>
                     </div>
                 </div>
             </nav>
 
-            <header
-                v-if="$slots.header"
-                class="bg-white shadow-sm"
-            >
+            <header v-if="$slots.header" class="bg-white shadow-sm">
                 <div class="mx-auto max-w-[1800px] px-3 py-6 sm:px-4 lg:px-6">
                     <slot name="header" />
                 </div>
             </header>
 
-            <main>
+            <!--
+                ⚠️ `pb-20 sm:pb-0` fica AQUI e não nas páginas: a barra inferior é `fixed` e
+                cobriria os últimos ~64px do conteúdo (o botão de salvar de um formulário, a
+                última linha de uma tabela). O container `max-w-[1800px]` está copiado em 18
+                arquivos, e pôr a folga em cada um seria a 19ª chance de esquecer.
+            -->
+            <main class="pb-20 sm:pb-0">
                 <slot />
             </main>
         </div>
+
+        <BarraInferior
+            :perfil="perfil"
+            :gaveta-aberta="gavetaAberta"
+            @abrir-mais="gavetaAberta = !gavetaAberta"
+        />
+        <GavetaMobile :show="gavetaAberta" :perfil="perfil" @close="gavetaAberta = false" />
     </div>
 </template>

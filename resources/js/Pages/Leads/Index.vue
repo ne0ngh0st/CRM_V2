@@ -16,6 +16,7 @@ import ObservacoesModal from '@/Components/Observacoes/ObservacoesModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import WordpressCapturaBar from '@/Components/Leads/WordpressCapturaBar.vue';
 import ModalPadrao from '@/Components/ModalPadrao.vue';
+import { contarFiltrosAtivos } from '@/utils/filtros';
 
 const props = defineProps({
     role: String,
@@ -138,16 +139,22 @@ async function abrirCaptura(lead) {
     }
 }
 
-const temFiltrosAtivos = computed(() => {
-    const campos = ['busca', 'estado', 'segmento', 'status'];
-    if (!props.somenteWordpress) {
-        campos.push('origem');
-    }
+/*
+ * Uma lista de campos, dois consumidores: a contagem no botão "Filtros" do celular e o
+ * aviso do Excel. `origem` não conta na aba WordPress porque lá ela é fixa, não escolhida.
+ *
+ * ⚠️ O badge conta só o que o botão ESCONDE — a busca fica visível ao lado dele. O aviso
+ * do Excel responde outra pergunta ("o arquivo sai recortado?") e aí a busca conta.
+ */
+const filtrosAtivos = computed(() => {
+    const campos = ['estado', 'segmento', 'status', 'visao_supervisor', 'visao_vendedor'];
 
-    return campos.some((k) => filtros[k] !== '')
-        || !!filtros.visao_supervisor
-        || !!filtros.visao_vendedor;
+    if (! props.somenteWordpress) campos.push('origem');
+
+    return contarFiltrosAtivos(filtros, campos);
 });
+
+const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
 </script>
 
 <template>
@@ -156,7 +163,7 @@ const temFiltrosAtivos = computed(() => {
     <AuthenticatedLayout>
         <div class="py-4">
             <div class="mx-auto flex w-full max-w-[1800px] flex-col gap-4 px-3 sm:px-4 lg:px-6">
-                <PageHero title="Leads">
+                <PageHero title="Leads" :filtros-ativos="filtrosAtivos">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <circle cx="9" cy="7" r="3" />
@@ -179,18 +186,29 @@ const temFiltrosAtivos = computed(() => {
                         <KpiTile :value="kpis.wordpress ?? 0" label="WordPress" tone="ok" :href="route('leads.index', { ...filtros, origem: 'wordpress', aba: 'leads' })" />
                         <KpiTile :value="kpis.ativos" label="Ativos" tone="ok" />
                     </template>
-                    <template #filtros>
-                        <div class="flex min-w-[200px] max-w-[280px] flex-1 flex-col gap-1">
+                    <!-- Busca e ordenação não colapsam no celular: abaixo de 640px a tabela
+                         vira cartão e o `<thead>` não está lá, então este select é o único
+                         acesso à ordenação — atrás do botão "Filtros" ele ficaria escondido. -->
+                    <template #filtrosFixos>
+                        <div class="flex w-full flex-col gap-1 sm:min-w-[200px] sm:max-w-[280px] sm:flex-1">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
                             <input
                                 v-model="filtros.busca"
                                 type="text"
                                 placeholder="Nome, CNPJ, e-mail ou telefone..."
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @input="onBuscaInput"
                             />
                         </div>
 
+                        <FilterField label="Ordenar" :model-value="filtros.ordenar" @update:model-value="(v) => { filtros.ordenar = v; aplicarFiltros(); }">
+                            <option value="nome_asc">Nome</option>
+                            <option value="valor_desc">Valor estimado</option>
+                            <option value="recentes">Mais recentes</option>
+                        </FilterField>
+                    </template>
+
+                    <template #filtros>
                         <FilterField label="UF" :model-value="filtros.estado" @update:model-value="(v) => { filtros.estado = v; aplicarFiltros(); }">
                             <option value="">Todos</option>
                             <option v-for="e in opcoes.estados" :key="e" :value="e">{{ e }}</option>
@@ -235,13 +253,7 @@ const temFiltrosAtivos = computed(() => {
                             <option v-for="v in visao.vendedores" :key="v.cod_vendedor" :value="v.cod_vendedor">{{ v.nome }}</option>
                         </FilterField>
 
-                        <FilterField label="Ordenar" :model-value="filtros.ordenar" @update:model-value="(v) => { filtros.ordenar = v; aplicarFiltros(); }">
-                            <option value="nome_asc">Nome</option>
-                            <option value="valor_desc">Valor estimado</option>
-                            <option value="recentes">Mais recentes</option>
-                        </FilterField>
-
-                        <button type="button" class="self-end rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100" @click="limparFiltros">
+                        <button type="button" class="min-h-11 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:self-end" @click="limparFiltros">
                             Limpar filtros
                         </button>
                     </template>

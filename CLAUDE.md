@@ -222,6 +222,7 @@ Aplicado em `Dashboard.vue` + tudo em `resources/js/Components/Dashboard/`. Toda
 | `.tbl-main` | 1ª linha de célula de duas linhas (razão social) | `mx-auto block truncate font-medium leading-4` |
 | `.tbl-sub` | 2ª linha da mesma célula (CNPJ, código) | `block text-[0.65rem] leading-3 text-gray-400` |
 | `.tbl-wrap` | `<div>` em volta da `<table>` | `overflow-x-auto` |
+| `.tbl-cartoes` | na `<table>` (opt-in) | abaixo de 640px a tabela vira cartão — `docs/mobile.md` |
 | `.tbl-acoes` | `<div>` dentro do `<td>` de ações | `flex flex-wrap items-center justify-center gap-1` |
 | `.tbl-acao` | botão-ícone da coluna "Ações" | `inline-flex h-6 w-6 ... rounded border` (a cor vem do modificador) |
 | `.tbl-acao-{neutro,teal,cyan,navy,amber,verde,danger}` | modificador de cor do botão | ícone + borda coloridos, tint no hover |
@@ -2164,6 +2165,50 @@ coluna Estado. São **641 clientes** com filiais em estados diferentes e **699**
 diferentes (1,5% cada). ⚠️ **Não é o mesmo defeito**: ali o filtro está certo (o cliente TEM
 presença no estado), quem engana é a coluna. O conserto não é filtrar diferente — é a linha
 dizer "SP +1". Deixado em aberto de propósito, à espera de alguém reclamar.
+
+### Celular: menu único, tabela em cartão, filtros colapsados — 2026-09-15
+
+O PALMA legado no celular era o hambúrguer truncado, a navbar esmagada e tabelas de
+1200px para arrastar. O v2 não copia isso. **Detalhe, papéis de célula, anti-padrões e
+como medir: `docs/mobile.md`.** Aqui fica só o que muda decisão futura.
+
+**O corte é 639px** (`sm` do Tailwind). Mora em DOIS lugares e os dois têm que continuar
+iguais: a media query de `.tbl-cartoes` no `app.css` e `LARGURA_COMPACTA` em
+`useTelaCompacta.js`. Esquecer um deixa tabela-cartão e filtros-modal dessincronizados,
+sem erro nenhum.
+
+| O que se repete | Onde mora |
+|---|---|
+| Estrutura do menu (rotas, papéis, ordem) | `resources/js/constants/navegacao.js` |
+| Barra inferior / gaveta "Mais" | `Components/Navegacao/` |
+| Ícones do menu | `Components/Icones/IconeNav.vue` |
+| Reflow tabela → cartão | `.tbl-cartoes` no `app.css` (opt-in) |
+| "A tela é estreita?" | `composables/useTelaCompacta.js` |
+| Contagem de filtros ativos | `utils/filtros.js` |
+| Pilha modal + gaveta (ESC, scroll do body) | `composables/usePilhaDeCamadas.js` |
+| Colunas ordenáveis da Carteira (header + seletor) | `constants/carteira.js` ↔ `CarteiraController::ORDENACOES` |
+
+- ⚠️ **Item de menu novo entra em `navegacao.js`**, não no layout. Até esta data o menu
+  era escrito duas vezes no `AuthenticatedLayout` e o link admin "Atualização de dados"
+  existia só no desktop.
+- ⚠️ **`min-w-0 flex-1` ao lado de `shrink-0` num `flex-wrap` esmaga, não quebra linha.**
+  Empilhar abaixo de `sm`. Foi o título do `PageHero` virando uma palavra por linha e a
+  barra de aderência virando um toco de 30px.
+- ⚠️ **Utilities `min-w-[Npx]` / `max-w-[Npx]` vencem o `@layer components`.** Toda
+  tabela em cartão usa `sm:min-w-` / `sm:max-w-`, senão o cartão sai certo dentro de uma
+  página rolando 1000px na horizontal.
+- ⚠️ **Uma marcação só.** Segunda árvore de cartões ao lado da `<table>` é a mesma
+  divergência do rótulo de status do Pedido (09/09).
+- ⚠️ **Segmentos Atendidos NÃO usa `.tbl-cartoes`.** É legenda de KPI dentro de card
+  (revertido em 10/09). No celular empilha via `.seg-lista`, sem scroll de página.
+- Convertidas: Carteira, Leads, Pedidos (abertos e emitidos), Orçamentos, Equipe, Metas,
+  Visão do Gestor, Meus downloads. Medido em 320/360px: zero overflow, zero truncate.
+- Ainda rola por dentro (não da página): Evolução Comercial, Cadastros, Tabela de
+  Preços, Matéria-prima, ficha do cliente.
+
+Medir: `node docker/medir-mobile.mjs` (CDP no Edge/Chrome da máquina). Depois de editar
+`.vue`, `docker compose restart vite`.
+
 ## Pendências
 - 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA em 2026-09-10,
   HOMOLOGADA ponta a ponta em 2026-09-14, falta dado REAL no de-para para liberar.**

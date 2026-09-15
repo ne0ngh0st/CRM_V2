@@ -54,7 +54,10 @@ async function excluir(lead) {
 
 <template>
     <div class="tbl-wrap">
-        <table class="tbl min-w-[1000px]">
+        <!-- `sm:min-w-`, nunca `min-w-`: abaixo de 640px o `.tbl-cartoes` desmonta a tabela
+             em cartões, e a largura mínima continuaria valendo (utility vence o
+             `@layer components`), deixando a PÁGINA rolando 1000px na horizontal. -->
+        <table class="tbl tbl-cartoes sm:min-w-[1000px]">
             <thead>
                 <tr class="tbl-head-row">
                     <th class="tbl-th">Lead</th>
@@ -69,33 +72,33 @@ async function excluir(lead) {
             </thead>
             <tbody class="tbl-body">
                 <tr v-for="lead in leads" :key="lead.id" class="tbl-row">
-                    <td class="tbl-td">
-                        <span class="tbl-main max-w-[220px]" :title="lead.razaoSocial">
+                    <td class="tbl-td tbl-td-titulo">
+                        <span class="tbl-main sm:max-w-[220px]" :title="lead.razaoSocial">
                             {{ lead.razaoSocial || lead.nome }}
                         </span>
                         <span class="tbl-sub">{{ lead.cnpj || lead.email || '—' }}</span>
                         <span v-if="lead.formularioNome" class="tbl-sub">{{ lead.formularioNome }}</span>
                     </td>
-                    <td class="tbl-td">
-                        <span class="tbl-trunc max-w-[180px]" :title="lead.vendedorNome ?? ''">{{ lead.vendedorNome || '—' }}</span>
+                    <td class="tbl-td" data-rotulo="Vendedor">
+                        <span class="tbl-trunc sm:max-w-[180px]" :title="lead.vendedorNome ?? ''">{{ lead.vendedorNome || '—' }}</span>
                     </td>
-                    <td class="tbl-td">
+                    <td class="tbl-td" data-rotulo="UF / Cidade">
                         <span v-if="lead.estado || lead.cidade">{{ lead.estado || '—' }}{{ lead.cidade ? ` · ${lead.cidade}` : '' }}</span>
                         <span v-else>—</span>
                     </td>
-                    <td class="tbl-td">{{ lead.segmento || '—' }}</td>
-                    <td class="tbl-td">
+                    <td class="tbl-td" data-rotulo="Segmento">{{ lead.segmento || '—' }}</td>
+                    <td class="tbl-td" data-rotulo="Origem">
                         <StatusPill :tone="TONS_ORIGEM_LEAD[lead.origem] || 'neutral'" size="sm">
                             {{ ROTULOS_ORIGEM_LEAD[lead.origem] || lead.origem }}
                         </StatusPill>
                     </td>
-                    <td class="tbl-td">
+                    <td class="tbl-td" data-rotulo="Status">
                         <StatusPill :tone="TONS_ETAPA_LEAD[lead.etapa] || 'neutral'" size="sm">
                             {{ ROTULOS_ETAPA_LEAD[lead.etapa] || lead.etapa }}
                         </StatusPill>
                     </td>
-                    <td class="tbl-td">{{ formatBRL(lead.valorEstimado) }}</td>
-                    <td class="tbl-td">
+                    <td class="tbl-td" data-rotulo="Valor est.">{{ formatBRL(lead.valorEstimado) }}</td>
+                    <td class="tbl-td tbl-td-acoes">
                         <div class="tbl-acoes">
                             <button
                                 v-if="lead.temCaptura"

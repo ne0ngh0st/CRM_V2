@@ -141,14 +141,20 @@ function abrirZoom(faca, recurso) {
                         <KpiTile :value="kpis.catalogos" label="Catálogos" />
                         <KpiTile :value="kpis.filtradas" label="Exibindo" tone="ok" />
                     </template>
-                    <template #filtros>
-                        <div class="flex min-w-[200px] max-w-[300px] flex-1 flex-col gap-1">
+                    <!--
+                        Sem `#filtros` de propósito: esta tela tem UM filtro (catálogo). Mandar
+                        um select só para dentro do modal custaria dois toques para chegar onde
+                        hoje se chega em zero, e ainda esconderia o "Limpar" e o "+ Nova faca".
+                        O botão "Filtros" existe para poupar altura quando há 7-8 campos.
+                    -->
+                    <template #filtrosFixos>
+                        <div class="flex w-full flex-col gap-1 sm:min-w-[200px] sm:max-w-[300px] sm:flex-1">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
                             <input
                                 v-model="filtros.busca"
                                 type="text"
                                 placeholder="Ex.: 60x80 ou corte retangular"
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                                 @input="onBuscaInput"
                             />
                         </div>
@@ -170,7 +176,7 @@ function abrirZoom(faca, recurso) {
 
                         <button
                             type="button"
-                            class="self-end rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100"
+                            class="min-h-11 flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:flex-none sm:self-end"
                             @click="limparFiltros"
                         >
                             Limpar filtros
@@ -179,7 +185,7 @@ function abrirZoom(faca, recurso) {
                         <button
                             v-if="podeGerenciar"
                             type="button"
-                            class="self-end rounded border border-teal bg-teal px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal/90"
+                            class="min-h-11 flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal/90 sm:min-h-0 sm:flex-none sm:self-end"
                             @click="novaFaca"
                         >
                             + Nova faca

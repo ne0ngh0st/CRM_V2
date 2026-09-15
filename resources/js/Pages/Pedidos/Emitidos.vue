@@ -9,6 +9,7 @@ import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import PedidosEmitidosTabela from '@/Components/Pedidos/PedidosEmitidosTabela.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
+import { contarFiltrosAtivos } from '@/utils/filtros.js';
 
 const props = defineProps({
     role: String,
@@ -78,12 +79,16 @@ function limparFiltros() {
     aplicarFiltros();
 }
 
-const temFiltrosAtivos = computed(() =>
-    filtros.busca !== ''
-    || filtros.faturamento !== ''
-    || !!filtros.visao_supervisor
-    || !!filtros.visao_vendedor,
-);
+/*
+ * `ano`/`mes` estão de fora: são estruturais (sempre têm valor), então contá-los faria o
+ * badge nascer em "2" com a tela intocada — e a única leitura possível seria "há dois
+ * filtros que eu não pedi". Quem declara o período é o subtítulo do PageHero.
+ */
+const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
+    'faturamento', 'visao_supervisor', 'visao_vendedor',
+]));
+
+const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
 
 function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
@@ -102,7 +107,7 @@ const periodoLabel = computed(() => {
     <AuthenticatedLayout>
         <div class="py-4">
             <div class="mx-auto flex w-full max-w-[1800px] flex-col gap-4 px-3 sm:px-4 lg:px-6">
-                <PageHero title="Pedidos Emitidos">
+                <PageHero title="Pedidos Emitidos" :filtros-ativos="filtrosAtivos">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <path d="M4 7h16v12H4z" />
@@ -127,6 +132,29 @@ const periodoLabel = computed(() => {
                             <KpiTile :value="formatBRL(kpis.valorTotal)" label="Valor total" compact />
                         </div>
                     </template>
+                    <template #filtrosFixos>
+                        <div class="flex w-full flex-col gap-1 sm:min-w-[200px] sm:max-w-[280px] sm:flex-1">
+                            <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
+                            <input
+                                v-model="filtros.busca"
+                                type="text"
+                                placeholder="Nº pedido, cliente, CNPJ ou produto..."
+                                class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
+                                @input="onBuscaInput"
+                            />
+                        </div>
+
+                        <!-- Ordenação não recorta a lista, reordena: fica fora do modal. -->
+                        <FilterField label="Ordenar por" :model-value="filtros.ordenar" @update:model-value="(v) => { filtros.ordenar = v; aplicarFiltros(); }">
+                            <option value="data_pedido_desc">Data do pedido · mais recente</option>
+                            <option value="data_pedido_asc">Data do pedido · mais antiga</option>
+                            <option value="faturamento_desc">Faturamento · mais recente</option>
+                            <option value="faturamento_asc">Faturamento · mais antigo</option>
+                            <option value="valor_desc">Valor · maior primeiro</option>
+                            <option value="valor_asc">Valor · menor primeiro</option>
+                        </FilterField>
+                    </template>
+
                     <template #filtros>
                         <FilterField label="Ano" :model-value="filtros.ano" @update:model-value="(v) => { filtros.ano = v; aplicarFiltros(); }">
                             <option v-for="a in opcoes.anos" :key="a" :value="String(a)">{{ a }}</option>
@@ -135,17 +163,6 @@ const periodoLabel = computed(() => {
                         <FilterField label="Mês" :model-value="filtros.mes" @update:model-value="(v) => { filtros.mes = v; aplicarFiltros(); }">
                             <option v-for="m in MESES" :key="m.value" :value="String(m.value)">{{ m.label }}</option>
                         </FilterField>
-
-                        <div class="flex min-w-[200px] max-w-[280px] flex-1 flex-col gap-1">
-                            <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
-                            <input
-                                v-model="filtros.busca"
-                                type="text"
-                                placeholder="Nº pedido, cliente, CNPJ ou produto..."
-                                class="w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan"
-                                @input="onBuscaInput"
-                            />
-                        </div>
 
                         <FilterField
                             v-if="visao.supervisores.length"
@@ -167,16 +184,7 @@ const periodoLabel = computed(() => {
                             <option v-for="v in visao.vendedores" :key="v.cod_vendedor" :value="v.cod_vendedor">{{ v.nome }}</option>
                         </FilterField>
 
-                        <FilterField label="Ordenar por" :model-value="filtros.ordenar" @update:model-value="(v) => { filtros.ordenar = v; aplicarFiltros(); }">
-                            <option value="data_pedido_desc">Data do pedido · mais recente</option>
-                            <option value="data_pedido_asc">Data do pedido · mais antiga</option>
-                            <option value="faturamento_desc">Faturamento · mais recente</option>
-                            <option value="faturamento_asc">Faturamento · mais antigo</option>
-                            <option value="valor_desc">Valor · maior primeiro</option>
-                            <option value="valor_asc">Valor · menor primeiro</option>
-                        </FilterField>
-
-                        <button type="button" class="self-end rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100" @click="limparFiltros">
+                        <button type="button" class="min-h-11 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:self-end" @click="limparFiltros">
                             Limpar filtros
                         </button>
                     </template>

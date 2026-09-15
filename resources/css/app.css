@@ -88,6 +88,28 @@
      * então todo ajuste de densidade driftava entre elas.
      * Mudou aqui, muda em todas as tabelas que usam os tokens.
      */
+    /*
+     * ═══ ANTI-PADRÃO DE LAYOUT RESPONSIVO — leia antes de escrever faixa com dois lados
+     *
+     * `min-w-0 flex-1` de um lado e `shrink-0` do outro, dentro de um `flex-wrap`, NÃO
+     * quebra linha no celular: esmaga o lado flexível. O flexbox só quebra quando os
+     * itens não cabem no tamanho MÍNIMO deles, e `min-w-0` declara que aquele mínimo é
+     * zero — então ele sempre acha que "cabe", comprimindo até o texto virar uma palavra
+     * por linha.
+     *
+     * Sintoma: título/subtítulo com uma palavra por linha, ou barra de progresso reduzida
+     * a um toco de 30px que parece um interruptor. Foi exatamente o que acontecia no
+     * `PageHero` (18 páginas) e na barra de aderência do `CarteiraSegmentoCard` até
+     * 2026-09-15.
+     *
+     * A correção é sempre a mesma e é determinística: EMPILHAR abaixo de `sm`
+     * (`flex-col sm:flex-row`), ou mandar o lado elástico para uma linha própria
+     * (`order-last w-full sm:order-none sm:w-auto sm:flex-1`). Nunca confiar no `wrap`.
+     *
+     * Exemplo canônico, com o histórico inteiro: `resources/js/Components/PageHero.vue`.
+     * ═══
+     */
+
     /* Container da tabela. Toda tabela do sistema tem colunas demais pra caber no
        celular, então o scroll horizontal é regra, não exceção. */
     .tbl-wrap {
@@ -293,5 +315,189 @@
 
     .tbl-acao:disabled:hover {
         @apply border-gray-200 bg-transparent text-gray-400;
+    }
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════════════
+     * TABELA EM CARTÃO NO CELULAR (2026-09-15)
+     * ═══════════════════════════════════════════════════════════════════════════════
+     *
+     * Abaixo de 640px, uma tabela marcada com `.tbl-cartoes` deixa de ser tabela: cada
+     * `<tr>` vira um cartão empilhado, com o rótulo de cada valor saindo do
+     * `data-rotulo` da própria célula. Substitui o scroll horizontal, que era regra
+     * declarada aqui (ver `.tbl-wrap`) e na prática significava arrastar 1200px de
+     * largura numa tela de 360 para ler o status de um cliente.
+     *
+     * ⚠️ UMA MARCAÇÃO SÓ, reflow por CSS. Renderizar `<table>` para desktop e uma
+     * segunda árvore de cartões para celular seria o mesmo dado escrito duas vezes —
+     * coluna nova entra na tabela e é esquecida no cartão, que é exatamente como o
+     * rótulo de status do Pedido divergiu entre back e front em 2026-09-09.
+     *
+     * ⚠️ É OPT-IN (`.tbl-cartoes` na `<table>`). Tabela não convertida continua rolando,
+     * então as outras 21 do sistema não mudam de comportamento sozinhas e o rollout é
+     * incremental.
+     *
+     * ⚠️ TUDO com combinador de filho direto (`>`). A linha expandida da Carteira e dos
+     * Pedidos contém uma `.tbl-itens` DENTRO de uma célula: com seletor descendente,
+     * essa sub-tabela também viraria cartão, e ela não tem `data-rotulo` em nada.
+     *
+     * Papéis de célula (nenhum é obrigatório; o default já é "campo"):
+     *   `.tbl-td-titulo`   primeira linha do cartão, largura cheia, com filete embaixo
+     *   `.tbl-td-acoes`    rodapé do cartão, largura cheia, botões em alvo de 44px
+     *   `.tbl-td-expandir` a célula do chevron quando ela é a única pista da expansão
+     *   `.tbl-td-expansao` a célula de `colspan` da linha expandida
+     *   `.tbl-td-oculto`   coluna que não entra no cartão (chevron redundante, repetições)
+     */
+    @media (max-width: 639px) {
+        .tbl-cartoes,
+        .tbl-cartoes > :is(tbody, tfoot) {
+            @apply block;
+        }
+
+        /* Sem cabeçalho: quem rotula cada valor é o `data-rotulo` da célula. */
+        .tbl-cartoes > thead {
+            @apply hidden;
+        }
+
+        .tbl-cartoes > :is(tbody, tfoot) > tr {
+            @apply mb-2 flex flex-wrap items-start gap-x-3 gap-y-2 rounded border border-gray-300 bg-white p-3;
+        }
+
+        /*
+         * ⚠️ Os `divide-*` de `.tbl-body` e `.tbl-row` desenham as réguas da TABELA e
+         * precisam ser desligados no cartão. NÃO dá para desligá-los com um utility nem
+         * com um seletor curto: o deles é `> :not([hidden]) ~ :not([hidden])`, que
+         * pontua (0,3,0) — mais que `.tbl-cartoes > tbody > tr` (0,1,2). Repetir a mesma
+         * FORMA de seletor, um nível abaixo, é o que ganha sem `!important`.
+         *
+         * A régua horizontal volta como 1px na cor do cartão: `divide-gray-200` pinta
+         * `border-color` (não só a largura), então sem esta linha o segundo cartão em
+         * diante ficaria com a borda inteira um tom mais clara que o primeiro.
+         */
+        .tbl-cartoes > :is(tbody, tfoot) > :not([hidden]) ~ :not([hidden]) {
+            border-top-width: 1px;
+            border-color: theme('colors.gray.300');
+        }
+
+        .tbl-cartoes > :is(tbody, tfoot) > tr > :not([hidden]) ~ :not([hidden]) {
+            border-left-width: 0;
+        }
+
+        /*
+         * Default = campo: metade da largura, para pares de valor curto ficarem lado a
+         * lado (Estado/Segmento, Última compra/Último contato). `grow` faz o último
+         * campo de uma linha ímpar ocupar o vão em vez de deixar meio cartão vazio.
+         *
+         * ⚠️ `text-left`, não o `text-center` do `.tbl-td`. Dentro de cartão o padrão do
+         * sistema é alinhamento à esquerda — foi a lição do `SegmentosInativosCard` em
+         * 2026-09-10: os tokens `.tbl*` existem para tabela de página cheia, e centralizar
+         * célula dentro de cartão afasta o número do nome que o explica.
+         */
+        .tbl-cartoes > :is(tbody, tfoot) > tr > td {
+            @apply block min-w-0 grow basis-[calc(50%-0.375rem)] p-0 text-left align-top;
+        }
+
+        /* Só célula COM rótulo ganha a etiqueta — senão sobraria uma linha em branco. */
+        .tbl-cartoes > :is(tbody, tfoot) > tr > td[data-rotulo]::before {
+            content: attr(data-rotulo);
+            @apply mb-0.5 block text-[0.6rem] font-semibold uppercase tracking-wide text-gray-400;
+        }
+
+        /* O nome do cliente/lead é a manchete do cartão: largura cheia e sem rótulo. */
+        .tbl-cartoes .tbl-td-titulo {
+            @apply order-first basis-full border-b border-gray-100 pb-2;
+        }
+
+        .tbl-cartoes .tbl-td-acoes {
+            @apply order-last basis-full border-t border-gray-100 pt-2;
+        }
+
+        .tbl-cartoes .tbl-td-oculto {
+            @apply hidden;
+        }
+
+        /*
+         * A célula do chevron, quando ele é o ÚNICO caminho para abrir a linha.
+         *
+         * ⚠️ Não dá para simplesmente esconder (`.tbl-td-oculto`) como se faz na Carteira:
+         * lá existe o botão "Escolher filial" anunciando que há mais coisa embaixo; aqui a
+         * seta é a única pista. Sem ela o cartão fica clicável e MUDO — ninguém descobre os
+         * itens do pedido, e a expansão vira código que nunca roda.
+         *
+         * Por isso ela desce para o rodapé do cartão, com alvo de 44px e rótulo em texto:
+         * uma seta de 14px sozinha num cartão de 320px não se lê como controle.
+         */
+        .tbl-cartoes .tbl-td-expandir {
+            @apply order-last flex min-h-11 basis-full items-center justify-start gap-2 border-t border-gray-100 text-xs font-medium text-gray-500;
+        }
+
+        /*
+         * A linha expandida ocupa o cartão inteiro. A sub-tabela de dentro CONTINUA
+         * rolando na horizontal, de propósito: ela é detalhe secundário (as filiais de
+         * um cliente, os itens de um pedido) e não tem `data-rotulo` em nenhuma célula.
+         * Convertê-la também é trabalho separado — o que não pode é o scroll dela virar
+         * scroll da PÁGINA, e é isso que este `overflow-x-auto` garante.
+         */
+        .tbl-cartoes .tbl-td-expansao {
+            @apply order-last basis-full overflow-x-auto p-0;
+        }
+
+        /*
+         * ⚠️ Se o conteúdo da expansão for um `grid`, ele precisa de `grid-cols-1`
+         * explícito. Coluna implícita é `auto`, e `auto` nunca encolhe abaixo do
+         * conteúdo: a `.tbl-itens` de 560px abaixo esticava a coluna a 560 dentro de
+         * uma célula de 276, levando o bloco vizinho junto — os valores dele iam para
+         * fora da tela, à direita, e NADA acusava (a página não rolava, porque o
+         * `overflow-x-auto` desta célula segurava o vazamento aqui dentro).
+         */
+
+        /*
+         * ⚠️ Sem esta largura mínima a sub-tabela NÃO rola — ela é `w-full`, então
+         * espremeria 7 colunas em ~330px e o `overflow-x-auto` de cima nunca teria o que
+         * rolar. Cada coluna ficaria com 4 caracteres e a CNPJ quebraria em três linhas.
+         */
+        .tbl-cartoes .tbl-itens {
+            @apply min-w-[560px];
+        }
+
+        /*
+         * ⚠️ ALVO DE TOQUE. `.tbl-acao` é 24px, dimensionado para economizar altura de
+         * linha numa tabela densa — no cartão não há linha para economizar e 24px está
+         * bem abaixo dos 44px mínimos de dedo. Aqui o botão cresce e o ícone junto:
+         * ícone de 14px dentro de caixa de 44px lê como botão desabilitado.
+         *
+         * Com 7 botões eles quebram para uma segunda fileira, que é o comportamento
+         * certo — `.tbl-acoes` já é `flex-wrap`.
+         */
+        .tbl-cartoes .tbl-acoes {
+            @apply justify-start gap-1.5;
+        }
+
+        .tbl-cartoes .tbl-acao {
+            @apply h-11 w-11;
+        }
+
+        .tbl-cartoes .tbl-acao svg {
+            @apply h-5 w-5;
+        }
+
+        /*
+         * `.tbl-main` traz `mx-auto` e `truncate`, os dois pensados para célula de
+         * tabela. No cartão o nome é a manchete e tem a largura toda: cortar com
+         * reticências esconderia justamente o que a pessoa procura.
+         *
+         * ⚠️ O `max-w-[Npx]` que acompanha `.tbl-main` no HTML é UTILITY e vence o layer
+         * `components` independentemente de especificidade. Por isso a conversão de cada
+         * tabela troca `max-w-[220px]` por `sm:max-w-[220px]` — não tem como resolver
+         * daqui.
+         */
+        .tbl-cartoes .tbl-main,
+        .tbl-cartoes .tbl-trunc {
+            @apply mx-0 overflow-visible whitespace-normal;
+        }
+
+        .tbl-cartoes .tbl-main {
+            @apply text-sm leading-tight;
+        }
     }
 }

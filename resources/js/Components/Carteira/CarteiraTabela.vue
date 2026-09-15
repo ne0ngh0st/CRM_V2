@@ -4,7 +4,7 @@ import { router, Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import SortableTh from '@/Components/Tabela/SortableTh.vue';
 import BotoesContato from '@/Components/Contato/BotoesContato.vue';
-import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira.js';
+import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA, rotuloOrdenacao } from '@/constants/carteira.js';
 import { ROTULOS_CANAL_CURTO } from '@/constants/contatos.js';
 
 const props = defineProps({
@@ -103,27 +103,39 @@ function criarOrcamento(cliente) {
     <div class="tbl-wrap">
         <!-- 1200px, não 1000: entraram a coluna "Último contato" e mais dois botões de
              ação. Com 1000 a coluna Ações espremia e os 7 botões empilhavam um por
-             linha, triplicando a altura da linha em tela média. -->
-        <table class="tbl min-w-[1200px]">
+             linha, triplicando a altura da linha em tela média.
+
+             ⚠️ `sm:min-w-[1200px]`, nunca `min-w-[1200px]`: abaixo de 640px o
+             `.tbl-cartoes` desmonta a tabela em cartões, e uma largura mínima de 1200px
+             continuaria valendo (utility vence o `@layer components`, independentemente
+             de especificidade). O sintoma seria o cartão certo dentro de uma página que
+             rola 1200px na horizontal — ou seja, o problema que a conversão resolve. -->
+        <table class="tbl tbl-cartoes sm:min-w-[1200px]">
             <thead>
                 <tr class="tbl-head-row">
                     <!-- Coluna do chevron, como em PedidosTabela. Só existe agrupado. -->
                     <th v-if="agrupado" class="tbl-th w-8"></th>
-                    <SortableTh campo="nome" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Cliente</SortableTh>
+                    <!-- O rótulo de coluna ordenável sai de `ORDENACOES_CARTEIRA`, nunca
+                         escrito aqui: o mesmo texto aparece no seletor "Ordenar por" do
+                         celular, onde este cabeçalho não existe. -->
+                    <SortableTh campo="nome" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('nome') }}</SortableTh>
                     <th class="tbl-th">Grupo</th>
-                    <SortableTh campo="vendedor" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Vendedor</SortableTh>
-                    <SortableTh campo="estado" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Estado</SortableTh>
+                    <SortableTh campo="vendedor" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('vendedor') }}</SortableTh>
+                    <SortableTh campo="estado" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('estado') }}</SortableTh>
                     <th class="tbl-th">Segmento</th>
-                    <SortableTh campo="status" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Status</SortableTh>
-                    <SortableTh campo="ultima_compra" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Última Compra</SortableTh>
-                    <SortableTh campo="ultimo_contato" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">Último contato</SortableTh>
+                    <SortableTh campo="status" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('status') }}</SortableTh>
+                    <SortableTh campo="ultima_compra" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('ultima_compra') }}</SortableTh>
+                    <SortableTh campo="ultimo_contato" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('ultimo_contato') }}</SortableTh>
                     <th class="tbl-th">Ações</th>
                 </tr>
             </thead>
             <tbody class="tbl-body">
                 <template v-for="cliente in clientes" :key="cliente.id">
                 <tr class="tbl-row" :class="expansivel(cliente) ? 'cursor-pointer' : ''" @click="alternar(cliente)">
-                    <td v-if="agrupado" class="tbl-td text-gray-400">
+                    <!-- No cartão a seta sai: quem dá a dica de que há filiais é o botão
+                         "Escolher filial" no rodapé, e o cartão inteiro continua sendo o
+                         alvo de toque. Uma célula só com a seta viraria meio cartão vazio. -->
+                    <td v-if="agrupado" class="tbl-td tbl-td-oculto text-gray-400">
                         <svg
                             v-if="expansivel(cliente)"
                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -133,8 +145,8 @@ function criarOrcamento(cliente) {
                             <polyline points="9,6 15,12 9,18" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
                     </td>
-                    <td class="tbl-td">
-                        <span class="tbl-main max-w-[220px]" :title="cliente.razaoSocial">{{ cliente.razaoSocial }}</span>
+                    <td class="tbl-td tbl-td-titulo">
+                        <span class="tbl-main sm:max-w-[220px]" :title="cliente.razaoSocial">{{ cliente.razaoSocial }}</span>
                         <span class="tbl-sub">{{ cliente.cnpj ?? '—' }}</span>
                         <!-- Filial e entrega contadas separadamente: dizer que a AUTOPASS
                              tem 220 filiais seria falso — são 2 filiais e 218 pontos de
@@ -143,18 +155,18 @@ function criarOrcamento(cliente) {
                             {{ cliente.lojas - cliente.entregas }} {{ cliente.lojas - cliente.entregas === 1 ? 'filial' : 'filiais' }}<template v-if="cliente.entregas"> · {{ cliente.entregas }} entrega{{ cliente.entregas === 1 ? '' : 's' }}</template>
                         </span>
                     </td>
-                    <td class="tbl-td">
-                        <span class="tbl-trunc max-w-[180px]" :title="cliente.grupo ?? ''">{{ cliente.grupo ?? '—' }}</span>
+                    <td class="tbl-td" data-rotulo="Grupo">
+                        <span class="tbl-trunc sm:max-w-[180px]" :title="cliente.grupo ?? ''">{{ cliente.grupo ?? '—' }}</span>
                     </td>
                     <!-- Trunca como o Grupo ao lado: com o nome vindo do TOTVS (até 40
                          caracteres, "FJ MORAES REPRESENTACAO COMERCIAL LTDA") a célula
                          quebrava em três linhas e levava a linha inteira de 41 para 73px. -->
-                    <td class="tbl-td">
-                        <span class="tbl-trunc max-w-[180px]" :title="cliente.vendedorNome">{{ cliente.vendedorNome }}</span>
+                    <td class="tbl-td" data-rotulo="Vendedor">
+                        <span class="tbl-trunc sm:max-w-[180px]" :title="cliente.vendedorNome">{{ cliente.vendedorNome }}</span>
                     </td>
-                    <td class="tbl-td">{{ cliente.estado ?? '—' }}</td>
-                    <td class="tbl-td">{{ cliente.segmento ?? '—' }}</td>
-                    <td class="tbl-td">
+                    <td class="tbl-td" data-rotulo="Estado">{{ cliente.estado ?? '—' }}</td>
+                    <td class="tbl-td" data-rotulo="Segmento">{{ cliente.segmento ?? '—' }}</td>
+                    <td class="tbl-td" data-rotulo="Status">
                         <button
                             v-if="cliente.status === 'inativo'"
                             type="button"
@@ -175,15 +187,15 @@ function criarOrcamento(cliente) {
                         </button>
                         <StatusPill v-else :tone="TONS_STATUS_CARTEIRA[cliente.status]" size="sm">{{ ROTULOS_STATUS_CARTEIRA[cliente.status] }}</StatusPill>
                     </td>
-                    <td class="tbl-td">{{ cliente.dataUltimaCompra ?? 'Nunca' }}</td>
-                    <td class="tbl-td">
+                    <td class="tbl-td" data-rotulo="Última compra">{{ cliente.dataUltimaCompra ?? 'Nunca' }}</td>
+                    <td class="tbl-td" data-rotulo="Último contato">
                         <template v-if="cliente.ultimoContato">
                             <span class="tbl-main">{{ cliente.ultimoContato.data }}</span>
                             <span class="tbl-sub">{{ ROTULOS_CANAL_CURTO[cliente.ultimoContato.canal] ?? cliente.ultimoContato.canal }}</span>
                         </template>
                         <span v-else class="text-gray-400">Nunca</span>
                     </td>
-                    <td class="tbl-td">
+                    <td class="tbl-td tbl-td-acoes">
                         <!--
                           🚨 CLIENTE COM MAIS DE UMA LOJA NÃO TEM AÇÃO NA LINHA — ela fica
                           em cada filial, dentro da expansão.
@@ -200,10 +212,13 @@ function criarOrcamento(cliente) {
                           Para cliente de uma loja só — 87,7% da base — a linha É a filial,
                           não há ambiguidade e os botões continuam aqui, como sempre.
                         -->
+                        <!-- `min-h-11` só no cartão: ali este botão é o ÚNICO caminho para
+                             agir sobre uma filial, e os 28px que bastam numa tabela densa
+                             ficam abaixo do mínimo de dedo. -->
                         <button
                             v-if="expansivel(cliente)"
                             type="button"
-                            class="mx-auto inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-[0.65rem] font-medium text-gray-500 transition hover:bg-gray-100"
+                            class="mx-auto inline-flex min-h-11 items-center gap-1 rounded border border-gray-300 bg-white px-3 text-xs font-medium text-gray-500 transition hover:bg-gray-100 sm:min-h-0 sm:px-2 sm:py-1 sm:text-[0.65rem]"
                             :title="`Este cliente tem ${cliente.lojas} lojas — escolha em qual agir`"
                             @click.stop="alternar(cliente)"
                         >
@@ -276,7 +291,9 @@ function criarOrcamento(cliente) {
                 </tr>
 
                 <tr v-if="agrupado && expandido === cliente.codCliente" class="bg-gray-50">
-                    <td :colspan="colunas" class="p-4">
+                    <!-- p-2 no cartão: com p-4 os 32px de padding lateral saem de uma tela
+                         de 360, e a sub-tabela de filiais já rola sozinha por dentro. -->
+                    <td :colspan="colunas" class="tbl-td-expansao p-2 sm:p-4">
                         <p v-if="carregando === cliente.codCliente" class="text-xs text-gray-500">Carregando filiais…</p>
 
                         <p v-else-if="erro === cliente.codCliente" class="text-xs text-red-600">
@@ -284,7 +301,11 @@ function criarOrcamento(cliente) {
                         </p>
 
                         <template v-else-if="filiaisPorCliente[cliente.codCliente]">
-                            <table class="tbl-itens">
+                            <!-- ⚠️ O scroll é DESTA tabela, não da célula de expansão: no
+                                 cartão ela ganha largura mínima, e com o overflow uma camada
+                                 acima o aviso "mostrando as N primeiras" sairia da tela
+                                 junto, deslocado para além do lado direito. -->
+                            <div class="tbl-wrap"><table class="tbl-itens">
                                 <thead>
                                     <tr class="tbl-itens-head-row">
                                         <th class="tbl-itens-th">Loja</th>
@@ -377,7 +398,7 @@ function criarOrcamento(cliente) {
                                         </td>
                                     </tr>
                                 </tbody>
-                            </table>
+                            </table></div>
 
                             <p
                                 v-if="filiaisPorCliente[cliente.codCliente].mostrando < filiaisPorCliente[cliente.codCliente].total"
