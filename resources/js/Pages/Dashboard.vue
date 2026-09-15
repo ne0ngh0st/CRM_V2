@@ -13,12 +13,14 @@ import ComparacaoCard from '@/Components/Dashboard/ComparacaoCard.vue';
 import SegmentosInativosCard from '@/Components/Dashboard/SegmentosInativosCard.vue';
 import FaturamentoBiEmbed from '@/Components/Dashboard/FaturamentoBiEmbed.vue';
 import SugestoesBoard from '@/Components/Dashboard/SugestoesBoard.vue';
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { contarFiltrosAtivos } from '@/utils/filtros.js';
 
 const props = defineProps({
     role: String,
     statusSistema: Object,
     statusCache: Object,
+    totalOnline: { type: Number, default: 0 },
     visao: Object,
     metaGauge: Object,
     ligacoesStats: Object,
@@ -104,6 +106,17 @@ const mesAno = computed(() => {
     const agora = new Date();
     return `${meses[agora.getMonth()]} ${agora.getFullYear()}`;
 });
+
+const filtrosAtivos = computed(() => contarFiltrosAtivos({
+    visao_supervisor: props.visao?.visaoSupervisor || '',
+    visao_vendedor: props.visao?.visaoVendedor || '',
+}, ['visao_supervisor', 'visao_vendedor']));
+
+const podeVerEquipe = computed(() => {
+    const papeis = page.props.auth?.roles ?? [];
+
+    return papeis.some((r) => ['admin', 'diretor', 'supervisor'].includes(r));
+});
 </script>
 
 <template>
@@ -112,7 +125,7 @@ const mesAno = computed(() => {
     <AuthenticatedLayout>
         <div class="py-4">
             <div class="mx-auto flex w-full max-w-[1800px] flex-col gap-4 px-3 sm:px-4 lg:px-6">
-                <PageHero title="Painel Comercial">
+                <PageHero title="Painel Comercial" :filtros-ativos="filtrosAtivos">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <path d="M4 20V4" stroke-linecap="round" />
@@ -144,6 +157,27 @@ const mesAno = computed(() => {
                         <StatusPill v-if="statusGeral" :tone="statusGeral.tom" surface="dark" :title="statusGeral.titulo">
                             Dados: {{ statusGeral.label }}
                         </StatusPill>
+                        <component
+                            :is="podeVerEquipe ? Link : 'span'"
+                            v-bind="podeVerEquipe ? { href: route('equipe.index', { online: 'sim' }) } : {}"
+                            class="inline-flex"
+                        >
+                            <StatusPill
+                                :tone="totalOnline > 0 ? 'ok' : 'neutral'"
+                                surface="dark"
+                                title="Pessoas com atividade nos últimos 5 minutos"
+                            >
+                                <template #icon>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
+                                        <circle cx="9" cy="7" r="3.5" />
+                                        <path d="M2 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5" stroke-linecap="round" />
+                                        <circle cx="17.5" cy="8.5" r="2.5" />
+                                        <path d="M16.2 14.2c2.6.5 4.8 2.6 4.8 5.8" stroke-linecap="round" />
+                                    </svg>
+                                </template>
+                                {{ totalOnline }} online agora
+                            </StatusPill>
+                        </component>
                         <StatusPill
                             v-if="cacheWarming"
                             :tone="cacheWarming.tom"

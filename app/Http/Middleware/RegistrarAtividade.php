@@ -26,7 +26,7 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Regra de ouro nº 8: este é o ÚNICO lugar que escreve presença. Sair do sistema não
  * zera a coluna de propósito — quem desloga simplesmente para de gerar atividade e
- * cai da lista quando a janela de EquipeController::MINUTOS_ONLINE expira.
+ * cai da lista quando a janela de User::MINUTOS_ONLINE expira.
  */
 class RegistrarAtividade
 {

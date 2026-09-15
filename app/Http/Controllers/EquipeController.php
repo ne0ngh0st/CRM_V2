@@ -23,9 +23,6 @@ class EquipeController extends Controller
 {
     use ExportaPlanilha;
 
-    /** Janela de "online agora", mesma da usuario_presenca_minutos_online() do legado. */
-    private const MINUTOS_ONLINE = 5;
-
     public function __construct(
         private readonly EquipeScopeResolver $scope,
         private readonly OrganogramaBuilder $organogramaBuilder,
@@ -82,7 +79,8 @@ class EquipeController extends Controller
                 'codVendedor' => $codVendedor,
                 'codSuper' => $u->vendedorPerfil?->cod_super,
                 'ultimoLogin' => optional($u->last_login_at)->toIso8601String(),
-                'online' => $u->last_activity_at?->gt(now()->subMinutes(self::MINUTOS_ONLINE)) ?? false,
+                'online' => $u->estaOnline(),
+                'fotoUrl' => $u->foto_url,
                 'segmentos' => $codVendedor ? ($segmentosPorCodVendedor[$codVendedor] ?? collect())->pluck('nome')->all() : [],
                 'segmentosIds' => $codVendedor ? ($segmentosPorCodVendedor[$codVendedor] ?? collect())->pluck('id')->all() : [],
             ];
@@ -113,7 +111,7 @@ class EquipeController extends Controller
                 // ⚠️ 'user.roles' é obrigatório aqui: o map abaixo chama getRoleNames()
                 // por nó, e sem as roles carregadas o Spatie consulta o banco uma vez
                 // por usuário — eram 201 queries extras nesta página (218 no total).
-                ->with(['user:id,name,display_name', 'user.roles'])
+                ->with(['user:id,name,display_name,foto_perfil', 'user.roles'])
                 ->get()
                 ->filter(fn (VendedorPerfil $vp) => $vp->user !== null)
                 ->map(fn (VendedorPerfil $vp) => [
@@ -122,6 +120,7 @@ class EquipeController extends Controller
                     'codSuper' => $vp->cod_super,
                     'nome' => $vp->user->display_name ?: $vp->user->name,
                     'perfil' => $vp->user->getRoleNames()->first(),
+                    'fotoUrl' => $vp->user->foto_url,
                 ]);
 
             $organograma = $this->organogramaBuilder->construir($nosOrganograma);
@@ -216,7 +215,7 @@ class EquipeController extends Controller
         }
 
         if ((string) $request->string('online') === 'sim') {
-            $query->where('last_activity_at', '>=', now()->subMinutes(self::MINUTOS_ONLINE));
+            $query->onlineAgora();
         }
 
         match ((string) $request->string('login')) {

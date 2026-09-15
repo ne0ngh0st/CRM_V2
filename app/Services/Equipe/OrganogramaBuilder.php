@@ -18,8 +18,8 @@ use Illuminate\Support\Collection;
 class OrganogramaBuilder
 {
     /**
-     * @param  Collection<int, array{id: int, codVendedor: string, codSuper: ?string, nome: string, perfil: string}>  $nos
-     * @return array<int, array{id: int, codVendedor: string, nome: string, perfil: string, filhos: array}>
+     * @param  Collection<int, array{id: int, codVendedor: string, codSuper: ?string, nome: string, perfil: string, fotoUrl: ?string}>  $nos
+     * @return array<int, array{id: int, codVendedor: string, nome: string, perfil: string, fotoUrl: ?string, filhos: array}>
      */
     public function construir(Collection $nos): array
     {
@@ -50,6 +50,7 @@ class OrganogramaBuilder
                 'codVendedor' => $no['codVendedor'],
                 'nome' => $no['nome'],
                 'perfil' => $no['perfil'],
+                'fotoUrl' => $no['fotoUrl'] ?? null,
                 'filhos' => $filhos,
             ];
         };

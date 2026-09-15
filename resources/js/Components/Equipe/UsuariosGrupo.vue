@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import Avatar from '@/Components/Avatar.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import SegmentoChips from '@/Components/Equipe/SegmentoChips.vue';
 import { ROTULOS_PERFIL } from '@/constants/perfis.js';
@@ -39,7 +40,7 @@ function formatarLogin(iso) {
         </div>
 
         <div class="tbl-wrap">
-            <table class="tbl">
+            <table class="tbl tbl-cartoes">
                 <thead>
                     <tr class="tbl-head-row">
                         <th v-if="podeGerenciar" class="tbl-th w-10">
@@ -63,7 +64,12 @@ function formatarLogin(iso) {
                 </thead>
                 <tbody class="tbl-body">
                     <tr v-for="usuario in grupo.usuarios" :key="usuario.id" class="tbl-row">
-                        <td v-if="podeGerenciar" class="tbl-td">
+                        <!--
+                            Checkbox some no cartão: selecionar em massa no celular brigaria
+                            com o alvo de toque das ações, e o fluxo de supervisor em massa
+                            é de mesa, não de campo.
+                        -->
+                        <td v-if="podeGerenciar" class="tbl-td tbl-td-oculto">
                             <input
                                 type="checkbox"
                                 :checked="selecionados.includes(usuario.id)"
@@ -71,40 +77,43 @@ function formatarLogin(iso) {
                                 @change="emit('toggle-selecionado', usuario.id)"
                             />
                         </td>
-                        <td class="tbl-td">
-                            <div class="flex items-center justify-center gap-1.5">
-                                <span
-                                    class="h-2 w-2 shrink-0 rounded-full"
-                                    :class="usuario.online ? 'bg-emerald-500' : 'bg-gray-300'"
-                                    :title="usuario.online ? 'Online agora' : 'Offline'"
-                                />
+                        <td class="tbl-td tbl-td-titulo">
+                            <div class="flex items-center gap-2 sm:justify-center">
+                                <span class="relative shrink-0">
+                                    <Avatar :src="usuario.fotoUrl" :nome="usuario.nome" size="sm" />
+                                    <span
+                                        class="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-white"
+                                        :class="usuario.online ? 'bg-emerald-500' : 'bg-gray-300'"
+                                        :title="usuario.online ? 'Online agora' : 'Offline'"
+                                    />
+                                </span>
                                 <span class="font-medium leading-4 text-gray-800">{{ usuario.nome }}</span>
                             </div>
                             <div class="tbl-sub">{{ usuario.email }}</div>
                         </td>
-                        <td class="tbl-td">
+                        <td class="tbl-td" data-rotulo="Perfil">
                             <span class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-gray-600">
                                 {{ ROTULOS_PERFIL[usuario.perfil] || usuario.perfil }}
                             </span>
                         </td>
-                        <td class="tbl-td">
+                        <td class="tbl-td" data-rotulo="Status">
                             <StatusPill :tone="usuario.ativo ? 'ok' : 'danger'" size="sm">{{ usuario.ativo ? 'Ativo' : 'Inativo' }}</StatusPill>
                         </td>
-                        <td class="tbl-td">
-                            <div class="flex justify-center">
+                        <td class="tbl-td" data-rotulo="Segmento">
+                            <div class="flex sm:justify-center">
                                 <SegmentoChips :segmentos="usuario.segmentos" />
                             </div>
                         </td>
-                        <td class="tbl-td">
+                        <td class="tbl-td" data-rotulo="Localização">
                             <div v-if="usuario.estado">{{ usuario.estado }}</div>
                             <div v-if="usuario.tipoUsuario" class="tbl-sub">{{ usuario.tipoUsuario === 'INTERNO' ? 'Interno' : 'Externo' }}</div>
                         </td>
-                        <td class="tbl-td">
+                        <td class="tbl-td" data-rotulo="Códigos">
                             <div v-if="usuario.codVendedor">V: {{ usuario.codVendedor }}</div>
                             <div v-if="usuario.codSuper" class="tbl-sub">S: {{ usuario.codSuper }}</div>
                         </td>
-                        <td class="tbl-td">{{ formatarLogin(usuario.ultimoLogin) }}</td>
-                        <td v-if="podeGerenciar" class="tbl-td">
+                        <td class="tbl-td" data-rotulo="Último login">{{ formatarLogin(usuario.ultimoLogin) }}</td>
+                        <td v-if="podeGerenciar" class="tbl-td tbl-td-acoes">
                             <div class="tbl-acoes">
                                 <button
                                     type="button"

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
 use App\Services\Dashboard\DashboardBlocos;
@@ -54,6 +55,9 @@ class DashboardController extends Controller
             // Só admin: "cache aquecido" é informação de operação, não de negócio — para
             // um vendedor seria jargão sem significado ocupando espaço no topo da tela.
             'statusCache' => $role === 'admin' ? $this->blocos->statusCache() : null,
+            // Presença: query barata (~200 users) e fora do cache de propósito — senão a
+            // pill mentiria pelos 30 min de TTL, o mesmo defeito da badge "0 online".
+            'totalOnline' => User::query()->onlineAgora()->count(),
             'visao' => [
                 'mostrarSeletor' => $eGestor,
                 'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],

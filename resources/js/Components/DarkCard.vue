@@ -36,6 +36,13 @@ const props = defineProps({
     rotuloDetalhes: { type: String, default: 'Ver detalhes' },
     /** Identificador estável para lembrar o estado. Sem ela, não persiste. */
     chaveDetalhes: { type: String, default: null },
+    /**
+     * Corpo mais baixo. O `p-4` padrão é o respiro dos cards de KPI (tile, anel, lista
+     * de registros). Faixa de ranking — uma tabela densa de ponta a ponta — não precisa
+     * da mesma folga: o conteúdo já é a leitura, e cada 8px de padding vira altura de
+     * página. Default permanece `p-4` para ninguém encolher sem pedir.
+     */
+    compacto: { type: Boolean, default: false },
 });
 
 const PREFIXO = 'card-detalhes:';
@@ -70,23 +77,41 @@ watch(detalhesAbertos, (valor) => {
 
 <template>
     <div class="flex h-full flex-col overflow-hidden rounded border border-gray-300 bg-white shadow-sm">
-        <div class="flex min-h-[3.5rem] flex-wrap items-center justify-between gap-3 border-b border-black/40 bg-corp-black px-4 py-2.5">
-            <div class="min-w-0 flex-1">
-                <h3 class="flex items-center gap-2 text-sm font-semibold leading-tight text-gray-100">
-                    <span v-if="$slots.icon" class="h-4 w-4 shrink-0 text-gray-400">
+        <!--
+            ⚠️ Empilha abaixo de `sm` pelo mesmo motivo do `PageHero`: com o título em
+            `min-w-0 flex-1` ao lado de um `#actions` em `shrink-0`, o `flex-wrap` nunca
+            dispara e quem encolhe é o título. O `min-h-[3.5rem]` existe para alinhar
+            headers de cards VIZINHOS numa fileira — no mobile os cards já ficam um por
+            linha, então não há vizinho para alinhar e empilhar não custa nada.
+        -->
+        <div
+            class="flex min-h-[3.5rem] flex-col gap-2 border-b border-black/40 bg-corp-black px-4 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3"
+        >
+            <div class="min-w-0 sm:flex-1">
+                <h3 class="flex items-start gap-2 text-sm font-semibold leading-tight text-gray-100">
+                    <span v-if="$slots.icon" class="mt-px h-4 w-4 shrink-0 text-gray-400">
                         <slot name="icon" />
                     </span>
-                    {{ title }}
+                    <span class="min-w-0">{{ title }}</span>
                 </h3>
-                <p v-if="subtitle" class="mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-snug text-gray-400">
+                <!--
+                    ⚠️ O corte com reticências vale só a partir de `sm`. No celular o
+                    subtítulo quebra em quantas linhas precisar: ele carrega os números que
+                    o card resume ("73.940 inativos · 474.581 caixas · 26 segmentos"), e
+                    truncado ele escondia justamente o conteúdo, não um enfeite.
+                -->
+                <p
+                    v-if="subtitle"
+                    class="mt-0.5 text-xs leading-snug text-gray-400 sm:overflow-hidden sm:text-ellipsis sm:whitespace-nowrap"
+                >
                     {{ subtitle }}
                 </p>
             </div>
-            <div v-if="$slots.actions" class="flex shrink-0 items-center gap-2">
+            <div v-if="$slots.actions" class="flex flex-wrap items-center gap-2 sm:shrink-0">
                 <slot name="actions" />
             </div>
         </div>
-        <div class="flex flex-1 flex-col p-4">
+        <div class="flex flex-1 flex-col" :class="compacto ? 'px-4 py-2' : 'p-4'">
             <slot />
 
             <template v-if="$slots.detalhes">

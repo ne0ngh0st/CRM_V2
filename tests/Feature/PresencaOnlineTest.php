@@ -150,4 +150,37 @@ class PresencaOnlineTest extends TestCase
                 $this->assertNotContains($ausente->id, $ids);
             });
     }
+
+    public function test_painel_traz_a_contagem_de_online(): void
+    {
+        $admin = $this->usuario('admin');
+        $this->usuario('vendedor', ['last_activity_at' => now()->subMinute()]);
+        $this->usuario('vendedor', ['last_activity_at' => now()->subHour()]);
+
+        // Mesma janela da Equipe, mesma ressalva do terminate(): quem abre a Home
+        // só entra na própria contagem no request seguinte.
+        $this->actingAs($admin)
+            ->get(route('dashboard'))
+            ->assertInertia(fn ($page) => $page->where('totalOnline', 1));
+    }
+
+    public function test_lista_da_equipe_traz_a_url_da_foto(): void
+    {
+        $admin = $this->usuario('admin');
+        $comFoto = $this->usuario('vendedor', ['foto_perfil' => 'perfis/abc.jpg']);
+        $legado = $this->usuario('vendedor', ['foto_perfil' => 'assets/img/perfis/x.jpg']);
+        $sem = $this->usuario('vendedor');
+
+        $this->actingAs($admin)
+            ->get(route('equipe.index'))
+            ->assertInertia(function ($page) use ($comFoto, $legado, $sem) {
+                $porId = collect($page->toArray()['props']['usuarios'])
+                    ->flatMap(fn ($grupo) => $grupo['usuarios'])
+                    ->keyBy('id');
+
+                $this->assertStringContainsString('perfis/abc.jpg', (string) $porId[$comFoto->id]['fotoUrl']);
+                $this->assertNull($porId[$legado->id]['fotoUrl']);
+                $this->assertNull($porId[$sem->id]['fotoUrl']);
+            });
+    }
 }

@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Notifications\RedefinirSenhaNotification;
 use App\Support\Uploads\Disco;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -15,6 +16,9 @@ class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasRoles;
+
+    /** Janela de "online agora", mesma da usuario_presenca_minutos_online() do legado. */
+    public const MINUTOS_ONLINE = 5;
 
     /**
      * The attributes that are mass assignable.
@@ -47,6 +51,16 @@ class User extends Authenticatable
     public function vendedorPerfil(): HasOne
     {
         return $this->hasOne(VendedorPerfil::class);
+    }
+
+    public function scopeOnlineAgora(Builder $query): Builder
+    {
+        return $query->where('last_activity_at', '>=', now()->subMinutes(self::MINUTOS_ONLINE));
+    }
+
+    public function estaOnline(): bool
+    {
+        return $this->last_activity_at?->gt(now()->subMinutes(self::MINUTOS_ONLINE)) ?? false;
     }
 
     /**

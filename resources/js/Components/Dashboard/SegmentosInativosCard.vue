@@ -23,8 +23,8 @@
  * quantas caixas um cliente daquele segmento tende a comprar. A unidade aparece na tela
  * sempre: todo outro número grande do Painel é em reais, então potencial sem unidade seria
  * lido como dinheiro. A conta mora no `SegmentosInativosResolver`; aqui só se exibe, com o
- * peso impresso embaixo do número — potencial sem a conta à vista é número que ninguém
- * confere, e a tabela ordena por ele.
+ * peso ao lado do número — potencial sem a conta à vista é número que ninguém confere, e
+ * a tabela ordena por ele.
  */
 import { computed, ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
@@ -153,7 +153,7 @@ function formatarPeso(peso) {
 </script>
 
 <template>
-    <DarkCard title="Segmentos Atendidos" :subtitle="subtitulo" colapsavel chave-colapso="segmentos-inativos">
+    <DarkCard title="Segmentos Atendidos" :subtitle="subtitulo" compacto>
         <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                 <line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round" />
@@ -169,7 +169,7 @@ function formatarPeso(peso) {
             >i</span>
         </template>
 
-        <div v-if="temLinhas" class="overflow-x-auto">
+        <div v-if="temLinhas" class="seg-lista sm:overflow-x-auto">
             <!--
                 ⚠️ Esta tabela NÃO usa os tokens `.tbl*` (Regra de ouro nº 5), e isso é
                 deliberado: aqueles são de tabela de dados de página cheia — células
@@ -186,7 +186,7 @@ function formatarPeso(peso) {
                 da lista (ranking), não ao total — com 20+ segmentos, fatia do total viraria
                 fiapo invisível em todas as linhas.
             -->
-            <table class="w-full min-w-[520px] text-sm">
+            <table class="w-full text-sm sm:min-w-[520px]">
                 <!--
                     ⚠️ A FOLGA DA LARGURA VAI PARA A BARRA, não para o nome. A primeira
                     versão deixava a coluna do nome absorver a sobra e, numa faixa de
@@ -198,22 +198,22 @@ function formatarPeso(peso) {
                 <colgroup>
                     <col class="w-[22%]" />
                     <col />
-                    <col class="w-[150px]" />
+                    <col class="w-[180px]" />
                     <col class="w-[130px]" />
                 </colgroup>
                 <thead>
                     <tr class="text-[0.65rem] uppercase tracking-wide text-gray-400">
-                        <th class="pb-1 text-left font-semibold">Segmento</th>
-                        <th class="pb-1" />
+                        <th class="pb-0.5 text-left font-semibold">Segmento</th>
+                        <th class="pb-0.5" />
                         <!--
                             ⚠️ POTENCIAL vem antes de inativos e é o número em destaque: é
                             ele que ordena a tabela e responde "por onde começo". Inativos
                             fica à direita, em tom de apoio, como o insumo da conta.
                         -->
-                        <th class="pb-1 text-right font-semibold">
+                        <th class="pb-0.5 text-right font-semibold">
                             Potencial <span class="font-normal normal-case text-gray-400">(cx)</span>
                         </th>
-                        <th class="pb-1 text-right font-semibold">Clientes inativos</th>
+                        <th class="pb-0.5 text-right font-semibold">Clientes inativos</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -229,7 +229,7 @@ function formatarPeso(peso) {
                         :key="linha.nome"
                         :href="href(linha) ?? undefined"
                         :as="href(linha) ? 'tr' : undefined"
-                        class="border-t border-gray-100 transition"
+                        class="seg-linha border-t border-gray-100 transition"
                         :class="href(linha) ? 'group cursor-pointer hover:bg-gray-50' : ''"
                         :title="href(linha) ? `${linha.potencial} caixas = ${linha.inativos} clientes inativos × ${linha.peso} caixas por cliente. Clique para ver esses clientes na Carteira.` : null"
                     >
@@ -243,10 +243,12 @@ function formatarPeso(peso) {
                             ⚠️ `whitespace-nowrap`: os 22% da coluna são folga em tela
                             cheia, mas em card estreito o nome de 22+ caracteres quebrava em
                             duas linhas e só AQUELA linha ficava mais alta que as vizinhas.
-                            Com nowrap o navegador respeita o min-content e alarga a coluna;
-                            se nem assim couber, quem rola é o `overflow-x-auto` de fora.
+                            Com nowrap o navegador respeita o min-content e alarga a coluna.
+                            Abaixo de `sm` o nowrap SAI: a linha empilha (nome / barra /
+                            números) e o nome quebra, senão o `min-w-[520px]` voltaria e
+                            a página inteira rolava — que é o que este quadro não pode.
                         -->
-                        <td class="whitespace-nowrap py-1.5 pr-3">
+                        <td class="py-1 pr-3 sm:whitespace-nowrap">
                             <span class="inline-flex items-center gap-1.5 font-medium text-gray-700">
                                 <span
                                     class="h-1.5 w-1.5 shrink-0 rounded-full bg-teal"
@@ -256,7 +258,7 @@ function formatarPeso(peso) {
                                 {{ linha.nome }}
                             </span>
                         </td>
-                        <td class="py-1.5 pr-4">
+                        <td class="py-1 pr-4">
                             <div class="h-1.5 overflow-hidden rounded-full bg-gray-100">
                                 <div
                                     class="h-full rounded-full"
@@ -266,20 +268,20 @@ function formatarPeso(peso) {
                             </div>
                         </td>
                         <!--
-                            ⚠️ O peso aparece embaixo do número, em miúdo. Sem ele o
-                            potencial é um número que caiu do céu: com ele o vendedor lê
-                            "188 × 8" e confere de cabeça — e entende por que o segmento de
-                            peso 0 fica no fim da lista mesmo cheio de inativo.
+                            ⚠️ O peso fica AO LADO do número, não embaixo: duas linhas por
+                            segmento era o que inflava a faixa. Continua visível para o
+                            vendedor conferir "inativos × peso = potencial" de cabeça — só
+                            não empilha mais a linha.
                         -->
-                        <td class="py-1.5 text-right">
-                            <span class="block font-semibold leading-4 tabular-nums text-navy">
+                        <td class="py-1 text-right whitespace-nowrap">
+                            <span class="font-semibold tabular-nums text-navy">
                                 {{ formatar.format(linha.potencial) }}
                             </span>
-                            <span class="block text-[0.65rem] leading-3 text-gray-400">
+                            <span class="ml-1.5 text-[0.65rem] text-gray-400">
                                 {{ formatarPeso(linha.peso) }} cx/cliente
                             </span>
                         </td>
-                        <td class="py-1.5 text-right tabular-nums text-gray-600">
+                        <td class="py-1 text-right tabular-nums text-gray-600">
                             <span class="inline-flex items-center justify-end gap-1">
                                 {{ formatar.format(linha.inativos) }}
                                 <svg
@@ -299,18 +301,18 @@ function formatarPeso(peso) {
                     </component>
                 </tbody>
                 <tfoot>
-                    <tr class="border-t border-gray-300">
-                        <td class="py-2 text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">
+                    <tr class="seg-linha border-t border-gray-300">
+                        <td class="py-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">
                             Total
                         </td>
-                        <td class="py-2" />
-                        <td class="py-2 text-right">
+                        <td class="py-1.5" />
+                        <td class="py-1.5 text-right">
                             <span class="font-bold tabular-nums text-navy">
                                 {{ formatar.format(segmentosInativos.totalPotencial) }}
                             </span>
                             <span class="ml-1 text-[0.65rem] text-gray-400">cx</span>
                         </td>
-                        <td class="py-2 text-right font-semibold tabular-nums text-gray-600">
+                        <td class="py-1.5 text-right font-semibold tabular-nums text-gray-600">
                             {{ formatar.format(segmentosInativos.total) }}
                         </td>
                     </tr>
@@ -320,7 +322,7 @@ function formatarPeso(peso) {
             <button
                 v-if="ocultas > 0"
                 type="button"
-                class="mt-2 flex w-full items-center justify-center gap-1 text-xs font-medium text-gray-500 transition hover:text-navy"
+                class="mt-1 flex w-full items-center justify-center gap-1 py-0.5 text-xs font-medium text-gray-500 transition hover:text-navy"
                 :aria-expanded="aberto"
                 @click="aberto = !aberto"
             >
@@ -337,3 +339,54 @@ function formatarPeso(peso) {
         </p>
     </DarkCard>
 </template>
+
+<style scoped>
+/*
+ * ⚠️ NÃO é `.tbl-cartoes`. Este quadro é legenda de KPI dentro de card — os tokens de
+ * tabela de página cheia (célula centrada, divide-x) foram aplicados aqui em 05/09 e
+ * revertidos em 10/09 exatamente porque ficaram errados. O que o celular precisa é só
+ * não rolar: empilhar nome / barra / números, na mesma marcação.
+ */
+@media (max-width: 639px) {
+    .seg-lista {
+        overflow-x: hidden;
+        min-width: 0;
+    }
+
+    .seg-lista :deep(thead) {
+        display: none;
+    }
+
+    .seg-lista :deep(table),
+    .seg-lista :deep(tbody),
+    .seg-lista :deep(tfoot) {
+        display: block;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .seg-lista :deep(.seg-linha) {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 0.75rem;
+        row-gap: 0.25rem;
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+
+    .seg-lista :deep(.seg-linha > :nth-child(1)),
+    .seg-lista :deep(.seg-linha > :nth-child(2)) {
+        grid-column: 1 / -1;
+        padding-right: 0;
+    }
+
+    .seg-lista :deep(.seg-linha > :nth-child(3)) {
+        text-align: left;
+    }
+
+    .seg-lista :deep(tfoot .seg-linha > :nth-child(2)) {
+        display: none;
+    }
+}
+</style>
+
