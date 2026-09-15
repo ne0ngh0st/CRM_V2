@@ -146,7 +146,12 @@ function criarOrcamento(cliente) {
                     <td class="tbl-td">
                         <span class="tbl-trunc max-w-[180px]" :title="cliente.grupo ?? ''">{{ cliente.grupo ?? '—' }}</span>
                     </td>
-                    <td class="tbl-td">{{ cliente.vendedorNome }}</td>
+                    <!-- Trunca como o Grupo ao lado: com o nome vindo do TOTVS (até 40
+                         caracteres, "FJ MORAES REPRESENTACAO COMERCIAL LTDA") a célula
+                         quebrava em três linhas e levava a linha inteira de 41 para 73px. -->
+                    <td class="tbl-td">
+                        <span class="tbl-trunc max-w-[180px]" :title="cliente.vendedorNome">{{ cliente.vendedorNome }}</span>
+                    </td>
                     <td class="tbl-td">{{ cliente.estado ?? '—' }}</td>
                     <td class="tbl-td">{{ cliente.segmento ?? '—' }}</td>
                     <td class="tbl-td">

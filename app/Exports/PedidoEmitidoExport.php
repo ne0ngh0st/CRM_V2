@@ -4,7 +4,7 @@ namespace App\Exports;
 
 use App\Models\Pedido;
 use App\Services\Pedidos\StatusPedidoResolver;
-use App\Models\VendedorPerfil;
+use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromQuery;
@@ -22,10 +22,10 @@ class PedidoEmitidoExport implements FromQuery, WithHeadings, WithMapping, WithC
     {
         $this->status = new StatusPedidoResolver;
 
-        $this->nomesPorCodVendedor = VendedorPerfil::query()
-            ->with('user:id,name,display_name')
-            ->get()
-            ->mapWithKeys(fn (VendedorPerfil $vp) => [$vp->cod_vendedor => $vp->user?->display_name ?: $vp->user?->name]);
+        // Inclui quem NAO tem conta no CRM (ex-funcionario, licitacao/SAC, e os baldes
+        // do proprio TOTVS): sem isso a coluna Vendedor sai com o codigo cru para 27%
+        // da base. O `?? $codigo` do `map()` e o ultimo degrau - ver o resolver.
+        $this->nomesPorCodVendedor = (new NomeVendedorResolver)->todos();
     }
 
     public function query(): Builder

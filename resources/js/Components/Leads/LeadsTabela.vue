@@ -76,7 +76,9 @@ async function excluir(lead) {
                         <span class="tbl-sub">{{ lead.cnpj || lead.email || '—' }}</span>
                         <span v-if="lead.formularioNome" class="tbl-sub">{{ lead.formularioNome }}</span>
                     </td>
-                    <td class="tbl-td">{{ lead.vendedorNome || '—' }}</td>
+                    <td class="tbl-td">
+                        <span class="tbl-trunc max-w-[180px]" :title="lead.vendedorNome ?? ''">{{ lead.vendedorNome || '—' }}</span>
+                    </td>
                     <td class="tbl-td">
                         <span v-if="lead.estado || lead.cidade">{{ lead.estado || '—' }}{{ lead.cidade ? ` · ${lead.cidade}` : '' }}</span>
                         <span v-else>—</span>

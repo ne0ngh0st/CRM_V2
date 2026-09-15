@@ -28,13 +28,39 @@ const props = defineProps({
 });
 
 function carteiraHref(params) {
-    return route('carteira.index', {
+    const query = {
         visao_supervisor: props.visaoSupervisor || undefined,
         visao_vendedor: props.visaoVendedor || undefined,
         ...props.baseFiltros,
         ...params,
+    };
+
+    /*
+     * ⚠️ Chave com valor vazio é REMOVIDA, e é isso que faz o clique no tile já marcado
+     * desfazer o filtro: `baseFiltros` é o objeto `filtros` inteiro da página, então ele
+     * traz o `status` atual e um `{ status: '' }` por cima seria ignorado se a chave
+     * sobrevivesse até o Ziggy.
+     */
+    Object.keys(query).forEach((k) => {
+        if (query[k] === '' || query[k] === null || query[k] === undefined) {
+            delete query[k];
+        }
     });
+
+    return route('carteira.index', query);
 }
+
+/*
+ * O que a TELA está filtrando hoje, para o card marcar em vez de esconder.
+ *
+ * ⚠️ Sai de `baseFiltros` porque ali já chega o objeto `filtros` da Carteira — na Home
+ * ele só tem a visão, então nada fica marcado, que é o correto: lá não há filtro.
+ */
+const statusAtivo = computed(() => props.baseFiltros?.status || '');
+const aderenciaAtiva = computed(() => props.baseFiltros?.aderencia || '');
+
+/** O href de um tile de status: aplica o filtro, ou o remove se já for o aplicado. */
+const hrefStatus = (chave) => carteiraHref({ status: statusAtivo.value === chave ? '' : chave });
 
 /**
  * ⚠️ Os três totais somam DENTRO + FORA + SEM SEGMENTO DEFINIDO.
@@ -74,18 +100,26 @@ const STATUS = [
     { chave: 'inativo', label: 'Inativos', campo: 'inativos', pct: 'pctInativos', dot: 'bg-red-500' },
 ];
 
+/**
+ * Uma célula da matriz. Clicar na que já está aplicada desfaz as DUAS dimensões — foi ela
+ * que aplicou as duas, então é o que desfaz o que o clique anterior fez.
+ */
+function celula(chaveStatus, lado, valor, pct) {
+    const ativa = statusAtivo.value === chaveStatus && aderenciaAtiva.value === lado;
+
+    return {
+        valor,
+        pct,
+        ativa,
+        href: carteiraHref(ativa ? { status: '', aderencia: '' } : { status: chaveStatus, aderencia: lado }),
+    };
+}
+
 const linhas = computed(() => STATUS.map((s) => ({
     ...s,
-    dentro: {
-        valor: props.carteiraSegmento.dentroSegmento[s.campo],
-        pct: props.carteiraSegmento.dentroSegmento[s.pct],
-        href: carteiraHref({ status: s.chave, aderencia: 'dentro' }),
-    },
-    fora: {
-        valor: props.carteiraSegmento.foraSegmento[s.campo],
-        pct: props.carteiraSegmento.foraSegmento[s.pct],
-        href: carteiraHref({ status: s.chave, aderencia: 'fora' }),
-    },
+    ativa: statusAtivo.value === s.chave,
+    dentro: celula(s.chave, 'dentro', props.carteiraSegmento.dentroSegmento[s.campo], props.carteiraSegmento.dentroSegmento[s.pct]),
+    fora: celula(s.chave, 'fora', props.carteiraSegmento.foraSegmento[s.campo], props.carteiraSegmento.foraSegmento[s.pct]),
 })));
 </script>
 
@@ -126,17 +160,30 @@ const linhas = computed(() => STATUS.map((s) => ({
                 saiu foi só o tile; a aderência deles continua fora do denominador de
                 dentro/fora, como sempre foi.
             -->
+            <!--
+                ⚠️ Os três tiles mostram SEMPRE a carteira inteira, mesmo com `?status=`
+                aplicado — o servidor não aplica ao card a faceta que o card desenha (ver
+                `CarteiraController::FACETAS_DO_CARD`). Antes, clicar em "Inativos" zerava
+                os outros dois e o card passava a responder "quantos inativos entre os
+                inativos?". O recorte aplicado aparece MARCADO, nunca como os vizinhos
+                zerados.
+            -->
             <div class="flex flex-wrap gap-2">
-                <KpiTile :value="totalAtivos" label="Ativos" tone="ok" :href="carteiraHref({ status: 'ativo' })" />
-                <KpiTile :value="totalInativando" label="Inativando" tone="warn" :href="carteiraHref({ status: 'inativando' })" />
-                <KpiTile :value="totalInativos" label="Inativos" tone="danger" :href="carteiraHref({ status: 'inativo' })" />
+                <KpiTile :value="totalAtivos" label="Ativos" tone="ok" :href="hrefStatus('ativo')" :ativo="statusAtivo === 'ativo'" />
+                <KpiTile :value="totalInativando" label="Inativando" tone="warn" :href="hrefStatus('inativando')" :ativo="statusAtivo === 'inativando'" />
+                <KpiTile :value="totalInativos" label="Inativos" tone="danger" :href="hrefStatus('inativo')" :ativo="statusAtivo === 'inativo'" />
             </div>
 
             <div class="space-y-2">
                 <div class="flex items-center gap-3 sm:gap-4">
                     <div class="shrink-0">
                         <p class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">No segmento</p>
-                        <Link :href="carteiraHref({ aderencia: 'dentro' })" class="tbl-num-link text-lg font-bold text-emerald-600">
+                        <Link
+                            :href="carteiraHref({ aderencia: aderenciaAtiva === 'dentro' ? '' : 'dentro' })"
+                            class="tbl-num-link text-lg font-bold text-emerald-600"
+                            :class="aderenciaAtiva === 'dentro' ? 'rounded bg-emerald-50 px-1.5 ring-1 ring-emerald-500' : ''"
+                            :title="aderenciaAtiva === 'dentro' ? 'Filtro aplicado — clique para remover' : undefined"
+                        >
                             {{ carteiraSegmento.dentroSegmento.total }}
                             <span class="text-xs font-medium text-gray-400">({{ carteiraSegmento.pctDentro }}%)</span>
                         </Link>
@@ -147,7 +194,12 @@ const linhas = computed(() => STATUS.map((s) => ({
                     </div>
                     <div class="shrink-0 text-right">
                         <p class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Fora do segmento</p>
-                        <Link :href="carteiraHref({ aderencia: 'fora' })" class="tbl-num-link text-lg font-bold text-red-500">
+                        <Link
+                            :href="carteiraHref({ aderencia: aderenciaAtiva === 'fora' ? '' : 'fora' })"
+                            class="tbl-num-link text-lg font-bold text-red-500"
+                            :class="aderenciaAtiva === 'fora' ? 'rounded bg-red-50 px-1.5 ring-1 ring-red-400' : ''"
+                            :title="aderenciaAtiva === 'fora' ? 'Filtro aplicado — clique para remover' : undefined"
+                        >
                             {{ carteiraSegmento.foraSegmento.total }}
                             <span class="text-xs font-medium text-gray-400">({{ carteiraSegmento.pctFora }}%)</span>
                         </Link>
@@ -176,21 +228,42 @@ const linhas = computed(() => STATUS.map((s) => ({
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="linha in linhas" :key="linha.chave" class="border-t border-gray-100">
+                    <!--
+                        A linha do status aplicado fica realçada — é a mesma informação do
+                        tile marcado, repetida onde o olho está quando se lê a matriz. Só
+                        fundo e peso de fonte: cor nova aqui competiria com os três dots,
+                        que já carregam significado.
+                    -->
+                    <tr
+                        v-for="linha in linhas"
+                        :key="linha.chave"
+                        class="border-t border-gray-100"
+                        :class="linha.ativa ? 'bg-gray-50' : ''"
+                    >
                         <td class="py-1.5">
-                            <span class="inline-flex items-center gap-1.5 text-gray-700">
+                            <span class="inline-flex items-center gap-1.5" :class="linha.ativa ? 'font-semibold text-gray-900' : 'text-gray-700'">
                                 <span class="h-1.5 w-1.5 rounded-full" :class="linha.dot" />
                                 {{ linha.label }}
                             </span>
                         </td>
                         <td class="py-1 text-right">
-                            <Link :href="linha.dentro.href" class="tbl-num-link font-semibold text-navy">
+                            <Link
+                                :href="linha.dentro.href"
+                                class="tbl-num-link font-semibold text-navy"
+                                :class="linha.dentro.ativa ? 'rounded bg-white px-1.5 ring-1 ring-navy' : ''"
+                                :title="linha.dentro.ativa ? 'Filtro aplicado — clique para remover' : undefined"
+                            >
                                 {{ linha.dentro.valor }}
                                 <span class="text-xs font-medium text-gray-400">({{ linha.dentro.pct }}%)</span>
                             </Link>
                         </td>
                         <td class="py-1 text-right">
-                            <Link :href="linha.fora.href" class="tbl-num-link font-semibold text-navy">
+                            <Link
+                                :href="linha.fora.href"
+                                class="tbl-num-link font-semibold text-navy"
+                                :class="linha.fora.ativa ? 'rounded bg-white px-1.5 ring-1 ring-navy' : ''"
+                                :title="linha.fora.ativa ? 'Filtro aplicado — clique para remover' : undefined"
+                            >
                                 {{ linha.fora.valor }}
                                 <span class="text-xs font-medium text-gray-400">({{ linha.fora.pct }}%)</span>
                             </Link>

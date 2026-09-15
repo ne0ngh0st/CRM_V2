@@ -10,7 +10,6 @@ use App\Models\GrupoCliente;
 use App\Models\Ligacao;
 use App\Models\Pedido;
 use App\Models\Segmento;
-use App\Models\VendedorPerfil;
 use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
@@ -20,6 +19,7 @@ use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Potencial\FamiliaProduto;
 use App\Services\Potencial\PotencialCarteiraResolver;
+use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -42,6 +42,7 @@ class CarteiraController extends Controller
         private readonly CacheDeAgregacao $cache,
         private readonly DashboardBlocos $blocos,
         private readonly PotencialCarteiraResolver $potencial,
+        private readonly NomeVendedorResolver $nomeVendedor,
     ) {
     }
 
@@ -72,7 +73,7 @@ class CarteiraController extends Controller
     private function aderencia(Request $request, ?array $codVendedores): array
     {
         $escopo = ChaveEscopo::deCodVendedores($codVendedores);
-        $assinatura = $this->assinaturaDosFiltros($request);
+        $assinatura = $this->assinaturaDosFiltros($request, self::FACETAS_DO_CARD);
 
         if ($assinatura === 'vazio') {
             return $this->blocos->carteiraSegmento($escopo, $codVendedores);
@@ -81,9 +82,32 @@ class CarteiraController extends Controller
         return $this->cache->lembrarPorMinutos(
             $escopo->paraDoDia('carteira-kpis', ['f' => $assinatura]),
             10,
-            fn () => $this->aderenciaResolver->resolver($this->baseQuery($request)),
+            fn () => $this->aderenciaResolver->resolver($this->baseQuery($request, comFacetas: false)),
         );
     }
+
+    /**
+     * As dimensões que o próprio card EXIBE, e que por isso ele não pode aplicar a si.
+     *
+     * 🚨 UM FILTRO NÃO SE APLICA À FACETA QUE ELE CONTROLA. O card mostra a quebra por
+     * status e por aderência; com `?status=inativo` ele passava a mostrar "0 ativos,
+     * 0 inativando, 543 inativos" — apagando exatamente a informação que existe para dar,
+     * e respondendo à pergunta "quantos inativos entre os inativos?". Pedido do Tony em
+     * 2026-09-15, depois do conserto do grão: "quando clico num KPI somem os outros".
+     *
+     * ⚠️ `aderencia` já era ignorada aqui, e por acidente de implementação, não por
+     * decisão: ela mora em `filtradaQuery()` e os KPIs saem de `baseQuery()`. Está na
+     * lista para deixar de ser acidente — se alguém mover o filtro de aderência para a
+     * `baseQuery`, o card continua correto.
+     *
+     * ⚠️ Os DEMAIS filtros continuam valendo (busca, estado, segmento, família): o card é
+     * o retrato do recorte que a pessoa está olhando, e nenhum deles é uma coluna do card.
+     *
+     * ⚠️ Efeito colateral bem-vindo: sem `status` na assinatura, clicar no tile "Inativos"
+     * cai na MESMA chave de cache da tela sem filtro — que o `AquecerCacheDashboardJob` já
+     * aquece. O KPI da Carteira filtrada por status passou a ser de graça.
+     */
+    private const FACETAS_DO_CARD = ['status', 'aderencia'];
 
     /**
      * Opções dos dropdowns de Estado e Segmento.
@@ -122,8 +146,15 @@ class CarteiraController extends Controller
      * caso que o warming alcança (as demais combinações vêm da query string e são
      * ilimitadas em teoria). Manter esse caso legível, em vez de virar mais um hash,
      * é o que permite tratá-lo de propósito em `aderencia()`.
+     *
+     * ⚠️ `$exceto` existe para os KPIs ignorarem as facetas que o próprio card desenha
+     * (ver `FACETAS_DO_CARD`). Ignorar um filtro na CHAVE sem ignorá-lo na CONSULTA — ou
+     * o contrário — serve conteúdo de um recorte sob a chave de outro, que é o defeito
+     * mais silencioso possível: nada quebra, o número é só o de outra tela.
+     *
+     * @param  list<string>  $exceto
      */
-    private function assinaturaDosFiltros(Request $request): string
+    private function assinaturaDosFiltros(Request $request, array $exceto = []): string
     {
         $filtros = array_filter([
             'busca' => trim((string) $request->string('busca')),
@@ -132,7 +163,7 @@ class CarteiraController extends Controller
             'status' => (string) $request->string('status'),
             'aderencia' => (string) $request->string('aderencia'),
             'sem_familia' => (string) $request->string('sem_familia'),
-        ], fn (string $v) => $v !== '');
+        ], fn (string $v, string $k) => $v !== '' && ! in_array($k, $exceto, true), ARRAY_FILTER_USE_BOTH);
 
         if ($filtros === []) {
             return 'vazio';
@@ -185,12 +216,7 @@ class CarteiraController extends Controller
                 ->paginate(perPage: self::POR_PAGINA, total: $this->filtradaQuery($request)->count(), page: $this->paginaSegura($request))
                 ->withQueryString();
 
-        $codVendedoresPresentes = $clientes->getCollection()->pluck('cod_vendedor')->filter()->unique()->values();
-        $nomesPorCodVendedor = VendedorPerfil::query()
-            ->whereIn('cod_vendedor', $codVendedoresPresentes)
-            ->with('user:id,name,display_name')
-            ->get()
-            ->mapWithKeys(fn (VendedorPerfil $vp) => [$vp->cod_vendedor => $vp->user?->display_name ?: $vp->user?->name]);
+        $nomesPorCodVendedor = $this->nomeVendedor->porCodigo($clientes->getCollection()->pluck('cod_vendedor'));
 
         $clienteIdsNaPagina = $clientes->getCollection()->pluck('id');
 
@@ -364,18 +390,30 @@ class CarteiraController extends Controller
         return $query;
     }
 
-    /** scopeQuery() + busca/estado/segmento/status. Sem aderência/ordenação. Usado por index() (lista e KPIs) e exportar(). */
-    protected function baseQuery(Request $request): Builder
+    /**
+     * scopeQuery() + todos os filtros de tela. Sem ordenação. Usado por index() (lista e
+     * KPIs) e exportar().
+     *
+     * ⚠️ `comFacetas: false` é só para os KPIs do card, que DESENHAM a quebra por status e
+     * por aderência e por isso não podem filtrar por elas — ver `FACETAS_DO_CARD`. Quem
+     * lista, conta ou exporta sempre usa o padrão.
+     */
+    protected function baseQuery(Request $request, bool $comFacetas = true): Builder
     {
-        $limiteAtivo = $this->statusResolver->limiteAtivo()->toDateString();
-        $limiteInativando = $this->statusResolver->limiteInativando()->toDateString();
-
         $busca = trim((string) $request->string('busca'));
         $estado = (string) $request->string('estado');
         $segmento = (string) $request->string('segmento');
-        $status = (string) $request->string('status');
 
-        $query = $this->scopeQuery($request)->select('clientes.*');
+        /*
+         * O recorte de escopo, ANTES de qualquer filtro de tela, guardado à parte: é ele
+         * que `aplicarFiltroDeStatus()` usa para consolidar a última compra por cliente.
+         * Clonado em vez de chamado duas vezes porque `scopeQuery()` resolve o escopo
+         * pelo DashboardScopeResolver, e no perfil admin isso custa 6 consultas de roles
+         * do spatie — mesma economia de `resumoDosCodigos()`.
+         */
+        $escopada = $this->scopeQuery($request);
+
+        $query = (clone $escopada)->select('clientes.*');
 
         if ($busca !== '') {
             $query->where(function ($q) use ($busca) {
@@ -396,15 +434,129 @@ class CarteiraController extends Controller
 
         $this->aplicarSemFamilia($request, $query);
 
-        match ($status) {
-            'ativo' => $query->where('clientes.data_ultima_compra', '>=', $limiteAtivo),
-            'inativando' => $query->where('clientes.data_ultima_compra', '<', $limiteAtivo)
-                ->where('clientes.data_ultima_compra', '>=', $limiteInativando),
-            'inativo' => $query->where(fn ($q) => $q->whereNull('clientes.data_ultima_compra')->orWhere('clientes.data_ultima_compra', '<', $limiteInativando)),
+        if ($comFacetas) {
+            $this->aplicarFiltroDeStatus($request, $query, $escopada);
+            $this->aplicarFiltroDeAderencia($request, $query, $escopada);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Filtro de status (ativo / inativando / inativo), no MESMO grão que a tela exibe.
+     *
+     * 🚨 ESTE FILTRO JÁ FOI POR FILIAL, E ERA UM BUG VISÍVEL EM PRODUÇÃO (2026-09-15).
+     * A lista é agrupada por `cod_cliente` desde 2026-09-11 e a pill de cada linha vem da
+     * data CONSOLIDADA (`MAX` entre as filiais, ver `resumoDosCodigos()`), mas o filtro
+     * comparava a data de cada filial isoladamente. Um cliente com uma filial parada há
+     * dois anos e outra que comprou ontem casava o `WHERE` pela filial velha e entrava na
+     * lista de "Inativos" — exibido lá com a pill VERDE "Ativo", porque a linha mostra a
+     * data do grupo. Caso real: VILA POKE LTDA, na carteira da Inaya, comprou 11/09/2026 e
+     * aparecia entre os inativos.
+     *
+     * O estrago não parava na lista: como os KPIs do topo saem da mesma `baseQuery()`, o
+     * card da Carteira dizia 1.009 inativos onde o card do Painel — que consolida — dizia
+     * 955. Os 54 de diferença eram exatamente os clientes de filiais mistas. Medido na
+     * base inteira: 110 vendedores afetados, 1.357 clientes, pior caso 92 numa carteira só.
+     *
+     * ⚠️ E o caminho para o erro era o próprio produto: o tile "Inativos" do
+     * `CarteiraSegmentoCard` linka para `/carteira?status=inativo`. Clicar em 955 abria uma
+     * tela dizendo 1.009. Número que não bate com o número que foi clicado é o caso que o
+     * Tony recusou em 08/09 no Segmentos Atendidos — não se resolve com legenda.
+     *
+     * ⚠️ A consolidação usa o ESCOPO, nunca a query já filtrada. Tem que ser o mesmo
+     * conjunto que `resumoDosCodigos()` agrega (que ignora filtros de tela de propósito):
+     * se `?estado=SP` estreitasse o `MAX`, a pill da linha voltaria a discordar do filtro
+     * — só que num caso mais raro e mais difícil de enxergar.
+     *
+     * ⚠️ `agrupar=0` (uma linha por filial) mantém o filtro por filial, e isso é coerência,
+     * não exceção esquecida: naquele modo a pill exibida É a da filial. Cada modo filtra
+     * no grão que mostra.
+     *
+     * ⚠️ 'ativo' daria o MESMO conjunto de clientes dos dois jeitos (`MAX >= limite` é
+     * verdadeiro exatamente quando alguma filial é >= limite — conferido em produção, zero
+     * divergências) e mesmo assim passa pelo caminho consolidado: manter as três faixas na
+     * mesma formulação é o que impede a próxima alteração de reintroduzir a assimetria.
+     *
+     * Medido em produção, intercalado e descontando o piso de conexão (92k filiais /
+     * 39k clientes) — consolidar saiu praticamente de graça:
+     *
+     *   passo 1 da listagem, vendedor ....   7 ms ->  18 ms   (o caso dominante)
+     *   passo 1 da listagem, empresa .....  260 ms -> 267 ms
+     *   total da paginação, empresa ......  200 ms -> 290 ms   (cacheado 10 min)
+     *
+     * ⚠️ MEDIR INTERCALADO, sempre: a primeira medição desta mesma consulta deu 678 ms
+     * contra 183 ms e era cache frio. Mesma lição de 2026-09-04.
+     *
+     * ⚠️ Tentado e DESCARTADO: a mesma regra como `NOT EXISTS` correlacionado. É
+     * equivalente e devolve o mesmo número, mas custa 16,5 SEGUNDOS no escopo empresa.
+     * Não reescrever "para evitar a subconsulta agrupada".
+     */
+    private function aplicarFiltroDeStatus(Request $request, Builder $query, Builder $escopada): void
+    {
+        $status = (string) $request->string('status');
+
+        if ($status === '') {
+            return;
+        }
+
+        $limiteAtivo = $this->statusResolver->limiteAtivo()->toDateString();
+        $limiteInativando = $this->statusResolver->limiteInativando()->toDateString();
+
+        if (! $this->agrupar($request)) {
+            match ($status) {
+                'ativo' => $query->where('clientes.data_ultima_compra', '>=', $limiteAtivo),
+                'inativando' => $query->where('clientes.data_ultima_compra', '<', $limiteAtivo)
+                    ->where('clientes.data_ultima_compra', '>=', $limiteInativando),
+                'inativo' => $query->where(fn ($q) => $q->whereNull('clientes.data_ultima_compra')->orWhere('clientes.data_ultima_compra', '<', $limiteInativando)),
+                default => null,
+            };
+
+            return;
+        }
+
+        /*
+         * `uc` é a MESMA expressão de `resumoDosCodigos()` e do `CarteiraAderenciaResolver`
+         * — os três precisam classificar pela mesma data, senão volta a divergir.
+         */
+        $uc = 'MAX(clientes.data_ultima_compra)';
+
+        $faixa = match ($status) {
+            'ativo' => ["{$uc} >= ?", [$limiteAtivo]],
+            'inativando' => ["{$uc} < ? AND {$uc} >= ?", [$limiteAtivo, $limiteInativando]],
+            'inativo' => ["{$uc} IS NULL OR {$uc} < ?", [$limiteInativando]],
+            // Status desconhecido (link velho, query string editada à mão) não filtra
+            // nada, em vez de derrubar a tela — mesma escolha de `aplicarSemFamilia()`.
             default => null,
         };
 
-        return $query;
+        if ($faixa === null) {
+            return;
+        }
+
+        [$condicao, $valores] = $faixa;
+
+        $consolidado = (clone $escopada)
+            ->select([])
+            ->selectRaw('clientes.cod_cliente')
+            ->groupBy('clientes.cod_cliente')
+            ->havingRaw($condicao, $valores);
+
+        /*
+         * 🚨 `joinSub`, JAMAIS `whereIn(subconsulta)` — a diferença medida em produção,
+         * no escopo empresa, é de 265 ms para MAIS DE 200 SEGUNDOS. São semanticamente
+         * equivalentes (a derivada tem `cod_cliente` único, então o join é 1:1 e não
+         * multiplica linha nenhuma), mas o otimizador do MySQL trata `IN (subconsulta)`
+         * como semi-join dependente e refaz a agregação por linha examinada. A primeira
+         * versão disto usava `whereIn` e travava a tela do admin — passou nos testes e
+         * no `COUNT` (110 ms), porque o plano só degenera quando a mesma consulta ainda
+         * agrupa e ordena por agregado. Medir o COUNT não prova o custo da listagem.
+         *
+         * ⚠️ O join entra na `baseQuery()`, então vale para TODOS os consumidores de uma
+         * vez — listagem, total da paginação, KPIs e Excel. Era esse o ponto: com a regra
+         * em um lugar só, não existe consumidor que fique para trás (Regra de ouro nº 8).
+         */
+        $query->joinSub($consolidado, 'status_consolidado', 'status_consolidado.cod_cliente', '=', 'clientes.cod_cliente');
     }
 
     /**
@@ -573,31 +725,92 @@ class CarteiraController extends Controller
      */
     protected function filtradaQuery(Request $request): Builder
     {
-        $query = $this->baseQuery($request);
+        return $this->baseQuery($request);
+    }
+
+    /**
+     * Filtro de aderência (dentro / fora / sem segmento), no MESMO grão que a tela exibe.
+     *
+     * 🚨 SEGUNDO CASO DO MESMO DEFEITO DO STATUS, achado em 2026-09-15 **porque o card
+     * passou a marcar a célula aplicada**: a matriz dizia 408 e a lista trazia 420.
+     * A assimetria estava em "fora":
+     *
+     *   card ..... fora = NENHUMA filial dentro do segmento do vendedor
+     *   filtro ... fora = ALGUMA filial fora   ← conta o cliente nos dois grupos
+     *
+     * Um cliente com uma filial SUPERMERCADISTA (dentro) e outra LOGISTICA (fora) é
+     * "dentro" para o card e casava o filtro "fora" — aparecia na lista de fora do
+     * segmento logo abaixo de um número que não o continha. São 699 clientes com filiais
+     * de segmentos diferentes na base.
+     *
+     * "Dentro" já batia (ALGUMA filial dentro, dos dois lados) e continua assim — o
+     * docblock do `CarteiraAderenciaResolver` registra que essa escolha foi deliberada
+     * justamente para o card e o clique concordarem.
+     *
+     * ⚠️ A derivada agrupa por `cod_cliente` e isso NÃO é enfeite: sem o `GROUP BY` ela
+     * devolveria uma linha por filial casada e o join multiplicaria a carteira — a tela
+     * mostraria o mesmo cliente várias vezes, com o total inflado junto.
+     *
+     * ⚠️ "Fora" é ANTI-JOIN (`leftJoinSub` + `IS NULL`), não `whereNotIn`: mesma família
+     * de armadilha do `whereIn` documentada em `aplicarFiltroDeStatus()`.
+     */
+    private function aplicarFiltroDeAderencia(Request $request, Builder $query, Builder $escopada): void
+    {
         $aderencia = (string) $request->string('aderencia');
 
-        if ($aderencia !== '') {
-            $temSegmentoDefinido = fn ($q) => $q->selectRaw(1)
-                ->from('segmentos_vendedor as sv2')
-                ->whereColumn('sv2.cod_vendedor', 'clientes.cod_vendedor');
-
-            if ($aderencia === 'sem_segmento') {
-                $query->whereNotExists($temSegmentoDefinido);
-            } else {
-                $query->whereExists($temSegmentoDefinido)
-                    ->leftJoin('segmentos', 'segmentos.codigo', '=', 'clientes.cod_segmento')
-                    ->leftJoin('segmentos_vendedor', function ($join) {
-                        $join->on('segmentos_vendedor.cod_vendedor', '=', 'clientes.cod_vendedor')
-                            ->on('segmentos_vendedor.segmento_id', '=', 'segmentos.id');
-                    });
-
-                $aderencia === 'dentro'
-                    ? $query->whereNotNull('segmentos_vendedor.id')
-                    : $query->whereNull('segmentos_vendedor.id');
-            }
+        if ($aderencia === '') {
+            return;
         }
 
-        return $query;
+        $temSegmentoDefinido = fn ($q) => $q->selectRaw(1)
+            ->from('segmentos_vendedor as sv2')
+            ->whereColumn('sv2.cod_vendedor', 'clientes.cod_vendedor');
+
+        if ($aderencia === 'sem_segmento') {
+            $query->whereNotExists($temSegmentoDefinido);
+
+            return;
+        }
+
+        if (! in_array($aderencia, ['dentro', 'fora'], true)) {
+            return;
+        }
+
+        // Por filial: a linha exibida é a loja, e a pill dela é a aderência dela.
+        if (! $this->agrupar($request)) {
+            $query->whereExists($temSegmentoDefinido)
+                ->leftJoin('segmentos', 'segmentos.codigo', '=', 'clientes.cod_segmento')
+                ->leftJoin('segmentos_vendedor', function ($join) {
+                    $join->on('segmentos_vendedor.cod_vendedor', '=', 'clientes.cod_vendedor')
+                        ->on('segmentos_vendedor.segmento_id', '=', 'segmentos.id');
+                });
+
+            $aderencia === 'dentro'
+                ? $query->whereNotNull('segmentos_vendedor.id')
+                : $query->whereNull('segmentos_vendedor.id');
+
+            return;
+        }
+
+        $comAlgumaFilialDentro = (clone $escopada)
+            ->select([])
+            ->selectRaw('clientes.cod_cliente')
+            ->join('segmentos', 'segmentos.codigo', '=', 'clientes.cod_segmento')
+            ->join('segmentos_vendedor', function ($join) {
+                $join->on('segmentos_vendedor.cod_vendedor', '=', 'clientes.cod_vendedor')
+                    ->on('segmentos_vendedor.segmento_id', '=', 'segmentos.id');
+            })
+            ->groupBy('clientes.cod_cliente');
+
+        if ($aderencia === 'dentro') {
+            $query->joinSub($comAlgumaFilialDentro, 'aderencia_dentro', 'aderencia_dentro.cod_cliente', '=', 'clientes.cod_cliente');
+
+            return;
+        }
+
+        $query->whereExists($temSegmentoDefinido)
+            ->leftJoinSub($comAlgumaFilialDentro, 'aderencia_dentro', 'aderencia_dentro.cod_cliente', '=', 'clientes.cod_cliente')
+            ->whereNull('aderencia_dentro.cod_cliente');
     }
 
     /**
@@ -1084,11 +1297,6 @@ class CarteiraController extends Controller
                 ])->all(),
             ]);
 
-        $vendedorNome = VendedorPerfil::query()
-            ->where('cod_vendedor', $cliente->cod_vendedor)
-            ->with('user:id,name,display_name')
-            ->first();
-
         return Inertia::render('Carteira/Detalhes', [
             'cliente' => [
                 'id' => $cliente->id,
@@ -1103,7 +1311,7 @@ class CarteiraController extends Controller
                 'email' => $cliente->email,
                 'segmento' => $cliente->cod_segmento ? (Segmento::where('codigo', $cliente->cod_segmento)->value('nome') ?? $cliente->cod_segmento) : null,
                 'codVendedor' => $cliente->cod_vendedor,
-                'vendedorNome' => $vendedorNome?->user?->display_name ?: $vendedorNome?->user?->name ?: $cliente->cod_vendedor,
+                'vendedorNome' => $this->nomeVendedor->para($cliente->cod_vendedor),
                 'status' => $this->statusResolver->statusPara($cliente->data_ultima_compra, now()),
                 'dataUltimaCompra' => $ultimaCompraFormatada,
             ],

@@ -59,7 +59,9 @@ function formatQuantidade(valor) {
                         <td class="tbl-td">
                             <span class="tbl-trunc max-w-[220px]" :title="pedido.cliente?.razaoSocial">{{ pedido.cliente?.razaoSocial ?? '—' }}</span>
                         </td>
-                        <td class="tbl-td">{{ pedido.vendedorNome }}</td>
+                        <td class="tbl-td">
+                            <span class="tbl-trunc max-w-[180px]" :title="pedido.vendedorNome">{{ pedido.vendedorNome }}</span>
+                        </td>
                         <td class="tbl-td">{{ pedido.dataPedido }}</td>
                         <td class="tbl-td">
                             <StatusPill :tone="TONS_SITUACAO_PEDIDO[pedido.situacao]" size="sm">

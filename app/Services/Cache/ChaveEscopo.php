@@ -74,8 +74,18 @@ final readonly class ChaveEscopo
      *   Bloco JÁ EM PRODUÇÃO: sem o bump, o tile novo apareceria vazio — `R$ NaN`, que é
      *   o que `Intl.NumberFormat` faz com `undefined` — por até 30 min depois do deploy,
      *   só para quem já estava logado.
+     *
+     *   v8 → v9 (2026-09-15) — os filtros de status e de aderência da Carteira passaram a
+     *   consolidar por cliente (antes comparavam filial por filial), e o card deixou de
+     *   aplicar a si as duas facetas que desenha. `carteira-kpis` e
+     *   `carteira-total-agrupado` mudam de VALOR com os mesmos filtros: 1.009 viraram 955
+     *   no caso que motivou o conserto, e 420 viraram 408 em `aderencia=fora`. Mesmo caso
+     *   do v6 → v7 — a forma não muda, e é justamente por isso que o bump importa: sem
+     *   ele a tela seguiria mostrando o número errado por até 10 min depois do deploy, com
+     *   o código novo no ar e nada quebrado para acusar. Quem for conferir o conserto na
+     *   hora veria o bug.
      */
-    public const VERSAO = 'v8';
+    public const VERSAO = 'v9';
 
     private const PREFIXO = 'agg';
 

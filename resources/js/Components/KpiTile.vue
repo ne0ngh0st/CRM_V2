@@ -11,6 +11,15 @@ defineProps({
     },
     compact: { type: Boolean, default: false },
     href: { type: String, default: null },
+    /**
+     * O tile representa o recorte que está aplicado na tela.
+     *
+     * ⚠️ Só faz sentido quando o tile é um FILTRO da própria tela (os três status da
+     * Carteira), e aí `href` deve ser o link que REMOVE o filtro — chip selecionado se
+     * desmarca no clique. Num tile que só navega para outro lugar, marcar não significa
+     * nada.
+     */
+    ativo: { type: Boolean, default: false },
 });
 
 /*
@@ -36,14 +45,35 @@ const toneText = {
     danger: 'text-red-500',
     info: 'text-cyan',
 };
+
+/*
+ * O selecionado troca o cinza do tile por branco e ganha a borda na própria cor do tom —
+ * a mesma que o número já usa, então nada de cor nova entra na tela. É a linguagem de
+ * chip marcado, e é o que permite dizer "você está vendo este" sem escrever uma frase.
+ *
+ * ⚠️ `border` sozinho, sem `ring`: com os dois o tile engorda visualmente e a fileira
+ * inteira parece desalinhada (o não-selecionado fica 2px mais estreito de aparência).
+ */
+const toneBorda = {
+    default: 'border-navy',
+    ok: 'border-emerald-500',
+    warn: 'border-amber',
+    danger: 'border-red-500',
+    info: 'border-cyan',
+};
 </script>
 
 <template>
     <component
         :is="href ? Link : 'div'"
         :href="href ?? undefined"
-        class="flex-1 basis-auto rounded border border-gray-200 bg-gray-50 px-2.5 py-2 text-center"
-        :class="href ? 'cursor-pointer transition hover:border-navy hover:bg-white hover:shadow-sm' : ''"
+        class="flex-1 basis-auto rounded border px-2.5 py-2 text-center"
+        :class="[
+            ativo ? [toneBorda[tone], 'bg-white shadow-sm'] : 'border-gray-200 bg-gray-50',
+            href ? 'cursor-pointer transition hover:border-navy hover:bg-white hover:shadow-sm' : '',
+        ]"
+        :title="ativo ? 'Filtro aplicado — clique para remover' : undefined"
+        :aria-current="ativo ? 'true' : undefined"
     >
         <p
             class="truncate font-bold leading-tight"
@@ -52,8 +82,17 @@ const toneText = {
         >
             {{ value }}
         </p>
-        <p class="mt-1 truncate text-[0.65rem] font-medium uppercase leading-tight tracking-normal text-gray-500" :title="label">
+        <p
+            class="mt-1 flex items-center justify-center gap-1 truncate text-[0.65rem] font-medium uppercase leading-tight tracking-normal"
+            :class="ativo ? toneText[tone] : 'text-gray-500'"
+            :title="label"
+        >
             {{ label }}
+            <!--
+                O "×" diz as duas coisas de uma vez — que este é o recorte aplicado e que
+                dá para sair dele — sem gastar uma linha de texto na altura do tile.
+            -->
+            <span v-if="ativo" aria-hidden="true" class="font-normal opacity-70">✕</span>
         </p>
     </component>
 </template>

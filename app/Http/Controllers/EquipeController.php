@@ -10,6 +10,7 @@ use App\Models\VendedorPerfil;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
 use App\Services\Equipe\EquipeScopeResolver;
 use App\Services\Equipe\OrganogramaBuilder;
+use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,6 +30,7 @@ class EquipeController extends Controller
         private readonly EquipeScopeResolver $scope,
         private readonly OrganogramaBuilder $organogramaBuilder,
         private readonly SegmentosDoVendedorResolver $segmentosDoVendedor,
+        private readonly NomeVendedorResolver $nomeVendedor,
     ) {
     }
 
@@ -59,10 +61,10 @@ class EquipeController extends Controller
         $codVendedoresPresentes = $usuarios->pluck('vendedorPerfil.cod_vendedor')->filter()->values();
         $segmentosPorCodVendedor = $this->segmentosDoVendedor->porCodigo($codVendedoresPresentes);
 
-        $nomesPorCodVendedor = VendedorPerfil::query()
-            ->with('user:id,name,display_name')
-            ->get()
-            ->mapWithKeys(fn (VendedorPerfil $vp) => [$vp->cod_vendedor => $vp->user?->display_name ?: $vp->user?->name]);
+        // Só serve para nomear o supervisor de cada grupo, e por isso vem de `todos()`:
+        // supervisor sem conta no CRM (há códigos assim) virava "Supervisor desconhecido"
+        // mesmo com o TOTVS sabendo o nome dele.
+        $nomesPorCodVendedor = $this->nomeVendedor->todos();
 
         $usuariosMapeados = $usuarios->map(function (User $u) use ($segmentosPorCodVendedor) {
             $codVendedor = $u->vendedorPerfil?->cod_vendedor;

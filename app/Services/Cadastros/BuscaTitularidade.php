@@ -5,6 +5,7 @@ namespace App\Services\Cadastros;
 use App\Models\Cliente;
 use App\Models\ClienteParaCadastro;
 use App\Models\User;
+use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Support\Collection;
 
 /**
@@ -30,6 +31,8 @@ class BuscaTitularidade
     public const MINIMO_CARACTERES = 3;
 
     private const LIMITE = 30;
+
+    public function __construct(private readonly NomeVendedorResolver $nomeVendedor) {}
 
     /**
      * @return array<int, array<string, mixed>>
@@ -230,6 +233,21 @@ class BuscaTitularidade
 
             $super = $supervisores[$usuario->vendedorPerfil->cod_super] ?? null;
             $mapa[$cod]['supervisor'] ??= $super ? ($super->display_name ?: $super->name) : null;
+        }
+
+        /*
+         * Código sem conta no CRM ainda tem dono: são 320 dos 444 códigos da base —
+         * ex-funcionário, gente de licitação/SAC, e os baldes do TOTVS. Sem este
+         * complemento a tela respondia "sem responsável" para 27% dos clientes, que é
+         * pior que não responder nada: numa busca cuja pergunta é "posso prospectar?",
+         * "sem responsável" soa como autorização.
+         *
+         * ⚠️ Aqui NÃO entra o degrau do código cru (ver o resolver): quem o TOTVS também
+         * não conhece continua saindo como "sem responsável", e o código já aparece na
+         * própria linha.
+         */
+        foreach ($this->nomeVendedor->doTotvs(array_diff($codigos, array_keys($mapa))) as $cod => $nome) {
+            $mapa[$cod] = ['responsaveis' => [$nome], 'supervisor' => null];
         }
 
         return $mapa;

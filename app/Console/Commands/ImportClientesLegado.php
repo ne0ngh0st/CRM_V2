@@ -31,6 +31,9 @@ class ImportClientesLegado extends Command
         $gruposImportados = $this->importarGrupos($pdo);
         $this->info("Grupos de cliente importados/atualizados: {$gruposImportados}");
 
+        $vendedoresImportados = $this->importarVendedores($pdo);
+        $this->info("Nomes de vendedor importados/atualizados: {$vendedoresImportados}");
+
         $this->info("Lendo clientes ({$fonte})...");
         $stmt = $pdo->query(
             'SELECT COD_CLIENT, LOJA, CNPJ, CLIENTE, NOME_FANTASIA, COD_VENDEDOR, COD_SEG, GrpVendas, '
@@ -182,6 +185,53 @@ class ImportClientesLegado extends Command
 
         foreach (array_chunk($lote, 500) as $pedaco) {
             DB::table('grupos_cliente')->upsert($pedaco, ['codigo'], ['nome', 'updated_at']);
+        }
+
+        return count($lote);
+    }
+
+    /**
+     * Nome do vendedor por código — o espelho guarda isso em `ultimo_faturamento`
+     * (`NOME_VENDEDOR`), nunca em `CLIENTES`, exatamente como grupo e segmento. Conferido
+     * no espelho: nenhum código tem duas grafias, então o mapa é 1:1.
+     *
+     * Existe para o caso em que o código NÃO tem conta no CRM (ex-funcionário, gente de
+     * licitação/SAC, e os baldes "INATIVOS"/"CLIENTE SEM COMPRA" do próprio TOTVS): sem
+     * este lookup a Carteira exibe o código cru. Ver `NomeVendedorResolver`.
+     *
+     * ⚠️ O código é gravado CRU, sem tirar zero à esquerda: quem tem que casar com ele é
+     * `clientes.cod_vendedor`, que também é cru. Normalizar aqui — como se faz com grupo
+     * e segmento, que vêm com padding inconsistente — faria o lookup nunca casar.
+     */
+    private function importarVendedores(PDO $pdo): int
+    {
+        $stmt = $pdo->query(
+            'SELECT COD_VENDEDOR, MIN(NOME_VENDEDOR) AS nome, MIN(NomeReduzid) AS reduzido '
+            .'FROM ultimo_faturamento WHERE COD_VENDEDOR IS NOT NULL GROUP BY COD_VENDEDOR'
+        );
+
+        $lote = [];
+        $agora = now();
+
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $codigo = trim((string) $row['COD_VENDEDOR']);
+            $nome = trim((string) ($row['nome'] ?? ''));
+
+            if ($codigo === '' || $nome === '') {
+                continue;
+            }
+
+            $lote[] = [
+                'codigo' => $codigo,
+                'nome' => $nome,
+                'nome_reduzido' => self::valorOuNull((string) ($row['reduzido'] ?? '')),
+                'created_at' => $agora,
+                'updated_at' => $agora,
+            ];
+        }
+
+        foreach (array_chunk($lote, 500) as $pedaco) {
+            DB::table('vendedores_totvs')->upsert($pedaco, ['codigo'], ['nome', 'nome_reduzido', 'updated_at']);
         }
 
         return count($lote);

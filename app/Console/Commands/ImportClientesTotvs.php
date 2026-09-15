@@ -47,24 +47,26 @@ class ImportClientesTotvs extends Command
 
         if ($temUltimoFaturamento) {
             $ultimoFat = Relatorios::abrir('ultimo_faturamento');
-            $ultimoFat->exigirColunas(['COD_CLIENT', 'LOJA', 'DT_FAT', 'Grp.Vendas', 'Descricao', 'Segmento 1', 'Descricao_2']);
+            $ultimoFat->exigirColunas(['COD_CLIENT', 'LOJA', 'DT_FAT', 'Grp.Vendas', 'Descricao', 'Segmento 1', 'Descricao_2', 'Codigo', 'Nome_2', 'Nome Reduzid']);
 
-            [$ultimaCompra, $grupos, $segmentos] = $this->lerUltimoFaturamento($ultimoFat);
+            [$ultimaCompra, $grupos, $segmentos, $vendedores] = $this->lerUltimoFaturamento($ultimoFat);
 
             $this->line(sprintf(
-                '199 - Último faturamento: %s clientes com data de compra, %d grupos, %d segmentos.',
+                '199 - Último faturamento: %s clientes com data de compra, %d grupos, %d segmentos, %d vendedores.',
                 number_format(count($ultimaCompra), 0, ',', '.'),
                 count($grupos),
-                count($segmentos)
+                count($segmentos),
+                count($vendedores)
             ));
 
             if (! $dryRun) {
                 $this->gravarLookup('grupos_cliente', $grupos);
                 $this->gravarLookup('segmentos', $segmentos);
+                $this->gravarVendedores($vendedores);
             }
         } else {
             $this->warn('199 - Último faturamento não está na pasta.');
-            $this->warn('  → data_ultima_compra, grupos e segmentos NÃO serão tocados nesta rodada.');
+            $this->warn('  → data_ultima_compra, grupos, segmentos e nomes de vendedor NÃO serão tocados nesta rodada.');
             $this->warn('  → é o que evita apagar a data de compra de todo mundo (status da carteira sai dela).');
         }
 
@@ -168,16 +170,17 @@ class ImportClientesTotvs extends Command
     }
 
     /**
-     * Uma passada só pelos 88 mil registros, extraindo as três coisas que o relatório
-     * carrega. Ler o arquivo três vezes seria três varreduras de 79 MB.
+     * Uma passada só pelos 88 mil registros, extraindo as quatro coisas que o relatório
+     * carrega. Ler o arquivo quatro vezes seria quatro varreduras de 79 MB.
      *
-     * @return array{0: array<string,string>, 1: array<string,string>, 2: array<string,string>}
+     * @return array{0: array<string,string>, 1: array<string,string>, 2: array<string,string>, 3: array<string,array{0:string,1:string}>}
      */
     private function lerUltimoFaturamento(LeitorRelatorio $leitor): array
     {
         $ultimaCompra = [];
         $grupos = [];
         $segmentos = [];
+        $vendedores = [];
 
         foreach ($leitor->linhas() as $linha) {
             $data = Normalizador::data($linha['DT_FAT']);
@@ -199,9 +202,27 @@ class ImportClientesTotvs extends Command
             if ($codSegmento !== null && $nomeSegmento !== '' && ! isset($segmentos[$codSegmento])) {
                 $segmentos[$codSegmento] = $nomeSegmento;
             }
+
+            /*
+             * ⚠️ `Codigo`/`Nome_2`/`Nome Reduzid` são do VENDEDOR — o `Nome` sem sufixo,
+             * lá atrás, é o do cliente. É o mesmo tipo de armadilha do par
+             * `Descricao`/`Descricao_2` acima: trocar não dá erro, só passa a escrever
+             * razão social do cliente na coluna Vendedor da Carteira.
+             *
+             * ⚠️ O código NÃO passa por `Normalizador::codigo()`, ao contrário de grupo e
+             * segmento: o que tem que casar aqui é `clientes.cod_vendedor`, que é gravado
+             * cru ("010148"), com zero à esquerda. Tirar o zero faria o lookup nunca casar
+             * — e silenciosamente, porque o fallback para o código cru continua exibindo
+             * algo plausível na tela.
+             */
+            $codVendedor = trim($linha['Codigo']);
+            $nomeVendedor = trim($linha['Nome_2']);
+            if ($codVendedor !== '' && $nomeVendedor !== '' && ! isset($vendedores[$codVendedor])) {
+                $vendedores[$codVendedor] = [$nomeVendedor, trim($linha['Nome Reduzid'])];
+            }
         }
 
-        return [$ultimaCompra, $grupos, $segmentos];
+        return [$ultimaCompra, $grupos, $segmentos, $vendedores];
     }
 
     /**
@@ -222,6 +243,34 @@ class ImportClientesTotvs extends Command
 
         foreach (array_chunk($linhas, 500) as $pedaco) {
             DB::table($tabela)->upsert($pedaco, ['codigo'], ['nome', 'updated_at']);
+        }
+    }
+
+    /**
+     * Mesmo upsert-sem-delete de `gravarLookup`, com a coluna a mais do nome reduzido.
+     *
+     * Conferido no relatório de 15/09/2026 antes de modelar: 439 códigos e ZERO deles com
+     * duas grafias de nome — o mapa é 1:1, igual ao de grupo e ao de segmento.
+     *
+     * @param  array<string,array{0:string,1:string}>  $vendedores
+     */
+    private function gravarVendedores(array $vendedores): void
+    {
+        $agora = now();
+        $linhas = [];
+
+        foreach ($vendedores as $codigo => [$nome, $reduzido]) {
+            $linhas[] = [
+                'codigo' => $codigo,
+                'nome' => $nome,
+                'nome_reduzido' => $reduzido !== '' ? $reduzido : null,
+                'created_at' => $agora,
+                'updated_at' => $agora,
+            ];
+        }
+
+        foreach (array_chunk($linhas, 500) as $pedaco) {
+            DB::table('vendedores_totvs')->upsert($pedaco, ['codigo'], ['nome', 'nome_reduzido', 'updated_at']);
         }
     }
 

@@ -6,13 +6,13 @@ use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\AgendamentoLigacao;
 use App\Models\Lead;
 use App\Models\Ligacao;
-use App\Models\VendedorPerfil;
 use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Marketing\WpLeadCapturaStatus;
 use App\Services\Marketing\WpLeadIngestor;
 use App\Services\Marketing\WpLeadPayloadParser;
+use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -36,6 +36,7 @@ class LeadController extends Controller
         private readonly CacheDeAgregacao $cache,
         private readonly WpLeadCapturaStatus $wpCaptura,
         private readonly WpLeadIngestor $wpIngestor,
+        private readonly NomeVendedorResolver $nomeVendedor,
     ) {}
 
     /**
@@ -134,12 +135,7 @@ class LeadController extends Controller
 
         $leads = $leadsQuery->paginate(30)->withQueryString();
 
-        $codigos = $leads->getCollection()->pluck('cod_vendedor')->filter()->unique()->values();
-        $nomesPorCod = VendedorPerfil::query()
-            ->whereIn('cod_vendedor', $codigos)
-            ->with('user:id,name,display_name')
-            ->get()
-            ->mapWithKeys(fn (VendedorPerfil $vp) => [$vp->cod_vendedor => $vp->user?->display_name ?: $vp->user?->name]);
+        $nomesPorCod = $this->nomeVendedor->porCodigo($leads->getCollection()->pluck('cod_vendedor'));
 
         $leads->through(fn (Lead $lead) => [
             'id' => $lead->id,

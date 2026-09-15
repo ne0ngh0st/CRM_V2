@@ -14,6 +14,7 @@ import MotivoInatividadeModal from '@/Components/Carteira/MotivoInatividadeModal
 import ObservacoesModal from '@/Components/Observacoes/ObservacoesModal.vue';
 import AgendarLigacaoModal from '@/Components/Carteira/AgendarLigacaoModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
+import { ROTULOS_STATUS_CARTEIRA } from '@/constants/carteira';
 
 const props = defineProps({
     role: String,
@@ -83,6 +84,43 @@ function paramsComAba(aba = props.aba) {
  * `modoVisao`/`visao` de 2026-09-03.
  */
 const listaAgrupada = computed(() => !! props.filtros.agrupado);
+
+/*
+ * O status filtrado, para o subtítulo dizer "543 de 1.199 clientes · Inativo".
+ *
+ * ⚠️ Só no modo agrupado: por filial, `clientes.total` conta FILIAIS e "543 de 1.199
+ * clientes" misturaria duas unidades na mesma frase. Naquele modo o subtítulo já diz as
+ * duas contagens com o rótulo de cada uma, logo abaixo.
+ *
+ * ⚠️ O rótulo vem de `ROTULOS_STATUS_CARTEIRA`, nunca de um mapa local: o de `Detalhes.vue`
+ * ficou para trás uma vez e a tela passou a exibir `pendente_totvs` cru (Regra de ouro nº 8).
+ */
+const statusFiltrado = computed(() => (listaAgrupada.value ? props.filtros.status || '' : ''));
+const rotuloStatusFiltrado = computed(() => ROTULOS_STATUS_CARTEIRA[statusFiltrado.value] ?? statusFiltrado.value);
+
+/**
+ * "31.651 de 39.692 clientes" quando a lista é um recorte, "39.692 clientes" quando não é.
+ *
+ * ⚠️ Decide COMPARANDO os dois números, nunca perguntando quais filtros estão ativos: é o
+ * que mantém a frase verdadeira quando um filtro novo entrar na tela sem ninguém lembrar
+ * deste trecho. E mora aqui num lugar só porque o PageHero e o card da tabela dizem a
+ * mesma coisa a 30cm de distância — divergirem é o defeito que esta rodada inteira
+ * combate.
+ */
+const contagemDeClientes = computed(() => {
+    const total = props.kpis.total;
+    const rotulo = `${total} cliente${total !== 1 ? 's' : ''}`;
+
+    return listaAgrupada.value && props.clientes.total !== total
+        ? `${props.clientes.total} de ${rotulo}`
+        : rotulo;
+});
+
+const subtituloDaTabela = computed(() => (
+    listaAgrupada.value && props.clientes.total !== props.kpis.total
+        ? contagemDeClientes.value
+        : `${contagemDeClientes.value} no escopo atual`
+));
 
 /*
  * Troca a unidade da lista (cliente ↔ filial) e volta para a página 1: a paginação
@@ -196,8 +234,14 @@ function limparSemFamilia() {
                             <path d="M3 10h18M8 6V4h8v2" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
                     </template>
-                    <template #subtitle>
-                        {{ kpis.total }} cliente{{ kpis.total !== 1 ? 's' : '' }}<!--
+                    <template #subtitle><!--
+                        ⚠️ Com um status filtrado, `kpis.total` volta a ser a CARTEIRA
+                        INTEIRA (o card não aplica a si a faceta que desenha) enquanto a
+                        lista mostra só o recorte. Dizer só "1.199 clientes" sobre uma
+                        lista de 543 é o número que não bate; dizer "543 de 1.199" responde
+                        as duas perguntas na mesma frase, e é a mesma saída já usada no
+                        modo "ver filiais separadas" logo abaixo.
+                     -->{{ contagemDeClientes }}<template v-if="statusFiltrado"> · {{ rotuloStatusFiltrado }}</template><!--
                         ⚠️ No modo "ver filiais separadas" a contagem do KPI (clientes) e a
                         da paginação (filiais) são DIFERENTES por definição, e ficam a cinco
                         centímetros uma da outra. A saída é dizer as duas unidades, nunca
@@ -343,7 +387,7 @@ function limparSemFamilia() {
                         </button>
                     </div>
 
-                    <DarkCard title="Carteira de Clientes" :subtitle="`${kpis.total} cliente${kpis.total !== 1 ? 's' : ''} no escopo atual`">
+                    <DarkCard title="Carteira de Clientes" :subtitle="subtituloDaTabela">
                         <template #icon>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                                 <line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round" />

@@ -12,26 +12,7 @@ namespace Tests\Concerns;
  */
 trait EscreveRelatorio200
 {
-    private string $diretorioTotvs;
-
-    /** Diretório temporário apontado por `config('totvs.diretorio')`. Chamar no setUp. */
-    protected function prepararRelatorios(): void
-    {
-        $this->diretorioTotvs = sys_get_temp_dir().'/totvs-teste-'.uniqid();
-        mkdir($this->diretorioTotvs.'/CSV', 0777, true);
-        config(['totvs.diretorio' => $this->diretorioTotvs]);
-    }
-
-    /** Chamar no tearDown. */
-    protected function removerRelatorios(): void
-    {
-        foreach (glob($this->diretorioTotvs.'/CSV/*') ?: [] as $arquivo) {
-            @unlink($arquivo);
-        }
-
-        @rmdir($this->diretorioTotvs.'/CSV');
-        @rmdir($this->diretorioTotvs);
-    }
+    use UsaDiretorioDeRelatorios;
 
     /**
      * @param  list<array{0: string, 1: string}>  $pedidos  [numero, historico]

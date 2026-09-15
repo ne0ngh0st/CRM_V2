@@ -1995,6 +1995,175 @@ São duas provas diferentes e só uma foi feita.
 ⚠️ **A chave de idempotência não expira.** Toda chave usada em teste fica queimada para
 sempre — reenviá-la devolve o pedido antigo, nunca cria outro.
 
+### O filtro de status da Carteira filtrava FILIAL numa tela que lista CLIENTE — 2026-09-15
+
+O Tony viu em produção, na carteira da Inaya: o card do Painel dizia **955 inativos** e a
+Carteira, aberta pelo clique naquele mesmo tile, dizia **1.009**. Não era caso isolado —
+**110 vendedores, 1.357 clientes**, pior caso 92 numa carteira só.
+
+**A causa é um descasamento de grão, e ele nasceu em 2026-09-11**, quando a listagem passou
+a ser agrupada por `cod_cliente`. A pill de cada linha vem da data CONSOLIDADA (`MAX` entre
+as filiais, ver `resumoDosCodigos()`), mas o filtro continuou comparando filial por filial:
+
+```
+WHERE clientes.data_ultima_compra < :limite     ← uma filial, isolada
+MAX(clientes.data_ultima_compra) < :limite      ← o que a tela exibe
+```
+
+Um cliente com uma loja parada há dois anos e outra que comprou ontem casava o `WHERE` pela
+loja velha e entrava na lista de "Inativos" — **exibido lá com a pill VERDE "Ativo"**, porque
+a linha mostra a data do grupo. Caso real conferido no RDS: **VILA POKE LTDA, comprou
+11/09/2026, listada entre os inativos da Inaya**. Junto vinham DROGA RAPHAEL SANSANA,
+DROGARIA CASONE e mais 51.
+
+A aritmética fecha exatamente, e é ela que confirma o diagnóstico sem depender de leitura de
+código: dos 244 clientes ativos/inativando da Inaya, **190 sumiam** do filtro (todas as
+filiais recentes) e **54 eram reclassificados** como inativos (filiais mistas). 1.199 − 190 =
+1.009, e 1.009 − 54 = 955.
+
+⚠️ **O caminho para o erro era o próprio produto.** O tile "Inativos" do
+`CarteiraSegmentoCard` linka para `/carteira?status=inativo`: clicava-se em 955 e chegava-se
+a 1.009. É o caso que o Tony recusou em 08/09 no Segmentos Atendidos — **número que não bate
+com o número que foi clicado não se resolve com legenda.**
+
+**O conserto mora em `CarteiraController::aplicarFiltroDeStatus()`**, e a decisão cabe numa
+frase: **cada modo filtra no grão que exibe.** Agrupado (o padrão) seleciona CLIENTES pelo
+`MAX` consolidado; `agrupar=0` continua filtrando filial, porque lá a pill exibida É a da
+filial.
+
+- ⚠️ **A consolidação usa o ESCOPO, nunca a query já filtrada** — tem que ser o mesmo
+  conjunto que `resumoDosCodigos()` agrega. Se `?estado=SP` estreitasse o `MAX`, a pill
+  voltaria a discordar do filtro, só que num caso mais raro e mais difícil de ver.
+- ⚠️ **O filtro entra na `baseQuery()`**, então vale de uma vez para listagem, total da
+  paginação, KPIs do topo e Excel. Era o ponto: com a regra em um lugar só não existe
+  consumidor que fique para trás (Regra de ouro nº 8). Foi a `baseQuery` compartilhada,
+  aliás, que fez o KPI errar junto com a lista.
+- ⚠️ **'ativo' dava o MESMO conjunto pelos dois caminhos** (`MAX >= limite` é verdadeiro
+  exatamente quando alguma filial é — conferido em produção, zero divergências) e mesmo
+  assim passa pelo caminho consolidado: manter as três faixas na mesma formulação é o que
+  impede a próxima alteração de reintroduzir a assimetria.
+
+#### 🚨 `joinSub`, JAMAIS `whereIn(subconsulta)` — 265 ms contra MAIS DE 200 SEGUNDOS
+
+As duas são semanticamente equivalentes (a derivada tem `cod_cliente` único, o join é 1:1 e
+não multiplica linha). A primeira versão usava `whereIn` e **travava a tela do admin**. O
+otimizador trata `IN (subconsulta)` como semi-join dependente e refaz a agregação por linha
+examinada.
+
+⚠️ **E isso passou por dois crivos antes de aparecer: os 8 testes ficaram verdes e o `COUNT`
+media 110 ms.** O plano só degenera quando a mesma consulta ainda agrupa E ordena por
+agregado — ou seja, na listagem. **Medir o COUNT não prova o custo da listagem**, e teste de
+servidor não mede plano de execução.
+
+Medido em produção, intercalado, descontando o piso de conexão (92k filiais / 39k clientes):
+
+| | antes | depois |
+|---|---:|---:|
+| passo 1 da listagem, vendedor (caso dominante) | 7 ms | 18 ms |
+| passo 1 da listagem, empresa | 260 ms | 267 ms |
+| total da paginação, empresa (cacheado 10 min) | 200 ms | 290 ms |
+
+⚠️ **MEDIR INTERCALADO, sempre**: a primeira medição da mesma consulta deu 678 ms contra
+183 ms e era cache frio — eu quase reprojetei em cima disso. Mesma lição de 2026-09-04.
+
+⚠️ Tentado e DESCARTADO: a regra como `NOT EXISTS` correlacionado — mesmo resultado,
+**16,5 s** no escopo empresa.
+
+#### `ChaveEscopo::VERSAO` foi para `v9`
+
+`carteira-kpis` e `carteira-total-agrupado` mudam de VALOR com os mesmos filtros. Mesmo caso
+do v6 → v7: a forma não muda, e é por isso que o bump importa mais — sem ele a tela seguiria
+mostrando 1.009 por até 10 min depois do deploy, com o código novo no ar e **nada quebrado
+para acusar**. Quem fosse conferir o conserto na hora veria o bug.
+
+#### Testes
+
+`tests/Feature/CarteiraFiltroStatusTest.php` (8 casos). **Verificado por mutação, três
+aplicadas de propósito** — voltar a filtrar por filial, consolidar sem escopo, e `MAX` →
+`MIN` —, cada uma mordida por 4 testes.
+
+⚠️ **Um teste sobreviveu às três**: o que comparava `kpis.total` com `clientes.total`. KPI e
+lista saíam da mesma query, então com o bug os dois inflavam JUNTOS (1.009 e 1.009) e ele
+passava verde. **Teste que não morde tem que dizer isso de si mesmo**, senão a próxima
+pessoa confia nele — e horas depois ele passou de fraco a errado, quando o card deixou de
+se filtrar a si mesmo (ver logo abaixo). Hoje é `test_o_tile_do_status_filtrado_bate_com_a_lista`,
+compara o tile da faixa com a lista, e morde.
+
+#### Um filtro não se aplica à faceta que ele controla (mesmo dia, pedido do Tony)
+
+Com o grão consertado, sobrou o outro incômodo: **clicar num KPI zerava os vizinhos.** Com
+`?status=inativo` o card virava "0 ativos · 0 inativando · 543 inativos" — respondendo
+"quantos inativos entre os inativos?" e apagando a única informação que ele existe para dar.
+
+**A regra: o card não aplica a si as dimensões que DESENHA** (`CarteiraController::FACETAS_DO_CARD`
+= status e aderência). Os demais filtros — busca, estado, segmento, família — continuam
+valendo, porque nenhum deles é uma coluna do card.
+
+- ⚠️ **`aderencia` já era ignorada por ACIDENTE**, não por decisão: ela morava em
+  `filtradaQuery()` e os KPIs saíam de `baseQuery()`. Entrou na constante para virar
+  decisão — se alguém mover o filtro de lugar, o card continua certo.
+- **Ganho de graça**: sem `status` na assinatura de cache, clicar no tile "Inativos" cai na
+  MESMA chave da tela sem filtro, que o `AquecerCacheDashboardJob` já aquece.
+- ⚠️ Ignorar um filtro na CHAVE sem ignorá-lo na CONSULTA (ou o contrário) serve o conteúdo
+  de um recorte sob a chave de outro — nada quebra, o número é só o de outra tela.
+
+**Como o recorte aplicado aparece** (o "explicitar sem ficar feio"): o tile fica com a borda
+na cor do próprio tom, o rótulo assume essa cor e ganha um `✕`; clicar nele de novo remove o
+filtro. A linha correspondente da matriz recebe fundo `gray-50`, e a célula/lado de
+aderência aplicados ganham um anel fino. Nenhuma cor nova entrou na tela.
+
+⚠️ **O PageHero e o card da tabela precisaram mudar junto**: os dois liam `kpis.total`, que
+voltou a ser a carteira inteira, e diriam "39.692 clientes" sobre uma lista de 31.651.
+Passaram a dizer **"31.651 de 39.692 clientes · Inativo"**. A frase é montada num computed
+só (`contagemDeClientes`), e ele decide **comparando os dois números** em vez de perguntar
+quais filtros estão ativos — assim continua verdadeira quando um filtro novo entrar na tela.
+
+#### 🔴 E aí apareceu o segundo caso do defeito de grão — porque a marcação o revelou
+
+Com a célula aplicada em destaque, a tela passou a mostrar **408 na matriz e 420 na lista**.
+A assimetria estava em "fora do segmento":
+
+```
+card ..... fora = NENHUMA filial dentro do segmento do vendedor
+filtro ... fora = ALGUMA filial fora        ← o cliente entrava nos DOIS grupos
+```
+
+São **699 clientes** com filiais de segmentos diferentes na base. "Dentro" já batia dos dois
+lados (ALGUMA filial dentro) e continua.
+
+- ⚠️ **A derivada agrupa por `cod_cliente`** — sem o `GROUP BY` o join multiplicaria a
+  carteira e a tela mostraria o mesmo cliente várias vezes, com o total inflado junto.
+- ⚠️ **"Fora" é ANTI-JOIN** (`leftJoinSub` + `IS NULL`), nunca `whereNotIn` — mesma família
+  de armadilha do `whereIn` acima.
+- Custo medido em produção, intercalado, escopo empresa (descontado o piso): `fora`
+  234 ms → 276 ms, `dentro` 179 ms → 250 ms.
+
+🥇 **A lição desta parte: marcar o número aplicado foi o que denunciou a divergência.** O
+defeito existia desde que a Carteira foi agrupada, e nenhum teste o via. Ele só apareceu
+quando a tela passou a dizer, em voz alta, qual número tinha sido clicado.
+
+#### Testes
+
+`tests/Feature/CarteiraCardFacetasTest.php` (6 casos). O que sustenta tudo é
+`test_todo_numero_do_card_bate_com_a_lista_que_ele_abre`: percorre os **11 números
+clicáveis** do card — três tiles, os dois lados da barra e as seis células — comparando cada
+um com o total da lista daquele recorte. É a invariante do Tony ("os dois números têm que
+bater em todos os casos") escrita como código em vez de conferida no olho.
+
+⚠️ **Um teste da rodada anterior passou a estar ERRADO e foi reescrito**: ele exigia
+`kpis.total == clientes.total` sob filtro, que era exatamente o comportamento que o Tony
+mandou mudar. Era também o teste que sobrevivera às três mutações; na versão nova — tile da
+faixa contra a lista — ele morde. **Teste verde não é teste certo: um deles descrevia uma
+regra que deixou de valer no mesmo dia.**
+
+#### Sobrou, e é OUTRO problema — não confundir
+
+Filtrar `?estado=` ou `?segmento=` também compara filial, e a linha exibida é a da
+**âncora**: cliente com matriz em SP e filial no RJ aparece no filtro RJ mostrando "SP" na
+coluna Estado. São **641 clientes** com filiais em estados diferentes e **699** com segmentos
+diferentes (1,5% cada). ⚠️ **Não é o mesmo defeito**: ali o filtro está certo (o cliente TEM
+presença no estado), quem engana é a coluna. O conserto não é filtrar diferente — é a linha
+dizer "SP +1". Deixado em aberto de propósito, à espera de alguém reclamar.
 ## Pendências
 - 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA em 2026-09-10,
   HOMOLOGADA ponta a ponta em 2026-09-14, falta dado REAL no de-para para liberar.**

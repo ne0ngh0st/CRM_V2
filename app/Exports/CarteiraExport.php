@@ -6,8 +6,8 @@ use App\Models\Cliente;
 use App\Models\GrupoCliente;
 use App\Models\Segmento;
 use App\Models\SegmentoVendedor;
-use App\Models\VendedorPerfil;
 use App\Services\Carteira\ClienteStatusResolver;
+use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromQuery;
@@ -29,10 +29,10 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
         private readonly Builder $query,
         private readonly ClienteStatusResolver $statusResolver,
     ) {
-        $this->nomesPorCodVendedor = VendedorPerfil::query()
-            ->with('user:id,name,display_name')
-            ->get()
-            ->mapWithKeys(fn (VendedorPerfil $vp) => [$vp->cod_vendedor => $vp->user?->display_name ?: $vp->user?->name]);
+        // Inclui quem NAO tem conta no CRM (ex-funcionario, licitacao/SAC, e os baldes
+        // do proprio TOTVS): sem isso a coluna Vendedor sai com o codigo cru para 27%
+        // da base. O `?? $codigo` do `map()` e o ultimo degrau - ver o resolver.
+        $this->nomesPorCodVendedor = (new NomeVendedorResolver)->todos();
 
         $this->segmentosPorVendedor = SegmentoVendedor::query()
             ->with('segmento')

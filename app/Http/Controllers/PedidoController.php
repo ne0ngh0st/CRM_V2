@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\Pedido;
-use App\Models\VendedorPerfil;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Metas\MetaRankingResolver;
 use App\Services\Pedidos\StatusPedidoResolver;
+use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +23,7 @@ class PedidoController extends Controller
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly MetaRankingResolver $metaRanking,
         private readonly StatusPedidoResolver $statusPedido,
+        private readonly NomeVendedorResolver $nomeVendedor,
     ) {}
 
     public function index(Request $request): Response
@@ -53,12 +54,7 @@ class PedidoController extends Controller
             ->paginate(20)
             ->withQueryString();
 
-        $codVendedoresPresentes = $pedidos->getCollection()->pluck('cod_vendedor')->unique()->values();
-        $nomesPorCodVendedor = VendedorPerfil::query()
-            ->whereIn('cod_vendedor', $codVendedoresPresentes)
-            ->with('user:id,name,display_name')
-            ->get()
-            ->mapWithKeys(fn (VendedorPerfil $vp) => [$vp->cod_vendedor => $vp->user?->display_name ?: $vp->user?->name]);
+        $nomesPorCodVendedor = $this->nomeVendedor->porCodigo($pedidos->getCollection()->pluck('cod_vendedor'));
 
         $pedidos->through(fn (Pedido $p) => [
             'id' => $p->id,
@@ -322,12 +318,7 @@ class PedidoController extends Controller
             ->paginate(25)
             ->withQueryString();
 
-        $codVendedoresPresentes = $pedidos->getCollection()->pluck('cod_vendedor')->unique()->values();
-        $nomesPorCodVendedor = VendedorPerfil::query()
-            ->whereIn('cod_vendedor', $codVendedoresPresentes)
-            ->with('user:id,name,display_name')
-            ->get()
-            ->mapWithKeys(fn (VendedorPerfil $vp) => [$vp->cod_vendedor => $vp->user?->display_name ?: $vp->user?->name]);
+        $nomesPorCodVendedor = $this->nomeVendedor->porCodigo($pedidos->getCollection()->pluck('cod_vendedor'));
 
         $pedidos->through(fn (Pedido $p) => [
             'id' => $p->id,
