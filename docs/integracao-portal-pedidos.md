@@ -595,12 +595,25 @@ Endpoints observados em `api-portal.autopel.com/v1`:
 Entidades citadas no bundle: `clients`, `clients_representatives`, `orders`, `products`,
 `quotations`, `tickets`, `users`, `payment_conditions`, `reports`.
 
-> **A consequência prática é grande**: dá para resolver `clientId` por CNPJ chamando
-> `GET /v1/clients/?search=<cnpj>` com o nosso próprio token, em vez de esperar eles
-> construírem endpoints de de-para. ⚠️ Duas ressalvas, as mesmas da §4.2: (a) continua
-> sendo acoplamento à API deles — combinar como contrato antes de virar produção; (b)
-> **falta confirmar se o nosso bearer tem escopo para `GET /clients`** (só vi o front
-> deles chamando, autenticado como usuário do portal, não como a nossa API key).
+>  🔴 **TESTADO em 2026-09-15, e o nosso token NÃO serve para isto.** Com o bearer de
+> homologação:
+> - `GET /v1/clients/` → **401 Unauthorized** (o endpoint existe, mas rejeita a nossa key)
+> - `GET /v1/api/clients`, `/v1/api/orders`, `/v1/api/products` → **404 "Cannot GET"**
+>
+> São **dois mundos de auth**: o `/v1/clients` é a API que o portal deles consome
+> **logado como usuário** (sessão do Alan Dayan); o nosso namespace é o `/v1/api/*`, e ali
+> só existe o que eles construíram para a integração — o `POST /v1/api/orders`. Não há
+> nenhum GET de leitura para a nossa key.
+>
+> ⚠️ **Portanto NÃO dá para resolver `clientId` ao vivo hoje.** E lembrando o grão (a
+> pergunta do Tony): a chave é `code`+`store`, **não** o CNPJ. Mesmo que o `/v1/clients`
+> abrisse, ele busca por documento e devolve **lista** (`pageSize=99`) — uma linha por
+> filial —, então ainda seria preciso filtrar pelo `store`/`code` para cravar a filial. O
+> CNPJ estreita; `code`+`store` crava; o `document` só confere (a guarda).
+>
+> **Saída**: pedir ao time do Portal (a) escopo de leitura de clientes para a nossa key,
+> **ou** (b) o `id`+`code`+`store` de um cliente de homologação — e montar o de-para local
+> por `code`+`store`.
 
 ### O Integrador expõe 4 bancos — inventário lido do `/descoberta`
 

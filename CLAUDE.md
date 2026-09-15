@@ -2056,15 +2056,18 @@ sempre — reenviá-la devolve o pedido antigo, nunca cria outro.
     - ⚠️ **`clients.seller_one` NÃO espelha o nosso `cod_vendedor`** — formato igual,
       valores divergentes em 3 dos 9 casos. Não usar para nada; o vendedor sai de
       `users.email`/`protheus_seller_code`.
-  - 🟢 **Achado em 2026-09-14 (varredura completa, §4.8 do doc): o próprio portal do
-    cliente já chama `GET /v1/clients/?search=<cnpj>&pageSize=99` no `api-portal`.** É o
-    endpoint de resolução de cliente por CNPJ que pedimos por WhatsApp — está no ar. Dá
-    para resolver `clientId` ao vivo em vez de esperar endpoint novo, MAS falta confirmar
-    se o NOSSO token tem escopo para `/clients` (só vi o front deles chamando, logado como
-    usuário). E `invoice_types` foi conferido na fonte: 1=Serviço, 2=Venda(Consumo),
-    3=Remessa, 4=Venda(Revenda), batendo com `config/portal.php`. ⚠️ Eles têm
-    `products_dedup_*` (deduplicando catálogo) e backups `bkp_20260910_*` — o de-para pode
-    mudar embaixo da gente; a guarda de CNPJ e o espelho local seguem sendo a proteção.
+  - 🔴 **TESTADO em 2026-09-15: o nosso token NÃO resolve cliente ao vivo.**
+    `GET /v1/clients/` → **401** (endpoint do portal deles, autenticado como USUÁRIO, não
+    como a nossa key); `GET /v1/api/clients|orders|products` → **404 "Cannot GET"** (o
+    nosso namespace `/v1/api` só tem o `POST /v1/api/orders` que eles construíram). Ou seja:
+    resolver `clientId` pelo nosso lado depende de eles (a) darem escopo de leitura à nossa
+    key OU (b) mandarem o `id`+`code`+`store` de um cliente de homologação. **A chave é
+    `code`+`store`, nunca CNPJ** (CNPJ se repete entre filiais — Regra nº 3); mesmo que o
+    `/v1/clients` abrisse, ele busca por documento e devolve LISTA, então ainda precisaria
+    filtrar pelo `store`. `invoice_types` foi conferido na fonte (§4.8): 1=Serviço,
+    2=Venda(Consumo), 3=Remessa, 4=Venda(Revenda), batendo com `config/portal.php`. ⚠️ Eles
+    têm `products_dedup_*` e backups `bkp_20260910_*` — o de-para pode mudar embaixo da
+    gente; a guarda de CNPJ e o espelho local seguem sendo a proteção.
   - 🟢 **Mas existe um caminho já no ar, achado no mesmo dia: a `api-integrador.autopel.com`**
     (zip em `docs/autopel-integrador-api-*.zip`, feita para o projeto do Lovable). É uma API
     **somente leitura** com metadados e `SELECT` parametrizado sobre **quatro bancos MySQL —
