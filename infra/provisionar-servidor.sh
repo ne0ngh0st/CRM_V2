@@ -161,6 +161,18 @@ server {
         try_files $uri =404;
     }
 
+    # PWA: o Chrome revalida o SW para saber se mudou. Cache longo aqui faria um
+    # worker velho viver horas depois do deploy. O manifest segue o mesmo ciclo.
+    location = /sw.js {
+        add_header Cache-Control "no-cache";
+        access_log off;
+    }
+    location = /manifest.json {
+        default_type application/manifest+json;
+        add_header Cache-Control "no-cache";
+        access_log off;
+    }
+
     location = /favicon.ico { access_log off; log_not_found off; }
     location = /robots.txt  { access_log off; log_not_found off; }
 

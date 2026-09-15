@@ -4,6 +4,7 @@ import { Head } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
+import InstalarAppCard from '@/Components/Pwa/InstalarAppCard.vue';
 import UpdateFotoPerfilForm from './Partials/UpdateFotoPerfilForm.vue';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue';
@@ -77,6 +78,8 @@ const infoRows = computed(() => {
                 </div>
 
                 <div class="space-y-4">
+                    <InstalarAppCard />
+
                     <DarkCard title="Informações do Usuário" subtitle="Dados da conta (somente leitura)">
                         <template #icon>
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
