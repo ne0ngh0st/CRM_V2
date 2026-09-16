@@ -43,4 +43,46 @@ return [
 
     'schema' => env('BI_DB_SCHEMA', 'bi'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Refresh do dataset depois de cada importação do TOTVS
+    |--------------------------------------------------------------------------
+    |
+    | Quando o `totvs:atualizar` termina em `sucesso`, o CRM pede ao Power BI que
+    | atualize o dataset (API REST, service principal do Entra ID). Detalhe em
+    | docs/power-bi.md.
+    |
+    | ⚠️ Nasce DESLIGADO. Só ligar depois que o dataset novo (lendo o RDS) estiver
+    | publicado e o service principal for membro do workspace — ligado antes disso,
+    | cada importação gera um passo vermelho de 401/404 em /atualizacoes.
+    |
+    | ⚠️ `client_secret` é segredo: só no .env do servidor, nunca versionado. Tudo lido
+    | por config(), nunca env() no código (config cacheado em produção).
+    |
+    */
+
+    'refresh' => [
+        'habilitado' => (bool) env('POWERBI_REFRESH_HABILITADO', false),
+
+        'tenant_id' => (string) env('POWERBI_TENANT_ID', ''),
+        'client_id' => (string) env('POWERBI_CLIENT_ID', ''),
+        'client_secret' => (string) env('POWERBI_CLIENT_SECRET', ''),
+        'workspace_id' => (string) env('POWERBI_WORKSPACE_ID', ''),
+        'dataset_id' => (string) env('POWERBI_DATASET_ID', ''),
+
+        'timeout' => (int) env('POWERBI_TIMEOUT', 20),
+
+        /*
+        | Trava de cota. A licença Pro aceita 8 refreshes por dataset por dia,
+        | contando os agendados no próprio Serviço. 6 deixa margem para um refresh
+        | manual de emergência pelo portal. Contado numa janela MÓVEL de 24 h, que
+        | respeita o limite qualquer que seja o horário de virada da Microsoft.
+        |
+        | ⚠️ Desligar o refresh agendado do dataset no Serviço: senão ele consome a
+        | mesma cota sem esta trava saber.
+        */
+        'max_por_dia' => (int) env('POWERBI_REFRESH_MAX_POR_DIA', 6),
+        'intervalo_minutos' => (int) env('POWERBI_REFRESH_INTERVALO_MINUTOS', 90),
+    ],
+
 ];
