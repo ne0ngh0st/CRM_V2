@@ -93,11 +93,70 @@ class Pedido extends Model
      */
     public function scopeContaComoVenda(Builder $query): Builder
     {
-        $limite = now()->subDays(self::DIAS_MAXIMO_EM_ABERTO)->toDateString();
-
         return $query->where(fn (Builder $q) => $q
             ->whereNotNull('data_faturamento')
-            ->orWhere('data_pedido', '>=', $limite));
+            ->orWhere('data_pedido', '>=', self::limiteEmAberto()));
+    }
+
+    /**
+     * O recorte da carteira em aberto que ainda conta para a meta de FATURAMENTO de um mês.
+     *
+     * Três condições, cada uma com um motivo:
+     *
+     * 1. EM ABERTO — faturado já está em `faturamentos` e entra pelo realizado. Os dois
+     *    conjuntos são disjuntos, então `meta − faturado − este recorte` não conta nada
+     *    duas vezes (com a exceção abaixo).
+     * 2. PREVISÃO ATÉ O FIM DO MÊS, SEM LIMITE INFERIOR — o atrasado (previsão já vencida)
+     *    ainda vai faturar, e em 2026-09-15 era R$ 21,6 mi de R$ 38,3 mi, mais da metade da
+     *    carteira. ⚠️ Por isso NÃO é `whereBetween($inicioDoMes, $fimDoMes)`: essa versão
+     *    "mais arrumada" apagaria o atrasado da conta sem erro nenhum. O que tem previsão
+     *    para o mês seguinte (R$ 4,5 mi) fica de fora — não ajuda a fechar ESTE mês.
+     * 3. PEDIDO COM MENOS DE {@see DIAS_MAXIMO_EM_ABERTO} DIAS — o mesmo corte do
+     *    `contaComoVenda()`. O resíduo eterno é pequeno no agregado (R$ 352 mil) mas se
+     *    concentra: havia vendedor com 66% da carteira em aberto feita dele.
+     *
+     * ⚠️ PREVISÃO NULA FICA DE FORA, de propósito: o `<=` descarta NULL em silêncio, e
+     * previsão ausente não é "vai faturar neste mês". Hoje o TOTVS preenche 100% dos
+     * abertos; não trocar por `orWhereNull` "para não perder dado".
+     *
+     * ⚠️ EXCEÇÃO À DISJUNÇÃO, medida em 2026-09-15: pedido PARCIALMENTE faturado tem a
+     * nota parcial em `faturamentos` e continua aqui com o valor cheio (o relatório 200
+     * vence o 232 no import — ver ImportPedidosAbertosTotvs). Eram 51 pedidos, com
+     * R$ 804,8 mil já faturados: 2,1% da carteira, contados duas vezes, o que faz a
+     * "falta" sair MENOR que a real. Corrigir exige casar por `faturamentos.pedido`, que
+     * não tem índice (14,8 s para checar 200 pedidos). Aceito e documentado.
+     *
+     * ⚠️ Comparação crua na coluna `date`, nunca `whereDate()`: função na coluna derruba
+     * o índice (Regra de ouro nº 6).
+     */
+    public function scopeContaParaFaturamentoDe(Builder $query, string $fimDoMes): Builder
+    {
+        return $query->emAberto()
+            ->where('data_previsao_faturamento', '<=', $fimDoMes)
+            ->where('data_pedido', '>=', self::limiteEmAberto());
+    }
+
+    /**
+     * Pedido que ainda não virou nota.
+     *
+     * É a definição de "em aberto" no banco, e mora aqui para não voltar a ser um
+     * `whereNull('data_faturamento')` escrito à mão em cada tela (eram cinco). Os imports
+     * do TOTVS continuam com o SQL cru porque escrevem por `DB::table`, sem o model.
+     */
+    public function scopeEmAberto(Builder $query): Builder
+    {
+        return $query->whereNull('data_faturamento');
+    }
+
+    /**
+     * A data a partir da qual um pedido em aberto ainda conta nas métricas.
+     *
+     * Uma fonte só para os dois recortes acima — com cada um calculando a sua, um dia um
+     * ganha `startOfDay()` e o outro não, e os dois números param de bater.
+     */
+    private static function limiteEmAberto(): string
+    {
+        return now()->subDays(self::DIAS_MAXIMO_EM_ABERTO)->toDateString();
     }
 
     public function cliente(): BelongsTo

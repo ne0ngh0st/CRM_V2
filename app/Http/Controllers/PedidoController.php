@@ -184,7 +184,7 @@ class PedidoController extends Controller
         $dataInicio = (string) $request->string('data_inicio');
         $dataFim = (string) $request->string('data_fim');
 
-        $query = Pedido::query()->whereNull('data_faturamento');
+        $query = Pedido::query()->emAberto();
 
         if ($scope['codVendedores'] !== null) {
             $query->whereIn('cod_vendedor', $scope['codVendedores']);
@@ -310,7 +310,7 @@ class PedidoController extends Controller
             'total' => (clone $kpiBase)->count(),
             'valorTotal' => (float) (clone $kpiBase)->sum('valor_total'),
             'faturados' => (clone $kpiBase)->whereNotNull('data_faturamento')->count(),
-            'emAberto' => (clone $kpiBase)->whereNull('data_faturamento')->count(),
+            'emAberto' => (clone $kpiBase)->emAberto()->count(),
         ];
 
         $pedidos = $this->listaQueryEmitidos($request)
@@ -423,7 +423,7 @@ class PedidoController extends Controller
 
         match ($faturamento) {
             'faturado' => $query->whereNotNull('data_faturamento'),
-            'aberto' => $query->whereNull('data_faturamento'),
+            'aberto' => $query->emAberto(),
             default => null,
         };
 

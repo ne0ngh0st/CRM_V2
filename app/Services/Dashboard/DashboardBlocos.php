@@ -543,7 +543,7 @@ class DashboardBlocos
         return $this->cachear(
             $escopo->paraDoDia('pedidos-atencao'),
             function () use ($codVendedores) {
-                $emAberto = Pedido::query()->whereNull('data_faturamento');
+                $emAberto = Pedido::query()->emAberto();
 
                 if ($codVendedores !== null) {
                     $emAberto->whereIn('cod_vendedor', $codVendedores);

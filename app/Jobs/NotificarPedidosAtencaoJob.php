@@ -23,7 +23,7 @@ class NotificarPedidosAtencaoJob implements ShouldQueue
         $hoje = now()->toDateString();
         $em7Dias = now()->addDays(7)->toDateString();
 
-        $emAberto = Pedido::query()->whereNull('data_faturamento')->with('cliente:id,razao_social');
+        $emAberto = Pedido::query()->emAberto()->with('cliente:id,razao_social');
 
         (clone $emAberto)
             ->whereDate('data_previsao_faturamento', '<', $hoje)
