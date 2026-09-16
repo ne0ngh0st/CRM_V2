@@ -20,8 +20,13 @@ VARIACOES DE LAYOUT QUE ESTE SCRIPT ABSORVE (todas reais, medidas em 30/08/2026)
   4. Numeros vem ora como float (openpyxl converteu) ora como texto com virgula
      decimal e separador de milhar.
 
+  5. Ha xlsx sem DESC_FAMILIA (2018 a 2023). Com --familias, a familia vem de um
+     de-para produto -> familia (gerado por `faturamento:de-para-familias`) sempre
+     que a linha nao trouxer a sua.
+
 Uso:
-    python scripts/faturamento_xlsx_para_csv.py <entrada.xlsx> <saida.csv> [--abas "parte 1,parte 2"]
+    python scripts/faturamento_xlsx_para_csv.py <entrada.xlsx> <saida.csv>
+        [--abas "parte 1,parte 2"] [--familias de_para_familias.csv]
 
 O CSV de saida tem cabecalho e usa as MESMAS colunas da tabela `faturamentos`.
 """
@@ -52,6 +57,14 @@ MAPA = {
     "quantidade": "QUANT",
     "valor_unitario": "VLR_UNIT",
     "valor_total": "VLR_TOTAL",
+    # Colunas do Power BI (2026-09-16). O Excel tem "Estado" e "Municipio" com
+    # padding; norm_cabecalho os deixa em maiusculas. O relatorio 198 atual tem um
+    # SEGUNDO "MUNICIPIO" depois de CLIENTE -- achar_cabecalho fica com o primeiro,
+    # o que esta ao lado de Estado, que e o unico dos xlsx historicos.
+    "loja": "COD_LOJA",
+    "estado": "ESTADO",
+    "municipio": "MUNICIPIO",
+    "desc_familia": "DESC_FAMILIA",
 }
 
 # Sem estas o registro nao serve para nada no CRM.
@@ -136,10 +149,36 @@ def parse_numero(valor):
 def texto(valor):
     if valor is None:
         return ""
+    # Codigo que o Excel guardou como numero ("1.0") volta a ser inteiro. Zero a
+    # esquerda ja se perdeu no Excel e nao da para recuperar aqui.
+    if isinstance(valor, float) and valor.is_integer():
+        valor = int(valor)
     return re.sub(r"\s+", " ", str(valor)).strip()
 
 
-def converter(entrada, saida, abas_escolhidas=None):
+def uf(valor):
+    """Sigla de UF ou vazio -- nunca cortada (mesma regra de Normalizador::uf)."""
+    sigla = texto(valor).upper()
+    return sigla if re.fullmatch(r"[A-Z]{2}", sigla) else ""
+
+
+def chave_produto(valor):
+    return texto(valor).upper()
+
+
+def carregar_familias(caminho):
+    """de-para gerado por `php artisan faturamento:de-para-familias`."""
+    familias = {}
+    with open(caminho, newline="", encoding="utf-8") as fh:
+        for linha in csv.DictReader(fh):
+            cod = chave_produto(linha.get("cod_produto"))
+            fam = texto(linha.get("desc_familia"))
+            if cod and fam:
+                familias[cod] = fam
+    return familias
+
+
+def converter(entrada, saida, abas_escolhidas=None, familias=None):
     wb = load_workbook(entrada, read_only=True, data_only=True)
 
     abas = abas_escolhidas or wb.sheetnames
@@ -150,6 +189,8 @@ def converter(entrada, saida, abas_escolhidas=None):
         return 1
 
     total = escritas = sem_data = sem_valor = sem_vendedor = negativas = 0
+    fam_arquivo = fam_de_para = sem_familia = 0
+    familias = familias or {}
     menor = maior = None
 
     with open(saida, "w", newline="", encoding="utf-8") as fh:
@@ -199,6 +240,16 @@ def converter(entrada, saida, abas_escolhidas=None):
                 quantidade = parse_numero(col("QUANT"))
                 valor_unitario = parse_numero(col("VLR_UNIT"))
 
+                familia = texto(col("DESC_FAMILIA"))
+                if familia:
+                    fam_arquivo += 1
+                else:
+                    familia = familias.get(chave_produto(col("COD_PROD")), "")
+                    if familia:
+                        fam_de_para += 1
+                    else:
+                        sem_familia += 1
+
                 w.writerow([
                     texto(col("FILIAL")),
                     texto(col("NTA_FISCAL")),
@@ -214,6 +265,10 @@ def converter(entrada, saida, abas_escolhidas=None):
                     "" if quantidade is None else quantidade,
                     "" if valor_unitario is None else valor_unitario,
                     valor_total,
+                    texto(col("COD_LOJA")),
+                    uf(col("ESTADO")),
+                    texto(col("MUNICIPIO")),
+                    familia,
                 ])
                 escritas += 1
 
@@ -234,6 +289,9 @@ def converter(entrada, saida, abas_escolhidas=None):
     print(f"  sem valor .......... {sem_valor}")
     print(f"  sem cod_vendedor ... {sem_vendedor}   (entram, mas nao aparecem para nenhum vendedor)")
     print(f"  valor negativo ..... {negativas}   (devolucoes)")
+    print(f"  familia do arquivo . {fam_arquivo}")
+    print(f"  familia do de-para . {fam_de_para}")
+    print(f"  sem familia ........ {sem_familia}")
     print(f"  periodo ............ {menor} .. {maior}")
     print(f"  saida .............. {saida} ({os.path.getsize(saida)/1048576:.1f} MB)")
     return 0
@@ -244,11 +302,15 @@ def main():
     p.add_argument("entrada")
     p.add_argument("saida")
     p.add_argument("--abas", help="lista separada por virgula; por padrao todas as abas")
+    p.add_argument("--familias", help="CSV cod_produto,desc_familia para linhas sem familia")
     args = p.parse_args()
 
     abas = [a.strip() for a in args.abas.split(",")] if args.abas else None
+    familias = carregar_familias(args.familias) if args.familias else None
+    if familias is not None:
+        print(f"De-para de familias: {len(familias)} produtos")
     print(f"Lendo {args.entrada}")
-    sys.exit(converter(args.entrada, args.saida, abas))
+    sys.exit(converter(args.entrada, args.saida, abas, familias))
 
 
 if __name__ == "__main__":

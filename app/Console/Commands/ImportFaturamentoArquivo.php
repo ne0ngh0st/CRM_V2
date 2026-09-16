@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Totvs\Normalizador;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -28,11 +29,23 @@ class ImportFaturamentoArquivo extends Command
 
     protected $description = 'Importa faturamento historico de um CSV normalizado, sem truncar a tabela';
 
-    /** Ordem exata das colunas escritas pelo conversor. */
-    private const COLUNAS = [
+    /** Ordem exata das colunas escritas pelo conversor até 2026-09-16. */
+    private const COLUNAS_V1 = [
         'filial', 'nota_fiscal', 'pedido', 'data_emissao', 'cod_cliente', 'cnpj',
         'cliente_nome', 'cod_vendedor', 'cod_produto', 'produto_desc', 'segmento',
         'quantidade', 'valor_unitario', 'valor_total',
+    ];
+
+    /**
+     * Ordem atual: as quatro colunas do Power BI no fim.
+     *
+     * ⚠️ O cabeçalho antigo continua aceito — os CSVs gerados em 30/08 ainda existem e
+     * carregá-los não pode quebrar. Só que eles entram SEM loja/estado/município/família,
+     * e o comando avisa: para o BI, o certo é regerar o CSV com o conversor atual.
+     */
+    private const COLUNAS = [
+        ...self::COLUNAS_V1,
+        'loja', 'estado', 'municipio', 'desc_familia',
     ];
 
     public function handle(): int
@@ -94,7 +107,18 @@ class ImportFaturamentoArquivo extends Command
         }
         $cabecalho = array_map(fn ($c) => trim((string) $c), $cabecalho);
 
-        if ($cabecalho !== self::COLUNAS) {
+        $colunas = match ($cabecalho) {
+            self::COLUNAS => self::COLUNAS,
+            self::COLUNAS_V1 => self::COLUNAS_V1,
+            default => null,
+        };
+
+        if ($colunas === self::COLUNAS_V1) {
+            $this->warn('CSV no formato antigo: entra SEM loja, estado, municipio e familia.');
+            $this->warn('Para o Power BI, regere o CSV com scripts/faturamento_xlsx_para_csv.py.');
+        }
+
+        if ($colunas === null) {
             fclose($fh);
             $this->error('Cabecalho do CSV nao confere com o esperado.');
             $this->line('  esperado: '.implode(',', self::COLUNAS));
@@ -120,13 +144,13 @@ class ImportFaturamentoArquivo extends Command
         $total = $ignoradas = $foraDoAno = 0;
 
         while (($linha = fgetcsv($fh)) !== false) {
-            if (count($linha) !== count(self::COLUNAS)) {
+            if (count($linha) !== count($colunas)) {
                 $ignoradas++;
 
                 continue;
             }
 
-            $registro = array_combine(self::COLUNAS, $linha);
+            $registro = array_combine($colunas, $linha) + array_fill_keys(self::COLUNAS, null);
 
             if (trim((string) $registro['data_emissao']) === '') {
                 $ignoradas++;
@@ -157,6 +181,10 @@ class ImportFaturamentoArquivo extends Command
                 'quantidade' => self::numeroOuNull($registro['quantidade']),
                 'valor_unitario' => self::numeroOuNull($registro['valor_unitario']),
                 'valor_total' => self::numeroOuNull($registro['valor_total']) ?? 0,
+                'loja' => self::valorOuNull($registro['loja']),
+                'estado' => Normalizador::uf($registro['estado']),
+                'municipio' => self::valorOuNull($registro['municipio']),
+                'desc_familia' => self::valorOuNull($registro['desc_familia']),
                 'created_at' => $agora,
                 'updated_at' => $agora,
             ];

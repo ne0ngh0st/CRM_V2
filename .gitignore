@@ -42,3 +42,6 @@ Desktop.ini
 # producao como TOTVS_RELATORIOS_DIR. Precisa sobreviver ao `git clean -fd` do deploy.sh
 # -- ver infra/deploy.sh e app/Console/Commands/SincronizarRelatoriosTotvsS3.php.
 /storage/app/totvs
+
+# Bytecode do Python (scripts/)
+__pycache__/
