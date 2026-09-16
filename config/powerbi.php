@@ -22,7 +22,7 @@ return [
 
     'embed_url' => env(
         'POWERBI_EMBED_URL',
-        'https://app.powerbi.com/reportEmbed?reportId=d92d3e5a-9b25-4406-9202-53d2a4ba7e36&autoAuth=true&ctid=455c3f1c-0a92-4f6d-8943-26ee08301ad0',
+        'https://app.powerbi.com/reportEmbed?reportId=583751e0-a0ab-46ee-9722-f9c1fce34a4d&autoAuth=true&ctid=455c3f1c-0a92-4f6d-8943-26ee08301ad0',
     ),
 
 ];
