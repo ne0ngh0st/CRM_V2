@@ -44,6 +44,20 @@ abstract class TestCase extends BaseTestCase
         $driver = config("database.connections.{$conexao}.driver");
         $banco = (string) config("database.connections.{$conexao}.database");
 
+        // As migrations do BI recriam as tabelas do schema `bi`, que o migrate:fresh
+        // não apaga — com o schema do dev na mira, a suíte zeraria as tabelas de
+        // referência dele a cada execução. Mesmo critério do banco: "test" no nome.
+        $schemaBi = (string) config('powerbi.schema');
+
+        if (! str_contains(strtolower($schemaBi), 'test')) {
+            DB::disconnect();
+
+            throw new RuntimeException(
+                "ABORTADO: os testes estão apontando para o schema do BI '{$schemaBi}', que não é descartável. "
+                .'O alvo esperado é bi_test — confira a linha BI_DB_SCHEMA do phpunit.xml.',
+            );
+        }
+
         // Banco dedicado a teste — o nome precisa deixar isso explícito (palma_v2_test).
         if (str_contains(strtolower($banco), 'test')) {
             return;

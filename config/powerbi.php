@@ -25,4 +25,22 @@ return [
         'https://app.powerbi.com/reportEmbed?reportId=583751e0-a0ab-46ee-9722-f9c1fce34a4d&autoAuth=true&ctid=455c3f1c-0a92-4f6d-8943-26ee08301ad0',
     ),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Schema do BI no MySQL
+    |--------------------------------------------------------------------------
+    |
+    | Onde moram as tabelas de referência (IBGE, de-para de município, potencial)
+    | e as views `vw_bi_*` que o Power BI lê. Fica no MESMO servidor do app, num
+    | schema à parte, para o usuário `bi_leitura` enxergar só o que precisa.
+    |
+    | ⚠️ A suíte usa `bi_test` (forçado no phpunit.xml). O schema não é apagado pelo
+    | `migrate:fresh` — só o banco padrão é —, então dev e teste precisam de schemas
+    | DIFERENTES, senão cada `php artisan test` recriaria as tabelas do BI do dev
+    | vazias. A trava do tests/TestCase.php exige "test" neste nome também.
+    |
+    */
+
+    'schema' => env('BI_DB_SCHEMA', 'bi'),
+
 ];
