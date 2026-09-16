@@ -2266,7 +2266,62 @@ aplicadas, todas mordidas** — uma delas só depois de corrigir o fixture: o pe
 tinha previsão dentro do próprio mês, e trocar o recorte por `whereBetween` passava quase
 verde. Suíte inteira: **646 testes**.
 
+### Power BI passa a ler o RDS — Fase 1 (código), 2026-09-16
+
+O `BI_RADES CORRETO.pbix` lia views `vw_bi_*` do `autopel01` (KingHost), que **sai do ar até
+31/10/2026**. Branch `feat/bi-no-rds`, **ainda não deployada**. Passo a passo, diferenças
+esperadas e números medidos: **`docs/power-bi.md`**. Aqui fica o que muda decisão.
+
+- **Schema `bi` no mesmo RDS**, criado FORA das migrations
+  (`infra/bi/criar-schema-e-usuario.sh`, credencial master, ANTES do deploy). O usuário
+  `bi_leitura` tem SELECT só no `bi` e nas tabelas de `SchemaBi::TABELAS_DO_APP`; o
+  `SchemaBiTest` falha se o script e essa lista divergirem.
+- ⚠️ **A suíte usa `bi_test`**, forçado no `phpunit.xml`. O `migrate:fresh` não apaga outro
+  schema, e as migrations do BI recriam as tabelas vazias — com o schema do dev na mira, cada
+  `php artisan test` zeraria as referências dele. A trava do `TestCase` exige "test" no nome
+  do schema também (provado: com `bi`, a suíte aborta antes de migrar). Setup local: §3.1 do doc.
+- ⚠️ **A SQL das 13 views mora só em `App\Services\PowerBi\ViewsBi`.** A view grava o NOME do
+  banco do app (`palma_v2` no dev, `palma_v2_test` na suíte), então cópia literal numa migration
+  só serviria a um dos dois. Mudou view: migration nova chamando `ViewsBi::recriar()`, ou
+  `bi:recriar-views`. Todas são `SQL SECURITY INVOKER` — o DEFINER preso a IP era o defeito do
+  legado.
+- ⚠️ **O contrato de colunas é o TMDL do modelo**, copiado para o `ViewsBiTest`. Nome de coluna
+  errado não quebra nada no CRM; quebra o relatório no primeiro refresh.
+- **Decisões do Tony nesta data** (não reabrir): orçamentos saem com `status` vazio (o CRM não
+  tem aprovação do cliente, e usar a do gestor inflaria a "Taxa de Conversão"); `REPRES` é o
+  nome do vendedor; filial passou a ser gravada em `pedidos` (`FILIAL` dos relatórios 200/232).
+- ⚠️ **Status do lead no BI é a situação do CLIENTE** (ativo/inativando/inativo/prospect), não a
+  etapa do funil — é o que a medida "Resumo Clientes Multilinha" conta.
+- **O mesmo código de vendedor está em mais de um usuário** (134 perfis, 132 códigos). A dimensão
+  fica com o usuário ativo; é isso que dispensa os filtros fixos por nome que o M tinha.
+- **Faturamento ganhou `loja`, `estado`, `municipio`, `desc_familia`** (`ALGORITHM=INSTANT`
+  explícito: 262 ms sobre 6 M de linhas, e falha em vez de reconstruir a tabela se não puder).
+  ⚠️ O 198 tem DUAS colunas de município; vale `Municipio` (ao lado de `Estado`), a única dos
+  xlsx históricos.
+- **Os xlsx de 2024 e 2025 têm `DESC_FAMILIA`; só 2018–2023 não têm.** A família desses sai de
+  `faturamento:de-para-familias`, então a ORDEM da carga é: 2024/2025 + 198 → de-para → 2018–2023.
+- **Refresh automático** (`AtualizarPowerBiJob`), **nasce desligado**. Só em `sucesso`; falha do
+  BI não marca a importação como falha. ⚠️ Despachado DEPOIS do `encerrar()` da rodada — antes,
+  o registro da rodada apagaria o resultado do job. Trava no Redis: 6 disparos em qualquer
+  janela de 24 h e 90 min entre eles (o Pro aceita 8/dia, contando o refresh agendado do
+  Serviço, que precisa ser DESLIGADO).
+- ⚠️ **`CarbonImmutable::createFromTimestamp()` devolve UTC no Carbon 3**, não o fuso do app. A
+  trava mostrava "adiado para 12:30" para um refresh das 09:30 — pego por teste.
+- **Performance (Regra nº 6), leitura completa no dev:** faturamento 6 M linhas em 29 s;
+  pedidos emitidos 39 s → 11,6 s (a dimensão de vendedor era refeita por item — ⚠️ o hint
+  `NO_MERGE` é **ignorado dentro de view**, o que resolveu foi uma derivada com `GROUP BY`);
+  produto 28 s → 11 s (filtrar os órfãos dentro de cada ramo do `UNION ALL`, que sempre
+  materializa). Município resolvido em 99,91% dos clientes.
+
+Suíte inteira: **702 testes**, 11 regras verificadas por mutação.
+
 ## Pendências
+- 🔴 **Power BI no RDS — Fases 2 a 5 (prazo: 31/10/2026, quando o `autopel01` sai do ar).** A
+  Fase 1 (código) está na branch `feat/bi-no-rds`, não deployada. Ordem: RDS → `db.t4g.medium`;
+  `infra/bi/criar-schema-e-usuario.sh`; deploy; `bi:carregar-referencias`; reimportar o
+  histórico (`docs/power-bi.md` §4); `bi:cobertura` ≥ 99%; gateway + dataset novo; ligar
+  `POWERBI_REFRESH_HABILITADO`. ⚠️ `produtos` continua sem fonte TOTVS depois do desligamento
+  (a view completa com os códigos vendidos, sem preço).
 - 🟡 **"Falta vender" do TOTAL/SUBTOTAL é líquida — confirmar com o diretor.** Hoje o
   vendedor "coberto" compensa a falta do colega na mesma equipe (e a empresa inteira aparece
   "Coberto", porque o faturado já passou da meta). A alternativa é somar só as faltas
