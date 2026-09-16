@@ -64,6 +64,9 @@ class EquipeScopeResolver
      * uma montar a sua (Regra de ouro nº 8). Se aparecer uma terceira tela gerencial, ela
      * chama isto — não copia.
      *
+     * A outra metade da mesma decisão — em que equipe cada LINHA cai — é
+     * {@see self::chaveDeEquipe()}. As duas têm que andar juntas.
+     *
      * @return array<string>
      */
     public function codigosEquipeDe(?string $codSupervisor): array
@@ -79,5 +82,34 @@ class EquipeScopeResolver
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * Em que equipe uma pessoa cai numa tela gerencial agrupada (hoje, /metas).
+     *
+     * Supervisor encabeça a PRÓPRIA equipe; os demais caem na equipe do `cod_super`; sem
+     * supervisor, `null` ("Sem supervisor").
+     *
+     * ⚠️ NÃO é `cod_super` cru. O `cod_super` de um supervisor aponta para o DIRETOR
+     * (conferido em 2026-09-15: CLEBER 000006 → 010002). Agrupando por ele, a linha do
+     * CLEBER cairia na equipe do diretor, e o subtotal da equipe "CLEBER" que o admin vê
+     * teria uma pessoa a menos que o "Totais" que o próprio CLEBER vê logado — porque
+     * {@see self::codigosEquipeDe()} o põe dentro da equipe. Dois números para a mesma
+     * coisa, com o mesmo rótulo.
+     *
+     * ⚠️ Decide pelo PERFIL, e não por "tem subordinados na lista": a chave precisa ser a
+     * mesma com qualquer busca ou filtro aplicado, senão o supervisor muda de grupo quando
+     * a equipe dele é filtrada.
+     *
+     * ⚠️ Diverge de /equipe, que agrupa por `cod_super` cru — lá a pergunta é "a quem esta
+     * pessoa responde?"; aqui é "por qual número ela responde?".
+     */
+    public static function chaveDeEquipe(?string $perfil, ?string $codVendedor, ?string $codSuper): ?string
+    {
+        if ($perfil === 'supervisor' && $codVendedor) {
+            return $codVendedor;
+        }
+
+        return $codSuper ?: null;
     }
 }

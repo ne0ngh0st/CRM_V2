@@ -38,18 +38,20 @@ class MetaController extends Controller
 
         $role = $user->getRoleNames()->first();
         $p = $this->parametrosRanking($request, $user);
-        $resultado = $this->rankingResolver->ranking(
-            $p['scope']['codVendedores'],
-            $p['ano'],
-            $p['mes'],
-            $p['modo'],
-            $p['busca'],
-            $p['faixa'],
-        );
+
+        /*
+         * Agrupado por equipe só na visão da empresa inteira, e só para quem enxerga mais
+         * de uma equipe. Com um supervisor escolhido no filtro a lista JÁ é uma equipe, e
+         * o supervisor logado vê a dele — nos dois casos um cabeçalho de grupo só repetiria
+         * o "Totais".
+         */
+        $agrupar = in_array($role, ['admin', 'diretor'], true) && $p['scope']['visaoSupervisor'] === null;
+        $resultado = $this->rodarRanking($p, $agrupar);
 
         return Inertia::render('Metas/Index', [
             'role' => $role,
             'linhas' => $resultado['linhas'],
+            'grupos' => $resultado['grupos'],
             'totais' => $resultado['totais'],
             'kpis' => $resultado['kpis'],
             'periodo' => $resultado['periodo'],
@@ -90,16 +92,34 @@ class MetaController extends Controller
     {
         $p = $this->parametrosRanking($request, $user);
 
-        $resultado = $this->rankingResolver->ranking(
+        /*
+         * A planilha sempre leva a coluna "Equipe" — em vez de linhas de subtotal, que
+         * quebrariam tabela dinâmica e filtro no Excel. Por isso agrupa sempre, e só usa
+         * o nome de cada grupo.
+         */
+        $resultado = $this->rodarRanking($p, true);
+        $equipes = collect($resultado['grupos'])->pluck('nome', 'chave');
+
+        $linhas = array_map(
+            fn (array $l) => $l + ['equipe' => $equipes[(string) $l['grupoChave']] ?? 'Sem supervisor'],
+            $resultado['linhas'],
+        );
+
+        return [$linhas, $p['ano'], $p['mes']];
+    }
+
+    /** O ranking com os parâmetros já normalizados — uma chamada só para tela e planilha. */
+    private function rodarRanking(array $p, bool $agruparPorEquipe): array
+    {
+        return $this->rankingResolver->ranking(
             $p['scope']['codVendedores'],
             $p['ano'],
             $p['mes'],
             $p['modo'],
             $p['busca'],
             $p['faixa'],
+            $agruparPorEquipe,
         );
-
-        return [$resultado['linhas'], $p['ano'], $p['mes']];
     }
 
     /**

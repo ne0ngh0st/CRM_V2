@@ -6,6 +6,8 @@ use App\Models\Faturamento;
 use App\Models\MetaMensal;
 use App\Models\Pedido;
 use App\Models\User;
+use App\Services\Equipe\EquipeScopeResolver;
+use App\Services\Vendedores\NomeVendedorResolver;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -115,12 +117,34 @@ class MetaRankingResolver
     /**
      * Ranking por usuário (vendedor/representante ativo com código) no escopo.
      *
+     * Além de meta × realizado, cada linha traz a carteira em aberto que ainda fatura no
+     * mês e quanto falta VENDER para bater a meta de faturamento:
+     *
+     *   faltaVender = fatMeta − fatRealizado − emAberto
+     *
+     * ⚠️ `emAberto` é uma foto de AGORA — não existe carteira histórica. Por isso ele (e a
+     * falta) só existem quando o fim do mês escolhido ainda não passou
+     * (`periodo.abertoAplicavel`). Em mês fechado os dois vêm NULOS, nunca 0: zero leria
+     * como "carteira vazia".
+     *
+     * ⚠️ As duas janelas da linha são diferentes, e isso é o certo: o realizado vai de
+     * `mesInicio` até D-1; o aberto é tudo que tem previsão até o fim de `mesFim`, sem
+     * limite inferior. No modo acumulado o teto do aberto continua sendo o fim de `mesFim`.
+     *
+     * ⚠️ Os dois erros conhecidos da conta vão em direções opostas e estão documentados:
+     * D-1 faz a falta sair um pouco MAIOR (o faturado de hoje já saiu da carteira e ainda
+     * não entrou no realizado); pedido parcialmente faturado faz sair um pouco MENOR (ver
+     * Pedido::scopeContaParaFaturamentoDe).
+     *
+     * Com `$agruparPorEquipe`, devolve também `grupos` — ver {@see self::grupos()}.
+     *
      * @param  array<string>|null  $codVendedores
      * @return array{
      *     linhas: list<array<string, mixed>>,
-     *     totais: array<string, float|int>,
+     *     totais: array<string, float|int|null>,
      *     kpis: array<string, int>,
-     *     periodo: array{inicio: string, fim: string, d1: bool}
+     *     periodo: array{inicio: string, fim: string, d1: bool, abertoAplicavel: bool, abertoEm: string},
+     *     grupos: list<array<string, mixed>>
      * }
      */
     public function ranking(
@@ -130,11 +154,15 @@ class MetaRankingResolver
         string $modo = 'mensal',
         string $busca = '',
         string $faixa = '',
+        bool $agruparPorEquipe = false,
     ): array {
         $mesInicio = $modo === 'acumulado' ? 1 : $mes;
         $mesFim = $mes;
         [$inicio, $fim] = $this->intervaloDatas($ano, $mesInicio, $mesFim);
         $d1 = $this->usaD1($ano, $mesFim);
+
+        $fimDoMes = Carbon::create($ano, $mesFim, 1)->endOfMonth()->toDateString();
+        $abertoAplicavel = $fimDoMes >= now()->toDateString();
 
         $usuarios = $this->usuariosDoEscopo($codVendedores);
         $codigos = $usuarios
@@ -148,20 +176,27 @@ class MetaRankingResolver
         $metasVenda = $this->metasPorCodigo($codigos, $ano, $mesInicio, $mesFim, 'venda');
         $fatRealizado = $this->realizadoPorCodigo('faturamento', $codigos, $inicio, $fim);
         $vendaRealizado = $this->realizadoPorCodigo('venda', $codigos, $inicio, $fim);
+        $aberto = $abertoAplicavel ? $this->abertoPorCodigo($codigos, $fimDoMes) : [];
 
-        $linhas = $usuarios->map(function (User $u) use ($metasFat, $metasVenda, $fatRealizado, $vendaRealizado) {
+        $linhas = $usuarios->map(function (User $u) use ($metasFat, $metasVenda, $fatRealizado, $vendaRealizado, $aberto, $abertoAplicavel) {
             $cod = $u->vendedorPerfil->cod_vendedor;
+            $perfil = $u->getRoleNames()->first();
             $fatMeta = (float) ($metasFat[$cod] ?? 0);
             $vendaMeta = (float) ($metasVenda[$cod] ?? 0);
             $fatReal = (float) ($fatRealizado[$cod] ?? 0);
             $vendaReal = (float) ($vendaRealizado[$cod] ?? 0);
 
+            // ⚠️ A decisão "nulo ou número" mora AQUI, não na ausência da chave: vendedor
+            // sem pedido em aberto tem 0, mês fechado tem nulo.
+            $emAberto = $abertoAplicavel ? (float) ($aberto[$cod] ?? 0) : null;
+
             return [
                 'userId' => $u->id,
                 'nome' => $u->display_name ?: $u->name,
-                'perfil' => $u->getRoleNames()->first(),
+                'perfil' => $perfil,
                 'codVendedor' => $cod,
                 'codSuper' => $u->vendedorPerfil->cod_super,
+                'grupoChave' => EquipeScopeResolver::chaveDeEquipe($perfil, $cod, $u->vendedorPerfil->cod_super),
                 'fatRealizado' => $fatReal,
                 'fatMeta' => $fatMeta,
                 'fatPct' => $fatMeta > 0 ? round(($fatReal / $fatMeta) * 100, 1) : null,
@@ -169,6 +204,12 @@ class MetaRankingResolver
                 'vendaMeta' => $vendaMeta,
                 'vendaPct' => $vendaMeta > 0 ? round(($vendaReal / $vendaMeta) * 100, 1) : null,
                 'semMeta' => $fatMeta <= 0 && $vendaMeta <= 0,
+                'emAberto' => $emAberto,
+                // Sem meta de faturamento não há o que faltar — sem este guard a linha
+                // mostraria −aberto, um negativo sem significado.
+                'faltaVender' => $emAberto !== null && $fatMeta > 0
+                    ? round($fatMeta - $fatReal - $emAberto, 2)
+                    : null,
             ];
         });
 
@@ -215,12 +256,48 @@ class MetaRankingResolver
             })
             ->values();
 
-        $totaisFonte = $linhas->unique('codVendedor');
+        return [
+            'linhas' => $linhas->all(),
+            'totais' => $this->somarLinhas($linhas, $abertoAplicavel),
+            'kpis' => $kpis,
+            'periodo' => [
+                'inicio' => $inicio,
+                'fim' => $fim,
+                'd1' => $d1,
+                'abertoAplicavel' => $abertoAplicavel,
+                'abertoEm' => now()->toDateString(),
+            ],
+            'grupos' => $agruparPorEquipe ? $this->grupos($linhas, $abertoAplicavel) : [],
+        ];
+    }
+
+    /**
+     * Os totais de um conjunto de linhas — a linha "Totais" e o subtotal de cada equipe.
+     *
+     * ⚠️ UMA função para os dois, de propósito: se o subtotal fosse somado de outro jeito,
+     * a soma dos subtotais deixaria de bater com o total na mesma tela.
+     *
+     * ⚠️ `faltaVender` do conjunto é a SOMA das faltas das linhas que têm meta — não
+     * `meta − realizado − aberto` do conjunto. A diferença é o aberto de quem não tem
+     * meta: ele não abate a meta de ninguém. E, por ser soma, ela é aditiva: a soma das
+     * faltas das equipes é a falta total. Linha "coberta" (falta negativa) compensa as
+     * outras da mesma equipe — é a pergunta "quanto a EQUIPE ainda precisa vender".
+     *
+     * Deduplica por código: duas contas que dividem o código mostram o mesmo número nas
+     * duas linhas, mas ele só conta uma vez.
+     *
+     * @param  Collection<int, array<string, mixed>>  $linhas
+     * @return array<string, float|null>
+     */
+    private function somarLinhas(Collection $linhas, bool $abertoAplicavel): array
+    {
+        $fonte = $linhas->unique('codVendedor');
+
         $totais = [
-            'fatRealizado' => round((float) $totaisFonte->sum('fatRealizado'), 2),
-            'fatMeta' => round((float) $totaisFonte->sum('fatMeta'), 2),
-            'vendaRealizado' => round((float) $totaisFonte->sum('vendaRealizado'), 2),
-            'vendaMeta' => round((float) $totaisFonte->sum('vendaMeta'), 2),
+            'fatRealizado' => round((float) $fonte->sum('fatRealizado'), 2),
+            'fatMeta' => round((float) $fonte->sum('fatMeta'), 2),
+            'vendaRealizado' => round((float) $fonte->sum('vendaRealizado'), 2),
+            'vendaMeta' => round((float) $fonte->sum('vendaMeta'), 2),
         ];
         $totais['fatPct'] = $totais['fatMeta'] > 0
             ? round(($totais['fatRealizado'] / $totais['fatMeta']) * 100, 1)
@@ -229,16 +306,61 @@ class MetaRankingResolver
             ? round(($totais['vendaRealizado'] / $totais['vendaMeta']) * 100, 1)
             : null;
 
-        return [
-            'linhas' => $linhas->all(),
-            'totais' => $totais,
-            'kpis' => $kpis,
-            'periodo' => [
-                'inicio' => $inicio,
-                'fim' => $fim,
-                'd1' => $d1,
-            ],
-        ];
+        $comFalta = $fonte->whereNotNull('faltaVender');
+        $totais['emAberto'] = $abertoAplicavel ? round((float) $fonte->sum('emAberto'), 2) : null;
+        $totais['faltaVender'] = $comFalta->isNotEmpty() ? round((float) $comFalta->sum('faltaVender'), 2) : null;
+
+        return $totais;
+    }
+
+    /**
+     * As linhas agrupadas por equipe, com subtotal — só para admin/diretor.
+     *
+     * Montado a partir das linhas JÁ filtradas (busca e faixa): equipe que o filtro
+     * esvaziou some, em vez de aparecer com subtotal zero, que leria como "não vendeu
+     * nada". E a soma dos subtotais continua igual aos totais, com qualquer filtro.
+     *
+     * O pertencimento é {@see EquipeScopeResolver::chaveDeEquipe()}. Ordem: melhor % de
+     * faturamento primeiro; "Sem supervisor" sempre por último.
+     *
+     * Não repete as linhas: cada linha já traz `grupoChave`, e o front filtra por ela.
+     *
+     * @param  Collection<int, array<string, mixed>>  $linhas
+     * @return list<array{chave: string|null, nome: string, subtotais: array<string, float|null>}>
+     */
+    private function grupos(Collection $linhas, bool $abertoAplicavel): array
+    {
+        if ($linhas->isEmpty()) {
+            return [];
+        }
+
+        $porChave = $linhas->groupBy(fn (array $l) => (string) $l['grupoChave']);
+        $nomes = app(NomeVendedorResolver::class)->porCodigo($porChave->keys()->filter());
+
+        return $porChave
+            ->map(fn (Collection $doGrupo, string $chave) => [
+                'chave' => $chave === '' ? null : $chave,
+                'nome' => $chave === '' ? 'Sem supervisor' : ($nomes[$chave] ?? $chave),
+                'subtotais' => $this->somarLinhas($doGrupo, $abertoAplicavel),
+            ])
+            ->sort(function (array $a, array $b) {
+                if (($a['chave'] === null) !== ($b['chave'] === null)) {
+                    return $a['chave'] === null ? 1 : -1;
+                }
+                $pa = $a['subtotais']['fatPct'];
+                $pb = $b['subtotais']['fatPct'];
+                if ($pa !== $pb) {
+                    if ($pa === null || $pb === null) {
+                        return $pa === null ? 1 : -1;
+                    }
+
+                    return $pb <=> $pa;
+                }
+
+                return strcmp($a['nome'], $b['nome']);
+            })
+            ->values()
+            ->all();
     }
 
     /**
@@ -364,6 +486,32 @@ class MetaRankingResolver
         return $this->queryRealizado($tipo)
             ->selectRaw('cod_vendedor, SUM(valor_total) as total')
             ->whereBetween($this->colunaDataDoTipo($tipo), [$inicio, $fim])
+            ->whereIn('cod_vendedor', $codigos)
+            ->groupBy('cod_vendedor')
+            ->pluck('total', 'cod_vendedor')
+            ->map(fn ($v) => (float) $v)
+            ->all();
+    }
+
+    /**
+     * Carteira em aberto por código, no recorte que ainda fatura até `$fimDoMes`.
+     *
+     * O recorte mora em {@see Pedido::scopeContaParaFaturamentoDe()}; aqui só se agrega.
+     * Medido em 2026-09-15 (3.478 pedidos em aberto): 47 ms no escopo empresa, entrando
+     * por `pedidos_data_faturamento_index`.
+     *
+     * @param  list<string>  $codigos
+     * @return array<string, float>
+     */
+    private function abertoPorCodigo(array $codigos, string $fimDoMes): array
+    {
+        if ($codigos === []) {
+            return [];
+        }
+
+        return Pedido::query()
+            ->contaParaFaturamentoDe($fimDoMes)
+            ->selectRaw('cod_vendedor, SUM(valor_total) as total')
             ->whereIn('cod_vendedor', $codigos)
             ->groupBy('cod_vendedor')
             ->pluck('total', 'cod_vendedor')
