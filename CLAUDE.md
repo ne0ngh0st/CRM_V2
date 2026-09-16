@@ -2209,7 +2209,70 @@ sem erro nenhum.
 Medir: `node docker/medir-mobile.mjs` (CDP no Edge/Chrome da máquina). Depois de editar
 `.vue`, `docker compose restart vite`.
 
+### "Falta vender" no /metas: meta de faturamento × carteira em aberto — 2026-09-16
+
+Pedido do diretor: *"se o cara tem 100k em aberto e a meta é 120k, ele tem que pôr mais 20k
+de pedido"*, por vendedor e por equipe. A tabela de `/metas` ganhou **abas Faturamento |
+Venda** (client-side, Faturamento é o padrão — o INVERSO do Painel), as colunas **Em aberto
+(hoje)** e **Falta vender**, e, para admin/diretor na visão da empresa, **uma tabela por
+equipe com subtotal**. Detalhe nos docblocks; aqui fica o que muda decisão.
+
+```
+faltaVender = meta de faturamento − faturado (até D-1) − em aberto que conta para o mês
+```
+
+| O que se repete | Onde mora |
+|---|---|
+| "Em aberto" no banco | `Pedido::scopeEmAberto()` (eram 5 cópias do `whereNull`) |
+| O recorte que conta para o mês | `Pedido::scopeContaParaFaturamentoDe()` |
+| O corte de 180 dias dos dois recortes | `Pedido::limiteEmAberto()` |
+| Totais E subtotais | `MetaRankingResolver::somarLinhas()` |
+| Em que equipe cada linha cai | `EquipeScopeResolver::chaveDeEquipe()` |
+
+- **O recorte**: em aberto + previsão de faturamento até o fim do mês **sem limite
+  inferior** + pedido com menos de 180 dias. ⚠️ Não é `whereBetween` no mês: o atrasado
+  (previsão vencida) era **mais da metade** da carteira e ainda vai faturar.
+- ⚠️ **Mês fechado → `emAberto` e `faltaVender` NULOS, nunca 0.** A carteira é foto de hoje;
+  zero leria como "carteira vazia". `periodo.abertoAplicavel` diz qual é o caso.
+- ⚠️ **Sem meta → `faltaVender` nulo** (guard no servidor), senão aparece −aberto.
+- ⚠️ **Supervisor encabeça a PRÓPRIA equipe**, e não a do `cod_super` dele — que aponta para
+  o DIRETOR (CLEBER 000006 → 010002). Agrupando por `cod_super` cru, o subtotal da equipe do
+  CLEBER que o admin vê teria uma pessoa a menos que o "Totais" que o CLEBER vê logado. Há
+  teste afirmando que os dois são IGUAIS. Diverge de `/equipe` de propósito.
+- ⚠️ **A falta de um conjunto é a SOMA das faltas das linhas com meta** — logo, "coberto"
+  de um compensa a falta do colega, e a soma dos subtotais fecha com o total. Ver a
+  pendência sobre isso abaixo.
+- ⚠️ **`'grupos'` está em `PROPS_DO_RANKING`** (`Metas/Index.vue`). Fora do `only:` a recarga
+  parcial traz linhas novas com subtotais velhos, sem erro — e nenhum teste PHP pega.
+- ⚠️ **`aba` fica FORA de `filtros`**: lá ela iria no POST da exportação e seria gravada no
+  registro que a fila usa para refazer a planilha. A planilha leva TODAS as colunas, mais
+  "Equipe" (em vez de linhas de subtotal).
+- **Sem cache, de propósito**: salvar uma meta tem que aparecer na hora, e a consulta nova
+  custa ~50 ms.
+
+**Os dois erros conhecidos da conta, em direções opostas:** D-1 faz a falta sair um pouco
+MAIOR (o faturado de hoje já saiu da carteira e ainda não entrou no realizado); pedido
+PARCIALMENTE faturado faz sair MENOR (o relatório 200 vence o 232 e o pedido segue em aberto
+com o valor cheio). Medido em produção em 16/09: **8 pedidos, R$ 263 mil** faturados no mês —
+pequeno. Corrigir exige casar por `faturamentos.pedido`, sem índice.
+
+**Retrato de produção em 16/09**: carteira que conta para setembro R$ 29,6 mi; meta de
+faturamento R$ 11,8 mi; faturado até ontem R$ 26,4 mi. Por vendedor: **75 com falta
+(R$ 3,2 mi somados), 18 cobertos**, de 93 com meta.
+
+**Testes**: `MetaFaltaVenderTest` (10), `MetaAgrupamentoEquipeTest` (8),
+`Performance/MetasDeQueriesTest` (custo não cresce com vendedores/equipes). **19 mutações
+aplicadas, todas mordidas** — uma delas só depois de corrigir o fixture: o pedido "atrasado"
+tinha previsão dentro do próprio mês, e trocar o recorte por `whereBetween` passava quase
+verde. Suíte inteira: **646 testes**.
+
 ## Pendências
+- 🟡 **"Falta vender" do TOTAL/SUBTOTAL é líquida — confirmar com o diretor.** Hoje o
+  vendedor "coberto" compensa a falta do colega na mesma equipe (e a empresa inteira aparece
+  "Coberto", porque o faturado já passou da meta). A alternativa é somar só as faltas
+  positivas ("quanto quem está atrás ainda precisa": R$ 3,2 mi em 16/09). É uma linha em
+  `MetaRankingResolver::somarLinhas()`, e a invariante "soma dos subtotais = total" continua
+  valendo nas duas versões.
 - 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA em 2026-09-10,
   HOMOLOGADA ponta a ponta em 2026-09-14, falta dado REAL no de-para para liberar.**
   **Análise, mapa e armadilhas em `docs/integracao-portal-pedidos.md`** — ler de lá antes

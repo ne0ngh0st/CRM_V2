@@ -7,7 +7,6 @@ import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import FilterField from '@/Components/FilterField.vue';
-import StatusPill from '@/Components/StatusPill.vue';
 import Modal from '@/Components/Modal.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -15,11 +14,13 @@ import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
+import MetaRankingTabela from '@/Components/Metas/MetaRankingTabela.vue';
 import { contarFiltrosAtivos } from '@/utils/filtros.js';
 
 const props = defineProps({
     role: String,
     linhas: { type: Array, default: () => [] },
+    grupos: { type: Array, default: () => [] },
     totais: { type: Object, required: true },
     kpis: { type: Object, required: true },
     periodo: { type: Object, required: true },
@@ -52,12 +53,46 @@ const filtros = reactive({
     visao_supervisor: props.filtros.visao_supervisor || '',
 });
 
+/*
+ * ⚠️ Toda prop derivada de `ranking()` mora aqui. Esquecer uma (foi o risco com `grupos`)
+ * faz a recarga parcial trazer linhas novas com subtotais velhos — sem erro nem aviso.
+ */
+const PROPS_DO_RANKING = ['linhas', 'grupos', 'totais', 'kpis', 'periodo', 'filtros', 'podeEditar'];
+
+/*
+ * Aba da tabela. ⚠️ FATURAMENTO é o padrão aqui — o INVERSO do Painel (MetaGaugeCard abre
+ * em Venda de propósito). A pergunta desta tela é "quanto falta para a meta de faturamento",
+ * e as colunas de carteira em aberto só existem nessa aba.
+ *
+ * ⚠️ Fica FORA de `filtros`: lá ela dispararia uma visita a cada troca e iria no POST da
+ * exportação, que grava os filtros no registro para a fila reconstruir a planilha.
+ */
+const ABAS = [
+    { chave: 'faturamento', rotulo: 'Faturamento' },
+    { chave: 'venda', rotulo: 'Venda' },
+];
+const aba = ref('faturamento');
+
+function linhasDoGrupo(grupo) {
+    return props.linhas.filter((l) => (l.grupoChave ?? null) === grupo.chave);
+}
+
+const subtituloRanking = computed(() => {
+    const n = props.linhas.length;
+    const equipes = props.grupos.length ? ` em ${props.grupos.length} equipe(s)` : '';
+    return `${n} vendedor(es) no filtro${equipes}`;
+});
+
+function dataCurta(iso) {
+    return iso ? iso.split('-').reverse().join('/') : '';
+}
+
 function aplicarFiltros(extra = {}) {
     router.get(route('metas.index'), { ...filtros, ...extra }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['linhas', 'totais', 'kpis', 'periodo', 'filtros', 'podeEditar'],
+        only: PROPS_DO_RANKING,
     });
 }
 
@@ -77,15 +112,6 @@ function setModo(modo) {
     aplicarFiltros();
 }
 
-function formatMoney(v) {
-    return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-function formatPct(v) {
-    if (v === null || v === undefined) return '—';
-    return `${Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
-}
-
 /*
  * `ano`/`mes`/`modo` estão de fora: são estruturais (sempre têm valor), então contá-los
  * faria o badge nascer preenchido com a tela intocada. Quem declara o período é o
@@ -96,13 +122,6 @@ const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
 ]));
 
 const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
-
-function tonePct(v) {
-    if (v === null || v === undefined) return 'neutral';
-    if (v >= 100) return 'ok';
-    if (v >= 80) return 'warn';
-    return 'danger';
-}
 
 const periodoLabel = computed(() => {
     const ini = props.periodo.inicio?.split('-').reverse().join('/');
@@ -236,99 +255,91 @@ function salvarMeta() {
                 </button>
             </div>
 
-            <DarkCard title="Ranking" :subtitle="`${linhas.length} vendedor(es) no filtro`">
+            <DarkCard title="Ranking" :subtitle="subtituloRanking">
                 <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-4 w-4">
                         <path d="M4 19h16M7 16V9M12 16V5M17 16v-4" stroke-linecap="round" />
                     </svg>
                 </template>
                 <template #actions>
-                    <ExportarExcelButton
-                        rota="metas.exportar"
-                        :filtros="filtros"
-                        :tem-filtros-ativos="temFiltrosAtivos"
-                    />
+                    <div class="flex items-center gap-2">
+                        <div class="flex overflow-hidden rounded border border-gray-600">
+                            <button
+                                v-for="opcao in ABAS"
+                                :key="opcao.chave"
+                                type="button"
+                                class="min-h-11 px-2 py-1 text-xs font-medium transition sm:min-h-0"
+                                :class="aba === opcao.chave ? 'bg-white/20 text-white' : 'text-gray-300 hover:bg-white/10'"
+                                @click="aba = opcao.chave"
+                            >
+                                {{ opcao.rotulo }}
+                            </button>
+                        </div>
+                        <ExportarExcelButton
+                            rota="metas.exportar"
+                            :filtros="filtros"
+                            :tem-filtros-ativos="temFiltrosAtivos"
+                        />
+                    </div>
                 </template>
+
+                <p v-if="aba === 'faturamento'" class="mb-3 text-xs text-gray-500">
+                    <template v-if="periodo.abertoAplicavel">
+                        <strong class="font-semibold text-gray-700">Falta vender</strong> = meta − faturado − pedidos em aberto
+                        com previsão até o fim do mês (carteira de {{ dataCurta(periodo.abertoEm) }}).
+                    </template>
+                    <template v-else>
+                        A carteira em aberto é uma foto de hoje — não existe versão histórica, por isso
+                        "Em aberto" e "Falta vender" ficam vazios em meses já fechados.
+                    </template>
+                </p>
 
                 <p v-if="!linhas.length" class="px-1 py-8 text-center text-sm text-gray-400">
                     Nenhum vendedor no filtro.
                 </p>
-                <div v-else class="tbl-wrap">
-                    <table class="tbl tbl-cartoes">
-                        <thead>
-                            <tr class="tbl-head-row">
-                                <th class="tbl-th">Vendedor</th>
-                                <th class="tbl-th">Código</th>
-                                <th class="tbl-th">Fat. realizado</th>
-                                <th class="tbl-th">Fat. meta</th>
-                                <th class="tbl-th">Fat. %</th>
-                                <th class="tbl-th">Venda realizado</th>
-                                <th class="tbl-th">Venda meta</th>
-                                <th class="tbl-th">Venda %</th>
-                                <th v-if="podeEditar" class="tbl-th">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody class="tbl-body">
-                            <tr
-                                v-for="linha in linhas"
-                                :key="linha.userId"
-                                class="tbl-row"
-                            >
-                                <td class="tbl-td tbl-td-titulo font-medium text-gray-800">{{ linha.nome }}</td>
-                                <td class="tbl-td" data-rotulo="Código">{{ linha.codVendedor }}</td>
-                                <td class="tbl-td" data-rotulo="Fat. realizado">{{ formatMoney(linha.fatRealizado) }}</td>
-                                <td class="tbl-td" data-rotulo="Fat. meta">{{ formatMoney(linha.fatMeta) }}</td>
-                                <td class="tbl-td" data-rotulo="Fat. %">
-                                    <StatusPill v-if="linha.fatPct !== null" :tone="tonePct(linha.fatPct)" size="sm">{{ formatPct(linha.fatPct) }}</StatusPill>
-                                    <span v-else class="text-gray-400">—</span>
-                                </td>
-                                <td class="tbl-td" data-rotulo="Venda realizado">{{ formatMoney(linha.vendaRealizado) }}</td>
-                                <td class="tbl-td" data-rotulo="Venda meta">{{ formatMoney(linha.vendaMeta) }}</td>
-                                <td class="tbl-td" data-rotulo="Venda %">
-                                    <StatusPill v-if="linha.vendaPct !== null" :tone="tonePct(linha.vendaPct)" size="sm">{{ formatPct(linha.vendaPct) }}</StatusPill>
-                                    <span v-else class="text-gray-400">—</span>
-                                </td>
-                                <td v-if="podeEditar" class="tbl-td tbl-td-acoes">
-                                    <div class="tbl-acoes">
-                                        <button
-                                            type="button"
-                                            title="Editar metas do mês"
-                                            class="tbl-acao tbl-acao-teal"
-                                            @click="abrirEdicao(linha)"
-                                        >
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                                <path d="M4 20h4l10-10-4-4L4 16v4z" stroke-linejoin="round" />
-                                                <path d="M13 7l4 4" stroke-linecap="round" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                        <tfoot>
-                            <!-- Linha de totais: só esta tabela tem, por isso não virou token.
-                                 O `tfoot` entra no mesmo reflow de cartão (app.css). -->
-                            <tr class="divide-x divide-gray-200 border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-800">
-                                <!-- `colspan` some no cartão (vira um `td` só); no desktop junta
-                                     vendedor+código, que é o rótulo da linha de totais. -->
-                                <td class="tbl-td tbl-td-titulo text-gray-800" colspan="2">Totais</td>
-                                <td class="tbl-td text-gray-800" data-rotulo="Fat. realizado">{{ formatMoney(totais.fatRealizado) }}</td>
-                                <td class="tbl-td text-gray-800" data-rotulo="Fat. meta">{{ formatMoney(totais.fatMeta) }}</td>
-                                <td class="tbl-td" data-rotulo="Fat. %">
-                                    <StatusPill v-if="totais.fatPct !== null" :tone="tonePct(totais.fatPct)" size="sm">{{ formatPct(totais.fatPct) }}</StatusPill>
-                                    <span v-else class="text-gray-400">—</span>
-                                </td>
-                                <td class="tbl-td text-gray-800" data-rotulo="Venda realizado">{{ formatMoney(totais.vendaRealizado) }}</td>
-                                <td class="tbl-td text-gray-800" data-rotulo="Venda meta">{{ formatMoney(totais.vendaMeta) }}</td>
-                                <td class="tbl-td" data-rotulo="Venda %">
-                                    <StatusPill v-if="totais.vendaPct !== null" :tone="tonePct(totais.vendaPct)" size="sm">{{ formatPct(totais.vendaPct) }}</StatusPill>
-                                    <span v-else class="text-gray-400">—</span>
-                                </td>
-                                <td v-if="podeEditar" class="tbl-td tbl-td-oculto" />
-                            </tr>
-                        </tfoot>
-                    </table>
+
+                <!-- Por equipe (admin/diretor na visão da empresa): uma tabela por equipe. -->
+                <div v-else-if="grupos.length" class="space-y-4">
+                    <section v-for="grupo in grupos" :key="grupo.chave ?? 'sem'" class="overflow-hidden rounded border border-gray-200">
+                        <header class="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-4 w-4 text-gray-400">
+                                <circle cx="9" cy="7" r="3" />
+                                <path d="M2 20c0-3.3 3-6 7-6s7 2.7 7 6" stroke-linecap="round" />
+                                <circle cx="17" cy="8" r="2.5" />
+                                <path d="M16 14.2c2.9.4 5 2.7 5 5.8" stroke-linecap="round" />
+                            </svg>
+                            <strong class="text-sm text-gray-800">{{ grupo.nome }}</strong>
+                            <span class="text-xs text-gray-400">({{ linhasDoGrupo(grupo).length }})</span>
+                        </header>
+                        <MetaRankingTabela
+                            :linhas="linhasDoGrupo(grupo)"
+                            :totais="grupo.subtotais"
+                            :aba="aba"
+                            :pode-editar="podeEditar"
+                            rotulo-totais="Subtotal da equipe"
+                            @editar="abrirEdicao"
+                        />
+                    </section>
+
+                    <section class="overflow-hidden rounded border-2 border-gray-300">
+                        <MetaRankingTabela
+                            :linhas="[]"
+                            :totais="totais"
+                            :aba="aba"
+                            :pode-editar="podeEditar"
+                            rotulo-totais="Total geral"
+                        />
+                    </section>
                 </div>
+
+                <MetaRankingTabela
+                    v-else
+                    :linhas="linhas"
+                    :totais="totais"
+                    :aba="aba"
+                    :pode-editar="podeEditar"
+                    @editar="abrirEdicao"
+                />
             </DarkCard>
         </div>
 
