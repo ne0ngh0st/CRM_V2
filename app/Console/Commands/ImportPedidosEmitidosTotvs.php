@@ -108,7 +108,7 @@ class ImportPedidosEmitidosTotvs extends Command
         try {
             $leitor = Relatorios::abrirArquivo($caminho, 'pedidos_emitidos');
             $leitor->exigirColunas([
-                'PEDIDO', 'DT_EMISSAO', 'PREV_FAT', 'PREV_ENTR', 'DATA_PCP', 'CARGA',
+                'FILIAL', 'PEDIDO', 'DT_EMISSAO', 'PREV_FAT', 'PREV_ENTR', 'DATA_PCP', 'CARGA',
                 'CONDPAGTO', 'COD_CLI', 'LOJA_CLI', 'COD_VENDEDOR', 'COD_PROD', 'DESC_PROD',
                 'PESO_LIQ', 'PRC_VENDA', 'QTDA_VENDA', 'DTA_LIBERADA', 'VLR_TOTAL',
                 'DT_FATURAMENTO', 'NOTA_FISCAL', 'SERIE', 'TP_FAT',
@@ -198,6 +198,7 @@ class ImportPedidosEmitidosTotvs extends Command
 
                 $cabecalhos[$numero] = [
                     'cliente_id' => $clienteId,
+                    'filial' => Normalizador::filial($linha['FILIAL']),
                     'cod_vendedor' => $linha['COD_VENDEDOR'],
                     'data_pedido' => Normalizador::data($linha['DT_EMISSAO']),
                     'data_previsao_faturamento' => Normalizador::data($linha['PREV_FAT']),
@@ -269,7 +270,7 @@ class ImportPedidosEmitidosTotvs extends Command
 
         foreach (array_chunk($lote, 500) as $pedaco) {
             DB::table('pedidos')->upsert($pedaco, ['numero_pedido'], [
-                'cliente_id', 'cod_vendedor', 'data_pedido', 'data_previsao_faturamento',
+                'cliente_id', 'filial', 'cod_vendedor', 'data_pedido', 'data_previsao_faturamento',
                 'data_faturamento', 'data_entrega_prevista', 'data_pcp', 'carga',
                 'condicao_pagamento', 'status', 'tipo_faturamento', 'rps', 'valor_total', 'updated_at',
             ]);

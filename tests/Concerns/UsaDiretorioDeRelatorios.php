@@ -25,11 +25,7 @@ trait UsaDiretorioDeRelatorios
     /** Chamar no tearDown. */
     protected function removerRelatorios(): void
     {
-        foreach (glob($this->diretorioTotvs.'/CSV/*') ?: [] as $arquivo) {
-            @unlink($arquivo);
-        }
-
-        @rmdir($this->diretorioTotvs.'/CSV');
-        @rmdir($this->diretorioTotvs);
+        // Recursivo: o 232 grava em `Pedidos emitidos/`, não em `CSV/`.
+        \Illuminate\Support\Facades\File::deleteDirectory($this->diretorioTotvs);
     }
 }

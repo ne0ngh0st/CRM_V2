@@ -23,6 +23,7 @@ class Pedido extends Model
         'rps',
         'tipo_faturamento',
         'cliente_id',
+        'filial',
         'cod_vendedor',
         'data_pedido',
         'data_previsao_faturamento',
