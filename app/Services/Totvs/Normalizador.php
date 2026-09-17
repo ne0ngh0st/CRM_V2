@@ -135,6 +135,34 @@ class Normalizador
     }
 
     /**
+     * Código de vendedor na forma canônica do CRM: 6 dígitos, com zero à esquerda.
+     *
+     * 🚨 O relatório pode chegar com o zero "comido" — é o que o Excel faz ao salvar o
+     * CSV. Aconteceu em 2026-09-16: o 232 de setembro veio com `10755` no lugar de
+     * `010755` em 97 mil linhas, o import gravou o texto como veio, e por 16 horas os
+     * faturados de setembro de quase toda a equipe deixaram de casar com
+     * `vendedor_perfis.cod_vendedor`. Nada quebrou em vermelho: o gauge da Inaya mostrou
+     * R$ 9.266,80 (só os abertos, que vêm do 200) no lugar de R$ 113.903,94.
+     *
+     * Ao contrário de {@see self::codigo()}, aqui o zero é ACRESCENTADO, não removido:
+     * o código de vendedor é gravado e comparado por igualdade em `pedidos`,
+     * `faturamentos`, `clientes`, `leads` e `metas_mensais`, e todas usam 6 dígitos.
+     *
+     * Só mexe em valor totalmente numérico e mais curto que 6; o resto passa como está.
+     * Vazio vira null.
+     */
+    public static function codigoVendedor(mixed $valor): ?string
+    {
+        $valor = trim((string) $valor);
+
+        if ($valor === '') {
+            return null;
+        }
+
+        return ctype_digit($valor) ? str_pad($valor, 6, '0', STR_PAD_LEFT) : $valor;
+    }
+
+    /**
      * Chave de comparação de cliente, imune a zero à esquerda.
      *
      * ⚠️ Só serve para COMPARAR, nunca para gravar. O espelho do v1 e o relatório do

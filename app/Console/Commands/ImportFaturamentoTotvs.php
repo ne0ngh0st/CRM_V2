@@ -207,7 +207,7 @@ class ImportFaturamentoTotvs extends Command
                 'cod_cliente' => Normalizador::valorOuNull($linha['COD_CLI']),
                 'cnpj' => Normalizador::valorOuNull($linha['CNPJ']),
                 'cliente_nome' => Normalizador::valorOuNull($linha['CLIENTE']),
-                'cod_vendedor' => $linha['COD_VENDEDOR'],
+                'cod_vendedor' => Normalizador::codigoVendedor($linha['COD_VENDEDOR']) ?? '',
                 'cod_produto' => Normalizador::valorOuNull($linha['COD_PROD']),
                 'produto_desc' => Normalizador::valorOuNull($linha['DES_PROD']),
                 'segmento' => Normalizador::valorOuNull($linha['SEGMENTO']),

@@ -1907,6 +1907,25 @@ O gap virou pendência própria (alarme de frescor de dado) — ver a lista abai
   contador: é que o formato de qualquer identificador de terceiro pode mudar sem aviso, e
   aqui o aviso veio em forma de tabela congelada.
 
+### O zero à esquerda do código de vendedor sumiu no CSV — 2026-09-17
+
+O Tony viu o gauge da Inaya em **R$ 9.266,80** com **R$ 113.903,94** vendidos. O 232 de
+setembro enviado em 16/09 às 16:19 veio com `COD_VENDEDOR = 10755` (o Excel comeu o zero)
+em 97 mil linhas, e o import gravou o texto como veio. **Até o arquivo correto chegar às
+09:00 do dia 17, os faturados de setembro de quase toda a equipe não casavam com
+`vendedor_perfis`** — sobravam só os abertos, que vêm do 200. O gauge dela continuou
+errado depois disso porque o cache tinha sido calculado às 09:02:51, **no meio** do import.
+
+- **`Normalizador::codigoVendedor()`** põe o código numérico em 6 dígitos, nos cinco
+  imports (`clientes`, `faturamento`, `pedidos-emitidos`, `pedidos-abertos`, `leads`).
+  Ao contrário de `codigo()`, **acrescenta** zero em vez de tirar. Não numérico passa igual.
+- ⚠️ Como achar: o S3 tem **versionamento ligado**, e comparar a versão anterior do CSV
+  com a atual foi o que respondeu "o que mudou". Antes disso, todas as hipóteses de
+  isolamento de transação estavam erradas.
+- ⚠️ **Cache calculado durante o import vive até 30 min depois dele.** Não resolvido aqui
+  (ver pendências).
+- Teste: `tests/Feature/CodigoVendedorSemZeroTest.php`, verificado por mutação.
+
 ### Valor em aberto, e o KPI que vinha cortado — 2026-09-14
 
 Pedido do Tony: `/pedidos-abertos` mostrava o **valor em risco** e não mostrava o total —
@@ -2328,6 +2347,13 @@ desliga 50 min depois). Por isso o disparo pela API (`POWERBI_REFRESH_HABILITADO
 um sem o outro faz o refresh rodar com o gateway desligado. `docs/power-bi.md` §5 e §8.
 
 ## Pendências
+- 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
+  durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão
+  do dado (id da última rodada com sucesso) na `ChaveEscopo` + disparar o aquecimento no
+  fim da rodada.
+- 🟡 **Tainara (`vendedor_perfis.cod_vendedor = '00006'`, 5 dígitos)** não casa com os
+  pedidos dela, que o TOTVS emite como `000006`. Corrigir o perfil para `000006` (a meta
+  dela também está em `00006`, zerada).
 - 🔴 **Power BI no RDS — Fases 2 a 5 (prazo: 31/10/2026, quando o `autopel01` sai do ar).** A
   Fase 1 (código) está na branch `feat/bi-no-rds`, não deployada. Ordem: RDS → `db.t4g.medium`;
   `infra/bi/criar-schema-e-usuario.sh`; deploy; `bi:carregar-referencias`; reimportar o

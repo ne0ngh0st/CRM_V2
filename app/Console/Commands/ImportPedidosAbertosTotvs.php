@@ -103,7 +103,7 @@ class ImportPedidosAbertosTotvs extends Command
                 $cabecalhos[$numero] = [
                     'cliente_id' => $clienteId,
                     'filial' => Normalizador::filial($linha['FILIAL']),
-                    'cod_vendedor' => $linha['COD_REPRES'],
+                    'cod_vendedor' => Normalizador::codigoVendedor($linha['COD_REPRES']) ?? '',
                     'data_pedido' => Normalizador::data($linha['DATA_PED']),
                     'data_previsao_faturamento' => Normalizador::data($linha['DT_PREVFAT']),
                     'data_faturamento' => null,

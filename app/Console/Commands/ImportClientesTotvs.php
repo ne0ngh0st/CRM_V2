@@ -126,7 +126,7 @@ class ImportClientesTotvs extends Command
                 // Alimentam o endereço do orçamento (sugestão do Vagner, 10/09/2026).
                 'endereco' => Normalizador::valorOuNull($linha['Endereco'] ?? ''),
                 'municipio' => Normalizador::valorOuNull($linha['Municipio'] ?? ''),
-                'cod_vendedor' => Normalizador::valorOuNull($linha['Vendedor']),
+                'cod_vendedor' => Normalizador::codigoVendedor($linha['Vendedor']),
                 'cod_segmento' => Normalizador::codigo($linha['Segmento 1']),
                 'cod_grupo' => Normalizador::codigo($linha['Grp.Vendas']),
                 'estado' => Normalizador::valorOuNull($linha['Estado'] ?? ''),

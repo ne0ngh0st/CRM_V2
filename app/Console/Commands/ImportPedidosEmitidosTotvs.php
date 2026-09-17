@@ -199,7 +199,7 @@ class ImportPedidosEmitidosTotvs extends Command
                 $cabecalhos[$numero] = [
                     'cliente_id' => $clienteId,
                     'filial' => Normalizador::filial($linha['FILIAL']),
-                    'cod_vendedor' => $linha['COD_VENDEDOR'],
+                    'cod_vendedor' => Normalizador::codigoVendedor($linha['COD_VENDEDOR']) ?? '',
                     'data_pedido' => Normalizador::data($linha['DT_EMISSAO']),
                     'data_previsao_faturamento' => Normalizador::data($linha['PREV_FAT']),
                     'data_faturamento' => Normalizador::data($linha['DT_FATURAMENTO']),

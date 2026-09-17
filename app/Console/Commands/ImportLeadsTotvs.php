@@ -153,7 +153,7 @@ class ImportLeadsTotvs extends Command
             }
 
             $registro = [
-                'cod_vendedor' => Normalizador::valorOuNull($linha['Codigo Vendedor']),
+                'cod_vendedor' => Normalizador::codigoVendedor($linha['Codigo Vendedor']),
                 'nome' => Normalizador::valorOuNull($linha['nome final']) ?? $razaoSocial,
                 'razao_social' => $razaoSocial,
                 'nome_fantasia' => Normalizador::valorOuNull($linha['NOME FANTASIA']),
