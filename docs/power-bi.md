@@ -154,8 +154,8 @@ próprio Power BI, **dentro delas**:
 
 | Refresh agendado no Serviço | EC2 liga | EC2 desliga |
 |---|---|---|
-| 11:00 | 10:40 | 11:50 |
-| 14:00 | 13:40 | 14:50 |
+| 10:30 | 10:10 | 11:20 |
+| 13:30 | 13:10 | 14:20 |
 
 Segunda a sexta, horário de São Paulo. **O disparo pela API fica desligado**
 (`POWERBI_REFRESH_HABILITADO=false`): com o gateway desligado na maior parte do dia, ele
@@ -266,4 +266,4 @@ schedule seguinte a desliga sozinho.
 
 ⚠️ **O serviço do gateway precisa subir sozinho com o Windows** (é o padrão do instalador).
 A janela de 20 min antes do refresh existe para isso; se o boot + registro passar disso, o
-refresh das 11:00 encontra o gateway offline e falha.
+refresh das 10:30 encontra o gateway offline e falha.

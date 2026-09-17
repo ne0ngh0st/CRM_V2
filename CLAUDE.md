@@ -2340,8 +2340,8 @@ Suíte inteira: **702 testes**, 11 regras verificadas por mutação.
 
 ⚠️ **O gateway NÃO fica ligado 24 h** (decisão do Tony: R$ 600/mês era caro demais só para
 isso). EC2 Windows `crm-v2-bi-gateway` liga e desliga pelo EventBridge Scheduler, de segunda a
-sexta, em volta dos refreshes **agendados no Serviço** às 11:00 e 14:00 (liga 20 min antes,
-desliga 50 min depois). Por isso o disparo pela API (`POWERBI_REFRESH_HABILITADO`) fica
+sexta, em volta dos refreshes **agendados no Serviço** às 10:30 e 13:30 (liga 20 min antes,
+desliga 50 min depois; meia hora depois do `totvs:atualizar` da hora cheia). Por isso o disparo pela API (`POWERBI_REFRESH_HABILITADO`) fica
 **desligado** — o código está pronto para o dia em que o gateway ficar ligado.
 ⚠️ **Horário do refresh e janela da EC2 são o mesmo horário escrito em dois sistemas**: mudar
 um sem o outro faz o refresh rodar com o gateway desligado. `docs/power-bi.md` §5 e §8.
@@ -2357,13 +2357,13 @@ um sem o outro faz o refresh rodar com o gateway desligado. `docs/power-bi.md` �
 - 🟢 **Power BI no RDS — migração CONCLUÍDA em 2026-09-17.** O relatório em uso é o
   **`BI_RADES RDS`** (`reportId=0d7a10a1-…`, fonte em `POWER BI\BI_RADES RDS.pbip`); o
   `BI_RADES CORRETO` (ODBC da KingHost) foi apagado do Serviço. As 12 tabelas leem
-  `MySQL.Database(<rds>, "bi")` pelo gateway, com refresh agendado seg–sex às 11:00 e 14:00.
+  `MySQL.Database(<rds>, "bi")` pelo gateway, com refresh agendado seg–sex às 10:30 e 13:30 (primeira rodada automática
+  conferida em 17/09: a EC2 ligou às 13:10, enviou ~450 MB às 13:36–13:45 e desligou às 14:20).
   O botão do Painel aponta para ele (`POWERBI_EMBED_URL` nos dois nós + default do config).
   - ⚠️ **O Desktop não atualiza dados**: o RDS não é público. Mudou o modelo → publicar e
     atualizar pelo Serviço, dentro da janela da EC2.
   - ⚠️ `bi_leitura` precisa de **20 conexões** (o refresh abre uma por tabela; com 5 falhou).
-  - Em aberto: mover o refresh para **11:15/14:15** (hoje coincide com o `totvs:atualizar` da
-    hora cheia); relatórios 198 de jan–ago/2026 (município/família); `produtos` sem fonte
+  - Em aberto: relatórios 198 de jan–ago/2026 (município/família); `produtos` sem fonte
     TOTVS depois de 31/10.
 - 🟡 **"Falta vender" do TOTAL/SUBTOTAL é líquida — confirmar com o diretor.** Hoje o
   vendedor "coberto" compensa a falta do colega na mesma equipe (e a empresa inteira aparece

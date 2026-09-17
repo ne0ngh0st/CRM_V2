@@ -14,8 +14,10 @@
 # REFRESH AGENDADO do Power BI, dentro das janelas. POWERBI_REFRESH_HABILITADO fica false.
 #
 # Janelas (segunda a sexta, horário de São Paulo):
-#   refresh 11:00 → liga 10:40, desliga 11:50
-#   refresh 14:00 → liga 13:40, desliga 14:50
+#   refresh 10:30 → liga 10:10, desliga 11:20
+#   refresh 13:30 → liga 13:10, desliga 14:20
+# ⚠️ Meia hora DEPOIS da hora cheia de propósito: o `totvs:atualizar` roda no minuto 0 e
+# leva ~2 min; refresh no mesmo minuto leria o faturamento no meio da importação.
 # 20 min antes: o Windows sobe e o serviço do gateway fica online. 50 min depois: folga
 # para a carga do faturamento terminar — desligar no meio faz o refresh falhar.
 #
@@ -35,10 +37,10 @@ FUSO=America/Sao_Paulo
 
 # nome do schedule | ação | hora | minuto
 JANELAS="
-liga-1040|start|10|40
-desliga-1150|stop|11|50
-liga-1340|start|13|40
-desliga-1450|stop|14|50
+liga-1010|start|10|10
+desliga-1120|stop|11|20
+liga-1310|start|13|10
+desliga-1420|stop|14|20
 "
 
 aws_() { aws --region "$REGIAO" "$@"; }
@@ -115,7 +117,7 @@ while IFS='|' read -r SUFIXO ACAO HORA MINUTO; do
   [[ "$ACAO" == "start" ]] && API=startInstances || API=stopInstances
 
   # ⚠️ Retentativa CURTA (15 min): o padrão do Scheduler é tentar por até 24 h, e um
-  # "ligar" das 10:40 que só passasse de madrugada deixaria a máquina ligada à toa.
+  # "ligar" das 10:10 que só passasse de madrugada deixaria a máquina ligada à toa.
   ALVO=$(cat <<EOF
 {
   "Arn": "arn:aws:scheduler:::aws-sdk:ec2:${API}",
@@ -142,6 +144,12 @@ EOF
     echo "    ${NOME_S} (${HORA}:${MINUTO}, ${ACAO}) criado"
   fi
 done <<< "$JANELAS"
+
+echo "==> Schedules antigos (nomes fora da lista acima)"
+ATUAIS=$(echo "$JANELAS" | cut -d'|' -f1 | sed "/^$/d; s/^/${NOME}-/")
+for S in $(aws_ scheduler list-schedules --name-prefix "${NOME}-" --query 'Schedules[].Name' --output text); do
+  grep -qx "$S" <<< "$ATUAIS" || { aws_ scheduler delete-schedule --name "$S"; echo "    ${S} removido"; }
+done
 
 echo
 aws_ scheduler list-schedules --name-prefix "$NOME" \
