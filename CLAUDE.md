@@ -2316,6 +2316,17 @@ esperadas e números medidos: **`docs/power-bi.md`**. Aqui fica o que muda decis
 
 Suíte inteira: **702 testes**, 11 regras verificadas por mutação.
 
+**Em produção desde 2026-09-17** (`b272c3a`): RDS em `db.t4g.medium`, schema `bi` e
+`bi_leitura` criados, 13 views lendo, histórico 2024–2025 recarregado com município e família.
+
+⚠️ **O gateway NÃO fica ligado 24 h** (decisão do Tony: R$ 600/mês era caro demais só para
+isso). EC2 Windows `crm-v2-bi-gateway` liga e desliga pelo EventBridge Scheduler, de segunda a
+sexta, em volta dos refreshes **agendados no Serviço** às 11:00 e 14:00 (liga 20 min antes,
+desliga 50 min depois). Por isso o disparo pela API (`POWERBI_REFRESH_HABILITADO`) fica
+**desligado** — o código está pronto para o dia em que o gateway ficar ligado.
+⚠️ **Horário do refresh e janela da EC2 são o mesmo horário escrito em dois sistemas**: mudar
+um sem o outro faz o refresh rodar com o gateway desligado. `docs/power-bi.md` §5 e §8.
+
 ## Pendências
 - 🔴 **Power BI no RDS — Fases 2 a 5 (prazo: 31/10/2026, quando o `autopel01` sai do ar).** A
   Fase 1 (código) está na branch `feat/bi-no-rds`, não deployada. Ordem: RDS → `db.t4g.medium`;

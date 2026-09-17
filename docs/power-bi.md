@@ -145,11 +145,34 @@ mostra o banco-alvo e pede confirmação. Em produção, rodar fora do horário 
 
 ⚠️ A carga é mais lenta com índices; ver a lição de 2026-08-31 no CLAUDE.md.
 
-## 5. Refresh automático
+## 5. Refresh
 
-Depois de cada `totvs:atualizar` que termina em **sucesso**, o `AtualizarPowerBiJob` pede
-o refresh ao Power BI. O resultado aparece em `/atualizacoes`, no passo
-`powerbi:refresh` da rodada.
+### 5.1 O que está valendo: refresh AGENDADO no Serviço (decisão de 2026-09-17)
+
+O gateway fica numa EC2 que **só liga nas janelas** (§8), então o refresh é o agendado do
+próprio Power BI, **dentro delas**:
+
+| Refresh agendado no Serviço | EC2 liga | EC2 desliga |
+|---|---|---|
+| 11:00 | 10:40 | 11:50 |
+| 14:00 | 13:40 | 14:50 |
+
+Segunda a sexta, horário de São Paulo. **O disparo pela API fica desligado**
+(`POWERBI_REFRESH_HABILITADO=false`): com o gateway desligado na maior parte do dia, ele
+falharia a cada importação.
+
+⚠️ **Mudou o horário no Serviço? Mude as janelas em `infra/bi/agendar-gateway.sh`** e rode de
+novo. As duas coisas são o mesmo horário escrito em dois sistemas que não se conhecem;
+descasadas, o refresh roda com o gateway desligado e falha.
+
+⚠️ **Motivo**: a `t3.large` Windows ligada 24 h custaria ~R$ 600/mês para ficar ociosa quase o
+dia todo. Agendada, são ~2h20 por dia útil (~R$ 90–110/mês com o disco).
+
+### 5.2 Disparo pela API depois da importação (pronto, desligado)
+
+Se o gateway voltar a ficar ligado 24 h, basta ligar este caminho: depois de cada
+`totvs:atualizar` que termina em **sucesso**, o `AtualizarPowerBiJob` pede o refresh ao
+Power BI. O resultado aparece em `/atualizacoes`, no passo `powerbi:refresh` da rodada.
 
 - **Nasce desligado.** Para ligar, no `.env` dos dois nós:
   ```
@@ -204,3 +227,43 @@ escreve; não enxerga tabela fora da lista; sem um dos grants, a view que depend
 recusa (`ERROR 1356`). O `SchemaBiTest` garante que a lista do script e a de
 `SchemaBi::TABELAS_DO_APP` são a mesma — view nova lendo tabela nova precisa entrar nas
 duas.
+
+## 8. O gateway (EC2 Windows)
+
+| | |
+|---|---|
+| Instância | `crm-v2-bi-gateway` (`i-00f370d0e45f41531`), `t3.large`, Windows Server 2022, créditos `standard` |
+| Rede | subnet `crm-v2-publica-1a`; SG `crm-v2-bi-gateway` sem entrada exceto RDP dos IPs do Tony; `crm-v2-db` aceita 3306 desse SG |
+| Chave | `~/.ssh/crm-v2-bi-gateway` (RSA, gerada localmente; só serve para ler a senha inicial do Administrator) |
+| Liga/desliga | EventBridge Scheduler, 4 schedules `crm-v2-bi-gateway-*`, role `crm-v2-bi-gateway-agenda` (só Start/Stop desta instância) |
+| Scripts | `infra/bi/criar-gateway.sh` (perfil `crm-v2`), `infra/bi/agendar-gateway.sh` (perfil `default`, admin) |
+
+⚠️ **O IP público muda a cada vez que a máquina liga** (sem Elastic IP, de propósito: o
+gateway só faz conexões de saída). Para o RDP, consultar o IP da vez:
+
+```bash
+aws ec2 describe-instances --region sa-east-1 --instance-ids i-00f370d0e45f41531 --query "Reservations[0].Instances[0].PublicIpAddress" --output text
+```
+
+⚠️ **Fora das janelas a máquina está desligada.** Para mexer nela fora de hora:
+`aws ec2 start-instances --region sa-east-1 --instance-ids i-00f370d0e45f41531` — e o
+schedule seguinte a desliga sozinho.
+
+### 8.1 Instalação (uma vez, pelo RDP)
+
+1. Senha do Administrator (só o Tony, no terminal dele):
+   ```bash
+   aws ec2 get-password-data --region sa-east-1 --instance-id i-00f370d0e45f41531 --priv-launch-key "C:\Users\antonio.barbosa\.ssh\crm-v2-bi-gateway" --query PasswordData --output text
+   ```
+2. RDP no IP da vez, usuário `Administrator`. Trocar a senha no primeiro acesso.
+3. Instalar o **MySQL Connector/NET 8.x** (pré-requisito do conector MySQL do Power BI).
+4. Instalar o **On-premises data gateway (modo padrão)** e registrá-lo no tenant com a conta
+   do Tony. Anotar a chave de recuperação no cofre.
+5. No Serviço, criar a fonte de dados **MySQL**: servidor
+   `crm-v2-prod.c3mguim6agp4.sa-east-1.rds.amazonaws.com`, banco `bi`, usuário `bi_leitura`
+   (senha em `~/bi-leitura-criacao.log` no app-1 — copiar para o cofre e apagar o arquivo).
+6. Conferir no gateway que a fonte conecta (o teste de conexão do Serviço).
+
+⚠️ **O serviço do gateway precisa subir sozinho com o Windows** (é o padrão do instalador).
+A janela de 20 min antes do refresh existe para isso; se o boot + registro passar disso, o
+refresh das 11:00 encontra o gateway offline e falha.
