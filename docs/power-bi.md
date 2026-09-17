@@ -232,7 +232,7 @@ duas.
 
 | | |
 |---|---|
-| Instância | `crm-v2-bi-gateway` (`i-00f370d0e45f41531`), `t3.large`, Windows Server 2022, créditos `standard` |
+| Instância | `crm-v2-bi-gateway` (`i-00f370d0e45f41531`), `t3.large`, Windows Server 2022, créditos `unlimited` (em `standard` o saldo zerava no refresh; ver `infra/bi/criar-gateway.sh`) |
 | Rede | subnet `crm-v2-publica-1a`; SG `crm-v2-bi-gateway` sem entrada exceto RDP dos IPs do Tony; `crm-v2-db` aceita 3306 desse SG |
 | Chave | `~/.ssh/crm-v2-bi-gateway` (RSA, gerada localmente; só serve para ler a senha inicial do Administrator) |
 | Liga/desliga | EventBridge Scheduler, 4 schedules `crm-v2-bi-gateway-*`, role `crm-v2-bi-gateway-agenda` (só Start/Stop desta instância) |

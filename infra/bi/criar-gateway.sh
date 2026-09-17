@@ -14,10 +14,11 @@
 # Administrator do Windows com chave RSA. A chave é gerada AQUI (ssh-keygen) e só a parte
 # pública sobe — a privada nunca passa pela AWS. Sem ela não há como ler a senha inicial.
 #
-# ⚠️ CRÉDITOS `standard`, não `unlimited`: o gateway fica ocioso quase o dia todo e só
-# trabalha durante o refresh; `unlimited` cobraria cada pico acima da linha de base sem
-# ninguém ver. Se o refresh ficar lento por falta de crédito, é a métrica
-# `CPUCreditBalance` que mostra — e aí se decide.
+# ⚠️ CRÉDITOS `unlimited`, não `standard` (trocado em 2026-09-17): a máquina só fica
+# ligada nas janelas de refresh, e em `standard` o saldo de crédito quase não acumula
+# entre um desligamento e outro. No primeiro refresh completo o saldo caiu de 19 para 11
+# em 15 min — zerado, a CPU cai para 30% e o refresh arrasta. Em `unlimited` a AWS cobra
+# só o excedente, que em ~2 h por dia útil fica abaixo de US$ 3/mês.
 #
 # ⚠️ Sem Elastic IP: o gateway só faz conexões de SAÍDA (Azure Service Bus e RDS). O IP
 # público serve só para o RDP, e muda se a máquina for parada — basta consultar de novo.
@@ -108,7 +109,7 @@ if [[ "$ID" == "None" ]]; then
     --subnet-id "$SUBNET" \
     --security-group-ids "$SG" \
     --associate-public-ip-address \
-    --credit-specification CpuCredits=standard \
+    --credit-specification CpuCredits=unlimited \
     --metadata-options "HttpTokens=required,HttpEndpoint=enabled" \
     --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":${DISCO_GB},\"VolumeType\":\"gp3\",\"Encrypted\":true,\"DeleteOnTermination\":true}}]" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NOME}},{Key=Projeto,Value=crm-v2}]" "ResourceType=volume,Tags=[{Key=Name,Value=${NOME}},{Key=Projeto,Value=crm-v2}]" \
@@ -116,6 +117,7 @@ if [[ "$ID" == "None" ]]; then
   echo "    criada ${ID}"
 else
   echo "    já existe ${ID}"
+  aws_ ec2 modify-instance-credit-specification     --instance-credit-specifications "InstanceId=${ID},CpuCredits=unlimited" > /dev/null
 fi
 
 aws_ ec2 wait instance-running --instance-ids "$ID"
