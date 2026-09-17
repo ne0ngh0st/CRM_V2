@@ -6,8 +6,9 @@ views, com os mesmos nomes e colunas, num schema `bi` do RDS `crm-v2-prod`, e a 
 sozinho depois de cada importação do TOTVS.
 
 Plano completo (fases 0 a 5): `~/.claude/plans/vamos-planejar-essa-migra-o-jazzy-clover.md`.
-Este documento cobre o que a **Fase 1** (código do CRM, 2026-09-16) entregou e como pôr
-em produção.
+**A migração foi concluída em 2026-09-17**: o relatório em uso é o `BI_RADES RDS`
+(`POWER BI\BI_RADES RDS.pbip`), lendo o `bi` do RDS pelo gateway. Este documento cobre o
+código (§1-§7), o gateway (§8), as armadilhas do dia da virada (§9) e a rotina (§10).
 
 ## 1. O caminho do dado
 
@@ -249,21 +250,141 @@ aws ec2 describe-instances --region sa-east-1 --instance-ids i-00f370d0e45f41531
 `aws ec2 start-instances --region sa-east-1 --instance-ids i-00f370d0e45f41531` — e o
 schedule seguinte a desliga sozinho.
 
-### 8.1 Instalação (uma vez, pelo RDP)
+### 8.1 Instalação (feita em 2026-09-17, por SSM + RDP)
 
-1. Senha do Administrator (só o Tony, no terminal dele):
-   ```bash
-   aws ec2 get-password-data --region sa-east-1 --instance-id i-00f370d0e45f41531 --priv-launch-key "C:\Users\antonio.barbosa\.ssh\crm-v2-bi-gateway" --query PasswordData --output text
-   ```
-2. RDP no IP da vez, usuário `Administrator`. Trocar a senha no primeiro acesso.
-3. Instalar o **MySQL Connector/NET 8.x** (pré-requisito do conector MySQL do Power BI).
-4. Instalar o **On-premises data gateway (modo padrão)** e registrá-lo no tenant com a conta
-   do Tony. Anotar a chave de recuperação no cofre.
-5. No Serviço, criar a fonte de dados **MySQL**: servidor
-   `crm-v2-prod.c3mguim6agp4.sa-east-1.rds.amazonaws.com`, banco `bi`, usuário `bi_leitura`
-   (senha em `~/bi-leitura-criacao.log` no app-1 — copiar para o cofre e apagar o arquivo).
-6. Conferir no gateway que a fonte conecta (o teste de conexão do Serviço).
+A instalação NÃO precisou de RDP: a EC2 ganhou a role `crm-v2-bi-gateway-ec2`
+(`infra/bi/habilitar-ssm-gateway.sh`, perfil admin — só `AmazonSSMManagedInstanceCore`) e
+o `infra/bi/instalar-gateway.ps1` rodou por `AWS-RunPowerShellScript`. Ele baixa e instala
+em silêncio o **MySQL Connector/NET 26.7.0** (conferindo o MD5 publicado pela Oracle) e o
+**On-premises data gateway** (conferindo a assinatura digital da Microsoft), e no fim
+imprime o estado do serviço `PBIEgwService` e o provedor MySQL registrado no .NET.
 
-⚠️ **O serviço do gateway precisa subir sozinho com o Windows** (é o padrão do instalador).
-A janela de 20 min antes do refresh existe para isso; se o boot + registro passar disso, o
-refresh das 10:30 encontra o gateway offline e falha.
+⚠️ **Depois de anexar a role, a instância precisou de um reboot** para o agente do SSM
+pegar a credencial. Antes disso ela não aparecia em `describe-instance-information`.
+
+O que exigiu pessoa (não é automatizável sem service principal):
+
+1. **RDP** no IP da vez, usuário `Administrator` (senha inicial via `get-password-data`,
+   trocada no primeiro acesso).
+2. Abrir o app **"On-premises data gateway"**, entrar com a conta Microsoft do Tony e
+   **registrar** o gateway como `crm-v2-bi-gateway`, guardando a chave de recuperação no
+   cofre.
+3. No Serviço (app.powerbi.com → ⚙️ → *Gerenciar conexões e gateways* → **Nova** →
+   **Local**): conexão `CRM V2 - RDS (bi)`, tipo **MySQL**, servidor
+   `crm-v2-prod.c3mguim6agp4.sa-east-1.rds.amazonaws.com`, banco `bi`, autenticação
+   **Básica** com `bi_leitura`, *Usar conexão criptografada* marcado.
+4. Ligar o modelo semântico a essa conexão (⋯ → Configurações → **Conexão de gateway**).
+
+## 9. O dia da virada (2026-09-17) — o que quebrou, e por quê
+
+Ordem real dos fatos e das armadilhas. Vale mais que o plano: cada item abaixo custou uma
+rodada.
+
+### 9.1 O relatório não usava o conector MySQL — usava ODBC
+
+O `.pbix` lia `Odbc.DataSource("dsn=mysql06-farm88.kinghost.net", …)` (9 tabelas) e
+`Odbc.Query(…)` com SELECT escrito à mão (3 tabelas). **"Alterar Fonte" não resolve**: o
+gateway tem o Connector/NET, não um DSN ODBC. As 12 partições passaram a
+`MySQL.Database("<rds>", "bi", [ReturnSingleDatabase = true]){[Schema="bi", Item="<view>"]}`.
+
+As três de `Odbc.Query` apontavam para tabelas do legado e viraram views do `bi` com as
+MESMAS colunas — por isso o resto do M (tipagem, renomes) seguiu valendo sem tocar:
+
+| SELECT antigo | view nova |
+|---|---|
+| `autopel01.METAS_MENSAIS` | `vw_bi_fato_metas` |
+| `autopel01.META_VENDA` | `vw_bi_fato_pedidos_emitidos` |
+| `autopel01.potencial_mercado_estado` | `vw_bi_potencial_estado` |
+
+⚠️ **A edição foi feita nos arquivos de TEXTO do modelo**, não pela interface: *Arquivo →
+Salvar como → Projeto do Power BI (.pbip)* gera `BI_RADES RDS.SemanticModel/…/tables/*.tmdl`,
+onde cada partição é um bloco `source = let … in …`. Com o Desktop FECHADO, editar ali e
+reabrir é mais seguro (e muito mais rápido) que repetir 12 vezes o Editor Avançado.
+
+### 9.2 `max_user_connections 5` derrubou o primeiro refresh
+
+Erro do Serviço: `User 'bi_leitura' has exceeded the 'max_user_connections' resource`
+(MySQL 1226). **O refresh abre uma conexão por tabela, em paralelo** — 12 tabelas contra um
+teto de 5. Subiu para **20** (`MAX_CONEXOES_BI` em `infra/bi/criar-schema-e-usuario.sh`, que
+agora aplica o `ALTER USER` SEMPRE, não só quando cria o usuário).
+
+### 9.3 Créditos de CPU `standard` não sobrevivem a uma máquina que desliga
+
+Durante o primeiro refresh completo o saldo caiu de 19 para 11 em 15 min. Como a EC2 fica
+ligada ~2 h por dia útil, o saldo nunca acumula: zerado, a CPU cai para 30% e o refresh
+arrasta. Trocado para **`unlimited`** (excedente < US$ 3/mês nessa janela).
+
+### 9.4 🚨 O Desktop NÃO atualiza dados — e publicar sobe o modelo VAZIO
+
+O RDS não é público (`PubliclyAccessible=false`): quem alcança o banco é a EC2 do gateway.
+No Desktop, *Atualizar* dá erro de conexão — e **publicar sobe as tabelas como estão na
+memória dele**, que é vazio quando o arquivo foi aberto sem refresh.
+
+Aconteceu: depois de publicar o visual novo, o relatório no Serviço ficou **sem dado
+nenhum** até a atualização seguinte. Não é perda de dado — o banco está intacto.
+
+**A regra: toda publicação exige um refresh no Serviço logo depois**, e refresh só funciona
+com o gateway ligado. Portanto: publicar DENTRO das janelas (10:10-11:20 / 13:10-14:20) ou
+ligar a máquina na mão antes (§8), e conferir também a **Conexão de gateway** do modelo, que
+pode se desfazer na substituição.
+
+### 9.5 O horário do refresh mora em DOIS sistemas
+
+Refresh agendado no Serviço às **10:30 e 13:30**; EC2 ligando 10:10/13:10 e desligando
+11:20/14:20 (`infra/bi/agendar-gateway.sh`). A primeira tentativa foi 11:00/14:00 e bateu de
+frente com o `totvs:atualizar`, que roda na hora cheia e leva ~2 min — o refresh podia ler o
+faturamento no meio da importação. Meia hora depois da hora cheia resolve os dois problemas
+(coincidência e janela).
+
+⚠️ Mudar um sem o outro faz o refresh rodar com o gateway desligado, e a falha só aparece no
+histórico de atualizações. O script **remove** schedules que saíram da lista, então mudar
+horário é editar `JANELAS` e rodar de novo.
+
+### 9.6 RLS: já existia no modelo, e continua valendo
+
+Os perfis `Administradores` (sem filtro) e `Gestores` (filtra `Vendedores` e `Clientes` pelo
+`USERPRINCIPALNAME()`) vieram do modelo antigo e foram junto. A tabela `Acesso RLS` agora sai
+de `bi.vw_bi_seg_acesso`, que deriva o mapa e-mail → códigos do próprio CRM: diretor e admin
+veem tudo; supervisor/gerente veem a equipe; vendedor vê o próprio código.
+
+- **Só entra quem tem e-mail `@autopel.com` e está ativo** — hoje 27 pessoas. Representante
+  com e-mail de fora não aparece no mapa e, dentro de `Gestores`, não veria nada.
+- ⚠️ **Quem é Administrador/Membro/Colaborador do workspace ignora o RLS.** Para o filtro
+  valer, a pessoa precisa entrar como **Visualizador**, por compartilhamento ou pelo App.
+- Testar sem outra conta: ⋯ do modelo → **Segurança** → ⋯ em `Gestores` → **Testar como
+  função** → *Outro usuário* com o e-mail. Conferido em 17/09 contra o banco (agosto/2026):
+  `inaya.silva@` ≈ R$ 192.772 (1 vendedor) e `cleber@` ≈ R$ 5.362.525 (41 vendedores).
+- ⚠️ **`tainara.bela@autopel.com` enxerga vazio**: o `cod_vendedor` dela está com 5 dígitos
+  (`00006`) e o TOTVS emite `000006`. É a pendência do CLAUDE.md, não é defeito do RLS.
+
+### 9.7 O visual do relatório foi refeito nos arquivos (2026-09-17)
+
+Sintomas: cabeçalhos com serifa, tabelas minúsculas, títulos repetidos.
+
+- **Serifa** = as tabelas pediam a fonte **Montserrat**, que o navegador não tem, e caíam para
+  Times. Todo `fontFamily`/`fontSize` fixado no visual foi removido para o TEMA decidir.
+- **Tabelas minúsculas** = página de 2.160 px com `displayOption: FitToPage`. Todas passaram a
+  **`FitToWidth`**.
+- **Tema `AutopelTheme` estava registrado no `report.json` mas o ARQUIVO não existia.** Criado
+  `StaticResources/RegisteredResources/AutopelTema2026.json` (cores oficiais, Segoe UI,
+  cabeçalho navy, faixa alternada, total destacado, card branco com título em faixa preta —
+  a mesma linguagem do `DarkCard` do CRM) e apontado em `themeCollection.customTheme`.
+- Abas renomeadas: **PEDIDOS DIÁRIOS**, **VENDA NO ANO**, **VENDA x META DO MÊS** (era
+  "Duplicata de…", e não é duplicata: é o recorte de um mês), **PEDIDOS x META**.
+
+⚠️ **Editar o relatório por arquivo só é possível no formato PBIR** (`definition/pages/<id>/
+visuals/<id>/visual.json`), que é o que o `.pbip` salva. Regras que valeram aqui: formatação
+fixada no visual VENCE o tema — para o tema valer, apague a propriedade do visual; e o
+Desktop precisa estar FECHADO durante a edição.
+
+## 10. Rotina depois da virada
+
+| Quando | O que fazer |
+|---|---|
+| Dia a dia | Nada. A EC2 liga, o Serviço atualiza às 10:30 e 13:30 e a EC2 desliga. |
+| Mudou view/modelo | Deploy do CRM (se mexeu em `ViewsBi`) → abrir o `.pbip` → publicar → **atualizar no Serviço**, dentro da janela. |
+| Mudou só o visual | Publicar → **atualizar no Serviço** (senão fica sem dado, §9.4). |
+| Mudar horário do refresh | Trocar nos DOIS lugares: agendamento do Serviço e `JANELAS` do `agendar-gateway.sh`. |
+| Publicar fora da janela | `aws ec2 start-instances …` antes, e desligar depois (`stop-instances`). |
+| Falhou o refresh | Histórico de atualizações do modelo → mensagem. Erros já vistos: conexões (§9.2), gateway desligado (§9.5), modelo publicado vazio (§9.4). |
+

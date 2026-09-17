@@ -2360,8 +2360,13 @@ um sem o outro faz o refresh rodar com o gateway desligado. `docs/power-bi.md` �
   `MySQL.Database(<rds>, "bi")` pelo gateway, com refresh agendado seg–sex às 10:30 e 13:30 (primeira rodada automática
   conferida em 17/09: a EC2 ligou às 13:10, enviou ~450 MB às 13:36–13:45 e desligou às 14:20).
   O botão do Painel aponta para ele (`POWERBI_EMBED_URL` nos dois nós + default do config).
-  - ⚠️ **O Desktop não atualiza dados**: o RDS não é público. Mudou o modelo → publicar e
-    atualizar pelo Serviço, dentro da janela da EC2.
+  - 🚨 **O Desktop não atualiza dados** (o RDS não é público) e **publicar sobe o modelo
+    VAZIO**: o relatório fica sem número nenhum até o refresh seguinte no Serviço, que só
+    roda com o gateway ligado. Publicar dentro da janela, atualizar em seguida e conferir a
+    Conexão de gateway do modelo, que a substituição pode desfazer. `docs/power-bi.md` §9.4.
+  - **O visual foi refeito em 17/09 editando os arquivos PBIR** (tema
+    `AutopelTema2026.json`, `FitToWidth`, abas renomeadas). Formatação fixada no visual vence
+    o tema, e o Desktop tem que estar fechado para editar — §9.7.
   - ⚠️ `bi_leitura` precisa de **20 conexões** (o refresh abre uma por tabela; com 5 falhou).
   - Em aberto: relatórios 198 de jan–ago/2026 (município/família); `produtos` sem fonte
     TOTVS depois de 31/10.
