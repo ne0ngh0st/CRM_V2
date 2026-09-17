@@ -3,12 +3,17 @@
 # Cria, no RDS, o schema do Power BI e o usuário só-leitura que o gateway usa.
 #
 # ⚠️ Rodar com a credencial MASTER do RDS, de DENTRO de um nó do app (o RDS só aceita
-# conexão das EC2 do app — ver docs/deploy-aws.md). O usuário do app (`palma`) não tem
-# CREATE global, e não deve ter: é por isso que este passo existe fora das migrations.
+# conexão das EC2 do app — ver docs/deploy-aws.md).
 #
-#   ssh app-1
-#   cd /var/www/crm/current
-#   MASTER_USER=<usuario master> bash infra/bi/criar-schema-e-usuario.sh
+# ⚠️ No RDS de produção o master É o `palma`, o mesmo usuário do app ("managed master user
+# password", senha rotacionada pelo Secrets Manager a cada 7 dias). Por isso, sem
+# MASTER_USER/MASTER_SENHA no ambiente, o script usa DB_USERNAME/DB_PASSWORD do .env do
+# próprio nó — que é a senha vigente, senão o CRM estaria fora do ar. Mesmo assim o schema
+# fica FORA das migrations: localmente o `palma` não tem CREATE global, e criar usuário de
+# banco não é trabalho de deploy.
+#
+#   ssh -i ~/.ssh/crm-v2 ubuntu@15.229.96.223
+#   cd /var/www/crm && bash infra/bi/criar-schema-e-usuario.sh
 #
 # ⚠️ ORDEM NO DEPLOY: este script roda ANTES do `migrate` da branch que traz o BI. A
 # migration `2026_09_16_110000` para com erro se o schema não existir.
@@ -33,13 +38,21 @@ USUARIO_APP="${USUARIO_APP:-palma}"
 SCHEMA_BI="${SCHEMA_BI:-bi}"
 USUARIO_BI="${USUARIO_BI:-bi_leitura}"
 ROTACIONAR="${ROTACIONAR:-0}"
+ENV_APP="${ENV_APP:-/var/www/crm/.env}"
 
-# ⚠️ Espelho de App\Services\PowerBi\SchemaBi::TABELAS_DO_APP. O SchemaBiInfraTest
+# ⚠️ Espelho de App\Services\PowerBi\SchemaBi::TABELAS_DO_APP. O SchemaBiTest
 # compara as duas listas e falha se divergirem — view nova lendo tabela nova sem
 # este grant só daria erro no primeiro refresh do Power BI.
 TABELAS_DO_APP="clientes faturamentos grupos_cliente leads metas_mensais model_has_roles orcamentos pedido_itens pedidos produtos roles segmentos users vendedor_perfis vendedores_totvs"
 
-: "${MASTER_USER:?defina MASTER_USER com o usuario master do RDS}"
+# Lê uma chave do .env sem executá-lo (o valor pode vir entre aspas).
+do_env() {
+  [[ -r "$ENV_APP" ]] || return 0
+  grep -E "^$1=" "$ENV_APP" | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'
+}
+
+MASTER_USER="${MASTER_USER:-$(do_env DB_USERNAME)}"
+: "${MASTER_USER:?defina MASTER_USER (nao achei DB_USERNAME em $ENV_APP)}"
 
 # Identificadores entram crus no SQL: só letras, dígitos e sublinhado.
 for NOME in "$BANCO_APP" "$USUARIO_APP" "$SCHEMA_BI" "$USUARIO_BI" $TABELAS_DO_APP; do
@@ -48,8 +61,12 @@ done
 
 command -v mysql > /dev/null || { echo "ERRO: cliente mysql nao instalado neste no"; exit 1; }
 
-read -r -s -p "Senha do master (${MASTER_USER}): " MASTER_SENHA
-echo
+MASTER_SENHA="${MASTER_SENHA:-$(do_env DB_PASSWORD)}"
+
+if [[ -z "$MASTER_SENHA" ]]; then
+  read -r -s -p "Senha do master (${MASTER_USER}): " MASTER_SENHA
+  echo
+fi
 
 # MYSQL_PWD em vez de -p<senha>: a senha não aparece no `ps` nem no histórico.
 sql() {
@@ -63,8 +80,11 @@ sql "SELECT CONCAT('    ', CURRENT_USER(), ' em MySQL ', VERSION())"
 echo "==> Schema ${SCHEMA_BI}"
 sql "CREATE DATABASE IF NOT EXISTS \`${SCHEMA_BI}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 
-echo "==> Permissão do app (${USUARIO_APP}) em ${SCHEMA_BI}.*"
-sql "GRANT ALL PRIVILEGES ON \`${SCHEMA_BI}\`.* TO '${USUARIO_APP}'@'%'"
+# Desnecessário quando o app É o master (produção hoje); vale se um dia deixar de ser.
+if [[ "$USUARIO_APP" != "$MASTER_USER" ]]; then
+  echo "==> Permissão do app (${USUARIO_APP}) em ${SCHEMA_BI}.*"
+  sql "GRANT ALL PRIVILEGES ON \`${SCHEMA_BI}\`.* TO '${USUARIO_APP}'@'%'"
+fi
 
 echo "==> Usuário ${USUARIO_BI}"
 EXISTE=$(sql "SELECT COUNT(*) FROM mysql.user WHERE user = '${USUARIO_BI}'")

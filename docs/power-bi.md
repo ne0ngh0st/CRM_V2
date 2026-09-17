@@ -82,9 +82,10 @@ O SQL original do legado está em `database/dados-bi/views-legado.sql`.
 
 1. **RDS para `db.t4g.medium`** (Fase 2.1). A reimportação do histórico e o primeiro
    refresh completo pesam na memória, e a `small` já está sem folga.
-2. **Criar o schema e o usuário**, de dentro de um nó do app, com a credencial master:
+2. **Criar o schema e o usuário**, de dentro de um nó do app. O master do RDS é o próprio
+   `palma`, e o script lê a senha vigente do `.env` do nó:
    ```bash
-   MASTER_USER=<usuario master> bash infra/bi/criar-schema-e-usuario.sh
+   cd /var/www/crm && bash infra/bi/criar-schema-e-usuario.sh
    ```
    Guardar a senha do `bi_leitura` que ele mostra (uma vez só).
    ⚠️ Tem que rodar **antes** do deploy: a migration `2026_09_16_110000` para se o schema

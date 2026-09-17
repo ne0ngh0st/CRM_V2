@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\DB;
  * conteúdo está versionado em `database/dados-bi/` e entra por `bi:carregar-referencias`
  * — a migration só cria a estrutura.
  *
- * ⚠️ O SCHEMA JÁ PRECISA EXISTIR. Ele é criado com a credencial master
- * (`infra/bi/criar-schema-e-usuario.sh`), porque o usuário do app não tem CREATE global.
- * Sem ele, esta migration para com a instrução do que fazer.
+ * ⚠️ O SCHEMA JÁ PRECISA EXISTIR. Ele é criado por `infra/bi/criar-schema-e-usuario.sh`,
+ * junto com o usuário `bi_leitura` (ver `SchemaBi::exigir()`). Sem ele, esta migration
+ * para com a instrução do que fazer.
  *
  * ⚠️ `DROP TABLE IF EXISTS` antes de criar, de propósito. O `migrate:fresh` só apaga o
  * banco padrão, não o `bi`; sem o drop, a segunda execução da suíte (ou um `migrate:fresh`

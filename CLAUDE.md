@@ -2273,7 +2273,8 @@ O `BI_RADES CORRETO.pbix` lia views `vw_bi_*` do `autopel01` (KingHost), que **s
 esperadas e números medidos: **`docs/power-bi.md`**. Aqui fica o que muda decisão.
 
 - **Schema `bi` no mesmo RDS**, criado FORA das migrations
-  (`infra/bi/criar-schema-e-usuario.sh`, credencial master, ANTES do deploy). O usuário
+  (`infra/bi/criar-schema-e-usuario.sh`, ANTES do deploy; o master do RDS é o próprio `palma`
+  e o script lê a senha do `.env` do nó). O usuário
   `bi_leitura` tem SELECT só no `bi` e nas tabelas de `SchemaBi::TABELAS_DO_APP`; o
   `SchemaBiTest` falha se o script e essa lista divergirem.
 - ⚠️ **A suíte usa `bi_test`**, forçado no `phpunit.xml`. O `migrate:fresh` não apaga outro

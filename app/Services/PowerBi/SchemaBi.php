@@ -75,8 +75,10 @@ class SchemaBi
     }
 
     /**
-     * O schema é criado FORA das migrations, com a credencial master (ver o script em
-     * `infra/bi/`): o usuário do app não tem, nem deve ter, `CREATE` global.
+     * O schema é criado FORA das migrations (`infra/bi/criar-schema-e-usuario.sh`), junto
+     * com o usuário `bi_leitura`. Localmente o `palma` não tem `CREATE` global; em
+     * produção ele é o master, mas criar schema e usuário de banco não é trabalho de
+     * deploy — a migration só confere.
      */
     public static function exigir(): void
     {

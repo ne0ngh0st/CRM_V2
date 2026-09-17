@@ -609,8 +609,8 @@ ssh -i ~/.ssh/crm-v2 ubuntu@<app-2> 'sudo bash /tmp/configurar-daemons.sh app-2'
 
 ⚠️ **Schema do Power BI (desde a branch `feat/bi-no-rds`, 2026-09-16): o
 `infra/bi/criar-schema-e-usuario.sh` roda ANTES do `--migrar`.** A migration
-`2026_09_16_110000` para com erro se o schema `bi` não existir, e o usuário do app não
-tem permissão para criá-lo. Ordem completa, incluindo a troca do RDS para
+`2026_09_16_110000` para com erro se o schema `bi` não existir, e é o script que cria também o usuário
+`bi_leitura`. Ordem completa, incluindo a troca do RDS para
 `db.t4g.medium` antes da reimportação do histórico: `docs/power-bi.md` §3.
 
 ⚠️ **O target group do Reverb leva ~1 min para virar `healthy`** (intervalo 30 s × 2
