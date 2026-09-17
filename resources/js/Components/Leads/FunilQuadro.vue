@@ -16,7 +16,7 @@
  */
 import FunilCard from '@/Components/Leads/FunilCard.vue';
 import ModalPadrao from '@/Components/ModalPadrao.vue';
-import { ETAPAS_ABERTAS, ROTULOS_ETAPA_LEAD } from '@/constants/leads.js';
+import { ETAPA_OUTROS, ETAPAS_ESTEIRA, ROTULOS_ETAPA_LEAD, proximaDaEsteira } from '@/constants/leads.js';
 import { computed, reactive, ref } from 'vue';
 
 const props = defineProps({
@@ -36,7 +36,16 @@ const modalPerda = ref(false);
 const cardPerdendo = ref(null);
 const motivoPerda = ref('');
 
-const totalEmJogo = computed(() => colunas.reduce((soma, c) => soma + c.total, 0));
+/**
+ * ⚠️ Só a ESTEIRA. "Outros" é coluna do quadro, mas somá-lo aqui faria o KPI de negócio em
+ * jogo contar SAC e licitação — exatamente o que a coluna existe para tirar da conta. Ele
+ * tem contador próprio ao lado.
+ */
+const totalEmJogo = computed(() =>
+    colunas.filter((c) => ETAPAS_ESTEIRA.includes(c.etapa)).reduce((soma, c) => soma + c.total, 0),
+);
+
+const totalForaDoFunil = computed(() => colunaDe(ETAPA_OUTROS)?.total ?? 0);
 
 function colunaDe(etapa) {
     return colunas.find((c) => c.etapa === etapa);
@@ -66,7 +75,7 @@ function mover(card, etapa, motivo = null) {
 
     const destino = colunaDe(etapa);
     if (destino) {
-        const proxima = ETAPAS_ABERTAS[ETAPAS_ABERTAS.indexOf(etapa) + 1] ?? null;
+        const proxima = proximaDaEsteira(etapa);
         destino.cards.unshift({ ...card, etapa, proximaEtapa: proxima, paradoDesde: new Date().toISOString() });
         destino.total += 1;
     } else if (etapa in fechados) {
@@ -135,6 +144,24 @@ function ganhar(card) {
     mover(card, 'ganho');
 }
 
+/**
+ * Triagem: chegou como lead mas não é venda — SAC, licitação, currículo, fornecedor.
+ * Não é perda (não havia negócio para perder) nem exclusão (o registro continua sendo a
+ * prova de que o contato existiu).
+ */
+function tirarDoFunil(card) {
+    mover(card, ETAPA_OUTROS);
+}
+
+/**
+ * ⚠️ O caminho de volta, e ele não é opcional. O auto-avanço não tira card de "Outros" de
+ * propósito, e arrastar não existe no celular: sem este botão, um lead triado por engano
+ * ficaria preso fora do funil.
+ */
+function devolverAoFunil(card) {
+    mover(card, ETAPAS_ESTEIRA[0]);
+}
+
 /** Perder sem dizer por quê é o que torna o funil inútil como diagnóstico. */
 function abrirPerda(card) {
     cardPerdendo.value = card;
@@ -192,27 +219,46 @@ async function carregarMais(coluna) {
             <span class="rounded border border-red-300 bg-red-50 px-2 py-0.5 font-semibold text-red-700">
                 Perdidos {{ fechados.perdido }}
             </span>
+            <span
+                v-if="totalForaDoFunil"
+                class="rounded border border-gray-300 bg-white px-2 py-0.5 font-semibold text-gray-500"
+                title="Contatos que não são venda — SAC, licitação, currículo, fornecedor"
+            >
+                Fora do funil {{ totalForaDoFunil }}
+            </span>
         </div>
 
         <p v-if="erro" class="mb-2 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
             {{ erro }}
         </p>
 
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <!--
+            ⚠️ 5 colunas, e a última NÃO é a quinta etapa: "Outros" é um desvio do funil.
+            Daí a borda tracejada e o fundo branco — a esteira é uma faixa contínua de
+            cartões cinzas, e o desvio tem que se ler como fora dela sem precisar de
+            legenda. Mesma razão do rótulo "Não é venda" no cabeçalho.
+        -->
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <div
                 v-for="coluna in colunas"
                 :key="coluna.etapa"
-                class="flex flex-col rounded border bg-zinc-50 transition"
-                :class="colunaAlvo === coluna.etapa ? 'border-cyan bg-cyan/5' : 'border-gray-200'"
+                class="flex flex-col rounded border transition"
+                :class="[
+                    coluna.etapa === ETAPA_OUTROS ? 'border-dashed bg-white' : 'bg-zinc-50',
+                    colunaAlvo === coluna.etapa ? 'border-cyan bg-cyan/5' : 'border-gray-300',
+                ]"
                 @dragover.prevent="colunaAlvo = coluna.etapa"
                 @dragleave="colunaAlvo === coluna.etapa && (colunaAlvo = null)"
                 @drop.prevent="soltarEm(coluna.etapa)"
             >
-                <div class="flex items-center justify-between border-b border-gray-200 px-2.5 py-2">
-                    <span class="text-[0.7rem] font-semibold uppercase tracking-wide text-gray-600">
+                <div class="flex items-center justify-between gap-1 border-b border-gray-200 px-2.5 py-2">
+                    <span class="truncate text-[0.7rem] font-semibold uppercase tracking-wide text-gray-600">
                         {{ ROTULOS_ETAPA_LEAD[coluna.etapa] }}
+                        <span v-if="coluna.etapa === ETAPA_OUTROS" class="font-normal normal-case text-gray-400">
+                            · não é venda
+                        </span>
                     </span>
-                    <span class="rounded bg-gray-200 px-1.5 text-[0.65rem] font-semibold text-gray-600">
+                    <span class="shrink-0 rounded bg-gray-200 px-1.5 text-[0.65rem] font-semibold text-gray-600">
                         {{ coluna.total }}
                     </span>
                 </div>
@@ -226,12 +272,14 @@ async function carregarMais(coluna) {
                         @avancar="avancar"
                         @ganhar="ganhar"
                         @perder="abrirPerda"
+                        @tirar-do-funil="tirarDoFunil"
+                        @devolver-ao-funil="devolverAoFunil"
                         @arrastar-inicio="arrastado = $event"
                         @arrastar-fim="arrastado = null"
                     />
 
                     <p v-if="!coluna.cards.length" class="px-1 py-4 text-center text-[0.7rem] text-gray-400">
-                        Nenhum lead nesta etapa.
+                        {{ coluna.etapa === ETAPA_OUTROS ? 'Nada fora do funil.' : 'Nenhum lead nesta etapa.' }}
                     </p>
 
                     <button

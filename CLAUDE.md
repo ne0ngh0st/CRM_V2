@@ -2346,6 +2346,72 @@ desliga 50 min depois; meia hora depois do `totvs:atualizar` da hora cheia). Por
 ⚠️ **Horário do refresh e janela da EC2 são o mesmo horário escrito em dois sistemas**: mudar
 um sem o outro faz o refresh rodar com o gateway desligado. `docs/power-bi.md` §5 e §8.
 
+### "Outros": a coluna do que chegou como lead e não é venda — 2026-09-17
+
+O funil ganhou uma 5ª coluna, **Outros**, para SAC, licitação, currículo, fornecedor — o que
+o formulário do site traz e não é negócio. É a **Regra de ouro nº 2 virando coluna**: cada um
+desses tem sistema próprio, e hoje eles ficavam parados na prospecção de alguém.
+
+⚠️ **É o contrário de filtrar na entrada, e de propósito.** O filtro de assunto
+(`assuntos_nao_comerciais`) existe desde 01/09 e está **desligado** porque o primeiro envio
+real do site chegou classificado como "Outros" pelo próprio remetente — quem preenche
+classifica de qualquer jeito, e descartar por ali perderia orçamento de verdade em silêncio.
+Aqui nada é descartado: quem separa é o vendedor que leu o pedido, e o lead continua
+existindo, alcançável pelo filtro da tela.
+
+#### 🥇 Esteira ≠ colunas — a separação que sustenta o resto
+
+| O que se pergunta | Quem responde |
+|---|---|
+| Quais colunas o quadro desenha? | `Lead::ETAPAS_ABERTAS` (esteira + outros) |
+| Qual é a próxima etapa? É avanço ou retrocesso? | `Lead::ETAPAS_ESTEIRA` |
+| O que conta como negócio em jogo? | `Lead::ETAPAS_ESTEIRA` |
+
+As duas listas foram a MESMA até esta data, e é isso que torna a armadilha fácil: acrescentar
+"outros" na única lista que existia faz o botão **"→" de um lead em Negociação apontar para
+"Outros"** — o atalho de "já tratei esse, joga pro próximo" passaria a jogar o negócio para
+fora do funil, num clique, sem nada quebrar em vermelho. Mesma armadilha no front
+(`proximaDaEsteira()` em `constants/leads.js`, onde o `indexOf` de -1 mais 1 cairia em 0 e um
+card em Outros exibiria "avançar para Novo").
+
+- ⚠️ **"Em jogo" conta a ESTEIRA, não as colunas** — no KPI da tela e no contador do quadro.
+  Somar "Outros" devolveria ao número exatamente o que a coluna existe para tirar dele.
+- ⚠️ **Auto-avanço NUNCA tira card de "Outros".** Quem o pôs lá leu o pedido; se responder ao
+  cliente o trouxesse de volta para "Em contato", o próprio ato de atender desfaria a triagem.
+  O caminho de volta é o botão "↩" do card (volta para Novo) — e ele não é opcional: arrastar
+  não existe no celular.
+- ⚠️ **Não exige motivo, e não é perda.** Não havia negócio para perder; misturar os dois
+  sujaria a taxa de conversão. Por isso o card em "Outros" perde os botões de ganho/perdido.
+- ⚠️ **Não conta "parado há X dias"** — ali um cartão âmbar permanente seria ruído, e ruído é
+  o que faz o sinal deixar de ser lido.
+- A migration escreve o enum **literal**, não `Lead::ETAPAS`: a `2026_09_03_100000` montou o
+  dela a partir da constante e, por isso, banco novo já nascia com "outros" enquanto dev e
+  produção não tinham — a lista mudou embaixo de uma migration já aplicada. **Migration é
+  retrato de um momento.**
+
+#### 🔴 Achado colateral: o filtro da tela de Leads estava morto havia duas semanas
+
+O dropdown oferecia `Ativo / Inativo / Convertido` — valores do enum anterior à separação dos
+eixos (03/09). O controller valida contra `Lead::ETAPAS`, então as três viravam `''` e o
+filtro **não fazia nada**: sem erro, sem tela vazia, apenas a lista inteira de volta. Mesmo
+formato do filtro de status dos pedidos, em que 5 das 6 opções devolviam tela vazia. Agora as
+opções saem de `ETAPAS_LEAD`, e o rótulo passou a ser "Etapa" — ⚠️ a **chave da query continua
+`status`**, porque renomear quebraria link salvo.
+
+#### Testes
+
+`FunilLeadTest` foi de 14 para 24 casos. **Cinco mutações aplicadas de propósito**, e o
+resultado corrigiu uma frase que eu ia escrever errado: remover a guarda
+`foraDoFunilComercial()` do auto-avanço **não quebra teste nenhum** (a comparação de posição
+já barra o movimento, igual ao caso de `etapaFechada()` documentado em 03/09) — mas trocar o
+`count()` de `posicaoDaEtapa` por `-1` derruba dois testes **se a guarda tiver saído**, e
+nenhum se ela estiver lá. As guardas não protegem o comportamento de hoje; protegem-no de uma
+mudança lá em cima. Há também um teste que se declara fraco: `lead_fora_do_funil_nao_tem_
+proxima_etapa` passa por acidente aritmético (Outros é o último da lista), e quem realmente
+trava a separação é `a_proxima_etapa_e_sempre_da_esteira`.
+
+Suíte inteira verde: **715 testes**.
+
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão

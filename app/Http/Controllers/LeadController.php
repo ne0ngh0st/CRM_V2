@@ -112,10 +112,20 @@ class LeadController extends Controller
             ->selectRaw("SUM(origem = 'sistema') as sistema")
             ->selectRaw("SUM(origem = 'manual') as manual")
             ->selectRaw("SUM(origem = 'wordpress') as wordpress")
-            // "Em jogo" = etapa ainda aberta. Antes era `status = 'ativo'`, que depois da
-            // separação dos eixos passaria a contar TODO lead não-excluído — inclusive os
-            // ganhos e perdidos — e o KPI viraria uma cópia do total.
-            ->selectRaw("SUM(etapa IN ('novo','em_contato','orcamento','negociacao')) as ativos")
+            /*
+             * "Em jogo" = etapa da ESTEIRA. Antes era `status = 'ativo'`, que depois da
+             * separação dos eixos passaria a contar TODO lead não-excluído — inclusive os
+             * ganhos e perdidos — e o KPI viraria uma cópia do total.
+             *
+             * ⚠️ Sai da constante, não de uma lista literal: "Outros" é coluna do quadro
+             * mas NÃO é negócio em jogo (é SAC, licitação, currículo), e uma lista
+             * chumbada aqui viraria a segunda definição de "em jogo" — certa hoje por
+             * coincidência, errada na próxima etapa que entrar. Regra de ouro nº 8.
+             */
+            ->selectRaw(
+                'SUM(etapa IN ('.implode(',', array_fill(0, count(Lead::ETAPAS_ESTEIRA), '?')).')) as ativos',
+                Lead::ETAPAS_ESTEIRA,
+            )
             ->first();
 
         $kpis = [

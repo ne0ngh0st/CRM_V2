@@ -17,6 +17,7 @@ import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import WordpressCapturaBar from '@/Components/Leads/WordpressCapturaBar.vue';
 import ModalPadrao from '@/Components/ModalPadrao.vue';
 import { contarFiltrosAtivos } from '@/utils/filtros';
+import { ETAPAS_LEAD, ROTULOS_ETAPA_LEAD } from '@/constants/leads.js';
 
 const props = defineProps({
     role: String,
@@ -226,11 +227,16 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
                             <option value="wordpress">WordPress</option>
                         </FilterField>
 
-                        <FilterField label="Status" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; aplicarFiltros(); }">
-                            <option value="">Todos</option>
-                            <option value="ativo">Ativo</option>
-                            <option value="inativo">Inativo</option>
-                            <option value="convertido">Convertido</option>
+                        <!--
+                            ⚠️ A chave da query continua `status` embora o que ela filtre
+                            seja `etapa`: renomear quebraria link salvo e o `only:` da
+                            recarga parcial. O rótulo é que estava mentindo.
+                        -->
+                        <FilterField label="Etapa" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; aplicarFiltros(); }">
+                            <option value="">Todas</option>
+                            <option v-for="etapa in ETAPAS_LEAD" :key="etapa" :value="etapa">
+                                {{ ROTULOS_ETAPA_LEAD[etapa] }}
+                            </option>
                         </FilterField>
 
                         <FilterField

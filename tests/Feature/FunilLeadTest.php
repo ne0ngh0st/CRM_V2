@@ -283,4 +283,214 @@ class FunilLeadTest extends TestCase
         $this->assertCount(count(Lead::ETAPAS_ABERTAS), $funil['colunas']);
         $this->assertSame(1, $funil['fechados']['ganho']);
     }
+
+    // ------------------------------------------------- "Outros": fora do funil comercial
+
+    /**
+     * 🥇 O TESTE QUE SUSTENTA A SEPARAÇÃO ENTRE ESTEIRA E COLUNAS.
+     *
+     * "Outros" é a última coluna do quadro. Se a ordem do funil continuasse saindo de
+     * ETAPAS_ABERTAS — como saía até ele existir —, o botão "→" de um lead em Negociação
+     * passaria a apontar para "Outros": o atalho de "já tratei esse, joga pro próximo"
+     * jogaria o negócio para FORA do funil, com um clique e sem nada quebrar na tela.
+     *
+     * Verificado por mutação: derivando `proximaEtapa()` de ETAPAS_ABERTAS, este teste
+     * falha com `outros` no lugar de null.
+     */
+    #[Test]
+    public function test_negociacao_nao_aponta_para_outros_como_proxima_etapa(): void
+    {
+        $lead = $this->lead(Lead::ETAPA_NEGOCIACAO);
+
+        $this->assertNull($lead->proximaEtapa(), 'Negociação é o fim da esteira — "Outros" não é a etapa seguinte');
+
+        $this->actingAs($this->vendedor())
+            ->patchJson(route('leads.etapa', $lead), ['etapa' => Lead::ETAPA_ORCAMENTO])
+            ->assertOk()
+            ->assertJsonPath('proximaEtapa', Lead::ETAPA_NEGOCIACAO);
+    }
+
+    /**
+     * Fora do funil não há "próximo": o botão "→" fica desabilitado e o card só volta à mão.
+     *
+     * ⚠️ ESTE TESTE NÃO MORDE quase nada hoje, e é honesto dizê-lo: "Outros" é o ÚLTIMO
+     * item das colunas, então mesmo derivando a próxima etapa da lista errada o índice
+     * cai fora do array e o resultado continua null, por acidente. Ele vale como
+     * regressão para o dia em que entrar uma etapa DEPOIS de "Outros" — quem realmente
+     * trava a separação é o teste acima.
+     */
+    #[Test]
+    public function test_lead_fora_do_funil_nao_tem_proxima_etapa(): void
+    {
+        $this->assertNull($this->lead(Lead::ETAPA_OUTROS)->proximaEtapa());
+    }
+
+    /**
+     * A invariante por trás dos dois testes acima, para não depender da posição de
+     * "Outros" na lista: o "→" só oferece etapa da ESTEIRA. Nenhum lead, em nenhuma
+     * etapa, pode ter como "próxima" um desvio ou um desfecho.
+     */
+    #[Test]
+    public function test_a_proxima_etapa_e_sempre_da_esteira(): void
+    {
+        foreach (Lead::ETAPAS as $etapa) {
+            $proxima = $this->lead($etapa)->proximaEtapa();
+
+            if ($proxima !== null) {
+                $this->assertContains($proxima, Lead::ETAPAS_ESTEIRA, "a etapa {$etapa} ofereceu '{$proxima}' como próxima");
+            }
+        }
+    }
+
+    /**
+     * Tirar do funil não é perder: não havia negócio para perder. Exigir motivo aqui
+     * transformaria uma triagem de um clique num formulário, e o vendedor voltaria a
+     * deixar SAC e licitação no meio da prospecção.
+     */
+    #[Test]
+    public function test_mover_para_outros_nao_exige_motivo(): void
+    {
+        $lead = $this->lead();
+
+        $this->actingAs($this->vendedor())
+            ->patchJson(route('leads.etapa', $lead), ['etapa' => Lead::ETAPA_OUTROS])
+            ->assertOk()
+            ->assertJsonPath('etapa', Lead::ETAPA_OUTROS)
+            ->assertJsonPath('proximaEtapa', null);
+
+        $this->assertSame(Lead::ETAPA_OUTROS, $lead->fresh()->etapa);
+        $this->assertNull($lead->fresh()->motivo_perda);
+    }
+
+    /**
+     * ⚠️ A REGRA QUE FAZ A TRIAGEM VALER. Quem pôs o lead em "Outros" leu o pedido e
+     * concluiu que não é venda. Se responder ao cliente (uma ligação, um WhatsApp) o
+     * trouxesse de volta para "Em contato", o próprio ato de atender desfaria a triagem —
+     * e o desvio existiria só no papel.
+     *
+     * ⚠️ Verificado por mutação, com uma ressalva que vale saber: remover a guarda
+     * `foraDoFunilComercial()` sozinha NÃO derruba este teste — a comparação de posição
+     * de `avancarAutomaticamentePara()` já barra o movimento por conta própria. O que
+     * derruba é mexer no `count()` de `posicaoDaEtapa` com a guarda ausente. O teste
+     * trava o COMPORTAMENTO (o card não sai de "Outros"), não a linha que o implementa.
+     */
+    #[Test]
+    public function test_contato_nao_tira_o_lead_de_outros(): void
+    {
+        $vendedor = $this->vendedor();
+        $lead = $this->lead(Lead::ETAPA_OUTROS);
+
+        $this->actingAs($vendedor)
+            ->post(route('leads.ligacao', $lead), ['tipo_contato' => 'telefonica'])
+            ->assertRedirect();
+
+        $this->assertSame(Lead::ETAPA_OUTROS, $lead->fresh()->etapa);
+        // E o contato foi registrado do mesmo jeito — a triagem não pode engolir atividade.
+        $this->assertSame(1, Ligacao::where('lead_id', $lead->id)->count());
+    }
+
+    /** Vale para todo gatilho automático, não só o contato — orçamento incluso. */
+    #[Test]
+    public function test_nenhum_gatilho_automatico_tira_o_lead_de_outros(): void
+    {
+        foreach (Lead::ETAPAS_ESTEIRA as $destino) {
+            $lead = $this->lead(Lead::ETAPA_OUTROS);
+
+            $this->assertFalse($lead->avancarAutomaticamentePara($destino));
+            $this->assertSame(Lead::ETAPA_OUTROS, $lead->fresh()->etapa);
+        }
+    }
+
+    /** O caminho de volta existe — triagem errada não pode prender o lead fora do funil. */
+    #[Test]
+    public function test_devolver_ao_funil_volta_o_lead_para_novo(): void
+    {
+        $lead = $this->lead(Lead::ETAPA_OUTROS);
+
+        $this->actingAs($this->vendedor())
+            ->patchJson(route('leads.etapa', $lead), ['etapa' => Lead::ETAPA_NOVO])
+            ->assertOk()
+            ->assertJsonPath('proximaEtapa', Lead::ETAPA_EM_CONTATO);
+
+        $this->assertSame(Lead::ETAPA_NOVO, $lead->fresh()->etapa);
+    }
+
+    /** "Outros" é coluna do quadro, e é a ÚLTIMA — o desvio vem depois do que é negócio. */
+    #[Test]
+    public function test_outros_e_a_ultima_coluna_do_quadro(): void
+    {
+        $vendedor = $this->vendedor();
+        $this->lead(Lead::ETAPA_NOVO);
+        $this->lead(Lead::ETAPA_OUTROS);
+        $this->lead(Lead::ETAPA_OUTROS);
+
+        $funil = $this->quadroDe($vendedor);
+        $etapas = collect($funil['colunas'])->pluck('etapa')->all();
+
+        $this->assertSame(Lead::ETAPA_OUTROS, end($etapas));
+        $this->assertSame(Lead::ETAPAS_ESTEIRA, array_slice($etapas, 0, count(Lead::ETAPAS_ESTEIRA)));
+        $this->assertSame(2, collect($funil['colunas'])->pluck('total', 'etapa')[Lead::ETAPA_OUTROS]);
+    }
+
+    /**
+     * ⚠️ "Em jogo" conta a ESTEIRA, não as colunas. Somar "Outros" ali devolveria ao KPI
+     * exatamente o que a coluna existe para tirar da conta — SAC e licitação inflando o
+     * número de negócios em aberto, sem ninguém desconfiar.
+     *
+     * Os números do fixture são todos diferentes de propósito: com 1 e 1, contar a
+     * esteira ou contar as colunas daria o mesmo e o teste não morderia.
+     */
+    #[Test]
+    public function test_lead_fora_do_funil_nao_conta_como_negocio_em_jogo(): void
+    {
+        $vendedor = $this->vendedor();
+        $this->lead(Lead::ETAPA_NOVO);
+        $this->lead(Lead::ETAPA_NEGOCIACAO);
+        $this->lead(Lead::ETAPA_OUTROS);
+        $this->lead(Lead::ETAPA_OUTROS);
+        $this->lead(Lead::ETAPA_OUTROS);
+        $this->lead(Lead::ETAPA_GANHO);
+
+        $kpis = $this->actingAs($vendedor)
+            ->get(route('leads.index'))
+            ->viewData('page')['props']['kpis'];
+
+        $this->assertSame(6, $kpis['total']);
+        $this->assertSame(2, $kpis['ativos'], '"em jogo" são os 2 da esteira — nem os 3 triados nem o ganho');
+    }
+
+    /**
+     * O filtro da tela precisa alcançar "Outros", senão a triagem entra e some: o quadro
+     * mostra 20 cards por coluna e não há outro caminho para ver a lista inteira.
+     *
+     * ⚠️ A chave da query continua `status` (link salvo não pode quebrar), embora o que
+     * ela filtre seja `etapa`.
+     */
+    #[Test]
+    public function test_filtro_da_tela_lista_os_leads_fora_do_funil(): void
+    {
+        $vendedor = $this->vendedor();
+        $this->lead(Lead::ETAPA_NOVO);
+        $triado = $this->lead(Lead::ETAPA_OUTROS);
+
+        $leads = $this->actingAs($vendedor)
+            ->get(route('leads.index', ['status' => Lead::ETAPA_OUTROS]))
+            ->viewData('page')['props']['leads']['data'];
+
+        $this->assertCount(1, $leads);
+        $this->assertSame($triado->id, $leads[0]['id']);
+    }
+
+    /** @return array<string, mixed> */
+    private function quadroDe(User $usuario): array
+    {
+        $completa = $this->actingAs($usuario)->get(route('leads.index', ['aba' => 'funil']))->assertOk();
+
+        return $this->actingAs($usuario)->get(route('leads.index', ['aba' => 'funil']), [
+            'X-Inertia' => 'true',
+            'X-Inertia-Version' => $completa->viewData('page')['version'],
+            'X-Inertia-Partial-Component' => 'Leads/Index',
+            'X-Inertia-Partial-Data' => 'funil',
+        ])->assertOk()->json('props.funil');
+    }
 }
