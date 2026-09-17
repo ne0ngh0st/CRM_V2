@@ -121,6 +121,7 @@ class VisaoSupervisorTest extends TestCase
 
         $this->actingAs($supervisor)
             ->withSession([ModoVisao::CHAVE_SESSAO => ModoVisao::PESSOAL])
+            ->followingRedirects()
             ->get(route($rota, $params))
             ->assertOk();
     }
@@ -240,6 +241,7 @@ class VisaoSupervisorTest extends TestCase
         $supervisor = $this->cenario();
 
         $props = $this->actingAs($supervisor)
+            ->followingRedirects()
             ->get(route($rota, $params))
             ->assertOk()
             ->viewData('page')['props'];

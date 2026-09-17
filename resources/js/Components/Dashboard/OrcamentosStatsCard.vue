@@ -53,7 +53,7 @@ function formatBRL(valor) {
         </template>
 
         <div class="flex flex-wrap gap-2">
-            <KpiTile :value="orcamentosStats.total" label="Total" :href="orcamentosHref({})" />
+            <KpiTile :value="orcamentosStats.total" label="Total" :href="orcamentosHref({ ver: 'todos' })" />
             <KpiTile :value="orcamentosStats.aguardandoSupervisor" label="Aguard. supervisor" tone="warn" :href="orcamentosHref({ status: 'pendente', nivel: 'supervisor' })" />
             <KpiTile :value="orcamentosStats.aguardandoDiretor" label="Aguard. diretor" tone="warn" :href="orcamentosHref({ status: 'pendente', nivel: 'diretor' })" />
             <KpiTile :value="orcamentosStats.aprovados" label="Aprovados" tone="ok" :href="orcamentosHref({ status: 'aprovado' })" />

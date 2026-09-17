@@ -22,6 +22,7 @@ const props = defineProps({
     portalHabilitado: { type: Boolean, default: false },
     orcamentos: Object,
     kpis: Object,
+    filaAprovacao: { type: Object, default: null },
     filtros: Object,
     visao: Object,
 });
@@ -72,6 +73,69 @@ const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
 ]));
 
 const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
+
+/*
+ * "12 de 180 orçamentos · Pendente" quando a lista é um recorte, "180 orçamentos"
+ * quando não é. Decide COMPARANDO os dois números, nunca perguntando quais filtros
+ * estão ativos — mesma regra da Carteira (`contagemDeClientes`).
+ */
+const contagemDeOrcamentos = computed(() => {
+    const total = props.kpis.total;
+    const rotulo = `${total} orçamento${total !== 1 ? 's' : ''}`;
+
+    return props.orcamentos.total !== total
+        ? `${props.orcamentos.total} de ${rotulo}`
+        : rotulo;
+});
+
+const recorteDaFila = computed(() => {
+    const fila = props.filaAprovacao;
+    if (!fila) return false;
+
+    return filtros.status === fila.status && filtros.nivel === fila.nivel;
+});
+
+const subtituloHero = computed(() => (
+    recorteDaFila.value
+        ? 'Fila de aprovação — só o que precisa da sua decisão.'
+        : 'Aprovação interna por nível de desconto — supervisor ou diretor conforme a regra de negócio.'
+));
+
+const vendoTodos = computed(() => (
+    props.filtros.ver === 'todos' && !filtros.status && !filtros.nivel
+));
+
+function hrefOrcamentos(recorte) {
+    return route('orcamentos.index', {
+        busca: filtros.busca || undefined,
+        data_inicio: filtros.data_inicio || undefined,
+        data_fim: filtros.data_fim || undefined,
+        visao_supervisor: filtros.visao_supervisor || undefined,
+        visao_vendedor: filtros.visao_vendedor || undefined,
+        ...recorte,
+    });
+}
+
+function facetaAtiva(recorte) {
+    if (recorte.ver === 'todos') {
+        return vendoTodos.value || (!props.filaAprovacao && !filtros.status && !filtros.nivel);
+    }
+
+    return Object.entries(recorte).every(([chave, valor]) => (filtros[chave] || '') === valor)
+        && (recorte.nivel ? true : !filtros.nivel);
+}
+
+function hrefFaceta(recorte) {
+    if (facetaAtiva(recorte)) {
+        if (recorte.ver === 'todos') {
+            return hrefOrcamentos(props.filaAprovacao ? {} : { ver: 'todos' });
+        }
+
+        return hrefOrcamentos({ ver: 'todos' });
+    }
+
+    return hrefOrcamentos(recorte);
+}
 
 function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
@@ -138,15 +202,50 @@ async function enviarAoPortal(orcamento) {
                         </svg>
                     </template>
                     <template #subtitle>
-                        Aprovação interna por nível de desconto — supervisor ou diretor conforme a regra de negócio.
+                        {{ subtituloHero }}
                     </template>
                     <template #meta>
-                        <KpiTile :value="kpis.total" label="Total" />
-                        <KpiTile :value="kpis.aguardandoSupervisor" label="Aguard. supervisor" tone="warn" />
-                        <KpiTile :value="kpis.aguardandoDiretor" label="Aguard. diretor" tone="warn" />
-                        <KpiTile :value="kpis.aprovados" label="Aprovados" tone="ok" />
-                        <KpiTile :value="kpis.rejeitados" label="Rejeitados" tone="danger" />
-                        <KpiTile :value="formatBRL(kpis.valorAprovado)" label="Valor aprovado" compact />
+                        <KpiTile
+                            :value="kpis.total"
+                            label="Total"
+                            :href="hrefFaceta({ ver: 'todos' })"
+                            :ativo="facetaAtiva({ ver: 'todos' })"
+                        />
+                        <KpiTile
+                            :value="kpis.aguardandoSupervisor"
+                            label="Aguard. supervisor"
+                            tone="warn"
+                            :href="hrefFaceta({ status: 'pendente', nivel: 'supervisor' })"
+                            :ativo="facetaAtiva({ status: 'pendente', nivel: 'supervisor' })"
+                        />
+                        <KpiTile
+                            :value="kpis.aguardandoDiretor"
+                            label="Aguard. diretor"
+                            tone="warn"
+                            :href="hrefFaceta({ status: 'pendente', nivel: 'diretor' })"
+                            :ativo="facetaAtiva({ status: 'pendente', nivel: 'diretor' })"
+                        />
+                        <KpiTile
+                            :value="kpis.aprovados"
+                            label="Aprovados"
+                            tone="ok"
+                            :href="hrefFaceta({ status: 'aprovado' })"
+                            :ativo="facetaAtiva({ status: 'aprovado' })"
+                        />
+                        <KpiTile
+                            :value="kpis.rejeitados"
+                            label="Rejeitados"
+                            tone="danger"
+                            :href="hrefFaceta({ status: 'rejeitado' })"
+                            :ativo="facetaAtiva({ status: 'rejeitado' })"
+                        />
+                        <KpiTile
+                            :value="formatBRL(kpis.valorAprovado)"
+                            label="Valor aprovado"
+                            compact
+                            :href="hrefFaceta({ status: 'aprovado' })"
+                            :ativo="facetaAtiva({ status: 'aprovado' })"
+                        />
                     </template>
                     <template #filtrosFixos>
                         <div class="flex w-full flex-col gap-1 sm:min-w-[200px] sm:max-w-[280px] sm:flex-1">
@@ -208,7 +307,7 @@ async function enviarAoPortal(orcamento) {
                     </template>
                 </PageHero>
 
-                <DarkCard title="Orçamentos" :subtitle="`${kpis.total} orçamento${kpis.total !== 1 ? 's' : ''}`">
+                <DarkCard title="Orçamentos" :subtitle="contagemDeOrcamentos">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round" />
@@ -260,7 +359,11 @@ async function enviarAoPortal(orcamento) {
                         @excluir="abrirExcluir"
                         @enviar-ao-portal="enviarAoPortal"
                     />
-                    <p v-else class="text-sm text-gray-400">Nenhum orçamento encontrado com os filtros atuais.</p>
+                    <p v-else class="text-sm text-gray-400">
+                        {{ recorteDaFila
+                            ? 'Nenhum orçamento aguardando sua aprovação.'
+                            : 'Nenhum orçamento encontrado com os filtros atuais.' }}
+                    </p>
 
                     <div class="mt-4">
                         <Pagination :meta="orcamentos" :only="['orcamentos']" />

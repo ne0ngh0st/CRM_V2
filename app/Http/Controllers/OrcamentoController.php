@@ -44,6 +44,25 @@ class OrcamentoController extends Controller
         'texto_importante' => 'Os preços deste orçamento têm validade de 5 dias a partir da data de emissão.',
     ];
 
+    /**
+     * Diretor e supervisor entram em Orçamentos na FILA, não na base inteira.
+     *
+     * Sem isto o diretor via os ~1.800 orçamentos da empresa e tinha que achar os
+     * poucos que pedem a decisão dele — e no celular o cartão ainda escondia o
+     * desconto até expandir. Pedido do Tony em 2026-09-17.
+     *
+     * ⚠️ `ver=todos` é o escape: o tile "Total" e o card do Painel apontam pra ele.
+     * Sem o sentinela, "Limpar filtros" e o próprio Total cairiam de novo na fila,
+     * e o número do tile não bateria com a lista (o caso que o Tony recusou na
+     * Carteira em 2026-09-15).
+     *
+     * ⚠️ Admin NÃO tem fila: o trabalho dele não é aprovar, é ver tudo.
+     */
+    private const FILA_POR_PERFIL = [
+        'diretor' => ['status' => 'pendente', 'nivel' => 'diretor'],
+        'supervisor' => ['status' => 'pendente', 'nivel' => 'supervisor'],
+    ];
+
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly NivelAprovacaoCalculator $calculator,
@@ -51,10 +70,14 @@ class OrcamentoController extends Controller
         private readonly NotificacaoService $notificacaoService,
     ) {}
 
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
         $role = $user->getRoleNames()->first();
+
+        if ($destino = $this->redirecionarParaFila($request, $role)) {
+            return $destino;
+        }
 
         $scope = $this->scopeResolver->resolve(
             $user,
@@ -70,19 +93,20 @@ class OrcamentoController extends Controller
 
         $portalHabilitado = (bool) config('portal.habilitado');
 
-        $baseQuery = fn () => $this->baseQuery($request);
+        $listaQuery = fn () => $this->baseQuery($request);
+        $kpisQuery = fn () => $this->baseQuery($request, comFacetas: false);
 
         $kpis = [
-            'total' => (clone $baseQuery())->count(),
-            'valorTotal' => (float) (clone $baseQuery())->sum('valor_total'),
-            'aguardandoSupervisor' => (clone $baseQuery())->where('status_gestor', 'pendente')->where('nivel_aprovacao', 'supervisor')->count(),
-            'aguardandoDiretor' => (clone $baseQuery())->where('status_gestor', 'pendente')->where('nivel_aprovacao', 'diretor')->count(),
-            'aprovados' => (clone $baseQuery())->where('status_gestor', 'aprovado')->count(),
-            'valorAprovado' => (float) (clone $baseQuery())->where('status_gestor', 'aprovado')->sum('valor_total'),
-            'rejeitados' => (clone $baseQuery())->where('status_gestor', 'rejeitado')->count(),
+            'total' => (clone $kpisQuery())->count(),
+            'valorTotal' => (float) (clone $kpisQuery())->sum('valor_total'),
+            'aguardandoSupervisor' => (clone $kpisQuery())->where('status_gestor', 'pendente')->where('nivel_aprovacao', 'supervisor')->count(),
+            'aguardandoDiretor' => (clone $kpisQuery())->where('status_gestor', 'pendente')->where('nivel_aprovacao', 'diretor')->count(),
+            'aprovados' => (clone $kpisQuery())->where('status_gestor', 'aprovado')->count(),
+            'valorAprovado' => (float) (clone $kpisQuery())->where('status_gestor', 'aprovado')->sum('valor_total'),
+            'rejeitados' => (clone $kpisQuery())->where('status_gestor', 'rejeitado')->count(),
         ];
 
-        $orcamentos = $baseQuery()
+        $orcamentos = $listaQuery()
             ->with(['user:id,name,display_name', 'aprovadoPor:id,name,display_name', 'itens'])
             ->latest()
             ->paginate(20)
@@ -148,12 +172,14 @@ class OrcamentoController extends Controller
             'podeExcluir' => in_array($role, ['admin', 'diretor'], true),
             'orcamentos' => $orcamentos,
             'kpis' => $kpis,
+            'filaAprovacao' => self::FILA_POR_PERFIL[$role] ?? null,
             'filtros' => [
                 'busca' => $busca,
                 'status' => $status,
                 'nivel' => $nivel,
                 'data_inicio' => $dataInicio,
                 'data_fim' => $dataFim,
+                'ver' => (string) $request->string('ver'),
             ],
             'visao' => [
                 'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
@@ -172,13 +198,19 @@ class OrcamentoController extends Controller
         return $this->entregarPlanilha('orcamentos', $request);
     }
 
-    /** Escopo (user_id) + busca/status/nivel/data. Usado por index() (KPIs e lista) e pelo CatalogoDeExportacoes. */
     /**
+     * Escopo (user_id) + busca/status/nivel/data. Usado por index() (KPIs e lista) e
+     * pelo CatalogoDeExportacoes.
+     *
      * ⚠️ Público porque o CatalogoDeExportacoes monta a mesma query em dois contextos: a
      * requisição e o job de exportação. Uma segunda cópia divergiria da tela no dia em
      * que um filtro novo entrasse aqui (Regra de ouro nº 8).
+     *
+     * ⚠️ `comFacetas: false` é só para os KPIs do card, que DESENHAM a quebra por
+     * status e por nível e por isso não podem filtrar por elas. Quem lista, conta
+     * ou exporta sempre usa o padrão.
      */
-    public function baseQuery(Request $request): Builder
+    public function baseQuery(Request $request, bool $comFacetas = true): Builder
     {
         $user = $request->user();
         $role = $user->getRoleNames()->first();
@@ -210,11 +242,11 @@ class OrcamentoController extends Controller
             });
         }
 
-        if ($status !== '') {
+        if ($comFacetas && $status !== '') {
             $query->where('status_gestor', $status);
         }
 
-        if ($nivel !== '') {
+        if ($comFacetas && $nivel !== '') {
             $query->where('nivel_aprovacao', $nivel);
         }
 
@@ -227,6 +259,33 @@ class OrcamentoController extends Controller
         }
 
         return $query;
+    }
+
+    /**
+     * Mandar diretor/supervisor para a fila quando a URL não escolheu recorte nenhum.
+     *
+     * ⚠️ `filled()`, nunca `has()`: o "Limpar filtros" do Inertia manda `status=`
+     * (chave presente, valor vazio). Com `has()` o redirect não dispararia e o
+     * diretor voltaria a ver a base inteira depois de limpar — exatamente o
+     * contrário do que a fila existe para fazer.
+     */
+    private function redirecionarParaFila(Request $request, string $role): ?RedirectResponse
+    {
+        $fila = self::FILA_POR_PERFIL[$role] ?? null;
+
+        if ($fila === null) {
+            return null;
+        }
+
+        if ($request->string('ver')->value() === 'todos') {
+            return null;
+        }
+
+        if ($request->filled('status') || $request->filled('nivel')) {
+            return null;
+        }
+
+        return redirect()->route('orcamentos.index', array_merge($request->query(), $fila));
     }
 
     public function novo(Request $request): Response

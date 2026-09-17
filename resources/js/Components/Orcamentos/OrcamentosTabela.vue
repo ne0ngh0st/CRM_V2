@@ -26,6 +26,14 @@ function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
 }
 
+function formatDesconto(valor) {
+    return `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(valor)}%`;
+}
+
+function rotuloItens(qtd) {
+    return qtd === 1 ? '1 item' : `${qtd} itens`;
+}
+
 function formatQuantidade(valor) {
     return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(valor);
 }
@@ -40,13 +48,15 @@ function pdfUrl(orcamento, download) {
         <!-- `sm:min-w-`, nunca `min-w-`: a largura mínima é utility e venceria o
              `@layer components`, então abaixo de 640px o cartão sairia certo dentro de uma
              página rolando 1000px na horizontal. -->
-        <table class="tbl tbl-cartoes sm:min-w-[1000px]">
+        <table class="tbl tbl-cartoes sm:min-w-[1200px]">
             <thead>
                 <tr class="tbl-head-row">
                     <th class="tbl-th w-8"></th>
                     <th class="tbl-th">Cliente</th>
                     <th class="tbl-th">Vendedor</th>
                     <th class="tbl-th">Valor Total</th>
+                    <th class="tbl-th">Desconto</th>
+                    <th class="tbl-th">Itens</th>
                     <th class="tbl-th">Nível</th>
                     <th class="tbl-th">Status</th>
                     <th class="tbl-th">Validade</th>
@@ -65,14 +75,16 @@ function pdfUrl(orcamento, download) {
                             >
                                 <polyline points="9,6 15,12 9,18" stroke-linecap="round" stroke-linejoin="round" />
                             </svg>
-                            <span class="sm:hidden">{{ expandido === orcamento.id ? 'Ocultar itens' : 'Ver itens' }}</span>
+                            <span class="sm:hidden">{{ expandido === orcamento.id ? 'Ocultar itens deste orçamento' : `Ver os ${orcamento.itens.length} ${orcamento.itens.length === 1 ? 'item' : 'itens'} deste orçamento` }}</span>
                         </td>
                         <td class="tbl-td tbl-td-titulo">
-                            <span class="tbl-main sm:max-w-[220px]" :title="orcamento.clienteNome">{{ orcamento.clienteNome }}</span>
+                            <span class="tbl-main sm:max-w-[220px]" :title="orcamento.clienteNome">#{{ orcamento.id }} · {{ orcamento.clienteNome }}</span>
                             <span class="tbl-sub">{{ orcamento.clienteCnpj ?? '—' }}</span>
                         </td>
                         <td class="tbl-td" data-rotulo="Vendedor">{{ orcamento.vendedorNome }}</td>
                         <td class="tbl-td font-medium text-gray-800" data-rotulo="Valor total">{{ formatBRL(orcamento.valorTotal) }}</td>
+                        <td class="tbl-td font-medium text-gray-800" data-rotulo="Desconto máx.">{{ formatDesconto(orcamento.descontoPctMax) }}</td>
+                        <td class="tbl-td" data-rotulo="Itens">{{ rotuloItens(orcamento.itens.length) }}</td>
                         <td class="tbl-td" data-rotulo="Nível">
                             <StatusPill :tone="orcamento.nivelAprovacao === 'diretor' ? 'danger' : orcamento.nivelAprovacao === 'supervisor' ? 'warn' : 'neutral'" size="sm">
                                 {{ ROTULOS_NIVEL_APROVACAO[orcamento.nivelAprovacao] }}
@@ -89,30 +101,43 @@ function pdfUrl(orcamento, download) {
                         <td class="tbl-td" data-rotulo="Criado em">{{ orcamento.criadoEm }}</td>
                         <td class="tbl-td tbl-td-acoes" @click.stop>
                             <div class="tbl-acoes">
+                                <div v-if="orcamento.podeDecidir" class="tbl-decisao">
                                 <button
-                                    v-if="orcamento.podeDecidir"
                                     type="button"
                                     title="Aprovar"
-                                    class="tbl-acao tbl-acao-verde"
+                                    class="tbl-acao tbl-acao-verde tbl-acao-decidir"
                                     @click="$emit('aprovar', orcamento)"
                                 >
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                         <circle cx="12" cy="12" r="9" />
                                         <path d="m8 12.5 2.5 2.5L16 9" stroke-linecap="round" stroke-linejoin="round" />
                                     </svg>
+                                    <span class="sm:hidden">Aprovar</span>
                                 </button>
                                 <button
-                                    v-if="orcamento.podeDecidir"
                                     type="button"
                                     title="Rejeitar"
-                                    class="tbl-acao tbl-acao-danger"
+                                    class="tbl-acao tbl-acao-danger tbl-acao-decidir"
                                     @click="$emit('rejeitar', orcamento)"
                                 >
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                         <circle cx="12" cy="12" r="9" />
                                         <path d="m9 9 6 6M15 9l-6 6" stroke-linecap="round" />
                                     </svg>
+                                    <span class="sm:hidden">Rejeitar</span>
                                 </button>
+                                </div>
+                                <a
+                                    :href="pdfUrl(orcamento)"
+                                    target="_blank"
+                                    title="Ver PDF"
+                                    class="tbl-acao tbl-acao-navy"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke-linecap="round" stroke-linejoin="round" />
+                                        <path d="M14 3v4h4" stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
+                                </a>
                                 <button
                                     v-if="orcamento.podeEditar"
                                     type="button"
@@ -135,17 +160,6 @@ function pdfUrl(orcamento, download) {
                                         <path d="M5 15V5a1 1 0 0 1 1-1h10" stroke-linecap="round" stroke-linejoin="round" />
                                     </svg>
                                 </button>
-                                <a
-                                    :href="pdfUrl(orcamento)"
-                                    target="_blank"
-                                    title="Ver PDF"
-                                    class="tbl-acao tbl-acao-navy"
-                                >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                        <path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke-linecap="round" stroke-linejoin="round" />
-                                        <path d="M14 3v4h4" stroke-linecap="round" stroke-linejoin="round" />
-                                    </svg>
-                                </a>
                                 <!--
                                     Âmbar porque a função é a mesma família de "enviar
                                     p/ setor": manda o documento para FORA do CRM. A
@@ -216,12 +230,12 @@ function pdfUrl(orcamento, download) {
                         </td>
                     </tr>
                     <tr v-if="expandido === orcamento.id" class="bg-gray-50">
-                        <td colspan="9" class="tbl-td-expansao p-2 sm:p-4">
+                        <td colspan="11" class="tbl-td-expansao p-2 sm:p-4">
                             <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
                                 <div class="lg:col-span-2">
                                     <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens do orçamento</p>
                                     <div class="tbl-wrap">
-                                    <table class="tbl-itens">
+                                    <table class="tbl-itens tbl-itens-cartoes">
                                         <thead>
                                             <tr class="tbl-itens-head-row">
                                                 <th class="tbl-itens-th">Produto</th>
@@ -236,10 +250,10 @@ function pdfUrl(orcamento, download) {
                                                 <td class="tbl-itens-td">
                                                     <span v-if="item.codProduto" class="text-gray-400">{{ item.codProduto }} · </span>{{ item.descricao }}
                                                 </td>
-                                                <td class="tbl-itens-td">{{ formatQuantidade(item.quantidade) }}</td>
-                                                <td class="tbl-itens-td">{{ formatBRL(item.valorUnitario) }}</td>
-                                                <td class="tbl-itens-td">{{ item.precoTabela !== null ? formatBRL(item.precoTabela) : '—' }}</td>
-                                                <td class="tbl-itens-td font-medium text-gray-800">{{ formatBRL(item.valorTotal) }}</td>
+                                                <td class="tbl-itens-td" data-rotulo="Qtd.">{{ formatQuantidade(item.quantidade) }}</td>
+                                                <td class="tbl-itens-td" data-rotulo="Vlr. unit.">{{ formatBRL(item.valorUnitario) }}</td>
+                                                <td class="tbl-itens-td" data-rotulo="Preço tabela">{{ item.precoTabela !== null ? formatBRL(item.precoTabela) : '—' }}</td>
+                                                <td class="tbl-itens-td font-medium text-gray-800" data-rotulo="Vlr. total">{{ formatBRL(item.valorTotal) }}</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -255,10 +269,6 @@ function pdfUrl(orcamento, download) {
                                         <div class="flex justify-between gap-2">
                                             <dt class="text-gray-400">Forma pagto.</dt>
                                             <dd class="text-right">{{ orcamento.formaPagamento ?? '—' }}</dd>
-                                        </div>
-                                        <div class="flex justify-between gap-2">
-                                            <dt class="text-gray-400">Desconto máx.</dt>
-                                            <dd class="text-right">{{ orcamento.descontoPctMax.toFixed(2) }}%</dd>
                                         </div>
                                         <div v-if="orcamento.aprovadoPorNome" class="flex justify-between gap-2">
                                             <dt class="text-gray-400">Decidido por</dt>
