@@ -2354,12 +2354,17 @@ um sem o outro faz o refresh rodar com o gateway desligado. `docs/power-bi.md` �
 - 🟡 **Tainara (`vendedor_perfis.cod_vendedor = '00006'`, 5 dígitos)** não casa com os
   pedidos dela, que o TOTVS emite como `000006`. Corrigir o perfil para `000006` (a meta
   dela também está em `00006`, zerada).
-- 🔴 **Power BI no RDS — Fases 2 a 5 (prazo: 31/10/2026, quando o `autopel01` sai do ar).** A
-  Fase 1 (código) está na branch `feat/bi-no-rds`, não deployada. Ordem: RDS → `db.t4g.medium`;
-  `infra/bi/criar-schema-e-usuario.sh`; deploy; `bi:carregar-referencias`; reimportar o
-  histórico (`docs/power-bi.md` §4); `bi:cobertura` ≥ 99%; gateway + dataset novo; ligar
-  `POWERBI_REFRESH_HABILITADO`. ⚠️ `produtos` continua sem fonte TOTVS depois do desligamento
-  (a view completa com os códigos vendidos, sem preço).
+- 🟢 **Power BI no RDS — migração CONCLUÍDA em 2026-09-17.** O relatório em uso é o
+  **`BI_RADES RDS`** (`reportId=0d7a10a1-…`, fonte em `POWER BI\BI_RADES RDS.pbip`); o
+  `BI_RADES CORRETO` (ODBC da KingHost) foi apagado do Serviço. As 12 tabelas leem
+  `MySQL.Database(<rds>, "bi")` pelo gateway, com refresh agendado seg–sex às 11:00 e 14:00.
+  O botão do Painel aponta para ele (`POWERBI_EMBED_URL` nos dois nós + default do config).
+  - ⚠️ **O Desktop não atualiza dados**: o RDS não é público. Mudou o modelo → publicar e
+    atualizar pelo Serviço, dentro da janela da EC2.
+  - ⚠️ `bi_leitura` precisa de **20 conexões** (o refresh abre uma por tabela; com 5 falhou).
+  - Em aberto: mover o refresh para **11:15/14:15** (hoje coincide com o `totvs:atualizar` da
+    hora cheia); relatórios 198 de jan–ago/2026 (município/família); `produtos` sem fonte
+    TOTVS depois de 31/10.
 - 🟡 **"Falta vender" do TOTAL/SUBTOTAL é líquida — confirmar com o diretor.** Hoje o
   vendedor "coberto" compensa a falta do colega na mesma equipe (e a empresa inteira aparece
   "Coberto", porque o faturado já passou da meta). A alternativa é somar só as faltas
