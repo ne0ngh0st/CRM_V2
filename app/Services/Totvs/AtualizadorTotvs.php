@@ -2,6 +2,7 @@
 
 namespace App\Services\Totvs;
 
+use App\Jobs\AtualizarPowerBiJob;
 use App\Models\TotvsImportacao;
 use FilesystemIterator;
 use Illuminate\Support\Facades\Artisan;
@@ -156,11 +157,53 @@ class AtualizadorTotvs
             // min, fora do caminho de qualquer usuário — o lugar certo para pagar isso.
             $this->recalcularContagens();
 
-            return $this->encerrar($rodada, 'sucesso', $passos);
+            $refreshBi = (bool) config('powerbi.refresh.habilitado');
+
+            if ($refreshBi) {
+                $passos[] = [
+                    'comando' => AtualizarPowerBiJob::PASSO,
+                    'segundos' => 0,
+                    'falhou' => false,
+                    'saida' => 'Na fila: o refresh do Power BI será pedido em instantes.',
+                ];
+            }
+
+            $rodada = $this->encerrar($rodada, 'sucesso', $passos);
+
+            if ($refreshBi) {
+                $this->pedirRefreshDoPowerBi($rodada);
+            }
+
+            return $rodada;
         } catch (Throwable $e) {
             Log::error('totvs:atualizar falhou', ['erro' => $e->getMessage()]);
 
             return $this->encerrar($rodada, 'falha', $passos, $e->getMessage());
+        }
+    }
+
+    /**
+     * Enfileira o refresh do Power BI para a rodada que acabou de dar certo.
+     *
+     * ⚠️ DEPOIS do `encerrar()`, nunca antes: o job reescreve o passo `powerbi:refresh`
+     * da rodada, e um worker rápido o faria antes de o `encerrar()` gravar os passos —
+     * que então apagaria o resultado.
+     *
+     * ⚠️ Só em `sucesso`. `sem_mudanca` não trouxe dado novo (refresh seria cota
+     * jogada fora) e `falha` deixou o banco pela metade.
+     *
+     * ⚠️ O próprio despacho não pode derrubar a rodada: se o Redis da fila estiver fora,
+     * os dados já entraram — fica o registro no log, e a próxima importação tenta de novo.
+     */
+    private function pedirRefreshDoPowerBi(TotvsImportacao $rodada): void
+    {
+        try {
+            AtualizarPowerBiJob::dispatch($rodada->id);
+        } catch (Throwable $e) {
+            Log::error('Não foi possível enfileirar o refresh do Power BI', [
+                'rodada' => $rodada->id,
+                'erro' => $e->getMessage(),
+            ]);
         }
     }
 

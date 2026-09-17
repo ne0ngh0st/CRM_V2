@@ -98,7 +98,7 @@ class ImportFaturamentoTotvs extends Command
             $leitor->exigirColunas([
                 'FILIAL', 'EMISSAO', 'COD_CLI', 'CNPJ', 'CLIENTE', 'COD_VENDEDOR',
                 'COD_PROD', 'DES_PROD', 'SEGMENTO', 'QUANT', 'VLR_UNIT', 'VLR_TOTAL',
-                'PEDIDO', 'NTA_FISCAL',
+                'PEDIDO', 'NTA_FISCAL', 'COD_LOJA', 'Estado', 'Municipio',
             ]);
         } catch (RuntimeException $e) {
             // Arquivo de formato antigo/estranho não pode derrubar o import dos outros
@@ -107,6 +107,14 @@ class ImportFaturamentoTotvs extends Command
             $this->warn('  pulando este arquivo.');
 
             return [0, 0];
+        }
+
+        // Família é a única das colunas do BI que já faltou em layout real (os xlsx de
+        // 2018–2023 não a têm). Arquivo sem ela importa normalmente, com a família nula.
+        $temFamilia = $leitor->temColuna('DESC_FAMILIA');
+
+        if (! $temFamilia) {
+            $this->warn('  sem a coluna DESC_FAMILIA — a família do produto fica nula neste arquivo.');
         }
 
         // Primeira passada: descobre quais dias o arquivo cobre. Ler duas vezes é mais
@@ -148,7 +156,7 @@ class ImportFaturamentoTotvs extends Command
         }
 
         DB::table('faturamentos')->whereIn('data_emissao', $datas)->delete();
-        $inseridas = $this->inserir($leitor, $chunk);
+        $inseridas = $this->inserir($leitor, $chunk, $temFamilia);
 
         return [$inseridas, $existentes];
     }
@@ -178,7 +186,7 @@ class ImportFaturamentoTotvs extends Command
         return [array_keys($datas), $linhas, $semData];
     }
 
-    private function inserir(LeitorRelatorio $leitor, int $chunk): int
+    private function inserir(LeitorRelatorio $leitor, int $chunk, bool $temFamilia): int
     {
         $agora = now();
         $lote = [];
@@ -209,6 +217,16 @@ class ImportFaturamentoTotvs extends Command
                 'quantidade' => Normalizador::numero($linha['QUANT']),
                 'valor_unitario' => Normalizador::numero($linha['VLR_UNIT']),
                 'valor_total' => Normalizador::numero($linha['VLR_TOTAL']),
+                'loja' => Normalizador::valorOuNull($linha['COD_LOJA']),
+                'estado' => Normalizador::uf($linha['Estado']),
+                /*
+                 * ⚠️ `Municipio`, com minúsculas — a coluna ao lado de `Estado`. O 198 tem
+                 * uma SEGUNDA, `MUNICIPIO`, depois de `CLIENTE`; o leitor distingue as duas
+                 * pela caixa. Esta é a que existe também nos xlsx históricos, então é a que
+                 * mantém 2018 e 2026 comparáveis no mapa do BI.
+                 */
+                'municipio' => Normalizador::valorOuNull($linha['Municipio']),
+                'desc_familia' => $temFamilia ? Normalizador::valorOuNull($linha['DESC_FAMILIA']) : null,
                 'created_at' => $agora,
                 'updated_at' => $agora,
             ];

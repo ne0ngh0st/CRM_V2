@@ -93,6 +93,28 @@ class Normalizador
     }
 
     /**
+     * Sigla de UF para uma coluna `varchar(2)`.
+     *
+     * ⚠️ O que não tiver exatamente duas letras vira NULL, nunca é cortado: `EX`
+     * (exterior) passa, mas um "SAO PAULO" truncado viraria `SA` e o mapa do BI passaria
+     * a mentir em silêncio. Mesmo raciocínio do `normalizarUf` dos leads do site.
+     */
+    public static function uf(mixed $valor): ?string
+    {
+        $valor = strtoupper(trim((string) $valor));
+
+        return preg_match('/^[A-Z]{2}$/', $valor) === 1 ? $valor : null;
+    }
+
+    /** Filial da Autopel ("05") como inteiro — o mesmo tipo de `faturamentos.filial`. */
+    public static function filial(mixed $valor): ?int
+    {
+        $valor = trim((string) $valor);
+
+        return ctype_digit($valor) ? (int) $valor : null;
+    }
+
+    /**
      * Código do TOTVS com zero-padding inconsistente: o MESMO segmento aparece como
      * "101" e "000101" dependendo do registro, e o mesmo vale para `GrpVendas`. Sem
      * normalizar, o join com `segmentos.codigo` / `grupos_cliente.codigo` não bate e o

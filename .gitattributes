@@ -6,6 +6,10 @@
 *.md diff=markdown
 *.php diff=php
 
+# Exports do phpMyAdmin (CRLF + BOM): versionados byte a byte, sem normalizar o fim de
+# linha — é o formato exato que o bi:carregar-referencias espera.
+/database/dados-bi/*.csv -text
+
 /.github export-ignore
 CHANGELOG.md export-ignore
 .styleci.yml export-ignore

@@ -21,6 +21,10 @@ class Faturamento extends Model
         'quantidade',
         'valor_unitario',
         'valor_total',
+        'loja',
+        'estado',
+        'municipio',
+        'desc_familia',
     ];
 
     protected function casts(): array

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Jobs\AtualizarDadosTotvsJob;
+use App\Jobs\AtualizarPowerBiJob;
 use App\Models\TotvsImportacao;
 use App\Models\User;
 use App\Services\Totvs\AtualizadorTotvs;
@@ -10,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -394,6 +396,99 @@ class AtualizacaoDadosTest extends TestCase
         app(AtualizadorTotvs::class)->executar();
 
         $this->assertSame($velho, Cache::get(AtualizadorTotvs::CHAVE_CACHE_CONTAGENS));
+    }
+
+    // ─── Refresh do Power BI ────────────────────────────────────────────────────
+
+    public function test_importacao_bem_sucedida_enfileira_o_refresh_do_power_bi(): void
+    {
+        config(['powerbi.refresh.habilitado' => true]);
+        Queue::fake();
+        $this->relatorio('FAT.csv');
+        $this->fingirArtisan();
+
+        $rodada = app(AtualizadorTotvs::class)->executar();
+
+        $this->assertSame('sucesso', $rodada->status);
+        Queue::assertPushed(AtualizarPowerBiJob::class, fn ($job) => $job->rodadaId === $rodada->id && $job->agendadoEm === null);
+
+        // A rodada já nasce dizendo que o refresh está a caminho.
+        $passo = collect($rodada->fresh()->passos)->firstWhere('comando', AtualizarPowerBiJob::PASSO);
+        $this->assertNotNull($passo);
+        $this->assertFalse($passo['falhou']);
+    }
+
+    /** Sem dado novo, refresh é cota do Pro jogada fora. */
+    public function test_rodada_sem_mudanca_nao_pede_refresh(): void
+    {
+        config(['powerbi.refresh.habilitado' => true]);
+        $this->relatorio('FAT.csv');
+        $artisan = $this->fingirArtisan();
+        Queue::fake();
+        app(AtualizadorTotvs::class)->executar();
+
+        Queue::fake();
+        $artisan->reiniciar();
+        $rodada = app(AtualizadorTotvs::class)->executar();
+
+        $this->assertSame('sem_mudanca', $rodada->status);
+        Queue::assertNotPushed(AtualizarPowerBiJob::class);
+    }
+
+    /** Banco pela metade não vai para o BI. */
+    public function test_rodada_que_falha_nao_pede_refresh(): void
+    {
+        config(['powerbi.refresh.habilitado' => true]);
+        Queue::fake();
+        $this->relatorio('FAT.csv');
+        $this->fingirArtisan('totvs:import-pedidos-abertos');
+
+        $rodada = app(AtualizadorTotvs::class)->executar();
+
+        $this->assertSame('falha', $rodada->status);
+        Queue::assertNotPushed(AtualizarPowerBiJob::class);
+        $this->assertNull(collect($rodada->fresh()->passos)->firstWhere('comando', AtualizarPowerBiJob::PASSO));
+    }
+
+    /** Desligado (o padrão até o dataset novo existir): nem job, nem passo na tela. */
+    public function test_refresh_desligado_nao_enfileira_nem_polui_a_rodada(): void
+    {
+        config(['powerbi.refresh.habilitado' => false]);
+        Queue::fake();
+        $this->relatorio('FAT.csv');
+        $this->fingirArtisan();
+
+        $rodada = app(AtualizadorTotvs::class)->executar();
+
+        $this->assertSame('sucesso', $rodada->status);
+        Queue::assertNotPushed(AtualizarPowerBiJob::class);
+        $this->assertNull(collect($rodada->fresh()->passos)->firstWhere('comando', AtualizarPowerBiJob::PASSO));
+    }
+
+    /**
+     * ⚠️ O job reescreve o passo `powerbi:refresh` da rodada. Com a fila síncrona ele roda
+     * no instante do despacho — se o despacho viesse antes do `encerrar()`, o `encerrar()`
+     * gravaria os passos por cima e o resultado do BI sumiria da tela. É o mesmo que
+     * aconteceria com um worker rápido em produção.
+     */
+    public function test_resultado_do_refresh_nao_e_apagado_pelo_registro_da_rodada(): void
+    {
+        config(['powerbi.refresh' => array_merge(config('powerbi.refresh'), [
+            'habilitado' => true, 'tenant_id' => 't', 'client_id' => 'c', 'client_secret' => 's',
+            'workspace_id' => 'w', 'dataset_id' => 'd',
+        ])]);
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => 'x', 'expires_in' => 3600]),
+            'api.powerbi.com/*' => Http::response([], 202),
+        ]);
+        $this->relatorio('FAT.csv');
+        $this->fingirArtisan();
+
+        $rodada = app(AtualizadorTotvs::class)->executar(); // QUEUE_CONNECTION=sync
+
+        $passo = collect($rodada->fresh()->passos)->firstWhere('comando', AtualizarPowerBiJob::PASSO);
+        $this->assertStringContainsString('Refresh pedido', $passo['saida']);
+        $this->assertSame('sucesso', $rodada->fresh()->status);
     }
 
     /**
