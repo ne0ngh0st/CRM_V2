@@ -323,6 +323,17 @@ memória dele**, que é vazio quando o arquivo foi aberto sem refresh.
 Aconteceu: depois de publicar o visual novo, o relatório no Serviço ficou **sem dado
 nenhum** até a atualização seguinte. Não é perda de dado — o banco está intacto.
 
+**Decisão do Tony (17/09): fica assim, o banco NÃO é exposto.** Foram avaliadas as duas
+alternativas para o Desktop enxergar o banco, e as duas custam mais do que resolvem:
+
+- **Abrir o RDS para os IPs do Tony** não é um botão: as sub-redes do banco são privadas
+  (sem rota para internet), então `PubliclyAccessible=true` sozinho não faz nada — seria
+  preciso MOVER o banco de produção (Multi-AZ) para sub-redes públicas, com indisponibilidade
+  e perda permanente do isolamento.
+- **Túnel SSH pelo app-1** exige linha no `hosts` do Windows (para manter o mesmo nome de
+  servidor do modelo) — testado: **precisa de administrador, que esta máquina não dá** — e a
+  porta 3306 local está ocupada pelo MySQL do Docker.
+
 **A regra: toda publicação exige um refresh no Serviço logo depois**, e refresh só funciona
 com o gateway ligado. Portanto: publicar DENTRO das janelas (10:10-11:20 / 13:10-14:20) ou
 ligar a máquina na mão antes (§8), e conferir também a **Conexão de gateway** do modelo, que
