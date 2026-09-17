@@ -37,6 +37,7 @@ BANCO_APP="${BANCO_APP:-palma_v2}"
 USUARIO_APP="${USUARIO_APP:-palma}"
 SCHEMA_BI="${SCHEMA_BI:-bi}"
 USUARIO_BI="${USUARIO_BI:-bi_leitura}"
+MAX_CONEXOES_BI="${MAX_CONEXOES_BI:-20}"
 ROTACIONAR="${ROTACIONAR:-0}"
 ENV_APP="${ENV_APP:-/var/www/crm/.env}"
 
@@ -96,8 +97,7 @@ if [[ "$EXISTE" == "0" || "$ROTACIONAR" == "1" ]]; then
   if [[ "$EXISTE" == "0" ]]; then
     # ⚠️ REQUIRE SSL: a conexão sai do gateway pela rede da VPC, mas nada custa exigir
     # criptografia. O MySQL Connector/NET usa SSL por padrão (SslMode=Preferred).
-    # MAX_USER_CONNECTIONS limita o estrago de um refresh mal configurado no RDS.
-    sql "CREATE USER '${USUARIO_BI}'@'%' IDENTIFIED BY '${SENHA_BI}' REQUIRE SSL WITH MAX_USER_CONNECTIONS 5"
+    sql "CREATE USER '${USUARIO_BI}'@'%' IDENTIFIED BY '${SENHA_BI}' REQUIRE SSL"
     echo "    criado"
   else
     sql "ALTER USER '${USUARIO_BI}'@'%' IDENTIFIED BY '${SENHA_BI}'"
@@ -113,6 +113,13 @@ if [[ "$EXISTE" == "0" || "$ROTACIONAR" == "1" ]]; then
 else
   echo "    já existe — senha mantida (ROTACIONAR=1 para trocar)"
 fi
+
+# MAX_USER_CONNECTIONS limita o estrago de um refresh mal configurado no RDS.
+# ⚠️ 5 era pouco: o Power BI abre uma conexão por tabela em paralelo (12 tabelas) e o
+# primeiro refresh de 2026-09-17 falhou com erro 1226. Aplicado sempre, não só na
+# criação, para que mudar o número aqui e rodar de novo baste.
+sql "ALTER USER '${USUARIO_BI}'@'%' WITH MAX_USER_CONNECTIONS ${MAX_CONEXOES_BI}"
+echo "    limite de ${MAX_CONEXOES_BI} conexões simultâneas"
 
 echo "==> SELECT em ${SCHEMA_BI}.*"
 sql "GRANT SELECT ON \`${SCHEMA_BI}\`.* TO '${USUARIO_BI}'@'%'"
