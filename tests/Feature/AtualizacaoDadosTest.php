@@ -242,6 +242,22 @@ class AtualizacaoDadosTest extends TestCase
         ], AtualizadorTotvs::IMPORTS);
     }
 
+    /**
+     * O rollup da Visão Diretor faz parte da corrente: se falha, a rodada é falha e o
+     * marcador não é gravado — senão a tela ficaria com faturamento velho sob uma rodada
+     * verde.
+     */
+    public function test_rollup_de_faturamento_que_falha_derruba_a_rodada(): void
+    {
+        $this->relatorio('FAT.csv');
+        $this->fingirArtisan('faturamento:rollup-mensal');
+
+        $rodada = app(AtualizadorTotvs::class)->executar(origem: 'manual', userId: null);
+
+        $this->assertSame('falha', $rodada->status);
+        $this->assertFileDoesNotExist($this->diretorio.'/.ultima-importacao');
+    }
+
     public function test_importa_e_grava_o_marcador_quando_ha_relatorio_novo(): void
     {
         $this->relatorio('FAT.csv');
@@ -251,7 +267,7 @@ class AtualizacaoDadosTest extends TestCase
 
         $this->assertSame('sucesso', $rodada->status);
         $this->assertSame(
-            array_merge(['totvs:sincronizar-s3'], AtualizadorTotvs::IMPORTS),
+            array_merge(['totvs:sincronizar-s3'], AtualizadorTotvs::IMPORTS, AtualizadorTotvs::DERIVADOS),
             $artisan->chamados
         );
         $this->assertFileExists($this->diretorio.'/.ultima-importacao');

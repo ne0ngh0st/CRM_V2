@@ -6,6 +6,7 @@ use App\Exports\CadastroExport;
 use App\Exports\CarteiraExport;
 use App\Exports\EquipeExport;
 use App\Exports\LeadExport;
+use App\Exports\MaioresPorSegmentoExport;
 use App\Exports\MetasExport;
 use App\Exports\OrcamentoExport;
 use App\Exports\PedidoAbertoExport;
@@ -22,7 +23,9 @@ use App\Http\Controllers\TabelaPrecoController;
 use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
+use App\Services\VisaoDiretor\MaioresPorSegmentoResolver;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use InvalidArgumentException;
 
 /**
@@ -69,6 +72,7 @@ class CatalogoDeExportacoes
         'cadastros-etiqueta' => 'Solicitações de etiqueta',
         'cadastros-cliente' => 'Solicitações de cliente novo',
         'cadastros-lead' => 'Solicitações de lead',
+        'maiores-por-segmento' => 'Maiores por segmento',
     ];
 
     public function rotulo(string $recurso): string
@@ -101,6 +105,7 @@ class CatalogoDeExportacoes
             'metas' => $this->metas($request, $user),
             'cadastros-bobina', 'cadastros-etiqueta', 'cadastros-cliente', 'cadastros-lead'
                 => $this->cadastros($recurso, $request, $user),
+            'maiores-por-segmento' => $this->maioresPorSegmento($request, $user),
 
             /*
              * ⚠️ Estoura em vez de cair num default. O recurso vem de um registro do banco
@@ -196,6 +201,28 @@ class CatalogoDeExportacoes
         [$linhas, $ano, $mes] = $controller->linhasDoRanking($request, $user);
 
         return new PlanoDeExportacao(new MetasExport($linhas), "metas-{$ano}-{$mes}", count($linhas));
+    }
+
+    /**
+     * Visão Diretor. O gate é conferido AQUI e não só na rota, porque este plano também é
+     * montado dentro do job — mesma regra de Equipe e Metas.
+     */
+    private function maioresPorSegmento(Request $request, User $user): PlanoDeExportacao
+    {
+        abort_unless(Gate::forUser($user)->allows('ver-visao-diretor'), 403);
+
+        $dados = app(MaioresPorSegmentoResolver::class)->resolver([
+            'segmento' => (string) $request->string('segmento'),
+            'status' => (string) $request->string('status'),
+            'uf' => (string) $request->string('uf'),
+            'busca' => (string) $request->string('busca'),
+        ]);
+
+        return new PlanoDeExportacao(
+            new MaioresPorSegmentoExport($dados['segmentos']),
+            'maiores-por-segmento',
+            $dados['kpis']['contas'],
+        );
     }
 
     private function cadastros(string $recurso, Request $request, User $user): PlanoDeExportacao

@@ -20,7 +20,7 @@
 
 /**
  * Visibilidade por perfil. Recebe sempre o mesmo objeto de papéis
- * (`{ isGestor, isAssistente, isAdmin }`), montado uma vez pelo layout.
+ * (`{ isGestor, isDiretor, isAssistente, isAdmin }`), montado uma vez pelo layout.
  *
  * Item sem `visivel` aparece para todos — é o default de propósito: perfil comercial novo
  * deve nascer vendo o menu inteiro e perdendo o que não é dele, nunca o contrário.
@@ -28,6 +28,9 @@
 const soGestor = ({ isGestor }) => isGestor;
 const soAssistente = ({ isAssistente }) => isAssistente;
 const soAdmin = ({ isAdmin }) => isAdmin;
+// Admin + diretor. Espelha o gate `ver-visao-diretor` do servidor — o menu só esconde;
+// quem proíbe é o gate (docs/visao-diretor.md).
+const soDiretor = ({ isDiretor }) => isDiretor;
 
 /**
  * Assistente não atende carteira nem pedido — o trabalho dele é lead e cadastro.
@@ -62,6 +65,19 @@ export const NAV_PRINCIPAL = [
             { chave: 'equipe', rotulo: 'Equipe', icone: 'equipe', rota: 'equipe.index', ativoEm: ['equipe.*'], prefetch: 'hover' },
             { chave: 'visao-gestor-index', rotulo: 'Observações e ligações', icone: 'observacoes', rota: 'visao-gestor.index', ativoEm: ['visao-gestor.*'], prefetch: 'hover' },
             { chave: 'metas', rotulo: 'Metas', icone: 'metas', rota: 'metas.index', ativoEm: ['metas.*'], prefetch: 'hover' },
+        ],
+    },
+    {
+        // Análises estratégicas para o dono da empresa. Página nova da seção entra como
+        // item deste grupo E no grupo de rotas do gate — ver docs/visao-diretor.md.
+        chave: 'visao-diretor',
+        rotulo: 'Visão Diretor',
+        icone: 'diretor',
+        visivel: soDiretor,
+        largura: '56',
+        ativoEm: ['visao-diretor.*'],
+        itens: [
+            { chave: 'maiores-por-segmento', rotulo: 'Maiores por segmento', icone: 'segmentos', rota: 'visao-diretor.maiores.index', ativoEm: ['visao-diretor.maiores.*'], prefetch: 'hover' },
         ],
     },
     {

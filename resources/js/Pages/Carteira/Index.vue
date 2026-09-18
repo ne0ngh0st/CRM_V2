@@ -59,6 +59,9 @@ const filtros = reactive({
     // Vem do card de Potencial da Carteira do Painel; não tem campo próprio na barra de
     // filtros — é anunciado por uma faixa acima da tabela, com "limpar".
     sem_familia: props.filtros.semFamilia || '',
+    // Vem do "Nossas lojas" da Visão Diretor → Maiores por Segmento. Também sem campo na
+    // barra: é anunciado pela faixa acima da tabela, com "limpar".
+    conta_alvo: props.filtros.contaAlvo?.id ? String(props.filtros.contaAlvo.id) : '',
     ordenar: props.filtros.ordenar || 'nome_asc',
     /*
      * Precisa viajar junto de todo filtro, ordenação e troca de aba: `paramsComAba()`
@@ -223,7 +226,7 @@ function abrirAgendamento(cliente) {
  * — e aí a busca conta.
  */
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
-    'estado', 'segmento', 'status', 'aderencia', 'sem_familia',
+    'estado', 'segmento', 'status', 'aderencia', 'sem_familia', 'conta_alvo',
     'visao_supervisor', 'visao_vendedor',
 ]));
 
@@ -231,6 +234,11 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
 
 function limparSemFamilia() {
     filtros.sem_familia = '';
+    aplicarFiltros();
+}
+
+function limparContaAlvo() {
+    filtros.conta_alvo = '';
     aplicarFiltros();
 }
 </script>
@@ -408,6 +416,29 @@ function limparSemFamilia() {
                             type="button"
                             class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
                             @click="limparSemFamilia"
+                        >
+                            Limpar recorte
+                        </button>
+                    </div>
+
+                    <!--
+                        Recorte vindo da Visão Diretor ("Nossas lojas" de uma conta-alvo). Mesmo
+                        motivo da faixa de cima: sem anunciar, a pessoa chega numa lista
+                        bem menor que a carteira e conclui que a tela quebrou.
+                    -->
+                    <div
+                        v-if="filtros.conta_alvo && props.filtros.contaAlvo"
+                        class="flex flex-wrap items-center justify-between gap-2 rounded border border-teal/40 bg-teal/10 px-3 py-2"
+                    >
+                        <p class="text-sm text-gray-700">
+                            Mostrando apenas os clientes da conta
+                            <strong class="font-semibold">{{ props.filtros.contaAlvo.nome }}</strong>
+                            (Visão Diretor → Maiores por segmento).
+                        </p>
+                        <button
+                            type="button"
+                            class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
+                            @click="limparContaAlvo"
                         >
                             Limpar recorte
                         </button>

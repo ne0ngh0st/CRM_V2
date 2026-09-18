@@ -21,6 +21,7 @@ use App\Http\Controllers\SimulacaoController;
 use App\Http\Controllers\SugestaoController;
 use App\Http\Controllers\TabelaPrecoController;
 use App\Http\Controllers\VisaoController;
+use App\Http\Controllers\VisaoDiretor\MaioresPorSegmentoController;
 use App\Http\Controllers\VisaoGestorController;
 use Illuminate\Support\Facades\Route;
 
@@ -198,6 +199,22 @@ Route::middleware('auth')->group(function () {
     // EtiquetaMateriaPrimaController e no CRUD do Catalogo de Facas.
     Route::get('/atualizacoes', [AtualizacaoDadosController::class, 'index'])->name('atualizacoes.index');
     Route::post('/atualizacoes', [AtualizacaoDadosController::class, 'disparar'])->name('atualizacoes.disparar');
+
+    /*
+     * Visão Diretor — admin + diretor. O gate vale para o GRUPO inteiro: página nova entra
+     * aqui e já nasce protegida, sem depender de checagem no controller. Padrão da seção
+     * em docs/visao-diretor.md.
+     */
+    Route::middleware('can:ver-visao-diretor')->prefix('visao-diretor')->name('visao-diretor.')->group(function () {
+        Route::get('/maiores-por-segmento', [MaioresPorSegmentoController::class, 'index'])->name('maiores.index');
+        Route::get('/maiores-por-segmento/busca-vinculo', [MaioresPorSegmentoController::class, 'buscarVinculo'])->name('maiores.busca-vinculo');
+        Route::post('/maiores-por-segmento/exportar', [MaioresPorSegmentoController::class, 'exportar'])->name('maiores.exportar');
+        Route::get('/maiores-por-segmento/contas/{conta}/clientes', [MaioresPorSegmentoController::class, 'clientes'])->name('maiores.clientes');
+        Route::post('/maiores-por-segmento/contas', [MaioresPorSegmentoController::class, 'store'])->name('maiores.store');
+        Route::patch('/maiores-por-segmento/contas/{conta}', [MaioresPorSegmentoController::class, 'update'])->name('maiores.update');
+        Route::delete('/maiores-por-segmento/contas/{conta}', [MaioresPorSegmentoController::class, 'destroy'])->name('maiores.destroy');
+        Route::patch('/maiores-por-segmento/segmentos/{segmento}/especialista', [MaioresPorSegmentoController::class, 'especialista'])->name('maiores.especialista');
+    });
 });
 
 require __DIR__.'/auth.php';

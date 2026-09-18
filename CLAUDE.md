@@ -321,6 +321,7 @@ Rodada grande que expandiu bastante o escopo original das ~16 páginas core. Adi
 - **Cadastros** (`/cadastros`, `CadastroController`) — hub único com 4 tipos de "solicitação" (bobina, etiqueta, cliente novo no TOTVS, lead manual rápido), cada uma vira um `mailto:` pro setor certo (PCP, Cadastro, Cadastro Cliente). `ClienteParaCadastro` (tabela `clientes_para_cadastro`) é só essa fila de solicitação — **não** é a tabela `clientes` real nem quebra a Regra nº 4 (não cria/edita cliente de verdade, só pede pro time de Cadastros criar no TOTVS).
 - **Metas** (`/metas`, `MetaController` + `MetaRankingResolver`) — ranking de metas vs. realizado, só gestor (admin/diretor/supervisor), com edição de meta escopada (supervisor só edita quem é `cod_super` dele).
 - **Visão do Gestor** (`/visao-gestor`) — painel gerencial de observações/ligações da equipe.
+- **Visão Diretor** (`/visao-diretor/*`) — análises estratégicas para admin + diretor (gate `ver-visao-diretor`). Primeira página: **Maiores por Segmento**. Padrão da seção, modelo e rollup em `docs/visao-diretor.md` — ler de lá antes de encostar. Não usa `DashboardScopeResolver`; faturamento nunca agrega `faturamentos` ao vivo.
 - **Tabela de Preços** (`/tabela-precos`) — consulta de produtos, aberta a todos os perfis exceto assistente.
 - **Pedidos Emitidos** (`/pedidos-emitidos`) — complementa `/pedidos-abertos` (que já existia).
 - **Perfil** — upload de foto (`ProfileController::updateFoto`/`destroyFoto`); auto-exclusão de conta removida (não fazia sentido, usuário vem do TOTVS/admin).

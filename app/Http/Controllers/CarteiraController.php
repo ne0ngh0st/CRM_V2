@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\AgendamentoLigacao;
 use App\Models\CarteiraMotivoInatividade;
 use App\Models\Cliente;
+use App\Models\ContaEstrategica;
 use App\Models\GrupoCliente;
 use App\Models\Ligacao;
 use App\Models\Pedido;
@@ -20,12 +21,14 @@ use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Potencial\FamiliaProduto;
 use App\Services\Potencial\PotencialCarteiraResolver;
 use App\Services\Vendedores\NomeVendedorResolver;
+use App\Services\VisaoDiretor\ClientesDaConta;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -43,6 +46,7 @@ class CarteiraController extends Controller
         private readonly DashboardBlocos $blocos,
         private readonly PotencialCarteiraResolver $potencial,
         private readonly NomeVendedorResolver $nomeVendedor,
+        private readonly ClientesDaConta $clientesDaConta,
     ) {
     }
 
@@ -163,6 +167,9 @@ class CarteiraController extends Controller
             'status' => (string) $request->string('status'),
             'aderencia' => (string) $request->string('aderencia'),
             'sem_familia' => (string) $request->string('sem_familia'),
+            // Id + VERSÃO dos vínculos: editar a conta na Visão Diretor muda a chave, e o
+            // total cacheado não fica 10 min atrás do número que a pessoa acabou de clicar.
+            'conta_alvo' => $this->assinaturaContaAlvo($request) ?? '',
         ], fn (string $v, string $k) => $v !== '' && ! in_array($k, $exceto, true), ARRAY_FILTER_USE_BOTH);
 
         if ($filtros === []) {
@@ -318,6 +325,9 @@ class CarteiraController extends Controller
                 // Quantas EMPRESAS o recorte tem. A tabela lista filiais, então este número
                 // é menor que o total da listagem — e é ele que bate com o card do Painel.
                 'semFamiliaEmpresas' => $semFamilia !== '' ? count($this->codigosSemFamilia($request) ?? []) : null,
+                // Vem do "Nossas lojas" da Visão Diretor. Anunciado por faixa com "limpar",
+                // pelo mesmo motivo do `semFamilia`: recorte invisível parece lista quebrada.
+                'contaAlvo' => $this->contaAlvoParaTela($request),
             ],
             'opcoes' => $this->opcoesDeFiltro($request, $codVendedores),
             'visao' => [
@@ -433,6 +443,10 @@ class CarteiraController extends Controller
         }
 
         $this->aplicarSemFamilia($request, $query);
+
+        if (($contaAlvo = $this->contaAlvoId($request)) !== null) {
+            $this->clientesDaConta->aplicar($query, $contaAlvo);
+        }
 
         if ($comFacetas) {
             $this->aplicarFiltroDeStatus($request, $query, $escopada);
@@ -580,6 +594,55 @@ class CarteiraController extends Controller
      * `faturamentos` não guardar `loja` — ver o docblock do PotencialCarteiraResolver — e o
      * card declara isso no rodapé.
      */
+    /**
+     * O id do filtro `?conta_alvo=` (Visão Diretor → Maiores por Segmento), ou null.
+     *
+     * ⚠️ Só vale para quem passa no gate da Visão Diretor. Para os demais é IGNORADO, não
+     * recusado: a Carteira de um vendedor continua escopada pelo `cod_vendedor` de
+     * qualquer jeito, mas a conta estratégica é informação da diretoria e o recorte não
+     * deve ser utilizável fora dela.
+     *
+     * A definição do recorte mora em `ClientesDaConta` — a mesma que a Visão Diretor usa
+     * para CONTAR. É o que faz o número clicado bater com a lista aberta.
+     */
+    private function contaAlvoId(Request $request): ?int
+    {
+        $bruto = (string) $request->string('conta_alvo');
+
+        if ($bruto === '' || ! ctype_digit($bruto)) {
+            return null;
+        }
+
+        $user = $request->user();
+
+        if (! $user || ! Gate::forUser($user)->allows('ver-visao-diretor')) {
+            return null;
+        }
+
+        return (int) $bruto;
+    }
+
+    private function assinaturaContaAlvo(Request $request): ?string
+    {
+        $id = $this->contaAlvoId($request);
+
+        return $id === null ? null : $this->clientesDaConta->assinatura($id);
+    }
+
+    /** @return array{id: int, nome: string}|null */
+    private function contaAlvoParaTela(Request $request): ?array
+    {
+        $id = $this->contaAlvoId($request);
+
+        if ($id === null) {
+            return null;
+        }
+
+        $nome = ContaEstrategica::query()->whereKey($id)->value('nome');
+
+        return $nome === null ? null : ['id' => $id, 'nome' => $nome];
+    }
+
     private function aplicarSemFamilia(Request $request, Builder $query): void
     {
         $codigos = $this->codigosSemFamilia($request);

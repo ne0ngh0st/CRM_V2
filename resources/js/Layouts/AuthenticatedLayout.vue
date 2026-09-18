@@ -39,6 +39,7 @@ const papeis = computed(() => page.props.auth?.roles ?? []);
  */
 const perfil = computed(() => ({
     isGestor: papeis.value.some((r) => ['admin', 'diretor', 'supervisor'].includes(r)),
+    isDiretor: papeis.value.some((r) => ['admin', 'diretor'].includes(r)),
     isAssistente: papeis.value.includes('assistente'),
     isAdmin: papeis.value.includes('admin'),
 }));

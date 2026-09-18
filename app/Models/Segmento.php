@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Segmento extends Model
@@ -13,6 +14,7 @@ class Segmento extends Model
         'codigo',
         'nome',
         'peso_potencial',
+        'especialista_user_id',
     ];
 
     protected $casts = [
@@ -22,5 +24,11 @@ class Segmento extends Model
     public function segmentosVendedor(): HasMany
     {
         return $this->hasMany(SegmentoVendedor::class);
+    }
+
+    /** O responsável do segmento na diretoria (Visão Diretor → Maiores por Segmento). */
+    public function especialista(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'especialista_user_id');
     }
 }

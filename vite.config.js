@@ -2,12 +2,15 @@ import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import vue from '@vitejs/plugin-vue';
 
+// Porta extra (VITE_PORT) quando esta worktree sobe ao lado do compose da outra sessão.
+const porta = Number(process.env.VITE_PORT || 5173);
+
 export default defineConfig({
     server: {
         host: '0.0.0.0',
-        port: 5173,
+        port: porta,
         strictPort: true,
-        origin: 'http://localhost:5173',
+        origin: `http://localhost:${porta}`,
         cors: true,
         hmr: {
             host: 'localhost',

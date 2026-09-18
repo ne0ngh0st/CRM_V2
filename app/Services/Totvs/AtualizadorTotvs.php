@@ -59,6 +59,19 @@ class AtualizadorTotvs
         'totvs:import-pedidos-abertos',
     ];
 
+    /**
+     * Tabelas DERIVADAS do que acabou de ser importado, recalculadas depois dos imports e
+     * antes do marcador.
+     *
+     * ⚠️ Fazem parte da corrente, não são "extra": se o rollup falha, a rodada é `falha`
+     * e o marcador não é gravado — a próxima rodada tenta tudo de novo. Tratar como
+     * best-effort deixaria a Visão Diretor com faturamento velho sob uma rodada verde,
+     * que é exatamente o tipo de defeito que não acende luz nenhuma.
+     */
+    public const DERIVADOS = [
+        'faturamento:rollup-mensal',
+    ];
+
     private const ARQUIVO_MARCADOR = '.ultima-importacao';
 
     /**
@@ -134,7 +147,7 @@ class AtualizadorTotvs
                 return $this->encerrar($rodada, 'sem_mudanca', $passos);
             }
 
-            foreach (self::IMPORTS as $comando) {
+            foreach ([...self::IMPORTS, ...self::DERIVADOS] as $comando) {
                 $passo = $this->rodar($comando);
                 $passos[] = $passo;
 

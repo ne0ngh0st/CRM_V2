@@ -38,6 +38,17 @@ const TRACOS = {
         'M12 14.8v5',
         'M9.2 19.8h5.6',
     ],
+    // Visão Diretor: curva subindo sobre um eixo — tendência, não operação.
+    diretor: [
+        'M3.6 3.8v16.6h16.8',
+        'M6.8 15.6l3.9-4.4 3.2 2.8 5.3-6.2',
+        'M15.6 7.8h3.6v3.6',
+    ],
+    // Maiores por segmento: pizza com uma fatia destacada.
+    segmentos: [
+        'M11 4.2a8 8 0 1 0 8.8 8.8H11Z',
+        'M14 3.2a7 7 0 0 1 6.8 6.8H14Z',
+    ],
     equipe: [
         'M9.4 11.4a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2',
         'M3.6 19.6v-.7a5.8 5.8 0 0 1 11.6 0v.7',
