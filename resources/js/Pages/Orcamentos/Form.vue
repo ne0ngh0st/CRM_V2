@@ -180,6 +180,26 @@ function salvar() {
                 </div>
 
                 <!--
+                    Resumo de erros do servidor, perto do botão que foi clicado.
+                    Existe porque nem todo campo validado tem lugar na folha (tipo do item,
+                    vínculo com cliente/lead, matéria-prima): quando a validação recusava
+                    um desses, o salvamento falhava sem mensagem nenhuma e o botão
+                    parecia não fazer nada. Lista TODOS os erros de propósito — manter uma
+                    lista de "campos sem mensagem própria" seria mais uma cópia para
+                    esquecer de atualizar.
+                -->
+                <div
+                    v-if="form.hasErrors"
+                    role="alert"
+                    class="mx-auto w-full max-w-[1180px] border-l-2 border-red-500 bg-red-50 px-3 py-2 text-xs text-red-700"
+                >
+                    <p class="font-semibold">Não foi possível salvar o orçamento. Confira:</p>
+                    <ul class="mt-1 list-disc pl-4">
+                        <li v-for="(mensagem, campo) in form.errors" :key="campo">{{ mensagem }}</li>
+                    </ul>
+                </div>
+
+                <!--
                     Nota de bastidor: fica FORA da folha de propósito. Tudo que está dentro
                     da folha é exatamente o que o cliente recebe; aprovação é assunto interno.
                 -->

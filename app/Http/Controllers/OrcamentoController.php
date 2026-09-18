@@ -962,7 +962,16 @@ class OrcamentoController extends Controller
             'textoImportante' => $orcamento->texto_importante,
             'itens' => $orcamento->itens->map(fn (OrcamentoItem $i) => Arr::except([
                 'id' => $i->id,
-                'tipoItem' => $i->tipo_item,
+                /*
+                 * ⚠️ Os 2.127 orçamentos importados do legado têm `tipo_item` NULO em
+                 * todos os itens (o legado não tinha o conceito). Mandar null para o
+                 * formulário fazia `itens.*.tipo_item` falhar na validação sem mensagem
+                 * nenhuma na tela: copiar ou editar um orçamento antigo e clicar em salvar
+                 * "não fazia nada". 'outro' é o mesmo default de item novo — o registro
+                 * histórico continua como está; só o documento salvo a partir dele
+                 * ganha o tipo.
+                 */
+                'tipoItem' => $i->tipo_item ?? 'outro',
                 'codProduto' => $i->cod_produto,
                 'descricao' => $i->descricao,
                 'quantidade' => (float) $i->quantidade,
