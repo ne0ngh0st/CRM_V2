@@ -25,11 +25,11 @@ use Tests\TestCase;
  *
  * O que estes testes protegem, em ordem de importância:
  *
- * 1. O número clicado bate com a lista aberta. "Nossas lojas" da conta tem que ser o total
+ * 1. O número clicado bate com a lista aberta. "Clientes" da conta tem que ser o total
  *    da Carteira filtrada por `?conta_alvo=`, e isso só é verdade enquanto as duas telas
  *    usarem a MESMA definição (`ClientesDaConta`).
  * 2. O gate: a seção é só admin + diretor, e o filtro `conta_alvo` não vale para os outros.
- * 3. Os derivados (status, atendimento, penetração) seguem as regras da Carteira.
+ * 3. Os derivados (status, atendimento) seguem as regras da Carteira.
  * 4. O rollup de faturamento soma exatamente o que `faturamentos` soma.
  */
 class MaioresPorSegmentoTest extends TestCase
@@ -160,7 +160,7 @@ class MaioresPorSegmentoTest extends TestCase
 
     // ─── Derivados ──────────────────────────────────────────────────────────────
 
-    public function test_deriva_lojas_clientes_status_atendimento_e_penetracao(): void
+    public function test_deriva_clientes_status_e_atendimento(): void
     {
         $conta = $this->conta('RAIA', [['grupo', '100'], ['grupo', '101'], ['cliente', '000003']], 100);
 
@@ -168,7 +168,6 @@ class MaioresPorSegmentoTest extends TestCase
 
         $this->assertSame(4, $l['lojas']);
         $this->assertSame(3, $l['clientes']);
-        $this->assertSame(0.04, $l['penetracao']);
         // A loja que comprou há 10 dias basta: a rede está ativa.
         $this->assertSame('ativo', $l['status']);
         $this->assertSame(['001', '002', '003'], array_column($l['atendimento'], 'codVendedor'));
@@ -200,20 +199,12 @@ class MaioresPorSegmentoTest extends TestCase
 
     // ─── A invariante: número clicado == lista aberta ───────────────────────────
 
-    public function test_nossas_lojas_e_clientes_batem_com_a_carteira_filtrada(): void
+    public function test_clientes_batem_com_a_carteira_filtrada(): void
     {
         $conta = $this->conta('RAIA', [['grupo', '100'], ['grupo', '101'], ['cliente', '000003']], 100);
         $l = $this->linha($conta);
 
-        $this->assertSame($l['lojas'], $this->totalDaCarteira($this->admin, ['conta_alvo' => $conta->id, 'agrupar' => '0']));
         $this->assertSame($l['clientes'], $this->totalDaCarteira($this->admin, ['conta_alvo' => $conta->id]));
-
-        // O chip de cada vendedor em "Atendimento" abre a carteira dele dentro da conta.
-        foreach ($l['atendimento'] as $v) {
-            $this->assertSame($v['lojas'], $this->totalDaCarteira($this->admin, [
-                'conta_alvo' => $conta->id, 'visao_vendedor' => $v['codVendedor'], 'agrupar' => '0',
-            ]));
-        }
     }
 
     /**
@@ -448,25 +439,6 @@ class MaioresPorSegmentoTest extends TestCase
         // Recalcular de novo não duplica.
         app(FaturamentoMensalRollup::class)->recalcular($mesPassado, $mesPassado);
         $this->assertSame(2, DB::table('faturamento_cliente_mensal')->count());
-    }
-
-    public function test_faturamento_da_conta_usa_12_meses_fechados_e_os_12_anteriores(): void
-    {
-        $inicioMes = CarbonImmutable::today()->startOfMonth();
-
-        $this->nota('000001', $inicioMes->subMonth(), 1000, 'A');          // últimos 12 m
-        $this->nota('000003', $inicioMes->subMonths(12), 200, 'B');        // primeiro mês da janela
-        $this->nota('000001', $inicioMes->subMonths(13), 500, 'C');        // 12 m anteriores
-        $this->nota('000001', $inicioMes, 777, 'D');                        // mês corrente: fora
-        $this->nota('000004', $inicioMes->subMonth(), 9999, 'E');          // cliente de fora da conta
-
-        app(FaturamentoMensalRollup::class)->recalcular($inicioMes->subMonths(24), $inicioMes);
-
-        $conta = $this->conta('RAIA', [['grupo', '100'], ['cliente', '000003']]);
-        $l = $this->linha($conta);
-
-        $this->assertEqualsWithDelta(1200.0, $l['fat12m'], 0.001);
-        $this->assertEqualsWithDelta(500.0, $l['fat12mAnterior'], 0.001);
     }
 
     private function nota(string $codCliente, CarbonImmutable $data, float $valor, string $nf): void

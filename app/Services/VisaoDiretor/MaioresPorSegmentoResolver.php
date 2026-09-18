@@ -8,7 +8,6 @@ use App\Models\ContaEstrategicaVinculo;
 use App\Models\GrupoCliente;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Vendedores\NomeVendedorResolver;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,11 +17,10 @@ use Illuminate\Support\Facades\DB;
  *
  * A conta-alvo é digitada (nome, UF, filiais de mercado, site, observação); TODO o resto é
  * derivado dos vínculos, via `ClientesDaConta` — a mesma definição que a Carteira usa no
- * `?conta_alvo=`. É isso que faz "Nossas lojas" bater com a lista que o clique abre.
+ * `?conta_alvo=`. É isso que faz "Clientes" bater com a lista que o clique abre.
  *
- * Custo: três consultas agregadas sobre os pares (conta, filial), independentemente de
- * quantas contas existam — há teste de teto de queries. Nenhuma lê `faturamentos`: o
- * faturamento vem do rollup `faturamento_cliente_mensal` (ver `FaturamentoMensalRollup`).
+ * Custo: duas consultas agregadas sobre os pares (conta, filial), independentemente de
+ * quantas contas existam — há teste de teto de queries. Não agrega `faturamentos`.
  *
  * Os filtros da tela são aplicados DEPOIS, em memória, sobre ~370 linhas: é mais barato que
  * refazer a agregação, e garante que KPI, resumo e tabela saiam da mesma lista.
@@ -36,7 +34,6 @@ class MaioresPorSegmentoResolver
         private readonly ClientesDaConta $clientesDaConta,
         private readonly ClienteStatusResolver $statusResolver,
         private readonly NomeVendedorResolver $nomeVendedor,
-        private readonly FaturamentoMensalRollup $rollup,
     ) {
     }
 
@@ -45,8 +42,7 @@ class MaioresPorSegmentoResolver
      */
     public function resolver(array $filtros = []): array
     {
-        $periodo = $this->periodo();
-        $linhas = $this->linhas($periodo);
+        $linhas = $this->linhas();
 
         $semSegmento = $this->filtrar($linhas, [...$filtros, 'segmento' => '']);
         $filtradas = $this->filtrar($linhas, $filtros);
@@ -95,33 +91,6 @@ class MaioresPorSegmentoResolver
                 ])->values()->all(),
                 'ufs' => $linhas->pluck('uf')->filter()->unique()->sort()->values()->all(),
             ],
-            'periodo' => [
-                'inicio' => $periodo['inicio']->toDateString(),
-                'fim' => $periodo['fim']->toDateString(),
-                'rotulo' => $this->rotuloMes($periodo['inicio']).'–'.$this->rotuloMes($periodo['fim']),
-                'rollupAtualizadoEm' => $this->rollup->atualizadoEm()?->toIso8601String(),
-            ],
-        ];
-    }
-
-    /**
-     * Os 12 meses FECHADOS mais recentes, e os 12 antes deles.
-     *
-     * ⚠️ Fechados de propósito: com o mês corrente dentro, a comparação com o ano anterior
-     * poria um mês pela metade contra um mês inteiro, e toda conta pareceria cair no
-     * começo do mês.
-     *
-     * @return array{inicio: CarbonImmutable, fim: CarbonImmutable, anteriorInicio: CarbonImmutable}
-     */
-    public function periodo(): array
-    {
-        $fim = CarbonImmutable::today()->startOfMonth()->subDay();
-        $inicio = $fim->startOfMonth()->subMonthsNoOverflow(11);
-
-        return [
-            'inicio' => $inicio,
-            'fim' => $fim,
-            'anteriorInicio' => $inicio->subMonthsNoOverflow(12),
         ];
     }
 
@@ -130,10 +99,8 @@ class MaioresPorSegmentoResolver
      *
      * @return Collection<int, array>
      */
-    public function linhas(?array $periodo = null): Collection
+    public function linhas(): Collection
     {
-        $periodo ??= $this->periodo();
-
         $contas = ContaEstrategica::query()
             ->with('segmento:id,codigo,nome,especialista_user_id', 'segmento.especialista:id,name,display_name')
             ->get();
@@ -158,29 +125,15 @@ class MaioresPorSegmentoResolver
             ->groupBy('conta_id');
 
         /*
-         * Clientes distintos e faturamento. ⚠️ Os dois NÃO podem sair da consulta acima:
-         * um `cod_cliente` dividido entre vendedores (39% das linhas da base) seria contado
-         * uma vez por vendedor, e o faturamento dele somado em dobro.
-         *
-         * O LEFT JOIN no rollup vai pela PK (`cod_cliente`, `mes`) — é o motivo de a PK
-         * começar por `cod_cliente`.
+         * Clientes distintos. ⚠️ NÃO pode sair da consulta por vendedor: um `cod_cliente`
+         * dividido entre vendedores (39% das linhas da base) seria contado uma vez por
+         * vendedor.
          */
-        $distintos = DB::query()
-            ->fromSub($pares, 'x')
-            ->select('x.conta_id', 'x.cod_cliente')
-            ->distinct();
-
         $porConta = DB::query()
-            ->fromSub($distintos, 'd')
-            ->leftJoin('faturamento_cliente_mensal as f', function ($join) use ($periodo) {
-                $join->on('f.cod_cliente', '=', 'd.cod_cliente')
-                    ->whereBetween('f.mes', [$periodo['anteriorInicio']->toDateString(), $periodo['fim']->toDateString()]);
-            })
-            ->select('d.conta_id')
-            ->selectRaw('COUNT(DISTINCT d.cod_cliente) as clientes')
-            ->selectRaw('COALESCE(SUM(CASE WHEN f.mes >= ? THEN f.valor_total END), 0) as fat_atual', [$periodo['inicio']->toDateString()])
-            ->selectRaw('COALESCE(SUM(CASE WHEN f.mes < ? THEN f.valor_total END), 0) as fat_anterior', [$periodo['inicio']->toDateString()])
-            ->groupBy('d.conta_id')
+            ->fromSub($pares, 'x')
+            ->select('x.conta_id')
+            ->selectRaw('COUNT(DISTINCT x.cod_cliente) as clientes')
+            ->groupBy('x.conta_id')
             ->get()
             ->keyBy('conta_id');
 
@@ -200,8 +153,6 @@ class MaioresPorSegmentoResolver
 
                 $lojas = (int) $vendedores->sum('lojas');
                 $uc = $vendedores->pluck('uc')->filter()->max();
-                $fatAtual = (float) ($agregado->fat_atual ?? 0);
-                $fatAnterior = (float) ($agregado->fat_anterior ?? 0);
 
                 return [
                     'id' => $conta->id,
@@ -211,8 +162,7 @@ class MaioresPorSegmentoResolver
                     'observacao' => $conta->observacao,
                     'filiaisMercado' => $conta->filiais_mercado,
                     'lojas' => $lojas,
-                    'clientes' => (int) ($agregado->clientes ?? 0),
-                    'penetracao' => $conta->filiais_mercado ? round($lojas / $conta->filiais_mercado, 4) : null,
+                    'clientes' => (int) ($agregado?->clientes ?? 0),
                     /*
                      * Mesmo corte da Carteira (ClienteStatusResolver), sobre a ÚLTIMA compra
                      * de QUALQUER loja da conta — a rede está ativa se alguma loja comprou.
@@ -232,9 +182,6 @@ class MaioresPorSegmentoResolver
                         ])
                         ->values()
                         ->all(),
-                    'fat12m' => $fatAtual,
-                    'fat12mAnterior' => $fatAnterior,
-                    'variacao' => $fatAnterior > 0 ? round(($fatAtual - $fatAnterior) / $fatAnterior, 4) : null,
                     'vinculos' => $vinculos->get($conta->id, collect())->values()->all(),
                     'temSugestao' => $vinculos->get($conta->id, collect())->contains('origem', ContaEstrategicaVinculo::ORIGEM_SUGESTAO),
                     'segmento' => [
@@ -345,16 +292,10 @@ class MaioresPorSegmentoResolver
      * O quadro de números de um conjunto de contas — KPIs do topo, linha do resumo por
      * segmento e subtítulo de cada card saem daqui, para os três nunca divergirem.
      *
-     * ⚠️ A penetração soma só as contas com filiais de mercado conhecidas, nos DOIS lados
-     * da divisão. Somar as lojas de todas contra as filiais de algumas inflaria o
-     * percentual com lojas cuja rede não tem tamanho declarado.
-     *
      * @param  Collection<int, array>  $contas
      */
     private function resumir(Collection $contas): array
     {
-        $comTamanho = $contas->filter(fn (array $l) => $l['filiaisMercado']);
-        $filiaisMercado = (int) $comTamanho->sum('filiaisMercado');
         $status = $contas->countBy('status');
 
         return [
@@ -364,19 +305,7 @@ class MaioresPorSegmentoResolver
             'inativo' => $status->get('inativo', 0),
             'lead' => $status->get('lead', 0),
             'filiaisMercado' => (int) $contas->sum('filiaisMercado'),
-            'lojas' => (int) $contas->sum('lojas'),
-            'penetracao' => $filiaisMercado > 0
-                ? round($comTamanho->sum('lojas') / $filiaisMercado, 4)
-                : null,
-            'fat12m' => round((float) $contas->sum('fat12m'), 2),
-            'fat12mAnterior' => round((float) $contas->sum('fat12mAnterior'), 2),
+            'clientes' => (int) $contas->sum('clientes'),
         ];
-    }
-
-    private function rotuloMes(CarbonImmutable $data): string
-    {
-        $meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-
-        return $meses[$data->month - 1].'/'.$data->format('y');
     }
 }

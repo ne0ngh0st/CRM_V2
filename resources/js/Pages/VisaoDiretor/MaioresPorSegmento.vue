@@ -4,9 +4,9 @@
  *
  * Substitui a planilha "MAIORES POR SEGMENTO - CRM.xlsx": as maiores redes do MERCADO em
  * cada segmento, e onde a Autopel está nelas. Uma aba por segmento, igual à planilha,
- * mais o Resumo (a aba DASHBOARD). Nome, UF, filiais e observação são digitados; lojas,
- * status, atendimento e faturamento vêm do CRM (ver docs/visao-diretor.md). Todos os
- * números levam a uma lista viva da Carteira.
+ * mais o Resumo (a aba DASHBOARD). Nome, UF, filiais e observação são digitados; status
+ * e atendimento vêm do CRM (ver docs/visao-diretor.md). Clientes e vendedores levam a
+ * uma lista viva da Carteira.
  */
 import { computed, reactive, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
@@ -23,7 +23,7 @@ import ContaEstrategicaModal from '@/Components/VisaoDiretor/ContaEstrategicaMod
 import { useConfirmacao } from '@/composables/useConfirmacao';
 import { ROTULOS_STATUS_CONTA, STATUS_CONTA } from '@/constants/visaoDiretor';
 import { contarFiltrosAtivos } from '@/utils/filtros';
-import { formatBRL, formatBRLCurto, formatInteiro, formatPercentual } from '@/utils/formato';
+import { formatInteiro } from '@/utils/formato';
 
 const props = defineProps({
     dados: { type: Object, required: true },
@@ -94,19 +94,6 @@ const abaAtiva = computed(() => {
 });
 
 const kpis = computed(() => abaAtiva.value?.resumo ?? props.dados.kpis);
-const periodo = computed(() => props.dados.periodo);
-
-/**
- * "Faturamento atualizado em 18/09 10:05". Sem data = o rollup nunca rodou, e isso tem
- * que aparecer — faturamento zerado sem aviso seria lido como "ninguém compra".
- */
-const frescor = computed(() => {
-    const em = periodo.value.rollupAtualizadoEm;
-
-    if (! em) return 'Faturamento ainda não calculado';
-
-    return `Faturamento atualizado em ${new Date(em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
-});
 
 // ─── Especialista do segmento ────────────────────────────────────────────────
 function trocarEspecialista(segmento, userId) {
@@ -163,7 +150,7 @@ async function excluir(conta) {
                 </template>
                 <template #subtitle>
                     As maiores redes do mercado em cada segmento e onde a Autopel está nelas.
-                    Lojas, status e atendimento vêm da Carteira; faturamento dos 12 meses fechados ({{ periodo.rotulo }}).
+                    Status e atendimento vêm da Carteira.
                 </template>
                 <template #filtrosFixos>
                     <div class="flex w-full flex-col gap-1 sm:min-w-[180px] sm:max-w-[260px] sm:flex-1">
@@ -221,15 +208,10 @@ async function excluir(conta) {
                 <KpiTile :value="kpis.inativando" :label="ROTULOS_STATUS_CONTA.inativando" tone="warn" />
                 <KpiTile :value="kpis.inativo + kpis.lead" label="A trabalhar + lead" tone="danger" />
                 <KpiTile :value="formatInteiro(kpis.filiaisMercado)" label="Filiais no mercado" />
-                <KpiTile :value="formatInteiro(kpis.lojas)" label="Nossas lojas" tone="info" />
-                <KpiTile :value="formatPercentual(kpis.penetracao)" label="Penetração" tone="info" />
-                <div :title="formatBRL(kpis.fat12m)">
-                    <KpiTile :value="formatBRLCurto(kpis.fat12m)" label="Fat. 12 meses" compact />
-                </div>
+                <KpiTile :value="formatInteiro(kpis.clientes)" label="Clientes" tone="info" />
             </div>
 
-            <div class="flex flex-wrap items-center justify-between gap-2">
-                <p class="text-xs text-gray-500">{{ frescor }}</p>
+            <div class="flex flex-wrap items-center justify-end gap-2">
                 <div class="flex items-center gap-2">
                     <ExportarExcelButton
                         rota="visao-diretor.maiores.exportar"
@@ -248,14 +230,13 @@ async function excluir(conta) {
                 v-if="! abaAtiva"
                 :linhas="dados.resumoPorSegmento"
                 :segmento-ativo="filtros.segmento"
-                :periodo="periodo"
                 @filtrar="filtrarSegmento"
             />
 
             <DarkCard
                 v-else
                 :title="abaAtiva.nome"
-                :subtitle="`${abaAtiva.resumo.contas} contas · ${formatInteiro(abaAtiva.resumo.lojas)} lojas nossas de ${formatInteiro(abaAtiva.resumo.filiaisMercado)} no mercado`"
+                :subtitle="`${abaAtiva.resumo.contas} contas · ${formatInteiro(abaAtiva.resumo.filiaisMercado)} filiais no mercado`"
             >
                 <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">

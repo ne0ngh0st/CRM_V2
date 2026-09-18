@@ -3,21 +3,16 @@
  * As contas-alvo de um segmento.
  *
  * 🥇 A razão de isto não ser um Power BI: todo número leva a uma lista viva do CRM.
- *   - "Nossas lojas"  → Carteira por filial com `?conta_alvo=` (mesmo total, há teste)
- *   - "N clientes"    → Carteira agrupada com `?conta_alvo=`
+ *   - "N clientes"    → Carteira agrupada com `?conta_alvo=` (mesmo total, há teste)
  *   - cada vendedor   → a carteira DELE dentro da conta
  *   - linha expandida → os clientes, cada um com link para a ficha
- *
- * Os links usam `agrupar: '0'` onde o número é de FILIAIS: a Carteira agrupada conta
- * clientes, e abrir "4 lojas" numa tela que diz "3 clientes" é o número que não bate.
  */
 import { ref, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
-import BarraPenetracao from '@/Components/VisaoDiretor/BarraPenetracao.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira';
 import { ROTULOS_STATUS_CONTA, TONS_STATUS_CONTA } from '@/constants/visaoDiretor';
-import { formatBRL, formatBRLCurto, formatDataCurta, formatInteiro, formatPercentual } from '@/utils/formato';
+import { formatDataCurta, formatInteiro } from '@/utils/formato';
 
 const props = defineProps({
     contas: { type: Array, required: true },
@@ -72,28 +67,21 @@ async function alternar(conta) {
     }
 }
 
-function variacaoClasse(v) {
-    if (v === null) return 'text-gray-400';
-
-    return v >= 0 ? 'text-green-700' : 'text-red-700';
-}
 </script>
 
 <template>
     <div class="tbl-wrap">
-        <table class="tbl tbl-cartoes sm:min-w-[1250px]">
+        <table class="tbl tbl-cartoes sm:min-w-[1000px]">
             <thead>
                 <tr class="tbl-head-row">
                     <th class="tbl-th w-8" />
                     <th class="tbl-th">Conta</th>
                     <th class="tbl-th">UF</th>
                     <th class="tbl-th" title="Filiais que a rede tem no mercado">Filiais</th>
-                    <th class="tbl-th" title="Lojas desta rede na nossa carteira">Nossas lojas</th>
-                    <th class="tbl-th">Penetração</th>
+                    <th class="tbl-th" title="Clientes desta rede na nossa carteira">Clientes</th>
                     <th class="tbl-th">Status</th>
                     <th class="tbl-th">Atendimento</th>
                     <th class="tbl-th">Última compra</th>
-                    <th class="tbl-th">Fat. 12 m</th>
                     <th class="tbl-th">Ações</th>
                 </tr>
             </thead>
@@ -133,22 +121,14 @@ function variacaoClasse(v) {
                         <td class="tbl-td tabular-nums" data-rotulo="Filiais (mercado)">
                             {{ conta.filiaisMercado !== null ? formatInteiro(conta.filiaisMercado) : '—' }}
                         </td>
-                        <td class="tbl-td" data-rotulo="Nossas lojas" @click.stop>
-                            <template v-if="conta.lojas">
-                                <Link
-                                    :href="route('carteira.index', { conta_alvo: conta.id, agrupar: '0' })"
-                                    class="tbl-main font-semibold text-teal hover:underline"
-                                    title="Abrir estas lojas na Carteira"
-                                >{{ formatInteiro(conta.lojas) }}</Link>
-                                <Link
-                                    :href="route('carteira.index', { conta_alvo: conta.id })"
-                                    class="tbl-sub hover:text-teal hover:underline"
-                                >{{ conta.clientes }} cliente{{ conta.clientes !== 1 ? 's' : '' }}</Link>
-                            </template>
+                        <td class="tbl-td" data-rotulo="Clientes" @click.stop>
+                            <Link
+                                v-if="conta.clientes"
+                                :href="route('carteira.index', { conta_alvo: conta.id })"
+                                class="tbl-main font-semibold text-teal hover:underline"
+                                title="Abrir estes clientes na Carteira"
+                            >{{ formatInteiro(conta.clientes) }}</Link>
                             <span v-else class="text-gray-400">0</span>
-                        </td>
-                        <td class="tbl-td" data-rotulo="Penetração">
-                            <BarraPenetracao :valor="conta.penetracao" />
                         </td>
                         <td class="tbl-td" data-rotulo="Status">
                             <StatusPill :tone="TONS_STATUS_CONTA[conta.status]" size="sm">
@@ -160,9 +140,9 @@ function variacaoClasse(v) {
                                 <Link
                                     v-for="v in conta.atendimento.slice(0, VENDEDORES_VISIVEIS)"
                                     :key="v.codVendedor"
-                                    :href="route('carteira.index', { conta_alvo: conta.id, visao_vendedor: v.codVendedor, agrupar: '0' })"
+                                    :href="route('carteira.index', { conta_alvo: conta.id, visao_vendedor: v.codVendedor })"
                                     class="max-w-[9rem] truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[0.7rem] text-gray-700 hover:border-teal hover:text-teal"
-                                    :title="`${v.nome}: ${v.lojas} loja${v.lojas !== 1 ? 's' : ''} — abrir na Carteira`"
+                                    :title="`${v.nome} — abrir na Carteira`"
                                 >{{ v.nome }}</Link>
                                 <span
                                     v-if="conta.atendimento.length > VENDEDORES_VISIVEIS"
@@ -173,12 +153,6 @@ function variacaoClasse(v) {
                             <span v-else class="text-gray-400">—</span>
                         </td>
                         <td class="tbl-td" data-rotulo="Última compra">{{ formatDataCurta(conta.ultimaCompra) }}</td>
-                        <td class="tbl-td" data-rotulo="Fat. 12 m" :title="`${formatBRL(conta.fat12m)} (12 meses anteriores: ${formatBRL(conta.fat12mAnterior)})`">
-                            <span class="tbl-main tabular-nums">{{ conta.fat12m ? formatBRLCurto(conta.fat12m) : '—' }}</span>
-                            <span v-if="conta.variacao !== null" class="tbl-sub" :class="variacaoClasse(conta.variacao)">
-                                {{ conta.variacao >= 0 ? '+' : '' }}{{ formatPercentual(conta.variacao) }}
-                            </span>
-                        </td>
                         <td class="tbl-td tbl-td-acoes" @click.stop>
                             <div class="tbl-acoes">
                                 <button type="button" class="tbl-acao tbl-acao-teal" title="Editar conta e vínculos" @click="emit('editar', conta)">
@@ -197,7 +171,7 @@ function variacaoClasse(v) {
                     </tr>
 
                     <tr v-if="expandida === conta.id">
-                        <td colspan="11" class="tbl-td tbl-td-expansao bg-gray-50/60">
+                        <td colspan="9" class="tbl-td tbl-td-expansao bg-gray-50/60">
                             <p v-if="carregando === conta.id" class="py-3 text-xs text-gray-400">Carregando clientes…</p>
                             <p v-else-if="erro === conta.id" class="py-3 text-xs text-red-700">Não foi possível carregar os clientes.</p>
                             <p v-else-if="! conta.vinculos.length" class="py-3 text-xs text-gray-500">

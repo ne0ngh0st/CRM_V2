@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
  * A ÚNICA definição de "os clientes desta conta estratégica".
  *
  * 🥇 Regra de ouro nº 8 em estado puro: a página Maiores por Segmento CONTA por aqui
- * ("2.354 lojas") e a Carteira FILTRA por aqui (`?conta_alvo=`). Se as duas definissem o
+ * ("N clientes") e a Carteira FILTRA por aqui (`?conta_alvo=`). Se as duas definissem o
  * conjunto cada uma do seu jeito, o número clicado e a lista aberta divergiriam no
  * primeiro vínculo novo — e a invariante "os números da tela têm que bater" existe
  * exatamente contra isso. Há teste comparando os dois caminhos.
@@ -72,7 +72,7 @@ class ClientesDaConta
      *
      * ⚠️ `UNION` (distinto) e não `UNION ALL`: uma filial pode casar pelos dois caminhos
      * na mesma conta (o grupo dela E o código dela estão vinculados). Com `UNION ALL` ela
-     * contaria duas vezes em "Nossas lojas", e esse número deixaria de bater com a
+     * contaria duas vezes em "Clientes", e esse número deixaria de bater com a
      * Carteira — que filtra com `OR` e a conta uma vez só.
      *
      * Traz junto as colunas que a agregação usa, para ela não precisar voltar a `clientes`.

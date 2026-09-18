@@ -325,8 +325,9 @@ class CarteiraController extends Controller
                 // Quantas EMPRESAS o recorte tem. A tabela lista filiais, então este número
                 // é menor que o total da listagem — e é ele que bate com o card do Painel.
                 'semFamiliaEmpresas' => $semFamilia !== '' ? count($this->codigosSemFamilia($request) ?? []) : null,
-                // Vem do "Nossas lojas" da Visão Diretor. Anunciado por faixa com "limpar",
-                // pelo mesmo motivo do `semFamilia`: recorte invisível parece lista quebrada.
+                // Vem da Visão Diretor (Maiores por Segmento). Anunciado por faixa com
+                // "limpar", pelo mesmo motivo do `semFamilia`: recorte invisível parece
+                // lista quebrada.
                 'contaAlvo' => $this->contaAlvoParaTela($request),
             ],
             'opcoes' => $this->opcoesDeFiltro($request, $codVendedores),

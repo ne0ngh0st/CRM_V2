@@ -39,14 +39,10 @@ class MaioresPorSegmentoExport implements FromArray, WithHeadings
                     $c['nome'],
                     $c['uf'] ?? '',
                     $c['filiaisMercado'] ?? '',
-                    $c['lojas'],
                     $c['clientes'],
-                    $c['penetracao'] !== null ? round($c['penetracao'] * 100, 1).'%' : '',
                     self::ROTULOS_STATUS[$c['status']] ?? $c['status'],
                     $c['ultimaCompra'] ?? '',
                     implode(' · ', array_column($c['atendimento'], 'nome')),
-                    $c['fat12m'],
-                    $c['fat12mAnterior'],
                     $c['site'] ?? '',
                     $c['observacao'] ?? '',
                 ];
@@ -59,9 +55,8 @@ class MaioresPorSegmentoExport implements FromArray, WithHeadings
     public function headings(): array
     {
         return [
-            'Segmento', 'Especialista', 'Conta', 'UF', 'Filiais (mercado)', 'Nossas lojas',
-            'Clientes', 'Penetração', 'Status', 'Última compra', 'Atendimento',
-            'Fat. 12 meses', 'Fat. 12 meses anteriores', 'Site', 'Observação',
+            'Segmento', 'Especialista', 'Conta', 'UF', 'Filiais (mercado)', 'Clientes',
+            'Status', 'Última compra', 'Atendimento', 'Site', 'Observação',
         ];
     }
 }

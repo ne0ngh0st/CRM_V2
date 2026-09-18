@@ -65,6 +65,8 @@ o payload traz todas as tabelas, igual virar a folha no Excel.
 ⚠️ **É lista de ALVOS, não de faturamento.** Na planilha, "ATENDIMENTO" e "STATUS" eram
 preenchidos à mão cruzando com o CRM, e envelheciam no dia seguinte. Aqui os dois são
 **derivados** — só nome, UF, filiais de mercado, site e observação são digitados.
+Nossas lojas, penetração e fat. 12 m saíram da tela de propósito: o diretor quer a
+rede, o status e quem atende — não a conta de penetração.
 
 ### Modelo
 
@@ -86,15 +88,11 @@ preenchidos à mão cruzando com o CRM, e envelheciam no dia seguinte. Aqui os d
 
 | Coluna | De onde |
 |---|---|
-| Nossas lojas | filiais de `clientes` casadas pelos vínculos |
-| Clientes | `cod_cliente` distintos dessas filiais |
-| Penetração | nossas lojas ÷ filiais de mercado |
+| Clientes | `cod_cliente` distintos das filiais casadas pelos vínculos |
 | Status | `MAX(data_ultima_compra)` → `ClienteStatusResolver` (mesmo corte da Carteira). **Sem vínculo = Lead** |
 | Atendimento | vendedores distintos dessas filiais |
-| Faturamento 12 m | `faturamento_cliente_mensal` (§3) |
 
-⚠️ **Invariantes testadas:** "Nossas lojas" == total de `/carteira?conta_alvo=X&agrupar=0`;
-"Clientes" == total de `/carteira?conta_alvo=X` (agrupada).
+⚠️ **Invariante testada:** "Clientes" == total de `/carteira?conta_alvo=X` (agrupada).
 
 ### Carga inicial
 
@@ -115,6 +113,9 @@ fim lista as 284 contas sem vínculo e as divergências Excel × CRM — é a li
 Depois da carga, a planilha morre: tudo se edita na tela.
 
 ## 3. Rollup de faturamento — `faturamento_cliente_mensal`
+
+A página Maiores por Segmento **não lê** esta tabela (saiu da tela em 18/09). O rollup
+continua existindo para as próximas páginas da seção e para o `totvs:atualizar`.
 
 Somar 12 meses de faturamento de **uma** conta direto em `faturamentos` (ESTAPAR, 162
 códigos) levou **~10 s** em dev (18/09): a tabela tem ~6 M de linhas e nenhum índice por

@@ -59,7 +59,7 @@ const filtros = reactive({
     // Vem do card de Potencial da Carteira do Painel; não tem campo próprio na barra de
     // filtros — é anunciado por uma faixa acima da tabela, com "limpar".
     sem_familia: props.filtros.semFamilia || '',
-    // Vem do "Nossas lojas" da Visão Diretor → Maiores por Segmento. Também sem campo na
+    // Vem da Visão Diretor → Maiores por Segmento. Também sem campo na
     // barra: é anunciado pela faixa acima da tabela, com "limpar".
     conta_alvo: props.filtros.contaAlvo?.id ? String(props.filtros.contaAlvo.id) : '',
     ordenar: props.filtros.ordenar || 'nome_asc',
@@ -422,7 +422,7 @@ function limparContaAlvo() {
                     </div>
 
                     <!--
-                        Recorte vindo da Visão Diretor ("Nossas lojas" de uma conta-alvo). Mesmo
+                        Recorte vindo da Visão Diretor (clientes de uma conta-alvo). Mesmo
                         motivo da faixa de cima: sem anunciar, a pessoa chega numa lista
                         bem menor que a carteira e conclui que a tela quebrou.
                     -->
