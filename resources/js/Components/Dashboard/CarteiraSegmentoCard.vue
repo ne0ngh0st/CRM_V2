@@ -4,6 +4,7 @@ import { Link } from '@inertiajs/vue3';
 import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import SegmentoChips from '@/Components/Equipe/SegmentoChips.vue';
+import { ROTULOS_STATUS_CARTEIRA as ROTULO } from '@/constants/carteira';
 
 const props = defineProps({
     carteiraSegmento: {
@@ -96,8 +97,8 @@ const totalInativos = somaStatus('inativos');
  */
 const STATUS = [
     { chave: 'ativo', label: 'Ativos', campo: 'ativos', pct: 'pctAtivos', dot: 'bg-emerald-500' },
-    { chave: 'inativando', label: 'Inativando', campo: 'inativando', pct: 'pctInativando', dot: 'bg-amber-500' },
-    { chave: 'inativo', label: 'Inativos', campo: 'inativos', pct: 'pctInativos', dot: 'bg-red-500' },
+    { chave: 'inativando', label: ROTULO.inativando, campo: 'inativando', pct: 'pctInativando', dot: 'bg-amber-500' },
+    { chave: 'inativo', label: ROTULO.inativo, campo: 'inativos', pct: 'pctInativos', dot: 'bg-red-500' },
 ];
 
 /**
@@ -170,8 +171,8 @@ const linhas = computed(() => STATUS.map((s) => ({
             -->
             <div class="flex flex-wrap gap-2">
                 <KpiTile :value="totalAtivos" label="Ativos" tone="ok" :href="hrefStatus('ativo')" :ativo="statusAtivo === 'ativo'" />
-                <KpiTile :value="totalInativando" label="Inativando" tone="warn" :href="hrefStatus('inativando')" :ativo="statusAtivo === 'inativando'" />
-                <KpiTile :value="totalInativos" label="Inativos" tone="danger" :href="hrefStatus('inativo')" :ativo="statusAtivo === 'inativo'" />
+                <KpiTile :value="totalInativando" :label="ROTULO.inativando" tone="warn" :href="hrefStatus('inativando')" :ativo="statusAtivo === 'inativando'" />
+                <KpiTile :value="totalInativos" :label="ROTULO.inativo" tone="danger" :href="hrefStatus('inativo')" :ativo="statusAtivo === 'inativo'" />
             </div>
 
             <div class="space-y-2">
@@ -219,8 +220,8 @@ const linhas = computed(() => STATUS.map((s) => ({
 
                 <p class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
                     <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Ativos ≤ 290 dias</span>
-                    <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-amber-500" /> Inativando 291–365 dias</span>
-                    <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-red-500" /> Inativos &gt; 365 dias ou sem compra</span>
+                    <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-amber-500" /> {{ ROTULO.inativando }} 291–365 dias</span>
+                    <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-red-500" /> {{ ROTULO.inativo }} &gt; 365 dias ou sem compra</span>
                 </p>
             </div>
 

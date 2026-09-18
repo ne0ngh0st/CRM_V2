@@ -88,7 +88,7 @@ function paramsComAba(aba = props.aba) {
 const listaAgrupada = computed(() => !! props.filtros.agrupado);
 
 /*
- * O status filtrado, para o subtítulo dizer "543 de 1.199 clientes · Inativo".
+ * O status filtrado, para o subtítulo dizer "543 de 1.199 clientes · A trabalhar".
  *
  * ⚠️ Só no modo agrupado: por filial, `clientes.total` conta FILIAIS e "543 de 1.199
  * clientes" misturaria duas unidades na mesma frase. Naquele modo o subtítulo já diz as
@@ -305,9 +305,7 @@ function limparSemFamilia() {
 
                         <FilterField label="Status" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; aplicarFiltros(); }">
                             <option value="">Todos</option>
-                            <option value="ativo">Ativo</option>
-                            <option value="inativando">Inativando</option>
-                            <option value="inativo">Inativo</option>
+                            <option v-for="(rotulo, valor) in ROTULOS_STATUS_CARTEIRA" :key="valor" :value="valor">{{ rotulo }}</option>
                         </FilterField>
 
                         <FilterField label="Aderência" :model-value="filtros.aderencia" @update:model-value="(v) => { filtros.aderencia = v; aplicarFiltros(); }">

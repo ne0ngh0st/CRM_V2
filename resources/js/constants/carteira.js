@@ -1,7 +1,19 @@
+/**
+ * O NOME de cada status da Carteira — pill, filtro e card do Painel leem daqui.
+ *
+ * ⚠️ Só o rótulo mudou em 2026-09-18 (pedido do Tony): "Inativando" virou "Perdendo" e
+ * "Inativo" virou "A trabalhar". As CHAVES (`inativando`/`inativo`) continuam as mesmas —
+ * estão na URL (`?status=inativo`, link salvo), no servidor, no cache e nas views do
+ * Power BI. Renomear a chave junto quebraria tudo isso sem ganho nenhum para quem lê.
+ *
+ * Os rótulos servem no singular e no plural ("12 Perdendo", "12 A trabalhar"), por isso
+ * o card do Painel usa o mesmo mapa em vez de ter a versão plural própria.
+ * ⚠️ `CarteiraExport.php` tem a cópia do lado do servidor — mudou aqui, muda lá.
+ */
 export const ROTULOS_STATUS_CARTEIRA = {
     ativo: 'Ativo',
-    inativando: 'Inativando',
-    inativo: 'Inativo',
+    inativando: 'Perdendo',
+    inativo: 'A trabalhar',
 };
 
 export const TONS_STATUS_CARTEIRA = {

@@ -79,8 +79,10 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
             $cliente->cod_segmento ? ($this->nomePorCodigo[$cliente->cod_segmento] ?? $cliente->cod_segmento) : null,
             match ($status) {
                 'ativo' => 'Ativo',
-                'inativando' => 'Inativando',
-                default => 'Inativo',
+                // Mesmos rótulos de `ROTULOS_STATUS_CARTEIRA` (constants/carteira.js) — só o
+                // nome mudou em 2026-09-18; a chave do status continua `inativando`/`inativo`.
+                'inativando' => 'Perdendo',
+                default => 'A trabalhar',
             },
             $aderencia,
             optional($cliente->data_ultima_compra)->format('d/m/Y'),

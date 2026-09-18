@@ -69,10 +69,10 @@ const subtitulo = computed(() => {
     const { total, atendidos, linhas } = props.segmentosInativos;
 
     if (linhas.length === 0) {
-        return 'Nenhum cliente inativo na carteira';
+        return 'Nenhum cliente a trabalhar na carteira';
     }
 
-    const inativos = `${formatar.format(total)} ${total === 1 ? 'cliente inativo' : 'clientes inativos'}`;
+    const inativos = `${formatar.format(total)} ${total === 1 ? 'cliente a trabalhar' : 'clientes a trabalhar'}`;
 
     // Diz quantos segmentos são dela porque a listagem mistura os dois tipos de linha — sem
     // isso a marca de "atendido" fica sem referência de quantidade.
@@ -89,16 +89,16 @@ const explicacao = [
     '',
     'Clique numa linha para abrir a Carteira já filtrada naquele segmento.',
     '',
-    'A lista traz TODOS os segmentos em que você tem cliente inativo. Os que você atende vêm marcados com o ponto colorido.',
-    'Segmento seu sem nenhum inativo aparece com zero — quer dizer que está em dia.',
+    'A lista traz TODOS os segmentos em que você tem cliente a trabalhar. Os que você atende vêm marcados com o ponto colorido.',
+    'Segmento seu sem nenhum cliente a trabalhar aparece com zero — quer dizer que está em dia.',
     'Mostra os 3 maiores; "ver mais" abre os demais. Os TOTAIS são sempre da carteira inteira, esteja a lista aberta ou não.',
     '',
-    'POTENCIAL, EM CAIXAS = clientes inativos × caixas por cliente do segmento.',
+    'POTENCIAL, EM CAIXAS = clientes a trabalhar × caixas por cliente do segmento.',
     'O peso (0 a 20 caixas) foi definido pela diretoria: é quanto um cliente daquele segmento tende a comprar.',
-    'Peso 0 significa que o segmento não é alvo de reativação — por isso o potencial dele é 0 mesmo com muitos inativos.',
+    'Peso 0 significa que o segmento não é alvo de reativação — por isso o potencial dele é 0 mesmo com muitos clientes a trabalhar.',
     'A tabela é ordenada pelo potencial, não pela quantidade.',
     '',
-    'O TOTAL de inativos é o mesmo número do card "Carteira por Segmento" — nenhum cliente fica de fora da conta.',
+    'O TOTAL de clientes a trabalhar é o mesmo número do card "Carteira por Segmento" — nenhum cliente fica de fora da conta.',
 ].join('\n');
 
 /**
@@ -213,7 +213,7 @@ function formatarPeso(peso) {
                         <th class="pb-0.5 text-right font-semibold">
                             Potencial <span class="font-normal normal-case text-gray-400">(cx)</span>
                         </th>
-                        <th class="pb-0.5 text-right font-semibold">Clientes inativos</th>
+                        <th class="pb-0.5 text-right font-semibold">Clientes a trabalhar</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -231,7 +231,7 @@ function formatarPeso(peso) {
                         :as="href(linha) ? 'tr' : undefined"
                         class="seg-linha border-t border-gray-100 transition"
                         :class="href(linha) ? 'group cursor-pointer hover:bg-gray-50' : ''"
-                        :title="href(linha) ? `${linha.potencial} caixas = ${linha.inativos} clientes inativos × ${linha.peso} caixas por cliente. Clique para ver esses clientes na Carteira.` : null"
+                        :title="href(linha) ? `${linha.potencial} caixas = ${linha.inativos} clientes a trabalhar × ${linha.peso} caixas por cliente. Clique para ver esses clientes na Carteira.` : null"
                     >
                         <!--
                             ⚠️ Ponto teal = segmento que a pessoa atende (pedido do diretor,
