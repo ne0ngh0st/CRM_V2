@@ -1,5 +1,5 @@
 <script setup>
-import { watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import Modal from '@/Components/Modal.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -46,6 +46,21 @@ watch(
         }).reset();
     },
     { immediate: true },
+);
+
+const idSupermercadista = computed(
+    () => props.opcoes.segmentos.find((s) => s.codigo === props.opcoes.codigoSupermercadista)?.id,
+);
+
+const ehRepresentante = computed(() => form.perfil === 'representante');
+
+watch(
+    () => form.perfil,
+    (perfil) => {
+        if (perfil === 'representante' && idSupermercadista.value) {
+            form.segmentos = [idSupermercadista.value];
+        }
+    },
 );
 
 function fechar() {
@@ -127,7 +142,13 @@ function salvar() {
 
             <div v-if="form.cod_vendedor" class="mt-4">
                 <InputLabel value="Segmentos" />
-                <div class="mt-1 grid max-h-28 grid-cols-2 gap-x-3 gap-y-1 overflow-y-auto rounded-md border border-gray-300 p-2 sm:grid-cols-3">
+                <p v-if="ehRepresentante" class="mt-1 text-xs text-gray-500">
+                    Representante atende só SUPERMERCADISTA — sem exceção.
+                </p>
+                <div
+                    v-else
+                    class="mt-1 grid max-h-28 grid-cols-2 gap-x-3 gap-y-1 overflow-y-auto rounded-md border border-gray-300 p-2 sm:grid-cols-3"
+                >
                     <label v-for="s in opcoes.segmentos" :key="s.id" class="flex items-center gap-1.5 text-xs text-gray-600">
                         <input
                             type="checkbox"
@@ -138,6 +159,12 @@ function salvar() {
                         {{ s.nome }}
                     </label>
                 </div>
+                <p
+                    v-if="ehRepresentante"
+                    class="mt-1 inline-flex rounded-full border border-teal/40 bg-teal/5 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-teal"
+                >
+                    Supermercadista
+                </p>
                 <InputError :message="form.errors.segmentos" class="mt-1" />
             </div>
 

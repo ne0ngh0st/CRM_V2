@@ -10,6 +10,8 @@ use App\Models\VendedorPerfil;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
 use App\Services\Equipe\EquipeScopeResolver;
 use App\Services\Equipe\OrganogramaBuilder;
+use App\Services\Equipe\QuadroSegmentosResolver;
+use App\Services\Equipe\SegmentoVendedorSync;
 use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -28,6 +30,8 @@ class EquipeController extends Controller
         private readonly OrganogramaBuilder $organogramaBuilder,
         private readonly SegmentosDoVendedorResolver $segmentosDoVendedor,
         private readonly NomeVendedorResolver $nomeVendedor,
+        private readonly QuadroSegmentosResolver $quadroSegmentos,
+        private readonly SegmentoVendedorSync $segmentoVendedorSync,
     ) {
     }
 
@@ -138,9 +142,65 @@ class EquipeController extends Controller
                 'supervisores' => $supervisoresDisponiveis,
                 'estados' => $estadosDisponiveis,
                 'segmentos' => Segmento::orderBy('nome')->get(['id', 'codigo', 'nome']),
+                'codigoSupermercadista' => Segmento::CODIGO_SUPERMERCADISTA,
             ],
             'organograma' => $organograma,
+            'aba' => ($podeGerenciar && $request->string('aba')->toString() === 'organograma')
+                ? 'organograma'
+                : 'lista',
         ]);
+    }
+
+    /**
+     * Quadro visual de cobertura por segmento. Página própria (não aba da lista)
+     * porque a pergunta é outra — "quem atende o quê" — e os filtros da lista
+     * (login, online, estado) fariam a cobertura mentir.
+     *
+     * Supervisor vê a própria equipe e pode mudar o segmento dela. Admin/diretor
+     * vêem e editam todo mundo. A escrita de usuário (criar, senha, excluir)
+     * continua só em {@see self::podeGerenciar()} — segmento é atribuição
+     * comercial, não cadastro de conta.
+     */
+    public function segmentos(Request $request): Response|RedirectResponse
+    {
+        $user = $request->user();
+
+        if (! $this->scope->podeAcessar($user)) {
+            return redirect()->route('dashboard');
+        }
+
+        return Inertia::render('Equipe/Segmentos', [
+            'role' => $user->getRoleNames()->first(),
+            'podeGerenciar' => $this->scope->podeGerenciar($user),
+            'quadro' => $this->quadroSegmentos->montar($user),
+        ]);
+    }
+
+    /**
+     * Troca os segmentos de um vendedor pelo quadro visual.
+     *
+     * ⚠️ Autorização é "está no escopo", não "pode gerenciar usuários". Supervisor
+     * não cria conta, mas é quem sabe quem cobre drogaria vs supermercado.
+     */
+    public function atualizarSegmentos(Request $request, User $usuario): RedirectResponse
+    {
+        $this->autorizarEdicaoDeSegmento($request->user(), $usuario);
+
+        $codVendedor = $usuario->vendedorPerfil?->cod_vendedor;
+        abort_unless(filled($codVendedor), 422, 'Usuário sem código de vendedor.');
+
+        $data = $request->validate([
+            'segmentos' => ['present', 'array'],
+            'segmentos.*' => ['integer', Rule::exists('segmentos', 'id')],
+        ]);
+
+        $this->segmentoVendedorSync->substituir(
+            $codVendedor,
+            $data['segmentos'],
+            $usuario->getRoleNames()->first(),
+        );
+
+        return back();
     }
 
     public function exportar(Request $request): RedirectResponse
@@ -307,10 +367,11 @@ class EquipeController extends Controller
                 SegmentoVendedor::where('cod_vendedor', $codVendedorAnterior)->delete();
             }
 
-            SegmentoVendedor::where('cod_vendedor', $data['cod_vendedor'])->delete();
-            foreach (array_unique($data['segmentos'] ?? []) as $segmentoId) {
-                SegmentoVendedor::create(['cod_vendedor' => $data['cod_vendedor'], 'segmento_id' => $segmentoId]);
-            }
+            $this->segmentoVendedorSync->substituir(
+                $data['cod_vendedor'],
+                $data['segmentos'] ?? [],
+                $data['perfil'],
+            );
         } else {
             $usuario->vendedorPerfil?->delete();
             if ($codVendedorAnterior) {
@@ -377,6 +438,19 @@ class EquipeController extends Controller
         $usuario->delete();
 
         return back();
+    }
+
+    private function autorizarEdicaoDeSegmento(User $ator, User $alvo): void
+    {
+        abort_unless($this->scope->podeAcessar($ator), 403);
+
+        $codigos = $this->scope->codigosEquipe($ator);
+        if ($codigos === null) {
+            return;
+        }
+
+        $codAlvo = $alvo->vendedorPerfil?->cod_vendedor;
+        abort_unless($codAlvo && in_array($codAlvo, $codigos, true), 403);
     }
 
     private function usernameUnico(string $email): string

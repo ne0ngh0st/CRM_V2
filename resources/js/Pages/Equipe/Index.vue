@@ -8,6 +8,7 @@ import FilterField from '@/Components/FilterField.vue';
 import DarkCard from '@/Components/DarkCard.vue';
 import UsuariosGrupo from '@/Components/Equipe/UsuariosGrupo.vue';
 import OrganogramaTree from '@/Components/Equipe/OrganogramaTree.vue';
+import EquipeAbas from '@/Components/Equipe/EquipeAbas.vue';
 import NovoUsuarioModal from '@/Components/Equipe/NovoUsuarioModal.vue';
 import EditarUsuarioModal from '@/Components/Equipe/EditarUsuarioModal.vue';
 import TrocarSenhaModal from '@/Components/Equipe/TrocarSenhaModal.vue';
@@ -28,9 +29,8 @@ const props = defineProps({
     filtros: Object,
     opcoes: Object,
     organograma: Array,
+    aba: { type: String, default: 'lista' },
 });
-
-const aba = ref('lista');
 
 const filtros = reactive({
     busca: props.filtros.busca || '',
@@ -44,7 +44,10 @@ const filtros = reactive({
 });
 
 function aplicarFiltros() {
-    router.get(route('equipe.index'), { ...filtros }, {
+    router.get(route('equipe.index'), {
+        ...filtros,
+        ...(props.aba === 'organograma' ? { aba: 'organograma' } : {}),
+    }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -239,26 +242,13 @@ function alternarStatus(usuario) {
                     </template>
                 </PageHero>
 
-                <div v-if="podeGerenciar" class="flex gap-2">
-                    <button
-                        type="button"
-                        class="rounded border px-3 py-1.5 text-sm font-medium"
-                        :class="aba === 'lista' ? 'border-teal bg-teal text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'"
-                        @click="aba = 'lista'"
-                    >
-                        Lista de Usuários
-                    </button>
-                    <button
-                        type="button"
-                        class="rounded border px-3 py-1.5 text-sm font-medium"
-                        :class="aba === 'organograma' ? 'border-teal bg-teal text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'"
-                        @click="aba = 'organograma'"
-                    >
-                        Organograma
-                    </button>
-                </div>
+                <EquipeAbas
+                    :ativa="aba"
+                    :pode-ver-organograma="podeGerenciar"
+                    :query-lista="filtros"
+                />
 
-                <DarkCard v-if="aba === 'lista'" title="Lista de Usuários" :subtitle="`${totalUsuarios} usuário${totalUsuarios !== 1 ? 's' : ''}`">
+                <DarkCard v-if="aba !== 'organograma'" title="Lista de Usuários" :subtitle="`${totalUsuarios} usuário${totalUsuarios !== 1 ? 's' : ''}`">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round" />

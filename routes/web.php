@@ -172,9 +172,11 @@ Route::middleware('auth')->group(function () {
     Route::patch('/observacoes/{observacao}/fixar', [ObservacaoController::class, 'togglePin'])->name('observacoes.fixar');
 
     Route::get('/equipe', [EquipeController::class, 'index'])->name('equipe.index');
+    Route::get('/equipe/segmentos', [EquipeController::class, 'segmentos'])->name('equipe.segmentos');
     Route::post('/equipe/exportar', [EquipeController::class, 'exportar'])->name('equipe.exportar');
     Route::post('/equipe', [EquipeController::class, 'store'])->name('equipe.store');
     Route::patch('/equipe/supervisor-massa', [EquipeController::class, 'reatribuirSupervisorMassa'])->name('equipe.supervisorMassa');
+    Route::patch('/equipe/{usuario}/segmentos', [EquipeController::class, 'atualizarSegmentos'])->name('equipe.atualizarSegmentos');
     Route::patch('/equipe/{usuario}', [EquipeController::class, 'update'])->name('equipe.update');
     Route::patch('/equipe/{usuario}/senha', [EquipeController::class, 'atualizarSenha'])->name('equipe.senha');
     Route::patch('/equipe/{usuario}/status', [EquipeController::class, 'toggleStatus'])->name('equipe.status');

@@ -7,7 +7,7 @@ const props = defineProps({
     size: {
         type: String,
         default: 'md',
-        validator: (v) => ['sm', 'md'].includes(v),
+        validator: (v) => ['sm', 'md', 'lg'].includes(v),
     },
 });
 
@@ -41,6 +41,7 @@ const iniciais = computed(() => {
 const sizeClasses = {
     sm: 'h-7 w-7 text-[0.6rem]',
     md: 'h-8 w-8 text-xs',
+    lg: 'h-11 w-11 text-sm',
 };
 </script>
 

@@ -59,10 +59,11 @@ export const NAV_PRINCIPAL = [
         rotulo: 'Visão Gestor',
         icone: 'gestor',
         visivel: soGestor,
-        largura: '56',
+        largura: '64',
         ativoEm: ['equipe.*', 'visao-gestor.*', 'metas.*'],
         itens: [
-            { chave: 'equipe', rotulo: 'Equipe', icone: 'equipe', rota: 'equipe.index', ativoEm: ['equipe.*'], prefetch: 'hover' },
+            { chave: 'equipe', rotulo: 'Equipe', icone: 'equipe', rota: 'equipe.index', ativoEm: ['equipe.index'], prefetch: 'hover' },
+            { chave: 'equipe-segmentos', rotulo: 'Segmentos', icone: 'quadro-segmentos', rota: 'equipe.segmentos', ativoEm: ['equipe.segmentos'], prefetch: 'hover' },
             { chave: 'visao-gestor-index', rotulo: 'Observações e ligações', icone: 'observacoes', rota: 'visao-gestor.index', ativoEm: ['visao-gestor.*'], prefetch: 'hover' },
             { chave: 'metas', rotulo: 'Metas', icone: 'metas', rota: 'metas.index', ativoEm: ['metas.*'], prefetch: 'hover' },
         ],
