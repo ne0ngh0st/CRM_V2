@@ -197,13 +197,28 @@ onUnmounted(() => {
                 <li
                     v-for="n in notificacoes"
                     :key="n.id"
-                    class="cursor-pointer px-3 py-2.5 hover:bg-gray-50/60"
+                    class="cursor-pointer px-3 py-2.5"
+                    :class="n.destaque
+                        ? 'border-l-4 border-intranet bg-intranet/15 hover:bg-intranet/25'
+                        : 'hover:bg-gray-50/60'"
                     @click="abrir(n)"
                 >
+                    <!--
+                        Destaque: fundo e filete roxos + selo "Importante". Quem decide é o
+                        servidor (Notificacao::TIPOS_DESTAQUE → `destaque`), não uma lista de
+                        tipos aqui. Hoje só a publicação da intranet marcada como importante.
+                    -->
                     <div class="flex items-start gap-2">
-                        <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan" />
+                        <span
+                            class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                            :class="n.destaque ? 'bg-intranet-dark' : 'bg-cyan'"
+                        />
                         <div class="min-w-0 flex-1">
-                            <p class="truncate text-sm font-semibold text-gray-800">{{ n.titulo }}</p>
+                            <span
+                                v-if="n.destaque"
+                                class="mb-0.5 inline-block rounded bg-intranet-dark px-1.5 py-px text-[0.58rem] font-bold uppercase tracking-wide text-white"
+                            >Importante</span>
+                            <p class="truncate text-sm font-semibold" :class="n.destaque ? 'text-intranet-dark' : 'text-gray-800'">{{ n.titulo }}</p>
                             <p
                                 v-if="n.mensagem"
                                 class="truncate text-xs text-gray-500"

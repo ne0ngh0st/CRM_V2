@@ -2412,6 +2412,41 @@ trava a separação é `a_proxima_etapa_e_sempre_da_esteira`.
 
 Suíte inteira verde: **715 testes**.
 
+### Intranet — estágio 1 (2026-09-18)
+
+Lugar da gestão comunicar a equipe (aviso, regra de negócio, workflow, documento). Até
+aqui isso circulava por WhatsApp/e-mail e se perdia. Admin, diretor e supervisor
+publicam; todos os ~200 usuários leem. Sem segmentação neste estágio.
+
+**O modelo:** tudo é uma "publicação" (título, markdown, anexos, categoria). A categoria
+só define o PADRÃO de "pedir ciência" (regra pede; o resto não) — quem publica liga ou
+desliga em qualquer uma, e também "importante" e "fixar no topo". A "biblioteca de
+documentos" é o filtro "Documento" da mesma lista, sem tela à parte.
+
+| O que se repete | Onde mora |
+|---|---|
+| Categorias, rótulos, padrão de ciência, quem publica/edita | `IntranetPublicacao::CATEGORIAS` / `podePublicar` / `podeSerGerenciadaPor` |
+| Cor da seção (roxo pastel) | token `intranet` no `tailwind.config.js` (`DEFAULT` + `dark`) |
+| Faixa de atalho do Painel | `Components/FaixaAtalho.vue` (`tom` bi \| intranet) |
+| Markdown → HTML seguro | `IntranetPublicacao::renderizar()` (`html_input => strip`) |
+| Download de anexo (S3 assinado vs disco local) | `Disco::respostaDeDownload()` |
+| Destaque no sino | `Notificacao::TIPOS_DESTAQUE` → flag `destaque` no payload |
+
+- **Faixa no Painel** acima da do BI, visível para todos os perfis. A do BI continua só
+  para gestor e continua sendo o único azul da página — "um azul e um roxo". Contador de
+  não lidas + ciências pendentes, **sem cache** (tem que zerar no request seguinte).
+- **Notificação de toda publicação**, via `NotificarPublicacaoIntranetJob` (fila). O POST
+  de publicar só despacha o job (Regra nº 9). "Importante" sai como tipo `intranet_importante`
+  e o sino pinta em roxo. "Pedir ciência de novo" sobe `revisao_ciencia` na referência da
+  notificação — senão a dedupe engole o segundo aviso.
+- **Anexos:** um por requisição, máx. 15 MB, MIME pelo `finfo` do conteúdo (não pela
+  extensão). Imagem vai pra galeria; o resto, lista de download. Vídeo fica fora (o teto
+  de produção é 16 MB).
+- **Soft delete** na publicação: apagar uma regra não leva o registro de quem deu ciência.
+
+Fora deste estágio (de propósito): segmentação por perfil/equipe, rascunho/agendamento,
+comentários, vídeo, versionamento do texto de regra.
+
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão

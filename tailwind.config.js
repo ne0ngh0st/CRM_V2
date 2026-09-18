@@ -33,6 +33,12 @@ export default {
                 // relance. O verde vivo da logo (#25D366) dá 1,98:1 sobre branco e
                 // sumiria como ícone; este dá 4,14:1.
                 whats: '#128C7E',
+                // Roxo pastel da INTRANET (Tony, 2026-09-18). Cor de SEÇÃO, não da marca:
+                // marca a faixa do Painel e tudo o que é da intranet, do mesmo jeito que o
+                // cyan marca o atalho do BI. `DEFAULT` é o pastel (filete, borda, tint via
+                // `/10`–`/20`); `dark` é para TEXTO e GLIFO — o pastel puro dá ~2:1 sobre
+                // branco e some, o `dark` dá ~7,9:1.
+                intranet: { DEFAULT: '#B7A6E8', dark: '#5B3FA0' },
                 'brand-gray': '#C8C9C7',
                 'corp-black': '#1a1a1a',
                 'corp-dark': '#2d2d2d',

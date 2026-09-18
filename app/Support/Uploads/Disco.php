@@ -4,6 +4,9 @@ namespace App\Support\Uploads;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\HeaderUtils;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Resolve o disco certo para cada tipo de arquivo.
@@ -72,6 +75,36 @@ class Disco
         }
 
         return self::uploads()->url($caminho);
+    }
+
+    /**
+     * Resposta que entrega um arquivo de upload como DOWNLOAD, com o nome original.
+     *
+     * ⚠️ Em S3, redireciona para uma URL assinada com `ResponseContentDisposition` em vez de
+     * passar o arquivo pelo PHP: um PDF de 15 MB baixado por celular em rede ruim seguraria
+     * um worker do PHP-FPM pelo tempo inteiro da transferência, e são poucos workers por nó.
+     * Assim o PHP só confere quem pediu e o S3 faz o trabalho pesado. Em disco local (dev)
+     * não há como assinar, e o `download()` normal basta.
+     *
+     * Quem chama é responsável por AUTORIZAR antes — este método só entrega.
+     */
+    public static function respostaDeDownload(string $caminho, string $nomeOriginal): Response
+    {
+        $disco = self::nomeUploads();
+
+        if (config("filesystems.disks.{$disco}.driver") === 's3') {
+            $fallback = str_replace(['/', '\\', '%'], '-', Str::ascii($nomeOriginal)) ?: 'arquivo';
+
+            return redirect()->away(self::uploads()->temporaryUrl($caminho, now()->addMinutes(10), [
+                'ResponseContentDisposition' => HeaderUtils::makeDisposition(
+                    HeaderUtils::DISPOSITION_ATTACHMENT,
+                    $nomeOriginal,
+                    $fallback,
+                ),
+            ]));
+        }
+
+        return self::uploads()->download($caminho, $nomeOriginal);
     }
 
     public static function nomeExports(): string

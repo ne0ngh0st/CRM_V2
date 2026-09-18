@@ -580,3 +580,78 @@
         }
     }
 }
+
+/*
+ * Texto das publicações da intranet (markdown renderizado no servidor).
+ *
+ * O projeto não tem `@tailwindcss/typography`, e não vale trazer um plugin inteiro para
+ * uma tela só. O HTML vem de `IntranetPublicacao::renderizar()` — nunca de marcação
+ * escrita à mão —, então basta estilizar as tags que o CommonMark gera.
+ *
+ * ⚠️ `@layer components`, igual aos tokens de tabela: assim uma utility no mesmo elemento
+ * continua vencendo, e ninguém precisa de `!important` para ajustar.
+ */
+@layer components {
+    .intranet-corpo {
+        @apply text-sm leading-relaxed text-gray-700;
+    }
+
+    .intranet-corpo > * + * {
+        @apply mt-3;
+    }
+
+    .intranet-corpo h1,
+    .intranet-corpo h2 {
+        @apply mt-5 text-base font-bold text-gray-900;
+    }
+
+    .intranet-corpo h3,
+    .intranet-corpo h4 {
+        @apply mt-4 text-sm font-bold text-gray-900;
+    }
+
+    .intranet-corpo strong {
+        @apply font-semibold text-gray-900;
+    }
+
+    .intranet-corpo a {
+        @apply font-medium text-intranet-dark underline underline-offset-2 hover:text-navy;
+    }
+
+    .intranet-corpo ul {
+        @apply list-disc space-y-1 pl-5;
+    }
+
+    .intranet-corpo ol {
+        @apply list-decimal space-y-1 pl-5;
+    }
+
+    .intranet-corpo blockquote {
+        @apply border-l-4 border-intranet bg-intranet/10 px-3 py-2 text-gray-600;
+    }
+
+    .intranet-corpo code {
+        @apply rounded bg-gray-100 px-1 py-0.5 font-mono text-[0.8em];
+    }
+
+    .intranet-corpo pre {
+        @apply overflow-x-auto rounded bg-gray-100 p-3 text-xs;
+    }
+
+    .intranet-corpo hr {
+        @apply border-gray-200;
+    }
+
+    .intranet-corpo table {
+        @apply block w-full overflow-x-auto text-xs;
+    }
+
+    .intranet-corpo th,
+    .intranet-corpo td {
+        @apply border border-gray-200 px-2 py-1 text-left;
+    }
+
+    .intranet-corpo th {
+        @apply bg-gray-50 font-semibold;
+    }
+}

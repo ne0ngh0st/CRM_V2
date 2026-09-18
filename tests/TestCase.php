@@ -21,6 +21,17 @@ abstract class TestCase extends BaseTestCase
      * Configuração pode ser desfeita por engano; isto não. Se o teste não estiver
      * apontando pra um banco descartável, ele morre ANTES de qualquer migration rodar.
      */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Worktree (e qualquer checkout sem `public/build` / `public/hot`) não pode
+        // depender do Vite pra o Inertia devolver 200. Sem isto o `@vite` estoura 500
+        // e o teste acusa "Not a valid Inertia response" — foi o que derrubou a
+        // primeira suíte da intranet.
+        $this->withoutVite();
+    }
+
     /**
      * A checagem precisa acontecer AQUI, não no setUp().
      *

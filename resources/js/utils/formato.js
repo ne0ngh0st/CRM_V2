@@ -16,3 +16,27 @@ export function formatBRL(valor) {
 export function formatNumero(valor) {
     return DECIMAL.format(valor || 0);
 }
+
+/** "18/09/2026" a partir de um ISO do servidor. Vazio vira travessão. */
+export function dataCurta(iso) {
+    if (!iso) return '—';
+
+    return new Date(iso).toLocaleDateString('pt-BR');
+}
+
+/** "18/09/2026 14:32" a partir de um ISO do servidor. */
+export function dataHora(iso) {
+    if (!iso) return '—';
+
+    return new Date(iso).toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+}
+
+/** "1,4 MB" / "320 KB" — tamanho de arquivo para quem vai baixar. */
+export function tamanhoArquivo(bytes) {
+    if (!bytes) return '—';
+    const mb = bytes / 1048576;
+
+    return mb >= 1 ? `${mb.toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}

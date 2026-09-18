@@ -9,6 +9,7 @@ use App\Http\Controllers\EquipeController;
 use App\Http\Controllers\EtiquetaMateriaPrimaController;
 use App\Http\Controllers\ExportacaoController;
 use App\Http\Controllers\InicioController;
+use App\Http\Controllers\IntranetController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\NotificacaoController;
@@ -102,6 +103,27 @@ Route::middleware('auth')->group(function () {
     Route::post('/catalogo-facas/{faca}/recursos', [CatalogoFacaController::class, 'storeRecurso'])->name('catalogo-facas.recursos.store');
     Route::patch('/catalogo-facas/{faca}', [CatalogoFacaController::class, 'update'])->name('catalogo-facas.update');
     Route::delete('/catalogo-facas/{faca}', [CatalogoFacaController::class, 'destroy'])->name('catalogo-facas.destroy');
+
+    /*
+     * Intranet. Ler é para todos; publicar, editar e anexar são checados no controller
+     * (`IntranetPublicacao::podePublicar` / `podeSerGerenciadaPor`), como no Catálogo de Facas.
+     *
+     * ⚠️ As rotas literais (`/nova`, `/previa`, `/anexos/...`) ficam ANTES de
+     * `/intranet/{publicacao}`: depois dela, o model binding tentaria achar uma publicação
+     * chamada "nova" e responderia 404 — mesmo caso do `/simulacao/encerrar`.
+     */
+    Route::get('/intranet', [IntranetController::class, 'index'])->name('intranet.index');
+    Route::get('/intranet/nova', [IntranetController::class, 'create'])->name('intranet.create');
+    Route::post('/intranet', [IntranetController::class, 'store'])->name('intranet.store');
+    Route::post('/intranet/previa', [IntranetController::class, 'previa'])->name('intranet.previa');
+    Route::get('/intranet/anexos/{anexo}', [IntranetController::class, 'baixarAnexo'])->name('intranet.anexos.baixar');
+    Route::delete('/intranet/anexos/{anexo}', [IntranetController::class, 'destroyAnexo'])->name('intranet.anexos.destroy');
+    Route::get('/intranet/{publicacao}', [IntranetController::class, 'show'])->name('intranet.show');
+    Route::get('/intranet/{publicacao}/editar', [IntranetController::class, 'edit'])->name('intranet.edit');
+    Route::put('/intranet/{publicacao}', [IntranetController::class, 'update'])->name('intranet.update');
+    Route::delete('/intranet/{publicacao}', [IntranetController::class, 'destroy'])->name('intranet.destroy');
+    Route::post('/intranet/{publicacao}/ciente', [IntranetController::class, 'ciente'])->name('intranet.ciente');
+    Route::post('/intranet/{publicacao}/anexos', [IntranetController::class, 'storeAnexo'])->name('intranet.anexos.store');
 
     Route::get('/cadastros', [CadastroController::class, 'index'])->name('cadastros.index');
     Route::get('/cadastros/titularidade', [CadastroController::class, 'titularidade'])->name('cadastros.titularidade');

@@ -125,6 +125,16 @@ export const NAV_PRINCIPAL = [
             { chave: 'facas', rotulo: 'Catálogo de Facas', icone: 'facas', rota: 'catalogo-facas.index', ativoEm: ['catalogo-facas.*'], prefetch: 'hover' },
         ],
     },
+    {
+        // Sem `visivel`: a intranet é de TODOS os perfis. Quem publica é decidido no
+        // servidor (IntranetPublicacao::podePublicar), não pelo menu.
+        chave: 'intranet',
+        rotulo: 'Intranet',
+        icone: 'intranet',
+        rota: 'intranet.index',
+        ativoEm: ['intranet.*'],
+        prefetch: 'hover',
+    },
 ];
 
 /**

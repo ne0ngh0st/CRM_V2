@@ -23,6 +23,18 @@ class Notificacao extends Model
      */
     public const TIPOS_DOWNLOAD = ['exportacao_pronta'];
 
+    /**
+     * Tipos que o sino desenha em DESTAQUE (fundo roxo e selo "Importante").
+     *
+     * Mesmo desenho de `TIPOS_DOWNLOAD`: quem decide é o servidor, e o front só lê a flag
+     * `destaque`. O sino não ganha uma lista de tipos própria.
+     *
+     * ⚠️ Destaque só funciona sendo raro. Hoje é só a publicação da intranet marcada como
+     * importante por quem publica; se virar padrão de outras notificações, deixa de
+     * destacar qualquer coisa.
+     */
+    public const TIPOS_DESTAQUE = ['intranet_importante'];
+
     protected $fillable = [
         'user_id',
         'tipo',
@@ -56,6 +68,11 @@ class Notificacao extends Model
         return in_array($this->tipo, self::TIPOS_DOWNLOAD, true);
     }
 
+    public function ehDestaque(): bool
+    {
+        return in_array($this->tipo, self::TIPOS_DESTAQUE, true);
+    }
+
     /**
      * Payload que o sino consome — usado pelo histórico (NotificacaoController::index) e
      * pelo tempo real (NotificacaoCriada::broadcastWith).
@@ -66,7 +83,7 @@ class Notificacao extends Model
      * de um F5 — divergência que não quebra nada em vermelho e ninguém liga uma coisa na
      * outra.
      *
-     * @return array{id: int, tipo: string, titulo: string, mensagem: ?string, link: ?string, download: bool, criadoEm: string}
+     * @return array{id: int, tipo: string, titulo: string, mensagem: ?string, link: ?string, download: bool, destaque: bool, criadoEm: string}
      */
     public function paraOSino(): array
     {
@@ -77,6 +94,7 @@ class Notificacao extends Model
             'mensagem' => $this->mensagem,
             'link' => $this->link,
             'download' => $this->ehDownload(),
+            'destaque' => $this->ehDestaque(),
             'criadoEm' => $this->created_at->toIso8601String(),
         ];
     }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\IntranetPublicacao;
 use App\Models\User;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
@@ -94,6 +95,14 @@ class DashboardController extends Controller
                 ? $this->blocos->faturamentoComparacao($porVendedor, $codVendedores)
                 : null,
             'biEmbedUrl' => $eGestor ? $this->urlDoBi() : null,
+            /*
+             * Contador da faixa da intranet: não lidas + ciências pendentes. Para TODO
+             * perfil — a intranet é de todos, ao contrário do BI.
+             *
+             * ⚠️ Fora do cache de propósito, como a presença acima: o número tem que zerar
+             * assim que a pessoa lê. Uma query sobre uma tabela de centenas de linhas.
+             */
+            'intranet' => IntranetPublicacao::contagensPara($user),
             'carteiraSegmento' => $temEscopo && $mostraBlocos ? $this->blocos->carteiraSegmento($porVendedor, $codVendedores) : null,
             /*
              * Clientes inativos por segmento atendido. Visível para TODO perfil com escopo,

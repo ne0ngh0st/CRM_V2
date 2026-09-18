@@ -12,6 +12,7 @@ import PedidosAtencaoCard from '@/Components/Dashboard/PedidosAtencaoCard.vue';
 import ComparacaoCard from '@/Components/Dashboard/ComparacaoCard.vue';
 import SegmentosInativosCard from '@/Components/Dashboard/SegmentosInativosCard.vue';
 import FaturamentoBiEmbed from '@/Components/Dashboard/FaturamentoBiEmbed.vue';
+import IntranetFaixa from '@/Components/Dashboard/IntranetFaixa.vue';
 import SugestoesBoard from '@/Components/Dashboard/SugestoesBoard.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { contarFiltrosAtivos } from '@/utils/filtros.js';
@@ -28,6 +29,7 @@ const props = defineProps({
     vendaComparacao: Object,
     faturamentoComparacao: Object,
     biEmbedUrl: String,
+    intranet: { type: Object, default: () => ({ naoLidas: 0, cienciasPendentes: 0 }) },
     carteiraSegmento: Object,
     orcamentosStats: Object,
     pedidosAtencao: Object,
@@ -222,6 +224,17 @@ const podeVerEquipe = computed(() => {
                     faixa de 58px e só gestor a vê — para vendedor `biEmbedUrl` é nulo e o
                     quadro de segmentos continua sendo o primeiro bloco.
                 -->
+                <!--
+                    ⚠️ Intranet ACIMA do BI (2026-09-18): é a única faixa que TODOS os perfis
+                    veem, e regra de negócio nova é pauta do dia para quem opera. Duas faixas
+                    seguidas, cada uma com a sua cor — "um azul e um roxo por página", ver
+                    `FaixaAtalho.vue`.
+                -->
+                <IntranetFaixa
+                    :nao-lidas="intranet.naoLidas"
+                    :ciencias-pendentes="intranet.cienciasPendentes"
+                />
+
                 <FaturamentoBiEmbed v-if="biEmbedUrl" :url="biEmbedUrl" />
 
                 <SegmentosInativosCard
