@@ -9,7 +9,7 @@
  * uma lista viva da Carteira.
  */
 import { computed, reactive, ref } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
@@ -20,6 +20,7 @@ import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import ResumoSegmentosCard from '@/Components/VisaoDiretor/ResumoSegmentosCard.vue';
 import ContasSegmentoTabela from '@/Components/VisaoDiretor/ContasSegmentoTabela.vue';
 import ContaEstrategicaModal from '@/Components/VisaoDiretor/ContaEstrategicaModal.vue';
+import EspecialistaSelo from '@/Components/Segmentos/EspecialistaSelo.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao';
 import { ROTULOS_STATUS_CONTA, STATUS_CONTA } from '@/constants/visaoDiretor';
 import { contarFiltrosAtivos } from '@/utils/filtros';
@@ -28,7 +29,6 @@ import { formatInteiro } from '@/utils/formato';
 const props = defineProps({
     dados: { type: Object, required: true },
     filtros: { type: Object, required: true },
-    usuarios: { type: Array, default: () => [] },
     segmentosDisponiveis: { type: Array, default: () => [] },
 });
 
@@ -94,13 +94,6 @@ const abaAtiva = computed(() => {
 });
 
 const kpis = computed(() => abaAtiva.value?.resumo ?? props.dados.kpis);
-
-// ─── Especialista do segmento ────────────────────────────────────────────────
-function trocarEspecialista(segmento, userId) {
-    router.patch(route('visao-diretor.maiores.especialista', segmento.id), {
-        especialista_user_id: userId || null,
-    }, { preserveScroll: true, preserveState: true, only: PROPS_DA_LISTA });
-}
 
 // ─── Cadastro / edição ───────────────────────────────────────────────────────
 const modalAberto = ref(false);
@@ -244,18 +237,18 @@ async function excluir(conta) {
                         <path d="M9 20v-6h6v6" stroke-linejoin="round" />
                     </svg>
                 </template>
+                <!--
+                    Só leitura: o especialista é marcado pela estrela no quadro de Segmentos
+                    da Equipe (decisão do Tony, 2026-09-22). O link leva para lá.
+                -->
                 <template #actions>
-                    <label class="flex items-center gap-2 text-[0.68rem] uppercase tracking-wide text-gray-400">
-                        Especialista
-                        <select
-                            class="rounded border-gray-600 bg-corp-dark py-1 pl-2 pr-7 text-xs normal-case tracking-normal text-white focus:border-cyan focus:ring-cyan"
-                            :value="abaAtiva.especialista?.id ?? ''"
-                            @change="trocarEspecialista(abaAtiva, $event.target.value)"
-                        >
-                            <option value="">— ninguém —</option>
-                            <option v-for="u in usuarios" :key="u.id" :value="u.id">{{ u.nome }}</option>
-                        </select>
-                    </label>
+                    <Link
+                        :href="route('equipe.segmentos')"
+                        class="rounded px-1 py-0.5 transition hover:bg-white/10"
+                        title="O especialista é marcado pela estrela em Equipe → Segmentos"
+                    >
+                        <EspecialistaSelo :especialista="abaAtiva.especialista" superficie="escuro" />
+                    </Link>
                 </template>
 
                 <p v-if="! abaAtiva.contas.length" class="px-3 py-10 text-center text-sm text-gray-400">

@@ -9,7 +9,6 @@ use App\Models\ContaEstrategica;
 use App\Models\ContaEstrategicaVinculo;
 use App\Models\GrupoCliente;
 use App\Models\Segmento;
-use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Vendedores\NomeVendedorResolver;
 use App\Services\VisaoDiretor\BuscaDeVinculo;
@@ -57,14 +56,6 @@ class MaioresPorSegmentoController extends Controller
              */
             'dados' => $this->resolver->resolver([...$filtros, 'segmento' => '']),
             'filtros' => $filtros,
-            // Para o select de especialista e o formulário de conta. ~200 linhas, e só
-            // quem passa no gate chega aqui.
-            'usuarios' => User::query()
-                ->where('is_active', true)
-                ->orderByRaw("COALESCE(NULLIF(display_name, ''), name)")
-                ->get(['id', 'name', 'display_name'])
-                ->map(fn (User $u) => ['id' => $u->id, 'nome' => $u->display_name ?: $u->name])
-                ->all(),
             'segmentosDisponiveis' => Segmento::query()->orderBy('nome')->get(['id', 'codigo', 'nome']),
         ]);
     }
@@ -175,17 +166,6 @@ class MaioresPorSegmentoController extends Controller
         $conta->delete();
 
         return back()->with('success', "Conta \"{$nome}\" excluída.");
-    }
-
-    public function especialista(Request $request, Segmento $segmento): RedirectResponse
-    {
-        $dados = $request->validate([
-            'especialista_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
-        ]);
-
-        $segmento->update($dados);
-
-        return back()->with('success', "Especialista de {$segmento->nome} atualizado.");
     }
 
     /**

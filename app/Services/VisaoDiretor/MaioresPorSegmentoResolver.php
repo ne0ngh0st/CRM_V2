@@ -7,6 +7,7 @@ use App\Models\Cliente;
 use App\Models\ContaEstrategicaVinculo;
 use App\Models\GrupoCliente;
 use App\Services\Carteira\ClienteStatusResolver;
+use App\Services\Segmentos\EspecialistasDoSegmento;
 use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -34,6 +35,7 @@ class MaioresPorSegmentoResolver
         private readonly ClientesDaConta $clientesDaConta,
         private readonly ClienteStatusResolver $statusResolver,
         private readonly NomeVendedorResolver $nomeVendedor,
+        private readonly EspecialistasDoSegmento $especialistas,
     ) {
     }
 
@@ -62,6 +64,16 @@ class MaioresPorSegmentoResolver
                     'contas' => $contas->map(fn (array $l) => collect($l)->except('segmento')->all())->values()->all(),
                 ])
         );
+
+        /*
+         * O especialista entra por cima, de uma fonte só (`EspecialistasDoSegmento`) —
+         * o mesmo mapa que o quadro de Segmentos da Equipe e o Painel usam. Ele é marcado
+         * pela estrela naquele quadro, não aqui.
+         */
+        $especialistas = $this->especialistas->porCodigo();
+        $todasAsAbas = $todasAsAbas
+            ->map(fn (array $s) => [...$s, 'especialista' => $especialistas[(string) $s['codigo']] ?? null])
+            ->values();
 
         /*
          * `segmento` recorta só o Excel (a aba aberta). A página manda vazio de propósito:
@@ -102,7 +114,7 @@ class MaioresPorSegmentoResolver
     public function linhas(): Collection
     {
         $contas = ContaEstrategica::query()
-            ->with('segmento:id,codigo,nome,especialista_user_id', 'segmento.especialista:id,name,display_name')
+            ->with('segmento:id,codigo,nome')
             ->get();
 
         if ($contas->isEmpty()) {
@@ -188,10 +200,6 @@ class MaioresPorSegmentoResolver
                         'id' => $conta->segmento->id,
                         'codigo' => $conta->segmento->codigo,
                         'nome' => $conta->segmento->nome,
-                        'especialista' => $conta->segmento->especialista ? [
-                            'id' => $conta->segmento->especialista->id,
-                            'nome' => $conta->segmento->especialista->display_name ?: $conta->segmento->especialista->name,
-                        ] : null,
                     ],
                 ];
             })
@@ -279,7 +287,6 @@ class MaioresPorSegmentoResolver
                 'id' => $seg->id,
                 'codigo' => $seg->codigo,
                 'nome' => $seg->nome,
-                'especialista' => AbasDaPlanilha::especialistaDe($seg),
                 'resumo' => $vazio,
                 'contas' => [],
             ]);

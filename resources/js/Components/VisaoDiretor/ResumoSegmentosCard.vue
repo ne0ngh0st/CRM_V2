@@ -7,8 +7,13 @@
  * `SegmentosInativosCard` (corrigido em 2026-09-10).
  *
  * Clicar numa linha abre a aba daquele segmento; clicar de novo volta ao Resumo.
+ *
+ * O especialista tem coluna própria, com foto — é a primeira coisa que o diretor procura
+ * ao lado do nome do segmento ("quem cuida disto?"). Ele é marcado pela estrela no quadro
+ * de Segmentos da Equipe; aqui só aparece.
  */
 import DarkCard from '@/Components/DarkCard.vue';
+import EspecialistaSelo from '@/Components/Segmentos/EspecialistaSelo.vue';
 import { ROTULOS_STATUS_CONTA } from '@/constants/visaoDiretor';
 import { formatInteiro } from '@/utils/formato';
 
@@ -35,16 +40,18 @@ const emit = defineEmits(['filtrar']);
             <li v-for="s in linhas" :key="s.codigo">
                 <button
                     type="button"
-                    class="grid w-full grid-cols-2 items-center gap-x-4 gap-y-1 px-2 py-2 text-left transition hover:bg-gray-50 sm:grid-cols-[minmax(10rem,1.6fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)]"
+                    class="grid w-full grid-cols-2 items-center gap-x-4 gap-y-1 px-2 py-2 text-left transition hover:bg-gray-50 sm:grid-cols-[minmax(10rem,1.3fr)_minmax(9rem,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)]"
                     :class="segmentoAtivo === s.codigo ? 'bg-gray-50 ring-1 ring-inset ring-teal/40' : ''"
                     :aria-pressed="segmentoAtivo === s.codigo"
                     @click="emit('filtrar', segmentoAtivo === s.codigo ? '' : s.codigo)"
                 >
                     <span class="col-span-2 sm:col-span-1">
                         <span class="block text-sm font-semibold text-gray-800">{{ s.nome }}</span>
-                        <span class="block text-[0.7rem] text-gray-400">
-                            {{ s.especialista ? s.especialista.nome : 'Sem especialista' }} · {{ s.resumo.contas }} contas
-                        </span>
+                        <span class="block text-[0.7rem] text-gray-400">{{ s.resumo.contas }} contas</span>
+                    </span>
+
+                    <span class="col-span-2 min-w-0 sm:col-span-1">
+                        <EspecialistaSelo :especialista="s.especialista" />
                     </span>
 
                     <span class="text-xs text-gray-600">

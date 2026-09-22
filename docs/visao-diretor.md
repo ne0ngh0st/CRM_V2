@@ -74,7 +74,7 @@ rede, o status e quem atende — não a conta de penetração.
 |---|---|
 | `contas_estrategicas` | a conta-alvo: segmento, nome, UF, filiais de mercado, site, observação, ordem |
 | `conta_estrategica_vinculos` | quais clientes do CRM são essa conta: `tipo` = `grupo` (cod_grupo do TOTVS) ou `cliente` (cod_cliente), `origem` = `sugestao` ou `manual` |
-| `segmentos.especialista_user_id` | o responsável do segmento (as abas da planilha diziam "DROGARIAS - Inaya") |
+| `segmentos.especialista_user_id` | o responsável do segmento (as abas da planilha diziam "DROGARIAS - Inaya") — ver "Especialista do segmento" abaixo |
 
 - **Vínculo por grupo** é o caso comum: ESTAPAR são 21 grupos no TOTVS (um por UF), o
   McDonald's uns dez. Código avulso cobre cliente sem grupo próprio.
@@ -83,6 +83,30 @@ rede, o status e quem atende — não a conta de penetração.
 - Nunca `raiz_cnpj` (Regra de ouro nº 3).
 - **`ClientesDaConta`** é a única definição de "os clientes desta conta". A página conta
   por ela e o filtro `?conta_alvo=` da Carteira filtra por ela.
+
+### Especialista do segmento (2026-09-22)
+
+Marcado pela **estrela** no quadro **Equipe → Segmentos** (`/equipe/segmentos`), e só
+lá — o seletor que existia no cabeçalho desta página foi removido (decisão do Tony, com
+o diretor). Um por segmento: a estrela em outra pessoa tira a anterior; clicar na acesa
+desmarca. Quem marca: admin + diretor (o mesmo gate desta seção); supervisor continua
+arrastando pessoas no quadro, mas não aponta o responsável.
+
+| Onde aparece | Como |
+|---|---|
+| Equipe → Segmentos | estrela no cartão da pessoa + selo no cabeçalho da ilha |
+| Visão Diretor → Resumo | coluna própria, com foto; cabeçalho da aba (link para o quadro) |
+| Painel → Segmentos Atendidos | ao lado da barra de cada segmento |
+
+- **Fonte única: `App\Services\Segmentos\EspecialistasDoSegmento::porCodigo()`**, e
+  **componente único: `Components/Segmentos/EspecialistaSelo.vue`** (Regra de ouro nº 8).
+- ⚠️ **No Painel vem numa prop à parte (`especialistasSegmento`), FORA do bloco
+  cacheado de segmentos.** O bloco vive 30 min no Redis; dentro dele a estrela levaria
+  até meia hora para aparecer. Há teste afirmando que aparece no request seguinte.
+- ⚠️ **Especialista inativo não aparece** (a coluna continua gravada; reativar a pessoa
+  devolve a marcação).
+- A carga inicial da planilha ainda preenche o especialista pelo título da aba
+  ("DROGARIAS - Inaya") quando o segmento não tem nenhum — isso não mudou.
 
 ### Derivados
 

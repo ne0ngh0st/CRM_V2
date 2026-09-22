@@ -9,17 +9,25 @@
  *
  * Arrastar adiciona o segmento (a pessoa pode ter 1-2). Tirar é o X no canto
  * do retrato, ou o modal. Representante não arrasta nem some do SUPERMERCADISTA.
+ *
+ * ⭐ A ESTRELA marca o especialista do segmento (admin + diretor). É o único lugar do
+ * sistema onde ele é definido; o Resumo da Visão Diretor e o card "Segmentos Atendidos"
+ * do Painel só mostram. Um por segmento: marcar outra pessoa tira a anterior, e clicar
+ * na estrela acesa desmarca. Fica no canto oposto ao X de propósito — são ações de
+ * pesos muito diferentes e não podem ser confundidas num clique rápido.
  */
 import { computed, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import KpiTile from '@/Components/KpiTile.vue';
 import PessoaSegmentoChip from '@/Components/Equipe/PessoaSegmentoChip.vue';
 import EditarSegmentosModal from '@/Components/Equipe/EditarSegmentosModal.vue';
+import EspecialistaSelo from '@/Components/Segmentos/EspecialistaSelo.vue';
 import { corDoSegmento, CODIGO_SUPERMERCADISTA } from '@/constants/segmentos.js';
 
 const props = defineProps({
     quadro: { type: Object, required: true },
     podeEditar: { type: Boolean, default: false },
+    podeDefinirEspecialista: { type: Boolean, default: false },
 });
 
 const busca = ref('');
@@ -128,6 +136,27 @@ function tirar(pessoa, segmentoId) {
     salvar(pessoa, pessoa.segmentosIds.filter((id) => id !== segmentoId));
 }
 
+function ehEspecialista(pessoa, ilha) {
+    return ilha.especialista?.id === pessoa.id;
+}
+
+function alternarEspecialista(pessoa, ilha) {
+    if (!props.podeDefinirEspecialista) {
+        return;
+    }
+    salvando.value = true;
+    router.patch(route('equipe.segmentos.especialista', ilha.id), {
+        especialista_user_id: ehEspecialista(pessoa, ilha) ? null : pessoa.id,
+    }, {
+        preserveScroll: true,
+        preserveState: true,
+        only: ['quadro'],
+        onFinish: () => {
+            salvando.value = false;
+        },
+    });
+}
+
 function abrir(pessoa) {
     pessoaAtivaId.value = pessoa.id;
 }
@@ -229,8 +258,11 @@ const codigoSuper = computed(
                     class="flex items-start justify-between gap-2 px-3 py-2.5"
                     :style="{ backgroundColor: cor(ilha.codigo).fundo, color: cor(ilha.codigo).texto }"
                 >
-                    <div class="min-w-0">
+                    <div class="min-w-0 flex-1">
                         <h2 class="truncate text-sm font-semibold uppercase tracking-wide">{{ ilha.nome }}</h2>
+                        <div class="mt-1">
+                            <EspecialistaSelo :especialista="ilha.especialista" compacto />
+                        </div>
                         <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/60">
                             <div
                                 class="h-full rounded-full"
@@ -255,6 +287,34 @@ const codigoSuper = computed(
                             @arrastar-inicio="arrastado = $event"
                             @arrastar-fim="arrastado = null"
                         />
+                        <!--
+                            Estrela: acesa = especialista deste segmento (visível para
+                            todos); apagada só aparece no hover, e só para quem pode marcar.
+                        -->
+                        <button
+                            v-if="ehEspecialista(pessoa, ilha) || podeDefinirEspecialista"
+                            type="button"
+                            class="absolute -left-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border bg-white transition"
+                            :class="[
+                                ehEspecialista(pessoa, ilha)
+                                    ? 'border-amber text-amber'
+                                    : 'border-gray-300 text-gray-300 opacity-0 hover:border-amber hover:text-amber group-hover:opacity-100 focus:opacity-100',
+                                podeDefinirEspecialista ? 'cursor-pointer' : 'cursor-default',
+                            ]"
+                            :title="ehEspecialista(pessoa, ilha)
+                                ? (podeDefinirEspecialista ? `Especialista de ${ilha.nome} — clique para desmarcar` : `Especialista de ${ilha.nome}`)
+                                : `Marcar ${pessoa.nome} como especialista de ${ilha.nome}`"
+                            :aria-pressed="ehEspecialista(pessoa, ilha)"
+                            :disabled="salvando"
+                            @click.stop="alternarEspecialista(pessoa, ilha)"
+                        >
+                            <svg viewBox="0 0 24 24" class="h-3 w-3" aria-hidden="true"
+                                :fill="ehEspecialista(pessoa, ilha) ? 'currentColor' : 'none'"
+                                stroke="currentColor" stroke-width="2" stroke-linejoin="round"
+                            >
+                                <path d="M12 3.2l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.3 2.8 1-6-4.4-4.2 6-.9Z" />
+                            </svg>
+                        </button>
                         <button
                             v-if="podeEditar && !ehRepresentante(pessoa)"
                             type="button"

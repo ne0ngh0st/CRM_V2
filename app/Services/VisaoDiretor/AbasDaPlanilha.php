@@ -44,7 +44,6 @@ final class AbasDaPlanilha
     public static function segmentos(): Collection
     {
         $encontrados = Segmento::query()
-            ->with('especialista:id,name,display_name')
             ->whereIn('codigo', self::codigos())
             ->get()
             ->keyBy('codigo');
@@ -53,18 +52,5 @@ final class AbasDaPlanilha
             ->map(fn (string $codigo) => $encontrados->get($codigo))
             ->filter()
             ->values();
-    }
-
-    /** @return array{id: int, nome: string}|null */
-    public static function especialistaDe(?Segmento $segmento): ?array
-    {
-        if (! $segmento?->especialista) {
-            return null;
-        }
-
-        return [
-            'id' => $segmento->especialista->id,
-            'nome' => $segmento->especialista->display_name ?: $segmento->especialista->name,
-        ];
     }
 }

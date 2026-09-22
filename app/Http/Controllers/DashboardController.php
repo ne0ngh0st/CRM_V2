@@ -8,6 +8,7 @@ use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
 use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
+use App\Services\Segmentos\EspecialistasDoSegmento;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,6 +26,7 @@ class DashboardController extends Controller
         private readonly DashboardScopeResolver $scopeResolver,
         private readonly DashboardBlocos $blocos,
         private readonly SegmentosDoVendedorResolver $segmentosDoVendedor,
+        private readonly EspecialistasDoSegmento $especialistas,
     ) {}
 
     public function index(Request $request): Response
@@ -120,6 +122,15 @@ class DashboardController extends Controller
             'segmentosInativos' => $temEscopo && $mostraBlocos
                 ? $this->blocos->segmentosInativos($porVendedor, $codVendedores)
                 : null,
+            /*
+             * Especialista de cada segmento (a estrela do quadro de Segmentos da Equipe),
+             * para o card acima. ⚠️ FORA do bloco cacheado de propósito: marcar a estrela
+             * tem que aparecer no F5 seguinte, e o bloco vive 30 min. Uma consulta sobre
+             * ~25 segmentos — e não exige bump de ChaveEscopo::VERSAO.
+             */
+            'especialistasSegmento' => $temEscopo && $mostraBlocos
+                ? $this->especialistas->porCodigo()
+                : [],
             /*
              * Segmento(s) de quem está olhando. Só quando o escopo é UM vendedor: para
              * equipe ou empresa "o segmento" seriam os 23, o que não informa nada. Cobre

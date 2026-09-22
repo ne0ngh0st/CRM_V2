@@ -177,6 +177,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/equipe', [EquipeController::class, 'store'])->name('equipe.store');
     Route::patch('/equipe/supervisor-massa', [EquipeController::class, 'reatribuirSupervisorMassa'])->name('equipe.supervisorMassa');
     Route::patch('/equipe/{usuario}/segmentos', [EquipeController::class, 'atualizarSegmentos'])->name('equipe.atualizarSegmentos');
+    // A estrela do quadro de Segmentos. Admin + diretor (gate da Visão Diretor), checado
+    // no controller: a rota vive na Equipe porque é lá que a pessoa é marcada.
+    Route::patch('/equipe/segmentos/{segmento}/especialista', [EquipeController::class, 'definirEspecialista'])->name('equipe.segmentos.especialista');
     Route::patch('/equipe/{usuario}', [EquipeController::class, 'update'])->name('equipe.update');
     Route::patch('/equipe/{usuario}/senha', [EquipeController::class, 'atualizarSenha'])->name('equipe.senha');
     Route::patch('/equipe/{usuario}/status', [EquipeController::class, 'toggleStatus'])->name('equipe.status');
@@ -215,7 +218,6 @@ Route::middleware('auth')->group(function () {
         Route::post('/maiores-por-segmento/contas', [MaioresPorSegmentoController::class, 'store'])->name('maiores.store');
         Route::patch('/maiores-por-segmento/contas/{conta}', [MaioresPorSegmentoController::class, 'update'])->name('maiores.update');
         Route::delete('/maiores-por-segmento/contas/{conta}', [MaioresPorSegmentoController::class, 'destroy'])->name('maiores.destroy');
-        Route::patch('/maiores-por-segmento/segmentos/{segmento}/especialista', [MaioresPorSegmentoController::class, 'especialista'])->name('maiores.especialista');
     });
 });
 

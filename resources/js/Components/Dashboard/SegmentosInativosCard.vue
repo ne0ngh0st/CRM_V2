@@ -29,9 +29,16 @@
 import { computed, ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import DarkCard from '@/Components/DarkCard.vue';
+import EspecialistaSelo from '@/Components/Segmentos/EspecialistaSelo.vue';
 
 const props = defineProps({
     segmentosInativos: { type: Object, required: true },
+    /*
+     * Código TOTVS → { id, nome, fotoUrl }. Vem numa prop PRÓPRIA, fora do bloco
+     * cacheado de `segmentosInativos`: marcar a estrela no quadro de Segmentos tem que
+     * aparecer aqui no próximo F5, e o bloco vive 30 min no Redis.
+     */
+    especialistas: { type: Object, default: () => ({}) },
     visaoSupervisor: { type: String, default: null },
     visaoVendedor: { type: String, default: null },
 });
@@ -204,7 +211,7 @@ function formatarPeso(peso) {
                 <thead>
                     <tr class="text-[0.65rem] uppercase tracking-wide text-gray-400">
                         <th class="pb-0.5 text-left font-semibold">Segmento</th>
-                        <th class="pb-0.5" />
+                        <th class="pb-0.5 text-left font-semibold">Especialista</th>
                         <!--
                             ⚠️ POTENCIAL vem antes de inativos e é o número em destaque: é
                             ele que ordena a tabela e responde "por onde começo". Inativos
@@ -258,13 +265,29 @@ function formatarPeso(peso) {
                                 {{ linha.nome }}
                             </span>
                         </td>
+                        <!--
+                            ⚠️ O especialista mora DENTRO da célula da barra, e não numa coluna
+                            nova: o CSS do celular empilha as células por posição
+                            (`nth-child`), e uma coluna a mais deslocaria todas. A caixa dele
+                            tem largura fixa para as barras começarem na mesma linha vertical
+                            com ou sem especialista.
+                        -->
                         <td class="py-1 pr-4">
-                            <div class="h-1.5 overflow-hidden rounded-full bg-gray-100">
-                                <div
-                                    class="h-full rounded-full"
-                                    :class="linha.atendido ? 'bg-teal' : 'bg-gray-300'"
-                                    :style="{ width: larguraBarra(linha) }"
-                                />
+                            <div class="flex items-center gap-3">
+                                <span class="w-40 shrink-0 min-w-0">
+                                    <EspecialistaSelo
+                                        :especialista="linha.codigo ? especialistas[linha.codigo] ?? null : null"
+                                        compacto
+                                        :mostrar-vazio="false"
+                                    />
+                                </span>
+                                <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                                    <div
+                                        class="h-full rounded-full"
+                                        :class="linha.atendido ? 'bg-teal' : 'bg-gray-300'"
+                                        :style="{ width: larguraBarra(linha) }"
+                                    />
+                                </div>
                             </div>
                         </td>
                         <!--

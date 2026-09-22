@@ -8,6 +8,7 @@ import QuadroSegmentos from '@/Components/Equipe/QuadroSegmentos.vue';
 defineProps({
     role: String,
     podeGerenciar: Boolean,
+    podeDefinirEspecialista: Boolean,
     quadro: Object,
 });
 </script>
@@ -29,12 +30,13 @@ defineProps({
                     </template>
                     <template #subtitle>
                         Quem atende cada segmento — sem gráfico, só gente. Arraste para mudar.
+                        <template v-if="podeDefinirEspecialista">A estrela marca o especialista do segmento.</template>
                     </template>
                 </PageHero>
 
                 <EquipeAbas :ativa="'segmentos'" :pode-ver-organograma="podeGerenciar" />
 
-                <QuadroSegmentos :quadro="quadro" :pode-editar="true" />
+                <QuadroSegmentos :quadro="quadro" :pode-editar="true" :pode-definir-especialista="podeDefinirEspecialista" />
             </div>
         </div>
     </AuthenticatedLayout>

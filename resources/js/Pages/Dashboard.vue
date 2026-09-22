@@ -34,6 +34,7 @@ const props = defineProps({
     orcamentosStats: Object,
     pedidosAtencao: Object,
     segmentosInativos: Object,
+    especialistasSegmento: { type: Object, default: () => ({}) },
     segmentosVendedor: { type: Array, default: () => [] },
 });
 
@@ -240,6 +241,7 @@ const podeVerEquipe = computed(() => {
                 <SegmentosInativosCard
                     v-if="segmentosInativos"
                     :segmentos-inativos="segmentosInativos"
+                    :especialistas="especialistasSegmento"
                     :visao-supervisor="visao.visaoSupervisor"
                     :visao-vendedor="visao.visaoVendedor"
                 />

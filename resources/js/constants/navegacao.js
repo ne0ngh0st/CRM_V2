@@ -45,6 +45,11 @@ const comercial = ({ isAssistente }) => !isAssistente;
  * Grupo com `itens` é dropdown no desktop e seção na gaveta; grupo com `rota` é link
  * direto nos dois. `largura` é só do dropdown desktop (a prop `width` do `Dropdown.vue`).
  */
+/*
+ * ⚠️ A Intranet NÃO está no menu (decisão do Tony, 2026-09-22): a porta de entrada é a
+ * faixa roxa do Painel (`IntranetFaixa`), que já mostra quantas publicações estão sem
+ * leitura. Se a faixa sair do Painel, a Intranet fica sem acesso — volte com o item aqui.
+ */
 export const NAV_PRINCIPAL = [
     {
         chave: 'inicio',
@@ -62,8 +67,11 @@ export const NAV_PRINCIPAL = [
         largura: '64',
         ativoEm: ['equipe.*', 'visao-gestor.*', 'metas.*'],
         itens: [
-            { chave: 'equipe', rotulo: 'Equipe', icone: 'equipe', rota: 'equipe.index', ativoEm: ['equipe.index'], prefetch: 'hover' },
-            { chave: 'equipe-segmentos', rotulo: 'Segmentos', icone: 'quadro-segmentos', rota: 'equipe.segmentos', ativoEm: ['equipe.segmentos'], prefetch: 'hover' },
+            /*
+             * "Segmentos" NÃO tem item próprio (decisão do Tony, 2026-09-22): é uma aba
+             * dentro da Equipe (`EquipeAbas`), e por isso o item Equipe acende nas duas.
+             */
+            { chave: 'equipe', rotulo: 'Equipe', icone: 'equipe', rota: 'equipe.index', ativoEm: ['equipe.index', 'equipe.segmentos'], prefetch: 'hover' },
             { chave: 'visao-gestor-index', rotulo: 'Observações e ligações', icone: 'observacoes', rota: 'visao-gestor.index', ativoEm: ['visao-gestor.*'], prefetch: 'hover' },
             { chave: 'metas', rotulo: 'Metas', icone: 'metas', rota: 'metas.index', ativoEm: ['metas.*'], prefetch: 'hover' },
         ],
@@ -141,16 +149,6 @@ export const NAV_PRINCIPAL = [
             { chave: 'tabela-precos', rotulo: 'Tabela de Preços', icone: 'tabela-precos', rota: 'tabela-precos.index', ativoEm: ['tabela-precos.*'], prefetch: 'hover' },
             { chave: 'facas', rotulo: 'Catálogo de Facas', icone: 'facas', rota: 'catalogo-facas.index', ativoEm: ['catalogo-facas.*'], prefetch: 'hover' },
         ],
-    },
-    {
-        // Sem `visivel`: a intranet é de TODOS os perfis. Quem publica é decidido no
-        // servidor (IntranetPublicacao::podePublicar), não pelo menu.
-        chave: 'intranet',
-        rotulo: 'Intranet',
-        icone: 'intranet',
-        rota: 'intranet.index',
-        ativoEm: ['intranet.*'],
-        prefetch: 'hover',
     },
 ];
 

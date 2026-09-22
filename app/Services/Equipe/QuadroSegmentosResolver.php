@@ -5,6 +5,7 @@ namespace App\Services\Equipe;
 use App\Models\Segmento;
 use App\Models\User;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
+use App\Services\Segmentos\EspecialistasDoSegmento;
 
 /**
  * Quem atende cada segmento, no grão da equipe visível.
@@ -24,6 +25,7 @@ class QuadroSegmentosResolver
     public function __construct(
         private readonly EquipeScopeResolver $scope,
         private readonly SegmentosDoVendedorResolver $segmentosDoVendedor,
+        private readonly EspecialistasDoSegmento $especialistas,
     ) {
     }
 
@@ -68,6 +70,7 @@ class QuadroSegmentosResolver
 
         $comSegmento = $pessoas->filter(fn (array $p) => $p['segmentosIds'] !== [])->count();
         $idsComGente = $pessoas->pluck('segmentosIds')->flatten()->unique()->count();
+        $especialistas = $this->especialistas->porCodigo();
 
         return [
             'pessoas' => $pessoas->all(),
@@ -78,6 +81,13 @@ class QuadroSegmentosResolver
                     'id' => $s->id,
                     'codigo' => $s->codigo,
                     'nome' => $s->nome,
+                    /*
+                     * Quem tem a estrela. Pode ser alguém FORA do escopo deste quadro (o
+                     * supervisor vê só a equipe dele, e o especialista pode ser de outra) —
+                     * por isso vem o objeto inteiro, não só o id: o cabeçalho da ilha
+                     * mostra o nome mesmo sem o rosto estar entre os cartões.
+                     */
+                    'especialista' => $especialistas[(string) $s->codigo] ?? null,
                 ])
                 ->all(),
             'totais' => [

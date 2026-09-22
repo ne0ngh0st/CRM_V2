@@ -12,10 +12,12 @@ use App\Services\Equipe\EquipeScopeResolver;
 use App\Services\Equipe\OrganogramaBuilder;
 use App\Services\Equipe\QuadroSegmentosResolver;
 use App\Services\Equipe\SegmentoVendedorSync;
+use App\Services\Segmentos\EspecialistasDoSegmento;
 use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -32,6 +34,7 @@ class EquipeController extends Controller
         private readonly NomeVendedorResolver $nomeVendedor,
         private readonly QuadroSegmentosResolver $quadroSegmentos,
         private readonly SegmentoVendedorSync $segmentoVendedorSync,
+        private readonly EspecialistasDoSegmento $especialistas,
     ) {
     }
 
@@ -172,8 +175,37 @@ class EquipeController extends Controller
         return Inertia::render('Equipe/Segmentos', [
             'role' => $user->getRoleNames()->first(),
             'podeGerenciar' => $this->scope->podeGerenciar($user),
+            /*
+             * A estrela de especialista é decisão da diretoria (quem responde pelo
+             * segmento na empresa inteira), não da supervisão — por isso o gate da Visão
+             * Diretor, e não o "está no escopo" que vale para arrastar pessoas.
+             */
+            'podeDefinirEspecialista' => Gate::forUser($user)->allows('ver-visao-diretor'),
             'quadro' => $this->quadroSegmentos->montar($user),
         ]);
+    }
+
+    /**
+     * Marca o especialista do segmento — a estrela do quadro. `null` desmarca.
+     *
+     * ⚠️ Um por segmento: marcar outra pessoa tira a anterior (é o que a estrela promete).
+     * Quem mostra o especialista (Resumo da Visão Diretor, Painel) lê o mesmo campo via
+     * `EspecialistasDoSegmento`, sem cache — aparece no request seguinte.
+     */
+    public function definirEspecialista(Request $request, Segmento $segmento): RedirectResponse
+    {
+        abort_unless(Gate::forUser($request->user())->allows('ver-visao-diretor'), 403);
+
+        $data = $request->validate([
+            'especialista_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
+        ]);
+
+        $this->especialistas->definir(
+            $segmento,
+            filled($data['especialista_user_id'] ?? null) ? User::find($data['especialista_user_id']) : null,
+        );
+
+        return back();
     }
 
     /**
