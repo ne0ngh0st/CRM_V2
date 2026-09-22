@@ -7,7 +7,7 @@ const props = defineProps({
     size: {
         type: String,
         default: 'md',
-        validator: (v) => ['sm', 'md', 'lg'].includes(v),
+        validator: (v) => ['xs', 'sm', 'md', 'lg'].includes(v),
     },
 });
 
@@ -39,6 +39,8 @@ const iniciais = computed(() => {
 });
 
 const sizeClasses = {
+    // xs: dentro de linha de tabela — do tamanho do texto, para a foto não ditar a altura.
+    xs: 'h-5 w-5 text-[0.45rem]',
     sm: 'h-7 w-7 text-[0.6rem]',
     md: 'h-8 w-8 text-xs',
     lg: 'h-11 w-11 text-sm',

@@ -204,6 +204,10 @@ function formatarPeso(peso) {
                 -->
                 <colgroup>
                     <col class="w-[22%]" />
+                    <!-- Especialista: largura FIXA. O nome se corta em "…" dentro dela;
+                         deixar a coluna seguir o nome empurrava a barra e desalinhava as
+                         linhas (2026-09-22). -->
+                    <col class="w-[210px]" />
                     <col />
                     <col class="w-[180px]" />
                     <col class="w-[130px]" />
@@ -211,7 +215,8 @@ function formatarPeso(peso) {
                 <thead>
                     <tr class="text-[0.65rem] uppercase tracking-wide text-gray-400">
                         <th class="pb-0.5 text-left font-semibold">Segmento</th>
-                        <th class="pb-0.5 text-left font-semibold">Especialista</th>
+                        <th class="pb-0.5 pr-4 text-left font-semibold">Especialista</th>
+                        <th class="pb-0.5" />
                         <!--
                             ⚠️ POTENCIAL vem antes de inativos e é o número em destaque: é
                             ele que ordena a tabela e responde "por onde começo". Inativos
@@ -266,28 +271,24 @@ function formatarPeso(peso) {
                             </span>
                         </td>
                         <!--
-                            ⚠️ O especialista mora DENTRO da célula da barra, e não numa coluna
-                            nova: o CSS do celular empilha as células por posição
-                            (`nth-child`), e uma coluna a mais deslocaria todas. A caixa dele
-                            tem largura fixa para as barras começarem na mesma linha vertical
-                            com ou sem especialista.
+                            Especialista em coluna própria, com foto `xs`: do tamanho do texto,
+                            para as linhas com e sem especialista terem a mesma altura.
+                            ⚠️ O CSS do celular empilha por `nth-child` — esta é a 2ª célula.
                         -->
+                        <td class="max-w-0 py-1 pr-4">
+                            <EspecialistaSelo
+                                :especialista="linha.codigo ? especialistas[linha.codigo] ?? null : null"
+                                compacto
+                                :mostrar-vazio="false"
+                            />
+                        </td>
                         <td class="py-1 pr-4">
-                            <div class="flex items-center gap-3">
-                                <span class="w-40 shrink-0 min-w-0">
-                                    <EspecialistaSelo
-                                        :especialista="linha.codigo ? especialistas[linha.codigo] ?? null : null"
-                                        compacto
-                                        :mostrar-vazio="false"
-                                    />
-                                </span>
-                                <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
-                                    <div
-                                        class="h-full rounded-full"
-                                        :class="linha.atendido ? 'bg-teal' : 'bg-gray-300'"
-                                        :style="{ width: larguraBarra(linha) }"
-                                    />
-                                </div>
+                            <div class="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                                <div
+                                    class="h-full rounded-full"
+                                    :class="linha.atendido ? 'bg-teal' : 'bg-gray-300'"
+                                    :style="{ width: larguraBarra(linha) }"
+                                />
                             </div>
                         </td>
                         <!--
@@ -328,6 +329,7 @@ function formatarPeso(peso) {
                         <td class="py-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">
                             Total
                         </td>
+                        <td class="py-1.5" />
                         <td class="py-1.5" />
                         <td class="py-1.5 text-right">
                             <span class="font-bold tabular-nums text-navy">
@@ -397,17 +399,26 @@ function formatarPeso(peso) {
         padding-bottom: 0.5rem;
     }
 
+    /* 1 nome · 2 especialista · 3 barra — largura cheia; 4 potencial | 5 clientes. */
     .seg-lista :deep(.seg-linha > :nth-child(1)),
-    .seg-lista :deep(.seg-linha > :nth-child(2)) {
+    .seg-lista :deep(.seg-linha > :nth-child(2)),
+    .seg-lista :deep(.seg-linha > :nth-child(3)) {
         grid-column: 1 / -1;
         padding-right: 0;
+        max-width: none;
     }
 
-    .seg-lista :deep(.seg-linha > :nth-child(3)) {
+    /* Sem especialista a célula fica vazia; no cartão ela não pode virar um buraco. */
+    .seg-lista :deep(.seg-linha > :nth-child(2):empty) {
+        display: none;
+    }
+
+    .seg-lista :deep(.seg-linha > :nth-child(4)) {
         text-align: left;
     }
 
-    .seg-lista :deep(tfoot .seg-linha > :nth-child(2)) {
+    .seg-lista :deep(tfoot .seg-linha > :nth-child(2)),
+    .seg-lista :deep(tfoot .seg-linha > :nth-child(3)) {
         display: none;
     }
 }

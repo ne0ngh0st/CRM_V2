@@ -8,8 +8,9 @@
  * clica no quadro para marcar a pessoa —, então ela tem que estar aqui também.
  *
  * `superficie="escuro"` é para header preto de card (DarkCard `#actions`).
- * `compacto` tira o rótulo "Especialista" e encolhe a foto, para caber numa linha de
- * tabela sem aumentar a altura dela.
+ * `compacto` tira o rótulo "Especialista" e usa a foto `xs` (20px, a altura do texto),
+ * para caber numa linha de tabela sem aumentar a altura dela. Ocupa a largura do pai e
+ * corta o nome em "…" — quem dá a largura é a coluna, nunca o nome.
  */
 import Avatar from '@/Components/Avatar.vue';
 
@@ -30,10 +31,11 @@ defineProps({
 <template>
     <span
         v-if="especialista"
-        class="inline-flex min-w-0 items-center gap-1.5"
+        class="min-w-0 items-center gap-1.5"
+        :class="compacto ? 'flex w-full' : 'inline-flex'"
         :title="`Especialista do segmento: ${especialista.nome}`"
     >
-        <Avatar :src="especialista.fotoUrl" :nome="especialista.nome" size="sm" :class="compacto ? 'scale-90' : ''" />
+        <Avatar :src="especialista.fotoUrl" :nome="especialista.nome" :size="compacto ? 'xs' : 'sm'" />
         <span class="min-w-0 leading-tight">
             <span
                 v-if="! compacto"
