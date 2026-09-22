@@ -351,6 +351,13 @@ faturamento no meio da importação. Meia hora depois da hora cheia resolve os d
 histórico de atualizações. O script **remove** schedules que saíram da lista, então mudar
 horário é editar `JANELAS` e rodar de novo.
 
+⚠️ **No Serviço, a frequência tem que ser "Semanalmente" com seg–sex marcados — NUNCA
+"Diariamente".** Aconteceu em 19–20/09: com "Diariamente", o Power BI tentou atualizar no
+sábado e no domingo com a EC2 desligada, falhou 4 vezes seguidas e **desativou o
+agendamento sozinho** ("Devido aos erros consecutivos, a atualização agendada foi
+desabilitada"). Segunda e terça não rodou nada, e o único aviso foi um e-mail ao dono do
+modelo. Religar é manual: ligar a chave de novo em Configurações → Atualizar.
+
 ### 9.6 RLS: já existia no modelo, e continua valendo
 
 Os perfis `Administradores` (sem filtro) e `Gestores` (filtra `Vendedores` e `Clientes` pelo
