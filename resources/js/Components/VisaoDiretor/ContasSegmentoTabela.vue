@@ -29,8 +29,8 @@ watch(() => props.contas, () => {
     clientesPorConta.value = {};
 });
 
-/** Quantos vendedores aparecem por extenso antes do "+N". */
-const VENDEDORES_VISIVEIS = 3;
+/** Quantos vendedores aparecem por extenso antes do "+N". Coluna estreita de propósito. */
+const VENDEDORES_VISIVEIS = 1;
 
 const expandida = ref(null);
 const carregando = ref(null);
@@ -71,7 +71,7 @@ async function alternar(conta) {
 
 <template>
     <div class="tbl-wrap">
-        <table class="tbl tbl-cartoes sm:min-w-[1000px]">
+        <table class="tbl tbl-cartoes sm:min-w-[1080px]">
             <thead>
                 <tr class="tbl-head-row">
                     <th class="tbl-th w-8" />
@@ -80,7 +80,8 @@ async function alternar(conta) {
                     <th class="tbl-th" title="Filiais que a rede tem no mercado">Filiais</th>
                     <th class="tbl-th" title="Clientes desta rede na nossa carteira">Clientes</th>
                     <th class="tbl-th">Status</th>
-                    <th class="tbl-th">Atendimento</th>
+                    <th class="tbl-th w-[7.5rem]">Atendimento</th>
+                    <th class="tbl-th">Observação</th>
                     <th class="tbl-th">Última compra</th>
                     <th class="tbl-th">Ações</th>
                 </tr>
@@ -106,11 +107,8 @@ async function alternar(conta) {
                                     title="Vínculo sugerido pela carga da planilha — revisar em Editar"
                                 />
                             </span>
-                            <span v-if="conta.observacao" class="tbl-sub mx-auto block truncate sm:max-w-[240px]" :title="conta.observacao">
-                                {{ conta.observacao }}
-                            </span>
                             <a
-                                v-else-if="conta.site"
+                                v-if="conta.site"
                                 :href="`https://${conta.site.replace(/^https?:\/\//, '')}`"
                                 target="_blank" rel="noopener"
                                 class="tbl-sub hover:text-teal hover:underline"
@@ -136,12 +134,12 @@ async function alternar(conta) {
                             </StatusPill>
                         </td>
                         <td class="tbl-td" data-rotulo="Atendimento" @click.stop>
-                            <div v-if="conta.atendimento.length" class="flex flex-wrap justify-center gap-1 sm:justify-center">
+                            <div v-if="conta.atendimento.length" class="flex flex-wrap items-center justify-center gap-0.5">
                                 <Link
                                     v-for="v in conta.atendimento.slice(0, VENDEDORES_VISIVEIS)"
                                     :key="v.codVendedor"
                                     :href="route('carteira.index', { conta_alvo: conta.id, visao_vendedor: v.codVendedor })"
-                                    class="max-w-[9rem] truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[0.7rem] text-gray-700 hover:border-teal hover:text-teal"
+                                    class="max-w-[5.5rem] truncate rounded border border-gray-200 bg-gray-50 px-1 py-0.5 text-[0.7rem] text-gray-700 hover:border-teal hover:text-teal"
                                     :title="`${v.nome} — abrir na Carteira`"
                                 >{{ v.nome }}</Link>
                                 <span
@@ -150,6 +148,14 @@ async function alternar(conta) {
                                     :title="conta.atendimento.slice(VENDEDORES_VISIVEIS).map((v) => v.nome).join(' · ')"
                                 >+{{ conta.atendimento.length - VENDEDORES_VISIVEIS }}</span>
                             </div>
+                            <span v-else class="text-gray-400">—</span>
+                        </td>
+                        <td class="tbl-td" data-rotulo="Observação">
+                            <span
+                                v-if="conta.observacao"
+                                class="tbl-trunc block truncate sm:max-w-[220px]"
+                                :title="conta.observacao"
+                            >{{ conta.observacao }}</span>
                             <span v-else class="text-gray-400">—</span>
                         </td>
                         <td class="tbl-td" data-rotulo="Última compra">{{ formatDataCurta(conta.ultimaCompra) }}</td>
@@ -171,7 +177,7 @@ async function alternar(conta) {
                     </tr>
 
                     <tr v-if="expandida === conta.id">
-                        <td colspan="9" class="tbl-td tbl-td-expansao bg-gray-50/60">
+                        <td colspan="10" class="tbl-td tbl-td-expansao bg-gray-50/60">
                             <p v-if="carregando === conta.id" class="py-3 text-xs text-gray-400">Carregando clientes…</p>
                             <p v-else-if="erro === conta.id" class="py-3 text-xs text-red-700">Não foi possível carregar os clientes.</p>
                             <p v-else-if="! conta.vinculos.length" class="py-3 text-xs text-gray-500">
