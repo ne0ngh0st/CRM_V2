@@ -85,6 +85,15 @@ class ContaEstrategica extends Model
         return $this->hasMany(ContaEstrategicaObservacao::class, 'conta_id');
     }
 
+    /**
+     * O lead que a diretoria abriu para esta conta (`LeadDaConta`). ⚠️ Fora do
+     * `$fillable` de propósito: só o serviço grava, e é ele que impede o lead duplicado.
+     */
+    public function lead(): BelongsTo
+    {
+        return $this->belongsTo(Lead::class);
+    }
+
     public function segmento(): BelongsTo
     {
         return $this->belongsTo(Segmento::class);

@@ -12,13 +12,14 @@ import { Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira';
 import { ROTULOS_STATUS_CONTA, TONS_STATUS_CONTA } from '@/constants/visaoDiretor';
+import { ROTULOS_ETAPA_LEAD } from '@/constants/leads';
 import { formatDataCurta, formatInteiro } from '@/utils/formato';
 
 const props = defineProps({
     contas: { type: Array, required: true },
 });
 
-const emit = defineEmits(['editar', 'excluir', 'historico']);
+const emit = defineEmits(['editar', 'excluir', 'historico', 'gerar-lead']);
 
 /*
  * A lista expandida é guardada por conta para não refazer a requisição a cada abre-fecha.
@@ -134,7 +135,17 @@ async function alternar(conta) {
                             </StatusPill>
                         </td>
                         <td class="tbl-td" data-rotulo="Atendimento" @click.stop>
-                            <div v-if="conta.atendimento.length" class="flex flex-wrap items-center justify-center gap-0.5">
+                            <!--
+                                Conta sem loja nossa mas com lead aberto pela diretoria: quem
+                                atende é o responsável do lead. Leva ao lead na tela de Leads.
+                            -->
+                            <Link
+                                v-if="! conta.atendimento.length && conta.leadAberto"
+                                :href="route('leads.index', { busca: conta.leadAberto.nome })"
+                                class="inline-flex max-w-[7rem] items-center gap-1 truncate rounded border border-amber bg-amber/10 px-1 py-0.5 text-[0.7rem] text-amber-dark hover:underline"
+                                :title="`Lead aberto com ${conta.leadAberto.responsavel} (${ROTULOS_ETAPA_LEAD[conta.leadAberto.etapa] ?? conta.leadAberto.etapa}) — abrir em Leads`"
+                            >Lead · {{ conta.leadAberto.responsavel }}</Link>
+                            <div v-else-if="conta.atendimento.length" class="flex flex-wrap items-center justify-center gap-0.5">
                                 <Link
                                     v-for="v in conta.atendimento.slice(0, VENDEDORES_VISIVEIS)"
                                     :key="v.codVendedor"
@@ -171,6 +182,19 @@ async function alternar(conta) {
                         <td class="tbl-td" data-rotulo="Última compra">{{ formatDataCurta(conta.ultimaCompra) }}</td>
                         <td class="tbl-td tbl-td-acoes" @click.stop>
                             <div class="tbl-acoes">
+                                <button
+                                    v-if="conta.status === 'lead' && ! conta.leadAberto"
+                                    type="button"
+                                    class="tbl-acao tbl-acao-amber"
+                                    title="Gerar lead com responsável"
+                                    @click="emit('gerar-lead', conta)"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                                        <circle cx="9" cy="8" r="3.5" />
+                                        <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke-linecap="round" />
+                                        <path d="M18 8v6M15 11h6" stroke-linecap="round" />
+                                    </svg>
+                                </button>
                                 <button type="button" class="tbl-acao tbl-acao-teal" title="Editar conta e vínculos" @click="emit('editar', conta)">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
                                         <path d="M4 20h4L19 9l-4-4L4 16v4Z" stroke-linejoin="round" />

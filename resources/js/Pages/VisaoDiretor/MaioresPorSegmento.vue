@@ -20,6 +20,7 @@ import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import ResumoSegmentosCard from '@/Components/VisaoDiretor/ResumoSegmentosCard.vue';
 import ContasSegmentoTabela from '@/Components/VisaoDiretor/ContasSegmentoTabela.vue';
 import ContaEstrategicaModal from '@/Components/VisaoDiretor/ContaEstrategicaModal.vue';
+import GerarLeadContaModal from '@/Components/VisaoDiretor/GerarLeadContaModal.vue';
 import HistoricoObservacaoConta from '@/Components/VisaoDiretor/HistoricoObservacaoConta.vue';
 import ModalPadrao from '@/Components/ModalPadrao.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -34,6 +35,7 @@ const props = defineProps({
     dados: { type: Object, required: true },
     filtros: { type: Object, required: true },
     segmentosDisponiveis: { type: Array, default: () => [] },
+    responsaveisLead: { type: Array, default: () => [] },
 });
 
 const filtros = reactive({
@@ -126,6 +128,13 @@ function editarDoHistorico() {
     const { conta, segmento } = historicoDe.value;
     historicoDe.value = null;
     editar(conta, segmento);
+}
+
+// "Gerar lead" — conta sem loja nossa vira lead com responsável (LeadDaConta no servidor).
+const leadDe = ref(null);
+
+function gerarLead(conta, segmento) {
+    leadDe.value = { conta, segmento };
 }
 
 const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
@@ -289,6 +298,7 @@ async function excluir(conta) {
                     :contas="abaAtiva.contas"
                     @editar="(conta) => editar(conta, abaAtiva)"
                     @historico="(conta) => verHistorico(conta, abaAtiva)"
+                    @gerar-lead="(conta) => gerarLead(conta, abaAtiva)"
                     @excluir="excluir"
                 />
             </DarkCard>
@@ -300,6 +310,14 @@ async function excluir(conta) {
             :segmento-inicial="segmentoDaNova"
             :segmentos="segmentosDisponiveis"
             @close="modalAberto = false"
+        />
+
+        <GerarLeadContaModal
+            :show="!! leadDe"
+            :conta="leadDe?.conta ?? null"
+            :segmento="leadDe?.segmento ?? null"
+            :responsaveis="responsaveisLead"
+            @close="leadDe = null"
         />
 
         <ModalPadrao

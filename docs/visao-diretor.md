@@ -123,6 +123,29 @@ arrastando pessoas no quadro, mas não aponta o responsável.
 - A carga inicial da planilha ainda preenche o especialista pelo título da aba
   ("DROGARIAS - Inaya") quando o segmento não tem nenhum — isso não mudou.
 
+### Gerar lead a partir da conta (2026-09-24)
+
+Conta com status **Lead** (nenhuma loja nossa) ganha o botão âmbar "Gerar lead" na
+coluna Ações. O modal pede o **responsável** e um recado opcional; o lead nasce no funil
+(`origem = manual`, etapa Novo) **na carteira do responsável**, que é avisado pelo sino.
+Segmento, UF, site e filiais vão numa observação assinada por quem abriu o lead.
+
+- **Regra em `App\Services\VisaoDiretor\LeadDaConta`**; o controller só valida a entrada.
+- ⚠️ **Atribuição na criação, não transferência** (transferir lead segue fora do escopo,
+  decisão de 2026-08-10). Antes disto o único caminho era a diretoria cadastrar pelo
+  /cadastros, e o lead nascia com `cod_vendedor` nulo: admin/diretor não têm código, e
+  ninguém via o lead.
+- ⚠️ **Quem pode receber é decidido pelo CÓDIGO de vendedor, não pelo perfil**: é o código
+  que torna o lead visível no `LeadController`. Perfil novo com carteira entra sozinho.
+- O sugerido é o **especialista do segmento**, se ele tiver código.
+- **Um lead por conta**: `contas_estrategicas.lead_id` + `lockForUpdate`. Lead excluído
+  libera a conta para gerar de novo.
+- **Conta com cliente na carteira não gera lead**: a rede já tem vendedor na Carteira.
+- ⚠️ **O lead NÃO muda o status da conta.** Ela continua "Lead" até virar cliente no TOTVS
+  e ser vinculada — o status é derivado dos vínculos. Na coluna Atendimento aparece o
+  selo "Lead · Fulano", que abre o lead em /leads.
+- Testes: `tests/Feature/VisaoDiretor/LeadDaContaTest.php` (12), 4 mutações mordidas.
+
 ### Derivados
 
 | Coluna | De onde |

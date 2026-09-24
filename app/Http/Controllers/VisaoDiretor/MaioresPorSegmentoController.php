@@ -9,10 +9,12 @@ use App\Models\ContaEstrategica;
 use App\Models\ContaEstrategicaVinculo;
 use App\Models\GrupoCliente;
 use App\Models\Segmento;
+use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Vendedores\NomeVendedorResolver;
 use App\Services\VisaoDiretor\BuscaDeVinculo;
 use App\Services\VisaoDiretor\ClientesDaConta;
+use App\Services\VisaoDiretor\LeadDaConta;
 use App\Services\VisaoDiretor\MaioresPorSegmentoResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -44,7 +46,7 @@ class MaioresPorSegmentoController extends Controller
     ) {
     }
 
-    public function index(Request $request): Response
+    public function index(Request $request, LeadDaConta $leadDaConta): Response
     {
         $filtros = $this->filtros($request);
 
@@ -56,6 +58,8 @@ class MaioresPorSegmentoController extends Controller
              */
             'dados' => $this->resolver->resolver([...$filtros, 'segmento' => '']),
             'filtros' => $filtros,
+            // Quem pode receber o lead de uma conta-alvo (botão "Gerar lead").
+            'responsaveisLead' => $leadDaConta->responsaveis(),
             'segmentosDisponiveis' => Segmento::query()->orderBy('nome')->get(['id', 'codigo', 'nome']),
         ]);
     }
@@ -179,6 +183,27 @@ class MaioresPorSegmentoController extends Controller
         });
 
         return back()->with('success', "Conta \"{$conta->nome}\" atualizada.");
+    }
+
+    /**
+     * "Gerar lead": a conta-alvo sem loja nossa vira lead no funil, já na carteira do
+     * responsável escolhido. Regras em `LeadDaConta`.
+     */
+    public function gerarLead(Request $request, ContaEstrategica $conta, LeadDaConta $leadDaConta): RedirectResponse
+    {
+        $dados = $request->validate([
+            'responsavel_id' => ['required', 'integer', Rule::exists('users', 'id')],
+            'recado' => ['nullable', 'string', 'max:2000'],
+        ], [
+            'responsavel_id.required' => 'Escolha quem vai trabalhar este lead.',
+        ]);
+
+        $responsavel = User::query()->with('vendedorPerfil')->findOrFail($dados['responsavel_id']);
+        $lead = $leadDaConta->gerar($conta, $responsavel, $request->user(), $dados['recado'] ?? null);
+
+        $nome = $responsavel->display_name ?: $responsavel->name;
+
+        return back()->with('success', "Lead \"{$lead->nome}\" aberto com {$nome}.");
     }
 
     public function destroy(ContaEstrategica $conta): RedirectResponse

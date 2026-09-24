@@ -117,6 +117,11 @@ class MaioresPorSegmentoResolver
             ->with('segmento:id,codigo,nome')
             // Subconsulta na MESMA query: não mexe no teto de queries da página.
             ->withCount('observacoes')
+            /*
+             * O lead aberto pela diretoria (`LeadDaConta`). Excluído não conta: a conta
+             * volta a oferecer o botão. Duas consultas para o conjunto, não por conta.
+             */
+            ->with(['lead' => fn ($q) => $q->visivel()->select('id', 'user_id', 'cod_vendedor', 'etapa', 'nome'), 'lead.user:id,name,display_name'])
             ->get();
 
         if ($contas->isEmpty()) {
@@ -199,6 +204,12 @@ class MaioresPorSegmentoResolver
                         ->values()
                         ->all(),
                     'vinculos' => $vinculos->get($conta->id, collect())->values()->all(),
+                    'leadAberto' => $conta->lead ? [
+                        'id' => $conta->lead->id,
+                        'nome' => $conta->lead->nome,
+                        'etapa' => $conta->lead->etapa,
+                        'responsavel' => $conta->lead->user?->display_name ?: $conta->lead->user?->name ?: $conta->lead->cod_vendedor,
+                    ] : null,
                     'temSugestao' => $vinculos->get($conta->id, collect())->contains('origem', ContaEstrategicaVinculo::ORIGEM_SUGESTAO),
                     'segmento' => [
                         'id' => $conta->segmento->id,
