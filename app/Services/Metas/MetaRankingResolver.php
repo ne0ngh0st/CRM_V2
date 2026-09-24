@@ -431,7 +431,7 @@ class MetaRankingResolver
          * o número do admin no Painel MUDA — passa a somar as metas de supervisor que
          * antes ficavam de fora.
          */
-        $query = User::role(['vendedor', 'representante', 'supervisor'])
+        $query = User::comPerfil([...User::PERFIS_CARTEIRA, 'supervisor'])
             ->where('is_active', true)
             ->whereHas('vendedorPerfil', function ($q) use ($codVendedores) {
                 $q->whereNotNull('cod_vendedor')->where('cod_vendedor', '!=', '');

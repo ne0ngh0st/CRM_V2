@@ -150,7 +150,7 @@ class VisaoGestorController extends Controller
             return collect();
         }
 
-        $query = User::role(['vendedor', 'representante'])
+        $query = User::comPerfil(User::PERFIS_CARTEIRA)
             ->where('is_active', true)
             ->whereHas('vendedorPerfil', function ($q) use ($codVendedores) {
                 $q->whereNotNull('cod_vendedor')->where('cod_vendedor', '!=', '');

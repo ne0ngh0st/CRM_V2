@@ -1,5 +1,6 @@
 <script setup>
 import FunilQuadro from '@/Components/Leads/FunilQuadro.vue';
+import { PERFIS_CARTEIRA } from '@/constants/perfis.js';
 import CapturaWordpressDetalhe from '@/Components/Leads/CapturaWordpressDetalhe.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
@@ -35,7 +36,7 @@ const props = defineProps({
 });
 
 const podeAgirNoLead = computed(() =>
-    ['vendedor', 'representante'].includes(props.role) || props.somenteWordpress,
+    PERFIS_CARTEIRA.includes(props.role) || props.somenteWordpress,
 );
 
 const filtros = reactive({

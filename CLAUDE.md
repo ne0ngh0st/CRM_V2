@@ -17,7 +17,7 @@ Refatoração completa do **PALMA** (CRM legado em PHP procedural, MySQL, ~200 u
 
 1. **Redesenhar > copiar o legado.** Antes de portar qualquer tabela/fluxo/padrão do legado, perguntar: "isso é a forma CERTA de modelar, ou é só como o legado fez por limitação histórica?". Não replicar gambiarra por inércia — o propósito do projeto é justamente corrigir isso. (Não é desculpa pra over-engineering; é não perpetuar decisão ruim.)
 
-2. **CRM-V2 é SÓ comercial.** Não portar perfis/dados/features de **SAC** nem de **Licitação** (cada um tem seu próprio sistema), mesmo que apareçam nos dados reais do legado. Perfis do escopo: vendedor, representante, supervisor, assistente, admin, diretor.
+2. **CRM-V2 é SÓ comercial.** Não portar perfis/dados/features de **SAC** nem de **Licitação** (cada um tem seu próprio sistema), mesmo que apareçam nos dados reais do legado. Perfis do escopo: vendedor, representante, **venda interna**, supervisor, assistente, admin, diretor.
 
 ## 🥇 Regra de ouro nº 9: latência é requisito, não polimento — **A MAIS IMPORTANTE DE TODAS**
 
@@ -2504,6 +2504,27 @@ mesma linha de `cnpj_consultas`.
   com CNPJ baixado") — ainda não existe.
 - Testes: `tests/Feature/CartaoCnpjTest.php` (23), com `Http::preventStrayRequests()` e as
   respostas no formato real de cada provedor. **12 mutações aplicadas, 12 mordidas.**
+
+### Perfil "Venda interna" — 2026-09-24
+
+A conta compartilhada do time interno (**comercial@autopel.com**, id 176 em produção,
+código **010617** — o mesmo que é dono do fallback `*` dos leads do site) estava como
+`assistente`: Painel sem blocos, Carteira e Pedidos fora do menu, 57 clientes invisíveis.
+Virou o perfil próprio **`venda_interna`**, que opera como vendedor pelo próprio código.
+
+- **`User::PERFIS_CARTEIRA`** (`vendedor`, `representante`, `venda_interna`) é a resposta
+  única a "opera como vendedor?" — escopo do `DashboardScopeResolver`, dropdown de
+  vendedores do gestor, Visão do Gestor, ranking de Metas. Espelho no front em
+  `constants/perfis.js` (botões ligar/agendar/orçar da Carteira e dos Leads, form de
+  observação do Painel). Perfil novo que venda entra NA CONSTANTE, não em cada `in_array`.
+- ⚠️ **Listas de perfis usam `User::comPerfil([...])`, não `User::role([...])`.** O escopo do
+  spatie faz um `Role::findByName()` — uma query — por nome; o terceiro nome custou 3 queries
+  no Painel do admin e estourou o `OrcamentoDeQueriesTest`.
+- ⚠️ **`legado:import-usuarios` não sobrescreve `User::PERFIS_SO_DO_CRM`** — no legado essa
+  conta é ASSISTENTE, e a reimportação a devolveria para lá.
+- A migration `2026_09_24_120000` só CRIA o perfil. Passar a conta para ele é pela tela
+  Equipe (editar usuário → Perfil "Venda interna").
+- Natany (000197) continua `assistente`, de propósito.
 
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado

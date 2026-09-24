@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
+import { PERFIS_CARTEIRA } from '@/constants/perfis.js';
 import axios from 'axios';
 import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
@@ -34,7 +35,7 @@ const mesAno = computed(() => {
     return `${meses[agora.getMonth()]}/${agora.getFullYear()}`;
 });
 
-const podeEscrever = computed(() => ['vendedor', 'representante'].includes(props.role));
+const podeEscrever = computed(() => PERFIS_CARTEIRA.includes(props.role));
 
 /*
  * Quebra dos contatos do mês por canal. Vem pronta do backend (colunas na mesma

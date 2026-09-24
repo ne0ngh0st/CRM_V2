@@ -81,7 +81,14 @@ class ImportUsuariosLegado extends Command
                 ])->save();
 
                 $role = strtolower($row['PERFIL']);
-                $user->syncRoles([$role]);
+                // Perfil criado no CRM (ex.: venda_interna) não tem como vir do legado;
+                // reimportar não pode desfazer a decisão tomada na tela Equipe.
+                $atual = $user->getRoleNames()->first();
+                if (in_array($atual, User::PERFIS_SO_DO_CRM, true)) {
+                    $role = $atual;
+                } else {
+                    $user->syncRoles([$role]);
+                }
                 $perfis[$role] = ($perfis[$role] ?? 0) + 1;
 
                 if (! empty($row['COD_VENDEDOR'])) {

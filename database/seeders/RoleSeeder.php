@@ -17,6 +17,7 @@ class RoleSeeder extends Seeder
         'vendedor',
         'supervisor',
         'admin',
+        'venda_interna',
         'assistente',
         'diretor',
     ];

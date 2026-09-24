@@ -21,6 +21,50 @@ class User extends Authenticatable
     public const MINUTOS_ONLINE = 5;
 
     /**
+     * Perfis que atendem uma carteira PRÓPRIA, pelo `cod_vendedor` do perfil.
+     *
+     * É a resposta única a "este usuário opera como vendedor?": escopo da Carteira, dos
+     * Pedidos e dos blocos do Painel, dropdown de vendedores do gestor, ranking de metas e
+     * Visão do Gestor leem daqui. Espelhada em `resources/js/constants/perfis.js`
+     * (`PERFIS_CARTEIRA`) — mudou aqui, muda lá.
+     *
+     * `venda_interna` (2026-09-24) é a conta compartilhada do time interno
+     * (comercial@autopel.com, código 010617 — o mesmo que recebe os leads do site sem dono).
+     * Estava como `assistente`, que não tem carteira: via o Painel vazio e nenhum cliente.
+     * É perfil próprio, e não `vendedor`, para poder divergir depois sem mexer em quem vende.
+     *
+     * ⚠️ Supervisor NÃO entra: ele também tem carteira, mas o escopo dele é a equipe (com o
+     * alternador de modo), e cada consumidor decide se o inclui.
+     */
+    public const PERFIS_CARTEIRA = ['vendedor', 'representante', 'venda_interna'];
+
+    /**
+     * Perfis que só existem no CRM-V2, sem equivalente no `USUARIOS.PERFIL` do legado.
+     * O `legado:import-usuarios` não sobrescreve quem está num deles — senão a próxima
+     * importação devolveria a venda interna para `assistente`.
+     */
+    public const PERFIS_SO_DO_CRM = ['venda_interna'];
+
+    /**
+     * Usuários com algum dos perfis — pelo NOME, dentro do próprio `whereHas`.
+     *
+     * ⚠️ Existe no lugar do `User::role([...])` do spatie para listas de perfis: aquele
+     * escopo faz um `Role::findByName()` — uma query — POR NOME antes de montar o filtro.
+     * Com `PERFIS_CARTEIRA` passando de dois para três nomes, o Painel do admin ganhou 3
+     * queries e estourou o teto do `OrcamentoDeQueriesTest`. Aqui o custo não cresce com a
+     * lista. De quebra, nome que não existe só não casa, em vez de estourar
+     * `RoleDoesNotExist` (produção antes da migration do perfil, por exemplo).
+     *
+     * @param  list<string>  $perfis
+     */
+    public function scopeComPerfil(Builder $query, array $perfis): Builder
+    {
+        return $query->whereHas('roles', fn (Builder $q) => $q
+            ->whereIn('roles.name', $perfis)
+            ->where('roles.guard_name', 'web'));
+    }
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>

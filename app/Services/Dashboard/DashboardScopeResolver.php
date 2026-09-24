@@ -51,7 +51,7 @@ class DashboardScopeResolver
         $role = $this->roleDe($user);
         $proprio = $user->vendedorPerfil?->cod_vendedor;
 
-        if (in_array($role, ['vendedor', 'representante'], true)) {
+        if (in_array($role, User::PERFIS_CARTEIRA, true)) {
             return ['codVendedores' => $proprio ? [$proprio] : [], 'visaoSupervisor' => null, 'visaoVendedor' => null];
         }
 
@@ -155,7 +155,7 @@ class DashboardScopeResolver
             default => null,
         };
 
-        $query = User::role(['vendedor', 'representante'])->with('vendedorPerfil');
+        $query = User::comPerfil(User::PERFIS_CARTEIRA)->with('vendedorPerfil');
 
         if ($codSuper) {
             $query->whereHas('vendedorPerfil', fn ($q) => $q->where('cod_super', $codSuper));
@@ -193,7 +193,7 @@ class DashboardScopeResolver
         // Vendedor/representante/assistente agrega só o próprio histórico, mesmo que o
         // código de vendedor seja compartilhado com outra conta (acontece no legado).
         // Assistente não tem carteira, mas cria orçamento no próprio user_id.
-        if (in_array($this->roleDe($user), ['vendedor', 'representante', 'assistente'], true)) {
+        if (in_array($this->roleDe($user), [...User::PERFIS_CARTEIRA, 'assistente'], true)) {
             return [$user->id];
         }
 
@@ -214,7 +214,7 @@ class DashboardScopeResolver
     public function usuarioIdsDoEscopo(?array $codVendedores): array
     {
         if ($codVendedores === null) {
-            return User::role(['vendedor', 'representante'])->pluck('id')->all();
+            return User::comPerfil(User::PERFIS_CARTEIRA)->pluck('id')->all();
         }
 
         if ($codVendedores === []) {
