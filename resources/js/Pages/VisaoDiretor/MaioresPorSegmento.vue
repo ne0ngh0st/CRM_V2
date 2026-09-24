@@ -223,11 +223,6 @@ async function excluir(conta) {
 
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <div class="flex items-center gap-2">
-                    <ExportarExcelButton
-                        rota="visao-diretor.maiores.exportar"
-                        :filtros="filtros"
-                        :tem-filtros-ativos="temFiltrosAtivos"
-                    />
                     <button
                         type="button"
                         class="inline-flex min-h-9 items-center gap-1 rounded bg-teal px-3 text-xs font-semibold text-white transition hover:bg-navy"
@@ -241,7 +236,20 @@ async function excluir(conta) {
                 :linhas="dados.resumoPorSegmento"
                 :segmento-ativo="filtros.segmento"
                 @filtrar="filtrarSegmento"
-            />
+            >
+                <!--
+                    O botão mora no header PRETO do card, como em toda página: ele é desenhado
+                    para fundo escuro e, solto no fundo cinza da página, ficava invisível.
+                    No Resumo exporta todos os segmentos; dentro de uma aba, só aquela.
+                -->
+                <template #actions>
+                    <ExportarExcelButton
+                        rota="visao-diretor.maiores.exportar"
+                        :filtros="filtros"
+                        :tem-filtros-ativos="temFiltrosAtivos"
+                    />
+                </template>
+            </ResumoSegmentosCard>
 
             <DarkCard
                 v-else
@@ -259,6 +267,11 @@ async function excluir(conta) {
                     da Equipe (decisão do Tony, 2026-09-22). O link leva para lá.
                 -->
                 <template #actions>
+                    <ExportarExcelButton
+                        rota="visao-diretor.maiores.exportar"
+                        :filtros="filtros"
+                        :tem-filtros-ativos="temFiltrosAtivos"
+                    />
                     <Link
                         :href="route('equipe.segmentos')"
                         class="rounded px-1 py-0.5 transition hover:bg-white/10"

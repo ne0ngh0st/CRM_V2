@@ -33,6 +33,9 @@ const emit = defineEmits(['filtrar']);
                 <path d="M14 3.2a7 7 0 0 1 6.8 6.8H14Z" stroke-linejoin="round" />
             </svg>
         </template>
+        <template #actions>
+            <slot name="actions" />
+        </template>
 
         <p v-if="! linhas.length" class="py-6 text-center text-sm text-gray-400">Nenhuma conta cadastrada.</p>
 
