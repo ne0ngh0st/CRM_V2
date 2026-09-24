@@ -2448,6 +2448,47 @@ documentos" é o filtro "Documento" da mesma lista, sem tela à parte.
 Fora deste estágio (de propósito): segmentação por perfil/equipe, rascunho/agendamento,
 comentários, vídeo, versionamento do texto de regra.
 
+### "Verificar cartão CNPJ" na Carteira — 2026-09-24
+
+Botão navy (ícone de crachá) na coluna Ações da Carteira — na linha do cliente E em cada
+linha de filial — e "Verificar cartão CNPJ" no card Dados cadastrais da ficha do cliente.
+Abre um `ModalPadrao` com o cartão da Receita: situação cadastral em destaque (ATIVA verde,
+SUSPENSA/INAPTA âmbar, BAIXADA/NULA vermelho), abertura, porte, natureza, Simples/MEI,
+capital, CNAEs, endereço e contato **na Receita**, e um bloco âmbar com o que **diverge do
+TOTVS**. Todos os perfis, com o mesmo escopo das outras ações da linha (`autorizarCliente`).
+
+| O que se repete | Onde mora |
+|---|---|
+| URL e formato de cada provedor, normalização, comparação | `App\Services\Receita\CartaoCnpjService` |
+| Ordem das fontes, timeout, validade | `config/receita.php` |
+| Cartão já consultado | tabela `cnpj_consultas` (um por CNPJ de 14 dígitos) |
+
+- **Fontes gratuitas, sem chave**, tentadas em ordem: BrasilAPI → minhareceita (mesma base,
+  o arquivo mensal da Receita) → CNPJá (independente, 5 consultas/min). A primeira que
+  devolver cartão válido vence. **Nenhuma serve para consulta em massa** — enriquecer a
+  carteira inteira é o download da base da Receita (item 2 da conversa de 24/09, a fazer).
+- **Validade de 30 dias**: a Receita publica uma vez por mês. "Atualizar da Receita" força.
+  Medido no dev com clientes reais: **480-730 ms** na primeira consulta, **2 ms** depois.
+- ⚠️ **`dados` guarda o NOSSO formato, nunca o payload cru** — trocar de provedor não
+  invalida o que está gravado nem obriga a tela a conhecer três formatos.
+- ⚠️ **Quadro de sócios não é lido nem guardado** (LGPD: nome de pessoa física). O provedor
+  manda, o normalizador descarta. Travado por teste.
+- ⚠️ **Resposta 200 sem razão social ou situação conta como FALHA da fonte**, com log —
+  é o sintoma de o provedor ter mudado o formato, e sem isso a tela mostraria um cartão
+  vazio com cara de dado. Tenta a próxima fonte.
+- Todas fora do ar: devolve o último cartão gravado marcado **desatualizado** (a tela diz
+  de quando é); sem cartão anterior, 503 com mensagem. CNPJ inexistente em todas: 404.
+- **Divergências comparam só o que compara bem** (razão social por prefixo, CEP, município,
+  UF), ignorando acento, pontuação e sufixo societário (`S/A` = `SA` = `AS`, `LTDA`).
+  Logradouro fica de fora: no TOTVS é texto livre e daria falso alarme em quase toda linha.
+  Lacuna de um dos lados não é divergência. O caso `AS`×`SA` apareceu no primeiro teste com
+  dado real (IMIFARMA) — aviso que dispara sem motivo ensina a ignorar o aviso.
+- `throttle:30,1` na rota: protege a cota das fontes gratuitas, não o nosso servidor.
+- `situacao` tem coluna própria indexada para virar **filtro da Carteira** depois ("inativo
+  com CNPJ baixado") — ainda não existe.
+- Testes: `tests/Feature/CartaoCnpjTest.php` (17), com `Http::preventStrayRequests()` e as
+  respostas no formato real de cada provedor. **9 mutações aplicadas, 9 mordidas.**
+
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão

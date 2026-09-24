@@ -13,6 +13,7 @@ import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos
 import MotivoInatividadeModal from '@/Components/Carteira/MotivoInatividadeModal.vue';
 import ObservacoesModal from '@/Components/Observacoes/ObservacoesModal.vue';
 import AgendarLigacaoModal from '@/Components/Carteira/AgendarLigacaoModal.vue';
+import CartaoCnpjModal from '@/Components/Carteira/CartaoCnpjModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import OrdenarMobile from '@/Components/Tabela/OrdenarMobile.vue';
 import { ROTULOS_STATUS_CARTEIRA, ORDENACOES_CARTEIRA } from '@/constants/carteira';
@@ -214,6 +215,13 @@ function abrirObservacao(cliente) {
 function abrirAgendamento(cliente) {
     clienteAtivo.value = cliente;
     modalAgendamento.value = true;
+}
+
+const modalCartaoCnpj = ref(false);
+
+function abrirCartaoCnpj(cliente) {
+    clienteAtivo.value = cliente;
+    modalCartaoCnpj.value = true;
 }
 
 /*
@@ -478,6 +486,7 @@ function limparContaAlvo() {
                             @motivo-inatividade="abrirMotivo"
                             @observacao="abrirObservacao"
                             @agendar-ligacao="abrirAgendamento"
+                            @cartao-cnpj="abrirCartaoCnpj"
                         />
                         <p v-else class="text-sm text-gray-400">Nenhum cliente encontrado com os filtros atuais.</p>
 
@@ -500,5 +509,6 @@ function limparContaAlvo() {
             @close="modalObservacao = false"
         />
         <AgendarLigacaoModal :show="modalAgendamento" :cliente="clienteAtivo" @close="modalAgendamento = false" />
+        <CartaoCnpjModal :show="modalCartaoCnpj" :cliente="clienteAtivo" @close="modalCartaoCnpj = false" />
     </AuthenticatedLayout>
 </template>

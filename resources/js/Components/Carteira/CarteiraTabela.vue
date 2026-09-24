@@ -75,7 +75,10 @@ async function alternar(cliente) {
     }
 }
 
-const emit = defineEmits(['motivo-inatividade', 'observacao', 'agendar-ligacao', 'ordenar']);
+const emit = defineEmits(['motivo-inatividade', 'observacao', 'agendar-ligacao', 'ordenar', 'cartao-cnpj']);
+
+// Cartão CNPJ só existe para CNPJ: cliente pessoa física (CPF) tem o botão desabilitado.
+const temCnpj = (c) => String(c?.cnpj ?? '').replace(/\D/g, '').length === 14;
 
 /*
  * Registra o contato no canal escolhido. `preserveState` mantém os filtros e a
@@ -242,6 +245,19 @@ function criarOrcamento(cliente) {
                                     <circle cx="12" cy="12" r="3" />
                                 </svg>
                             </Link>
+                            <button
+                                type="button"
+                                :title="temCnpj(cliente) ? 'Verificar cartão CNPJ' : 'Sem CNPJ (cliente pessoa física)'"
+                                class="tbl-acao tbl-acao-navy"
+                                :disabled="! temCnpj(cliente)"
+                                @click="emit('cartao-cnpj', cliente)"
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="3" y="5" width="18" height="14" rx="1.5" />
+                                    <circle cx="8.5" cy="11" r="2" />
+                                    <path d="M5.5 16c.6-1.5 1.7-2.2 3-2.2s2.4.7 3 2.2M14 10h4.5M14 13.5h3" stroke-linecap="round" />
+                                </svg>
+                            </button>
                             <BotoesContato
                                 v-if="podeLigar"
                                 :telefone="cliente.telefone"
@@ -350,6 +366,19 @@ function criarOrcamento(cliente) {
                                                         <circle cx="12" cy="12" r="3" />
                                                     </svg>
                                                 </Link>
+                                                <button
+                                                    type="button"
+                                                    :title="temCnpj(filial) ? 'Verificar cartão CNPJ' : 'Sem CNPJ (cliente pessoa física)'"
+                                                    class="tbl-acao tbl-acao-navy"
+                                                    :disabled="! temCnpj(filial)"
+                                                    @click="emit('cartao-cnpj', filial)"
+                                                >
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                        <rect x="3" y="5" width="18" height="14" rx="1.5" />
+                                                        <circle cx="8.5" cy="11" r="2" />
+                                                        <path d="M5.5 16c.6-1.5 1.7-2.2 3-2.2s2.4.7 3 2.2M14 10h4.5M14 13.5h3" stroke-linecap="round" />
+                                                    </svg>
+                                                </button>
                                                 <BotoesContato
                                                     v-if="podeLigar"
                                                     :telefone="filial.telefone"

@@ -76,6 +76,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/carteira/cliente/{codCliente}/filiais', [CarteiraController::class, 'filiais'])->name('carteira.filiais');
 
     Route::get('/carteira/{cliente}/detalhes', [CarteiraController::class, 'detalhes'])->name('carteira.detalhes');
+    // Consulta externa (API pública da Receita): o throttle protege a cota das fontes
+    // gratuitas de alguém clicando "atualizar" em sequência, não o nosso servidor.
+    Route::get('/carteira/{cliente}/cartao-cnpj', [CarteiraController::class, 'cartaoCnpj'])
+        ->middleware('throttle:30,1')
+        ->name('carteira.cartaoCnpj');
     Route::post('/carteira/{cliente}/motivo-inatividade', [CarteiraController::class, 'registrarMotivoInatividade'])->name('carteira.motivoInatividade');
     Route::post('/carteira/{cliente}/ligacao', [CarteiraController::class, 'registrarLigacao'])->name('carteira.ligacao');
     Route::post('/carteira/{cliente}/agendamento', [CarteiraController::class, 'registrarAgendamento'])->name('carteira.agendamento');

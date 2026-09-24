@@ -16,6 +16,7 @@ use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Pedidos\StatusPedidoResolver;
+use App\Services\Receita\CartaoCnpjService;
 use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Potencial\FamiliaProduto;
@@ -937,6 +938,33 @@ class CarteiraController extends Controller
             'mostrando' => $filiais->count(),
             'filiais' => $filiais,
         ]);
+    }
+
+    /**
+     * "Verificar cartão CNPJ": o cartão da Receita desta filial, comparado com o
+     * cadastro do TOTVS. JSON porque o modal abre na hora e busca por baixo — a
+     * consulta externa nunca segura a tela (Regra de ouro nº 9).
+     *
+     * Mesmo escopo das outras ações da linha: o vendedor só consulta cliente da própria
+     * carteira. Para CNPJ avulso (titularidade, cadastro de lead) o caminho é outro.
+     */
+    public function cartaoCnpj(Request $request, Cliente $cliente, CartaoCnpjService $servico): JsonResponse
+    {
+        $this->autorizarCliente($request, $cliente);
+
+        $cnpj = CartaoCnpjService::normalizarCnpj($cliente->cnpj);
+
+        if ($cnpj === null) {
+            return response()->json(['erro' => 'Este cliente não tem CNPJ de 14 dígitos (pode ser CPF).'], 422);
+        }
+
+        $resultado = $servico->consultar($cnpj, $request->boolean('atualizar'));
+
+        return match ($resultado['status']) {
+            'ok' => response()->json($servico->paraTela($resultado['consulta'], $resultado['desatualizado'], $cliente)),
+            CartaoCnpjService::NAO_ENCONTRADO => response()->json(['erro' => 'A Receita não encontrou este CNPJ.'], 404),
+            default => response()->json(['erro' => 'A consulta à Receita está indisponível agora. Tente de novo em alguns minutos.'], 503),
+        };
     }
 
     /**

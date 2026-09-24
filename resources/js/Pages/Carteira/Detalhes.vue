@@ -6,6 +6,7 @@ import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import KpiTile from '@/Components/KpiTile.vue';
+import CartaoCnpjModal from '@/Components/Carteira/CartaoCnpjModal.vue';
 import Pagination from '@/Components/Pagination.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira.js';
 // Esta página já manteve uma cópia local do mapa de rótulos de status, e a cópia não
@@ -24,6 +25,9 @@ const props = defineProps({
 });
 
 const expandido = ref(null);
+const modalCartaoCnpj = ref(false);
+// Mesma regra do botão da tabela: cartão CNPJ só existe para CNPJ, não para CPF.
+const temCnpj = computed(() => String(props.cliente.cnpj ?? '').replace(/\D/g, '').length === 14);
 
 function toggle(id) {
     expandido.value = expandido.value === id ? null : id;
@@ -126,6 +130,23 @@ const campos = [
                 </PageHero>
 
                 <DarkCard title="Dados cadastrais" subtitle="Espelho de leitura do TOTVS — edição é feita lá, não aqui">
+                    <template #actions>
+                        <!-- Comparar o espelho do TOTVS com a Receita mora aqui, ao lado
+                             dos dados que ele confere. -->
+                        <button
+                            v-if="temCnpj"
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded border border-gray-600 px-2 py-1 text-xs font-medium text-gray-200 transition hover:border-white hover:text-white"
+                            @click="modalCartaoCnpj = true"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-3.5 w-3.5">
+                                <rect x="3" y="5" width="18" height="14" rx="1.5" />
+                                <circle cx="8.5" cy="11" r="2" />
+                                <path d="M5.5 16c.6-1.5 1.7-2.2 3-2.2s2.4.7 3 2.2M14 10h4.5M14 13.5h3" stroke-linecap="round" />
+                            </svg>
+                            Verificar cartão CNPJ
+                        </button>
+                    </template>
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
                             <line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round" />
@@ -275,5 +296,6 @@ const campos = [
                 </DarkCard>
             </div>
         </div>
+        <CartaoCnpjModal :show="modalCartaoCnpj" :cliente="cliente" @close="modalCartaoCnpj = false" />
     </AuthenticatedLayout>
 </template>
