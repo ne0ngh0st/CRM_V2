@@ -315,6 +315,30 @@ class CartaoCnpjTest extends TestCase
             ->assertJsonPath('divergencias', []);
     }
 
+    public function test_nome_abreviado_no_totvs_nao_e_divergencia(): void
+    {
+        // Caso real de produção (2026-09-24): o TOTVS abrevia palavra para caber no campo.
+        Http::fake(['brasilapi.com.br/*' => Http::response($this->respostaBrasilApi([
+            'razao_social' => 'IMIFARMA PRODUTOS FARMACEUTICOS E COSMETICOS SA',
+        ]))]);
+
+        $this->consultar($this->cliente(['razao_social' => 'IMIFARMA PROD FARMA E COSMETICOS SA']))
+            ->assertOk()
+            ->assertJsonPath('divergencias', []);
+    }
+
+    public function test_nome_diferente_com_mesmo_comeco_continua_divergindo(): void
+    {
+        // Abreviação vale palavra a palavra, na mesma posição — não "qualquer prefixo".
+        Http::fake(['brasilapi.com.br/*' => Http::response($this->respostaBrasilApi([
+            'razao_social' => 'IMIFARMA PRODUTOS FARMACEUTICOS E COSMETICOS SA',
+        ]))]);
+
+        $this->consultar($this->cliente(['razao_social' => 'IMIFARMA COMERCIO DE ALIMENTOS SA']))
+            ->assertOk()
+            ->assertJsonPath('divergencias.0.campo', 'Razão social');
+    }
+
     public function test_aponta_onde_o_totvs_diverge_da_receita(): void
     {
         Http::fake(['brasilapi.com.br/*' => Http::response($this->respostaBrasilApi())]);

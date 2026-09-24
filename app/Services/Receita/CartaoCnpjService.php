@@ -282,13 +282,9 @@ class CartaoCnpjService
                 continue;
             }
 
-            $a = $this->chaveComparacao($totvs);
-            $b = $this->chaveComparacao($receita);
-
-            // Razão social: o TOTVS trunca nomes longos, então "começa igual" basta.
             $bate = $modo === 'prefixo'
-                ? (str_starts_with($a, $b) || str_starts_with($b, $a))
-                : $a === $b;
+                ? $this->mesmoNome($totvs, $receita)
+                : $this->chaveComparacao($totvs) === $this->chaveComparacao($receita);
 
             if (! $bate) {
                 $saida[] = ['campo' => $campo, 'totvs' => (string) $totvs, 'receita' => (string) $receita];
@@ -304,7 +300,43 @@ class CartaoCnpjService
      * "IMIFARMA ... COSMETICOS AS" e a Receita "... COSMETICOS SA" — mesma empresa, e
      * um aviso de divergência ali só ensinaria o usuário a ignorar o aviso.
      */
+    /**
+     * Razão social: o TOTVS TRUNCA nome longo e ABREVIA palavra para caber no campo.
+     * Casos reais: "IMIFARMA PROD FARMA E COSMETICOS SA" é a mesma empresa que
+     * "IMIFARMA PRODUTOS FARMACEUTICOS E COSMETICOS SA". Por isso cada palavra só
+     * precisa COMEÇAR igual à do outro lado, na mesma posição. A primeira palavra
+     * diferente de verdade ("24715-MANOEL" × "FUNDACAO") continua acusando.
+     *
+     * O texto corrido sem espaços também vale, para "SUPERMERCADOS" × "SUPER MERCADOS".
+     */
+    private function mesmoNome(string $totvs, string $receita): bool
+    {
+        $a = $this->palavrasComparacao($totvs);
+        $b = $this->palavrasComparacao($receita);
+
+        $juntoA = implode('', $a);
+        $juntoB = implode('', $b);
+
+        if (str_starts_with($juntoA, $juntoB) || str_starts_with($juntoB, $juntoA)) {
+            return true;
+        }
+
+        for ($i = 0, $n = min(count($a), count($b)); $i < $n; $i++) {
+            if (! str_starts_with($a[$i], $b[$i]) && ! str_starts_with($b[$i], $a[$i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private function chaveComparacao(string $valor): string
+    {
+        return implode('', $this->palavrasComparacao($valor));
+    }
+
+    /** @return array<int, string> */
+    private function palavrasComparacao(string $valor): array
     {
         $palavras = preg_split('/[^A-Z0-9]+/', mb_strtoupper(Str::ascii($valor)), -1, PREG_SPLIT_NO_EMPTY);
 
@@ -321,7 +353,7 @@ class CartaoCnpjService
             }
         }
 
-        return implode('', $palavras);
+        return $palavras;
     }
 
     private function situacao(?string $texto): ?string

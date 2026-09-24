@@ -2483,11 +2483,16 @@ TOTVS**. Todos os perfis, com o mesmo escopo das outras ações da linha (`autor
   Logradouro fica de fora: no TOTVS é texto livre e daria falso alarme em quase toda linha.
   Lacuna de um dos lados não é divergência. O caso `AS`×`SA` apareceu no primeiro teste com
   dado real (IMIFARMA) — aviso que dispara sem motivo ensina a ignorar o aviso.
+- ⚠️ **Razão social compara PALAVRA A PALAVRA, aceitando abreviação** (`mesmoNome()`): o
+  TOTVS abrevia para caber no campo — "IMIFARMA **PROD FARMA** E COSMETICOS SA" é a mesma
+  empresa que "…**PRODUTOS FARMACEUTICOS**…". Achado no primeiro teste EM PRODUÇÃO, no mesmo
+  dia do deploy. Cada palavra só precisa começar igual à da mesma posição do outro lado;
+  a primeira palavra diferente de verdade continua acusando.
 - `throttle:30,1` na rota: protege a cota das fontes gratuitas, não o nosso servidor.
 - `situacao` tem coluna própria indexada para virar **filtro da Carteira** depois ("inativo
   com CNPJ baixado") — ainda não existe.
-- Testes: `tests/Feature/CartaoCnpjTest.php` (17), com `Http::preventStrayRequests()` e as
-  respostas no formato real de cada provedor. **9 mutações aplicadas, 9 mordidas.**
+- Testes: `tests/Feature/CartaoCnpjTest.php` (19), com `Http::preventStrayRequests()` e as
+  respostas no formato real de cada provedor. **10 mutações aplicadas, 10 mordidas.**
 
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
