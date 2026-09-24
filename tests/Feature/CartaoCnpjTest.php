@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Cliente;
 use App\Models\CnpjConsulta;
+use App\Models\Lead;
 use App\Models\User;
 use App\Models\VendedorPerfil;
 use Database\Seeders\RoleSeeder;
@@ -343,14 +344,15 @@ class CartaoCnpjTest extends TestCase
     {
         Http::fake(['brasilapi.com.br/*' => Http::response($this->respostaBrasilApi())]);
 
-        $divergencias = $this->consultar($this->cliente([
+        $resposta = $this->consultar($this->cliente([
             'razao_social' => 'OUTRA EMPRESA LTDA',
             'cep' => '01310-100',
             'municipio' => 'BRASÍLIA', // acento não conta
-        ]))->assertOk()->json('divergencias');
+        ]))->assertOk()->assertJsonPath('origemCadastro', 'TOTVS');
+        $divergencias = $resposta->json('divergencias');
 
         $this->assertSame(['Razão social', 'CEP'], array_column($divergencias, 'campo'));
-        $this->assertSame('01310-100', $divergencias[1]['totvs']);
+        $this->assertSame('01310-100', $divergencias[1]['cadastro']);
         $this->assertSame('70040-912', $divergencias[1]['receita']);
     }
 
@@ -361,5 +363,70 @@ class CartaoCnpjTest extends TestCase
         $this->consultar($this->cliente(['cep' => null, 'municipio' => null]))
             ->assertOk()
             ->assertJsonPath('divergencias', []);
+    }
+
+    // ------------------------------------------------------------------ leads
+
+    private function lead(array $atributos = []): Lead
+    {
+        return Lead::create([
+            'origem' => Lead::ORIGEM_MANUAL,
+            'cod_vendedor' => '000010',
+            'nome' => 'Contato',
+            'razao_social' => 'BANCO DO BRASIL SA',
+            'cnpj' => '00000000000191',
+            'cidade' => 'Brasília',
+            'estado' => 'DF',
+            ...$atributos,
+        ]);
+    }
+
+    private function consultarLead(Lead $lead, ?User $user = null)
+    {
+        return $this->actingAs($user ?? $this->usuario())->getJson(route('leads.cartaoCnpj', $lead));
+    }
+
+    public function test_lead_traz_o_cartao_e_compara_com_o_que_foi_digitado(): void
+    {
+        Http::fake(['brasilapi.com.br/*' => Http::response($this->respostaBrasilApi())]);
+
+        $resposta = $this->consultarLead($this->lead(['cidade' => 'Goiânia']))->assertOk();
+
+        $resposta->assertJsonPath('cartao.situacao', 'ATIVA')
+            ->assertJsonPath('origemCadastro', 'Lead')
+            ->assertJsonPath('divergencias.0.campo', 'Município')
+            ->assertJsonPath('divergencias.0.cadastro', 'Goiânia');
+        // Lead não tem CEP: nunca pode aparecer como divergência.
+        $this->assertNotContains('CEP', array_column($resposta->json('divergencias'), 'campo'));
+    }
+
+    public function test_lead_e_cliente_com_o_mesmo_cnpj_reaproveitam_a_consulta(): void
+    {
+        Http::fake(['brasilapi.com.br/*' => Http::response($this->respostaBrasilApi())]);
+        $user = $this->usuario();
+
+        $this->consultar($this->cliente(), $user)->assertOk();
+        $this->consultarLead($this->lead(), $user)->assertOk();
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_vendedor_nao_consulta_lead_de_outro(): void
+    {
+        Http::fake();
+        $vendedor = $this->usuario('vendedor', '000999');
+
+        $this->consultarLead($this->lead(['cod_vendedor' => '000010']), $vendedor)->assertForbidden();
+
+        Http::assertNothingSent();
+    }
+
+    public function test_lead_sem_cnpj_nao_consulta(): void
+    {
+        Http::fake();
+
+        $this->consultarLead($this->lead(['cnpj' => null]))->assertStatus(422);
+
+        Http::assertNothingSent();
     }
 }

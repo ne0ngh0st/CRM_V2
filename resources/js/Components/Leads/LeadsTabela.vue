@@ -15,7 +15,10 @@ defineProps({
     podeExcluir: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['observacao', 'agendar-ligacao', 'captura']);
+const emit = defineEmits(['observacao', 'agendar-ligacao', 'captura', 'cartao-cnpj']);
+
+// Mesma regra da Carteira: cartão CNPJ só existe para CNPJ de 14 dígitos.
+const temCnpj = (l) => String(l?.cnpj ?? '').replace(/\D/g, '').length === 14;
 
 function formatBRL(valor) {
     if (valor === null || valor === undefined) return '—';
@@ -109,6 +112,19 @@ async function excluir(lead) {
                             >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                     <path d="M4 6h16M4 12h10M4 18h16" stroke-linecap="round" />
+                                </svg>
+                            </button>
+                            <button
+                                type="button"
+                                :title="temCnpj(lead) ? 'Verificar cartão CNPJ' : 'Lead sem CNPJ cadastrado'"
+                                class="tbl-acao tbl-acao-navy"
+                                :disabled="! temCnpj(lead)"
+                                @click="emit('cartao-cnpj', lead)"
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="3" y="5" width="18" height="14" rx="1.5" />
+                                    <circle cx="8.5" cy="11" r="2" />
+                                    <path d="M5.5 16c.6-1.5 1.7-2.2 3-2.2s2.4.7 3 2.2M14 10h4.5M14 13.5h3" stroke-linecap="round" />
                                 </svg>
                             </button>
                             <BotoesContato

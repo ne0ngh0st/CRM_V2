@@ -94,6 +94,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/leads/funil/mais', [LeadController::class, 'maisDoFunil'])->name('leads.funil.mais');
     Route::patch('/leads/{lead}/etapa', [LeadController::class, 'moverEtapa'])->name('leads.etapa');
     Route::get('/leads/{lead}/captura', [LeadController::class, 'capturaWordpress'])->name('leads.captura');
+    // Mesmo throttle do cartão da Carteira: protege a cota das fontes gratuitas.
+    Route::get('/leads/{lead}/cartao-cnpj', [LeadController::class, 'cartaoCnpj'])
+        ->middleware('throttle:30,1')
+        ->name('leads.cartaoCnpj');
     Route::post('/leads/{lead}/ligacao', [LeadController::class, 'registrarLigacao'])->name('leads.ligacao');
     Route::post('/leads/{lead}/agendamento', [LeadController::class, 'registrarAgendamento'])->name('leads.agendamento');
     Route::patch('/leads/agendamentos/{agendamento}', [LeadController::class, 'atualizarAgendamento'])->name('leads.agendamentoStatus');

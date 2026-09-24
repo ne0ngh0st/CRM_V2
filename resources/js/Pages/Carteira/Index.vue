@@ -13,7 +13,7 @@ import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos
 import MotivoInatividadeModal from '@/Components/Carteira/MotivoInatividadeModal.vue';
 import ObservacoesModal from '@/Components/Observacoes/ObservacoesModal.vue';
 import AgendarLigacaoModal from '@/Components/Carteira/AgendarLigacaoModal.vue';
-import CartaoCnpjModal from '@/Components/Carteira/CartaoCnpjModal.vue';
+import CartaoCnpjModal from '@/Components/Receita/CartaoCnpjModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import OrdenarMobile from '@/Components/Tabela/OrdenarMobile.vue';
 import { ROTULOS_STATUS_CARTEIRA, ORDENACOES_CARTEIRA } from '@/constants/carteira';
@@ -509,6 +509,10 @@ function limparContaAlvo() {
             @close="modalObservacao = false"
         />
         <AgendarLigacaoModal :show="modalAgendamento" :cliente="clienteAtivo" @close="modalAgendamento = false" />
-        <CartaoCnpjModal :show="modalCartaoCnpj" :cliente="clienteAtivo" @close="modalCartaoCnpj = false" />
+        <CartaoCnpjModal
+            :show="modalCartaoCnpj"
+            :cliente="clienteAtivo"
+            :url="clienteAtivo ? route('carteira.cartaoCnpj', clienteAtivo.id) : ''"
+            @close="modalCartaoCnpj = false" />
     </AuthenticatedLayout>
 </template>

@@ -12,6 +12,7 @@ use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Marketing\WpLeadCapturaStatus;
 use App\Services\Marketing\WpLeadIngestor;
 use App\Services\Marketing\WpLeadPayloadParser;
+use App\Services\Receita\CartaoCnpjService;
 use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -605,6 +606,17 @@ class LeadController extends Controller
         $lead->update(['status' => 'excluido']);
 
         return back();
+    }
+
+    /**
+     * "Verificar cartão CNPJ" do lead, comparado com o que foi digitado nele (pelo
+     * vendedor ou pelo formulário do site). Mesmo escopo das outras ações da linha.
+     */
+    public function cartaoCnpj(Request $request, Lead $lead, CartaoCnpjService $servico): JsonResponse
+    {
+        $this->autorizarLead($request, $lead);
+
+        return $servico->resposta($lead->cnpj, $request->boolean('atualizar'), CartaoCnpjService::cadastroDoLead($lead));
     }
 
     private function autorizarLead(Request $request, Lead $lead): void

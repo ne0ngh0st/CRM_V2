@@ -2457,9 +2457,20 @@ SUSPENSA/INAPTA âmbar, BAIXADA/NULA vermelho), abertura, porte, natureza, Simpl
 capital, CNAEs, endereço e contato **na Receita**, e um bloco âmbar com o que **diverge do
 TOTVS**. Todos os perfis, com o mesmo escopo das outras ações da linha (`autorizarCliente`).
 
+**Também nos Leads** (mesmo dia, pedido do Tony): botão na coluna Ações da tabela de
+`/leads` (o quadro de funil NÃO tem — card de kanban não leva ações de linha), rota
+`leads.cartaoCnpj`, escopo por `autorizarLead`. Ali a comparação é contra o que foi
+**digitado no lead** (razão social, cidade, UF — lead não tem CEP), e o bloco se chama
+"Dados do lead diferentes da Receita". Cliente e lead com o mesmo CNPJ reaproveitam a
+mesma linha de `cnpj_consultas`.
+- ⚠️ **Uma resposta só para as duas telas**: `CartaoCnpjService::resposta()` decide
+  422/404/503/200; cada controller só autoriza e passa `cadastroDoCliente()` ou
+  `cadastroDoLead()`. O modal (`Components/Receita/CartaoCnpjModal.vue`) recebe a `url`
+  de quem o abre e não conhece rota nenhuma.
+
 | O que se repete | Onde mora |
 |---|---|
-| URL e formato de cada provedor, normalização, comparação | `App\Services\Receita\CartaoCnpjService` |
+| URL e formato de cada provedor, normalização, comparação, resposta HTTP | `App\Services\Receita\CartaoCnpjService` |
 | Ordem das fontes, timeout, validade | `config/receita.php` |
 | Cartão já consultado | tabela `cnpj_consultas` (um por CNPJ de 14 dígitos) |
 
@@ -2491,8 +2502,8 @@ TOTVS**. Todos os perfis, com o mesmo escopo das outras ações da linha (`autor
 - `throttle:30,1` na rota: protege a cota das fontes gratuitas, não o nosso servidor.
 - `situacao` tem coluna própria indexada para virar **filtro da Carteira** depois ("inativo
   com CNPJ baixado") — ainda não existe.
-- Testes: `tests/Feature/CartaoCnpjTest.php` (19), com `Http::preventStrayRequests()` e as
-  respostas no formato real de cada provedor. **10 mutações aplicadas, 10 mordidas.**
+- Testes: `tests/Feature/CartaoCnpjTest.php` (23), com `Http::preventStrayRequests()` e as
+  respostas no formato real de cada provedor. **12 mutações aplicadas, 12 mordidas.**
 
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado

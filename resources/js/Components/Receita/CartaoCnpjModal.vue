@@ -15,8 +15,11 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
  */
 const props = defineProps({
     show: { type: Boolean, default: false },
-    // { id, razaoSocial, cnpj } — a linha da Carteira ou a filial.
+    // { razaoSocial, cnpj } — cliente, filial ou lead. Só vai para o subtítulo.
     cliente: { type: Object, default: null },
+    // Quem abre diz de onde vem o cartão: `carteira.cartaoCnpj` ou `leads.cartaoCnpj`.
+    // O modal não conhece rota — é o que deixa o mesmo componente servir aos dois.
+    url: { type: String, default: '' },
 });
 
 const emit = defineEmits(['close']);
@@ -37,15 +40,19 @@ const ROTULO = 'mb-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text
 
 const cartao = computed(() => dados.value?.cartao ?? null);
 
+// O servidor diz de onde veio o nosso lado da comparação ("TOTVS" ou "Lead").
+const tituloDivergencias = computed(() => (dados.value?.origemCadastro === 'Lead'
+    ? 'Dados do lead diferentes da Receita'
+    : 'Cadastro do TOTVS diferente da Receita'));
+
 async function carregar(atualizar = false) {
-    if (! props.cliente) return;
+    if (! props.url) return;
 
     carregando.value = true;
     erro.value = '';
 
     try {
-        const url = route('carteira.cartaoCnpj', props.cliente.id) + (atualizar ? '?atualizar=1' : '');
-        const resposta = await fetch(url, {
+        const resposta = await fetch(props.url + (atualizar ? '?atualizar=1' : ''), {
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin',
         });
@@ -143,16 +150,16 @@ const consultadoTexto = computed(() => {
             </div>
             <div v-if="erro" class="rounded border border-amber/40 bg-amber/10 px-3 py-2 text-xs text-gray-700">{{ erro }}</div>
 
-            <!-- O que o time de Cadastro precisa corrigir no TOTVS. -->
+            <!-- Cliente: o que o Cadastro precisa corrigir no TOTVS. Lead: o que foi digitado errado. -->
             <div v-if="dados.divergencias.length" class="rounded border border-amber/40 bg-amber/5">
                 <p class="border-b border-amber/30 px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-dark">
-                    Cadastro do TOTVS diferente da Receita
+                    {{ tituloDivergencias }}
                 </p>
                 <table class="w-full text-xs">
                     <tbody class="divide-y divide-amber/20">
                         <tr v-for="d in dados.divergencias" :key="d.campo">
                             <td class="w-28 px-3 py-1.5 font-medium text-gray-500">{{ d.campo }}</td>
-                            <td class="px-3 py-1.5"><span class="text-gray-400">TOTVS:</span> {{ d.totvs }}</td>
+                            <td class="px-3 py-1.5"><span class="text-gray-400">{{ dados.origemCadastro }}:</span> {{ d.cadastro }}</td>
                             <td class="px-3 py-1.5"><span class="text-gray-400">Receita:</span> <span class="font-medium text-gray-900">{{ d.receita }}</span></td>
                         </tr>
                     </tbody>

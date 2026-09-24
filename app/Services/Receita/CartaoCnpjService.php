@@ -4,7 +4,9 @@ namespace App\Services\Receita;
 
 use App\Models\Cliente;
 use App\Models\CnpjConsulta;
+use App\Models\Lead;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -230,10 +232,57 @@ class CartaoCnpjService
     }
 
     /**
-     * O que a TELA recebe: o cartão com datas e CEP formatados, mais o carimbo de
-     * quando/onde foi consultado e as divergências contra o cadastro do TOTVS.
+     * A resposta HTTP do botão "Verificar cartão CNPJ", igual para Carteira e Leads —
+     * cada controller só autoriza e diz qual é o nosso cadastro. JSON porque o modal
+     * abre na hora e busca por baixo: a consulta externa nunca segura a tela.
      */
-    public function paraTela(CnpjConsulta $consulta, bool $desatualizado, ?Cliente $cliente = null): array
+    public function resposta(?string $cnpjBruto, bool $atualizar, array $cadastro): JsonResponse
+    {
+        $cnpj = self::normalizarCnpj($cnpjBruto);
+
+        if ($cnpj === null) {
+            return response()->json(['erro' => 'Sem CNPJ de 14 dígitos cadastrado (pode ser CPF).'], 422);
+        }
+
+        $resultado = $this->consultar($cnpj, $atualizar);
+
+        return match ($resultado['status']) {
+            'ok' => response()->json($this->paraTela($resultado['consulta'], $resultado['desatualizado'], $cadastro)),
+            self::NAO_ENCONTRADO => response()->json(['erro' => 'A Receita não encontrou este CNPJ.'], 404),
+            default => response()->json(['erro' => 'A consulta à Receita está indisponível agora. Tente de novo em alguns minutos.'], 503),
+        };
+    }
+
+    /** O cadastro do TOTVS, no formato que `divergencias()` compara. */
+    public static function cadastroDoCliente(Cliente $cliente): array
+    {
+        return [
+            'origem' => 'TOTVS',
+            'razaoSocial' => $cliente->razao_social,
+            'cep' => $cliente->cep,
+            'municipio' => $cliente->municipio,
+            'uf' => $cliente->estado,
+        ];
+    }
+
+    /** O que o vendedor/formulário do site digitou no lead. Lead não tem CEP. */
+    public static function cadastroDoLead(Lead $lead): array
+    {
+        return [
+            'origem' => 'Lead',
+            'razaoSocial' => $lead->razao_social,
+            'cep' => null,
+            'municipio' => $lead->cidade,
+            'uf' => $lead->estado,
+        ];
+    }
+
+    /**
+     * O que a TELA recebe: o cartão com datas e CEP formatados, mais o carimbo de
+     * quando/onde foi consultado e as divergências contra o nosso cadastro (o do
+     * TOTVS, para cliente; o digitado, para lead — ver `cadastroDo*()`).
+     */
+    public function paraTela(CnpjConsulta $consulta, bool $desatualizado, ?array $cadastro = null): array
     {
         $d = $consulta->dados;
 
@@ -252,54 +301,51 @@ class CartaoCnpjService
             'diasDesdeConsulta' => (int) $consulta->consultado_em->copy()->startOfDay()->diffInDays(now()->startOfDay()),
             'fonte' => $consulta->fonte,
             'desatualizado' => $desatualizado,
-            'divergencias' => $cliente ? $this->divergencias($d, $cliente) : [],
+            // "TOTVS" ou "Lead": a tela diz de ONDE veio o valor que diverge.
+            'origemCadastro' => $cadastro['origem'] ?? null,
+            'divergencias' => $cadastro ? $this->divergencias($d, $cadastro) : [],
         ];
     }
 
     /**
-     * Onde a Receita discorda do cadastro do TOTVS. Só campos que comparam bem:
+     * Onde a Receita discorda do nosso cadastro. Só campos que comparam bem:
      * logradouro e número vêm num texto livre só no TOTVS e dariam falso alarme em
      * quase toda linha — aviso que dispara sempre é aviso que ninguém lê.
      *
-     * @return array<int, array{campo: string, totvs: string, receita: string}>
+     * @param  array{razaoSocial: ?string, cep: ?string, municipio: ?string, uf: ?string}  $cadastro
+     * @return array<int, array{campo: string, cadastro: string, receita: string}>
      */
-    public function divergencias(array $cartao, Cliente $cliente): array
+    public function divergencias(array $cartao, array $cadastro): array
     {
         $end = $cartao['endereco'] ?? [];
 
         $pares = [
-            'Razão social' => [$cliente->razao_social, $cartao['razaoSocial'] ?? null, 'prefixo'],
-            'CEP' => [$cliente->cep, $end['cep'] ?? null, 'igual'],
-            'Município' => [$cliente->municipio, $end['municipio'] ?? null, 'igual'],
-            'UF' => [$cliente->estado, $end['uf'] ?? null, 'igual'],
+            'Razão social' => [$cadastro['razaoSocial'] ?? null, $cartao['razaoSocial'] ?? null, 'prefixo'],
+            'CEP' => [$cadastro['cep'] ?? null, $end['cep'] ?? null, 'igual'],
+            'Município' => [$cadastro['municipio'] ?? null, $end['municipio'] ?? null, 'igual'],
+            'UF' => [$cadastro['uf'] ?? null, $end['uf'] ?? null, 'igual'],
         ];
 
         $saida = [];
 
-        foreach ($pares as $campo => [$totvs, $receita, $modo]) {
+        foreach ($pares as $campo => [$nosso, $receita, $modo]) {
             // Sem valor de um dos lados não há o que comparar — lacuna não é divergência.
-            if (blank($totvs) || blank($receita)) {
+            if (blank($nosso) || blank($receita)) {
                 continue;
             }
 
             $bate = $modo === 'prefixo'
-                ? $this->mesmoNome($totvs, $receita)
-                : $this->chaveComparacao($totvs) === $this->chaveComparacao($receita);
+                ? $this->mesmoNome($nosso, $receita)
+                : $this->chaveComparacao($nosso) === $this->chaveComparacao($receita);
 
             if (! $bate) {
-                $saida[] = ['campo' => $campo, 'totvs' => (string) $totvs, 'receita' => (string) $receita];
+                $saida[] = ['campo' => $campo, 'cadastro' => (string) $nosso, 'receita' => (string) $receita];
             }
         }
 
         return $saida;
     }
 
-    /**
-     * Sem acento, maiúsculo, só letras/dígitos e SEM o sufixo de tipo societário no fim:
-     * "S/A" = "SA" = "AS", "LTDA." = "LTDA" = nada. Caso real que motivou: o TOTVS tem
-     * "IMIFARMA ... COSMETICOS AS" e a Receita "... COSMETICOS SA" — mesma empresa, e
-     * um aviso de divergência ali só ensinaria o usuário a ignorar o aviso.
-     */
     /**
      * Razão social: o TOTVS TRUNCA nome longo e ABREVIA palavra para caber no campo.
      * Casos reais: "IMIFARMA PROD FARMA E COSMETICOS SA" é a mesma empresa que
@@ -309,9 +355,9 @@ class CartaoCnpjService
      *
      * O texto corrido sem espaços também vale, para "SUPERMERCADOS" × "SUPER MERCADOS".
      */
-    private function mesmoNome(string $totvs, string $receita): bool
+    private function mesmoNome(string $nosso, string $receita): bool
     {
-        $a = $this->palavrasComparacao($totvs);
+        $a = $this->palavrasComparacao($nosso);
         $b = $this->palavrasComparacao($receita);
 
         $juntoA = implode('', $a);
@@ -335,7 +381,14 @@ class CartaoCnpjService
         return implode('', $this->palavrasComparacao($valor));
     }
 
-    /** @return array<int, string> */
+    /**
+     * Sem acento, maiúsculo, só letras/dígitos e SEM o sufixo de tipo societário no fim:
+     * "S/A" = "SA" = "AS", "LTDA." = "LTDA" = nada. Caso real que motivou: o TOTVS tem
+     * "IMIFARMA ... COSMETICOS AS" e a Receita "... COSMETICOS SA" — mesma empresa, e
+     * um aviso de divergência ali só ensinaria o usuário a ignorar o aviso.
+     *
+     * @return array<int, string>
+     */
     private function palavrasComparacao(string $valor): array
     {
         $palavras = preg_split('/[^A-Z0-9]+/', mb_strtoupper(Str::ascii($valor)), -1, PREG_SPLIT_NO_EMPTY);

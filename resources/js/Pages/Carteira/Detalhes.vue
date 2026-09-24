@@ -6,7 +6,7 @@ import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import KpiTile from '@/Components/KpiTile.vue';
-import CartaoCnpjModal from '@/Components/Carteira/CartaoCnpjModal.vue';
+import CartaoCnpjModal from '@/Components/Receita/CartaoCnpjModal.vue';
 import Pagination from '@/Components/Pagination.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira.js';
 // Esta página já manteve uma cópia local do mapa de rótulos de status, e a cópia não
@@ -296,6 +296,6 @@ const campos = [
                 </DarkCard>
             </div>
         </div>
-        <CartaoCnpjModal :show="modalCartaoCnpj" :cliente="cliente" @close="modalCartaoCnpj = false" />
+        <CartaoCnpjModal :show="modalCartaoCnpj" :cliente="cliente" :url="route('carteira.cartaoCnpj', cliente.id)" @close="modalCartaoCnpj = false" />
     </AuthenticatedLayout>
 </template>

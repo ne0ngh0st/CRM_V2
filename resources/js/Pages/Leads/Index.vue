@@ -13,6 +13,7 @@ import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos
 import LeadsTabela from '@/Components/Leads/LeadsTabela.vue';
 import AgendarLigacaoLeadModal from '@/Components/Leads/AgendarLigacaoLeadModal.vue';
 import ObservacoesModal from '@/Components/Observacoes/ObservacoesModal.vue';
+import CartaoCnpjModal from '@/Components/Receita/CartaoCnpjModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import WordpressCapturaBar from '@/Components/Leads/WordpressCapturaBar.vue';
 import ModalPadrao from '@/Components/ModalPadrao.vue';
@@ -121,6 +122,13 @@ function abrirObservacao(lead) {
 function abrirAgendamento(lead) {
     leadAtivo.value = lead;
     modalAgendamento.value = true;
+}
+
+const modalCartaoCnpj = ref(false);
+
+function abrirCartaoCnpj(lead) {
+    leadAtivo.value = lead;
+    modalCartaoCnpj.value = true;
 }
 
 async function abrirCaptura(lead) {
@@ -321,6 +329,7 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
                             :pode-excluir="true"
                             @observacao="abrirObservacao"
                             @agendar-ligacao="abrirAgendamento"
+                            @cartao-cnpj="abrirCartaoCnpj"
                             @captura="abrirCaptura"
                         />
                         <p v-else class="text-sm text-gray-400">Nenhum lead encontrado com os filtros atuais.</p>
@@ -355,6 +364,12 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
             :historico-url="leadAtivo ? route('observacoes.porLead', leadAtivo.id) : null"
             :payload="leadAtivo ? { lead_id: leadAtivo.id, cnpj: leadAtivo.cnpj || undefined } : {}"
             @close="modalObservacao = false"
+        />
+        <CartaoCnpjModal
+            :show="modalCartaoCnpj"
+            :cliente="leadAtivo ? { razaoSocial: leadAtivo.razaoSocial || leadAtivo.nome, cnpj: leadAtivo.cnpj } : null"
+            :url="leadAtivo ? route('leads.cartaoCnpj', leadAtivo.id) : ''"
+            @close="modalCartaoCnpj = false"
         />
         <AgendarLigacaoLeadModal
             :show="modalAgendamento"
