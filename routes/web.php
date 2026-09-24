@@ -215,6 +215,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/maiores-por-segmento/busca-vinculo', [MaioresPorSegmentoController::class, 'buscarVinculo'])->name('maiores.busca-vinculo');
         Route::post('/maiores-por-segmento/exportar', [MaioresPorSegmentoController::class, 'exportar'])->name('maiores.exportar');
         Route::get('/maiores-por-segmento/contas/{conta}/clientes', [MaioresPorSegmentoController::class, 'clientes'])->name('maiores.clientes');
+        Route::get('/maiores-por-segmento/contas/{conta}/observacoes', [MaioresPorSegmentoController::class, 'observacoes'])->name('maiores.observacoes');
         Route::post('/maiores-por-segmento/contas', [MaioresPorSegmentoController::class, 'store'])->name('maiores.store');
         Route::patch('/maiores-por-segmento/contas/{conta}', [MaioresPorSegmentoController::class, 'update'])->name('maiores.update');
         Route::delete('/maiores-por-segmento/contas/{conta}', [MaioresPorSegmentoController::class, 'destroy'])->name('maiores.destroy');

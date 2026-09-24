@@ -19,6 +19,7 @@ import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { formatInteiro } from '@/utils/formato';
+import HistoricoObservacaoConta from '@/Components/VisaoDiretor/HistoricoObservacaoConta.vue';
 
 const props = defineProps({
     show: { type: Boolean, default: false },
@@ -185,6 +186,16 @@ const rotulo = 'text-xs font-semibold uppercase tracking-wide text-gray-400';
                 <label :class="rotulo" for="conta_obs">Observação estratégica</label>
                 <textarea id="conta_obs" v-model="form.observacao" rows="2" maxlength="5000" :class="campo" />
                 <InputError :message="form.errors.observacao" class="mt-1" />
+                <p class="mt-1 text-[0.7rem] text-gray-400">Ao salvar um texto diferente, a versão anterior fica no histórico abaixo.</p>
+            </div>
+            <div v-if="conta && show" class="sm:col-span-6">
+                <p :class="rotulo">Histórico da observação</p>
+                <HistoricoObservacaoConta
+                    class="mt-1"
+                    :conta-id="conta.id"
+                    :versao="conta.versoesObservacao"
+                    altura-maxima="max-h-40"
+                />
             </div>
 
             <!-- Vínculos -->

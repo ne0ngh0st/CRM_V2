@@ -18,7 +18,7 @@ const props = defineProps({
     contas: { type: Array, required: true },
 });
 
-const emit = defineEmits(['editar', 'excluir']);
+const emit = defineEmits(['editar', 'excluir', 'historico']);
 
 /*
  * A lista expandida é guardada por conta para não refazer a requisição a cada abre-fecha.
@@ -150,12 +150,22 @@ async function alternar(conta) {
                             </div>
                             <span v-else class="text-gray-400">—</span>
                         </td>
-                        <td class="tbl-td" data-rotulo="Observação">
-                            <span
-                                v-if="conta.observacao"
-                                class="tbl-trunc block truncate sm:max-w-[220px]"
-                                :title="conta.observacao"
-                            >{{ conta.observacao }}</span>
+                        <td class="tbl-td" data-rotulo="Observação" @click.stop>
+                            <button
+                                v-if="conta.observacao || conta.versoesObservacao"
+                                type="button"
+                                class="group w-full"
+                                title="Ver o histórico da observação"
+                                @click="emit('historico', conta)"
+                            >
+                                <span
+                                    class="tbl-trunc block truncate group-hover:text-teal sm:max-w-[220px]"
+                                    :class="conta.observacao ? '' : 'italic text-gray-400'"
+                                >{{ conta.observacao || 'apagada' }}</span>
+                                <span v-if="conta.versoesObservacao > 1" class="tbl-sub group-hover:text-teal">
+                                    {{ conta.versoesObservacao }} versões
+                                </span>
+                            </button>
                             <span v-else class="text-gray-400">—</span>
                         </td>
                         <td class="tbl-td" data-rotulo="Última compra">{{ formatDataCurta(conta.ultimaCompra) }}</td>

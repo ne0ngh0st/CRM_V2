@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Http\Controllers\SimulacaoController;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -36,6 +37,53 @@ class ContaEstrategica extends Model
         'ordem' => 'integer',
         'vinculos_versao' => 'integer',
     ];
+
+    /**
+     * Toda mudança de observação vira uma versão no histórico — criar, editar, apagar,
+     * pela tela ou pela carga da planilha.
+     *
+     * ⚠️ É gancho de model, e não código no controller, pelo mesmo motivo do
+     * `Ligacao::created()`: são três caminhos que escrevem a observação (store, update e o
+     * `diretor:importar-maiores-segmento`), e o que ficar de fora abre um buraco no
+     * histórico sem erro nenhum aparecer.
+     */
+    protected static function booted(): void
+    {
+        static::saved(function (ContaEstrategica $conta) {
+            $mudou = $conta->wasRecentlyCreated
+                ? filled($conta->observacao)
+                : $conta->wasChanged('observacao');
+
+            if (! $mudou) {
+                return;
+            }
+
+            $conta->observacoes()->create([
+                'user_id' => self::autorDaEdicao(),
+                'texto' => filled($conta->observacao) ? $conta->observacao : null,
+            ]);
+        });
+    }
+
+    /**
+     * Durante a simulação o guard devolve o ALVO, mas quem escreveu foi o admin — mesma
+     * regra da presença (`RegistrarAtividade`): a autoria segue a pessoa, não o guard.
+     */
+    private static function autorDaEdicao(): ?int
+    {
+        $request = request();
+
+        if ($request->hasSession() && $request->session()->has(SimulacaoController::SESSAO_ADMIN_ID)) {
+            return (int) $request->session()->get(SimulacaoController::SESSAO_ADMIN_ID);
+        }
+
+        return auth()->id();
+    }
+
+    public function observacoes(): HasMany
+    {
+        return $this->hasMany(ContaEstrategicaObservacao::class, 'conta_id');
+    }
 
     public function segmento(): BelongsTo
     {

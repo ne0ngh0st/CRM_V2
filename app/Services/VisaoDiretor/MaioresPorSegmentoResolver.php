@@ -115,6 +115,8 @@ class MaioresPorSegmentoResolver
     {
         $contas = ContaEstrategica::query()
             ->with('segmento:id,codigo,nome')
+            // Subconsulta na MESMA query: não mexe no teto de queries da página.
+            ->withCount('observacoes')
             ->get();
 
         if ($contas->isEmpty()) {
@@ -172,6 +174,8 @@ class MaioresPorSegmentoResolver
                     'uf' => $conta->uf,
                     'site' => $conta->site,
                     'observacao' => $conta->observacao,
+                    // Versões no histórico (inclui a vigente). Só a tela usa; o Excel não.
+                    'versoesObservacao' => (int) $conta->observacoes_count,
                     'filiaisMercado' => $conta->filiais_mercado,
                     'lojas' => $lojas,
                     'clientes' => (int) ($agregado?->clientes ?? 0),

@@ -84,6 +84,21 @@ rede, o status e quem atende — não a conta de penetração.
 - **`ClientesDaConta`** é a única definição de "os clientes desta conta". A página conta
   por ela e o filtro `?conta_alvo=` da Carteira filtra por ela.
 
+### Histórico da observação (2026-09-24)
+
+`contas_estrategicas.observacao` é o texto **vigente** (tabela e Excel); cada versão fica
+em `conta_estrategica_observacoes` (texto, autor, data). Na tela: clicar na célula
+Observação abre o histórico, e o modal de edição mostra o histórico logo abaixo do campo.
+
+- ⚠️ **Quem escreve o histórico é só o gancho `ContaEstrategica::saved`** — não o
+  controller. São três caminhos que mexem na observação (criar, editar e a carga da
+  planilha); gancho de model é o que impede um deles de ficar de fora.
+- Salvar sem mudar o texto **não** gera versão; apagar o texto **gera** (`texto` nulo,
+  "Observação apagada").
+- Autor nulo = carga da planilha. Durante simulação, o autor é o **admin**, não o alvo.
+- A migration transformou a observação que já existia na primeira versão de cada conta,
+  datada da criação dela.
+
 ### Especialista do segmento (2026-09-22)
 
 Marcado pela **estrela** no quadro **Equipe → Segmentos** (`/equipe/segmentos`), e só

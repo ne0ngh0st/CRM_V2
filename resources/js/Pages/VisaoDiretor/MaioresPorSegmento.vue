@@ -20,6 +20,10 @@ import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import ResumoSegmentosCard from '@/Components/VisaoDiretor/ResumoSegmentosCard.vue';
 import ContasSegmentoTabela from '@/Components/VisaoDiretor/ContasSegmentoTabela.vue';
 import ContaEstrategicaModal from '@/Components/VisaoDiretor/ContaEstrategicaModal.vue';
+import HistoricoObservacaoConta from '@/Components/VisaoDiretor/HistoricoObservacaoConta.vue';
+import ModalPadrao from '@/Components/ModalPadrao.vue';
+import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
 import EspecialistaSelo from '@/Components/Segmentos/EspecialistaSelo.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao';
 import { ROTULOS_STATUS_CONTA, STATUS_CONTA } from '@/constants/visaoDiretor';
@@ -109,6 +113,19 @@ function novaConta(segmento = null) {
 function editar(conta, segmento) {
     contaEmEdicao.value = { ...conta, segmentoId: segmento.id };
     modalAberto.value = true;
+}
+
+// Histórico da observação, aberto pela célula da tabela. "Editar" leva ao formulário.
+const historicoDe = ref(null);
+
+function verHistorico(conta, segmento) {
+    historicoDe.value = { conta, segmento };
+}
+
+function editarDoHistorico() {
+    const { conta, segmento } = historicoDe.value;
+    historicoDe.value = null;
+    editar(conta, segmento);
 }
 
 const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
@@ -258,6 +275,7 @@ async function excluir(conta) {
                     v-else
                     :contas="abaAtiva.contas"
                     @editar="(conta) => editar(conta, abaAtiva)"
+                    @historico="(conta) => verHistorico(conta, abaAtiva)"
                     @excluir="excluir"
                 />
             </DarkCard>
@@ -270,6 +288,32 @@ async function excluir(conta) {
             :segmentos="segmentosDisponiveis"
             @close="modalAberto = false"
         />
+
+        <ModalPadrao
+            :show="!! historicoDe"
+            titulo="Histórico da observação"
+            :subtitulo="historicoDe?.conta.nome ?? ''"
+            max-width="lg"
+            @close="historicoDe = null"
+        >
+            <template #icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5">
+                    <path d="M4 4h16v12H8l-4 4V4Z" stroke-linecap="round" stroke-linejoin="round" />
+                    <line x1="8" y1="9" x2="16" y2="9" stroke-linecap="round" />
+                    <line x1="8" y1="12.5" x2="13" y2="12.5" stroke-linecap="round" />
+                </svg>
+            </template>
+            <HistoricoObservacaoConta
+                v-if="historicoDe"
+                :conta-id="historicoDe.conta.id"
+                :versao="historicoDe.conta.versoesObservacao"
+                altura-maxima="max-h-96"
+            />
+            <template #footer>
+                <SecondaryButton type="button" @click="historicoDe = null">Fechar</SecondaryButton>
+                <PrimaryButton type="button" @click="editarDoHistorico">Editar observação</PrimaryButton>
+            </template>
+        </ModalPadrao>
 
         <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
     </AuthenticatedLayout>

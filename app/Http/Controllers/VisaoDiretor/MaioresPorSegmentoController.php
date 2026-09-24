@@ -129,6 +129,27 @@ class MaioresPorSegmentoController extends Controller
         ]);
     }
 
+    /**
+     * Todas as versões da observação da conta, da mais recente para a mais antiga. A
+     * primeira é a vigente; `texto` nulo marca o momento em que alguém apagou o texto.
+     */
+    public function observacoes(ContaEstrategica $conta): JsonResponse
+    {
+        return response()->json(
+            $conta->observacoes()
+                ->with('user:id,name,display_name')
+                ->orderByDesc('id')
+                ->get()
+                ->map(fn ($o) => [
+                    'id' => $o->id,
+                    'texto' => $o->texto,
+                    'autor' => $o->nomeAutor(),
+                    'criadoEm' => $o->created_at->format('d/m/Y H:i'),
+                ])
+                ->all()
+        );
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $dados = $this->validar($request);

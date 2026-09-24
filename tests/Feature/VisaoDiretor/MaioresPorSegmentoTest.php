@@ -146,6 +146,7 @@ class MaioresPorSegmentoTest extends TestCase
 
             $this->actingAs($user)->get(route('visao-diretor.maiores.index'))->assertForbidden();
             $this->actingAs($user)->get(route('visao-diretor.maiores.clientes', $conta))->assertForbidden();
+            $this->actingAs($user)->get(route('visao-diretor.maiores.observacoes', $conta))->assertForbidden();
             $this->actingAs($user)->patch(route('visao-diretor.maiores.update', $conta), ['nome' => 'X'])->assertForbidden();
             $this->actingAs($user)->delete(route('visao-diretor.maiores.destroy', $conta))->assertForbidden();
         }
