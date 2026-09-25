@@ -95,13 +95,16 @@ class ImportColunasDoBiTest extends TestCase
         $this->assertSame('SUMARE', $linha->municipio, 'o resto da linha continua sendo gravado');
     }
 
+    /** Pedido em aberto também vem do 232 desde 2026-09-25 — e grava a filial. */
     public function test_pedidos_abertos_gravam_a_filial(): void
     {
-        $this->escreverRelatorio200([['992086', 'PEDIDO 992086 INCLUIDO NA CARGA 190050']]);
+        $this->escreverRelatorio232([['PEDIDO' => '992086', 'FILIAL' => '05', 'DT_FATURAMENTO' => '', 'NOTA_FISCAL' => '', 'TP_FAT' => '']]);
 
-        $this->artisan('totvs:import-pedidos-abertos')->assertSuccessful();
+        $this->artisan('totvs:import-pedidos-emitidos')->assertSuccessful();
 
-        $this->assertSame(5, Pedido::where('numero_pedido', '992086')->value('filial'));
+        $pedido = Pedido::where('numero_pedido', '992086')->firstOrFail();
+        $this->assertNull($pedido->data_faturamento);
+        $this->assertSame(5, $pedido->filial);
     }
 
     public function test_pedidos_emitidos_gravam_a_filial(): void
@@ -124,14 +127,14 @@ class ImportColunasDoBiTest extends TestCase
         Pedido::create([
             'numero_pedido' => '992086',
             'cod_vendedor' => '010585',
-            'data_pedido' => '2026-08-14',
+            'data_pedido' => '2026-09-01',
             'status' => 'pendente_totvs',
             'valor_total' => 0,
         ]);
 
-        $this->escreverRelatorio200([['992086', 'PEDIDO 992086 INCLUIDO NA CARGA 190050']]);
+        $this->escreverRelatorio232([['PEDIDO' => '992086', 'FILIAL' => '05']]);
 
-        $this->artisan('totvs:import-pedidos-abertos')->assertSuccessful();
+        $this->artisan('totvs:import-pedidos-emitidos')->assertSuccessful();
 
         $this->assertSame(5, Pedido::where('numero_pedido', '992086')->value('filial'));
     }

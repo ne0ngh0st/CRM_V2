@@ -66,6 +66,9 @@ class PedidoStatusTotvsTest extends TestCase
 
     public function test_import_grava_a_etapa_e_o_texto_cru_do_totvs(): void
     {
+        // Desde 2026-09-25 o 200 só atualiza pedido que o 232 trouxe.
+        $this->pedidosEmAberto(['990001', '990002', '990003']);
+
         $this->escreverRelatorio200([
             ['990001', 'PEDIDO 990001 COM BLOQUEIO DE ESTOQUE'],
             ['990002', 'PEDIDO 990002 INCLUIDO NA CARGA 190050'],
@@ -94,6 +97,8 @@ class PedidoStatusTotvsTest extends TestCase
      */
     public function test_movimento_desconhecido_importa_sem_classificacao_e_avisa(): void
     {
+        $this->pedidosEmAberto(['990004', '990005']);
+
         $this->escreverRelatorio200([
             ['990004', 'NOTA FISCAL CANCELADA - NF 1  /001123689'],
             ['990005', 'PEDIDO 990005 COM BLOQUEIO DE ESTOQUE'],
@@ -228,5 +233,20 @@ class PedidoStatusTotvsTest extends TestCase
             'historico_em' => '2026-09-08 07:10:21',
             'valor_total' => 1000,
         ]);
+    }
+
+    /** @param  list<string>  $numeros */
+    private function pedidosEmAberto(array $numeros): void
+    {
+        foreach ($numeros as $numero) {
+            Pedido::create([
+                'numero_pedido' => $numero,
+                'cliente_id' => $this->cliente->id,
+                'cod_vendedor' => '010585',
+                'data_pedido' => '2026-08-14',
+                'status' => StatusPedidoResolver::DESCONHECIDO,
+                'valor_total' => 1000,
+            ]);
+        }
     }
 }

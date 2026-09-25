@@ -10,6 +10,7 @@ use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\EscreveRelatorio200;
+use Tests\Concerns\EscreveRelatorio232;
 use Tests\TestCase;
 
 /**
@@ -42,6 +43,7 @@ use Tests\TestCase;
 class PedidoNumeroAlfanumericoTest extends TestCase
 {
     use EscreveRelatorio200;
+    use EscreveRelatorio232;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -69,21 +71,23 @@ class PedidoNumeroAlfanumericoTest extends TestCase
 
     /**
      * O caso exato de produção: o relatório traz a série antiga e a nova no mesmo arquivo,
-     * e existe pedido em aberto na base que precisa ser removido por já ter saído do
-     * relatório — é esse DELETE que estourava.
+     * e existe pedido na base que precisa ser removido por já ter saído do relatório.
+     *
+     * Desde 2026-09-25 essa remoção é do 232 (recorte pela faixa de datas do arquivo), não
+     * mais do 200 — a mistura de tipos continua sendo o fixture que morde.
      */
     public function test_relatorio_com_numero_antigo_e_serie_alfanumerica_importa(): void
     {
         $this->pedidoEmAberto('994017');
         $this->pedidoEmAberto('A00062');
 
-        $this->escreverRelatorio200([
-            ['992086', 'PEDIDO 992086 INCLUIDO NA CARGA 190050'],
-            ['A00051', 'PEDIDO A00051 COM BLOQUEIO DE ESTOQUE'],
-            ['A02092', 'ENVIO DO PEDIDO PARA O WMS - ORDEM DE SEPARACAO 876758'],
+        $this->escreverRelatorio232([
+            ['PEDIDO' => '992086'],
+            ['PEDIDO' => 'A00051'],
+            ['PEDIDO' => 'A02092'],
         ]);
 
-        $this->artisan('totvs:import-pedidos-abertos')->assertSuccessful();
+        $this->artisan('totvs:import-pedidos-emitidos')->assertSuccessful();
 
         $this->assertSame(
             ['992086', 'A00051', 'A02092'],
@@ -102,48 +106,48 @@ class PedidoNumeroAlfanumericoTest extends TestCase
      */
     public function test_pedido_alfanumerico_fora_do_relatorio_e_removido(): void
     {
-        $this->pedidoEmAberto('A00062');   // saiu do relatório: foi faturado ou cancelado
+        $this->pedidoEmAberto('A00062');   // saiu do relatório: foi cancelado
         $this->pedidoEmAberto('A00051');   // continua no relatório: fica
 
-        $this->escreverRelatorio200([
-            ['992086', 'PEDIDO 992086 INCLUIDO NA CARGA 190050'],
-            ['A00051', 'PEDIDO A00051 COM BLOQUEIO DE ESTOQUE'],
+        $this->escreverRelatorio232([
+            ['PEDIDO' => '992086'],
+            ['PEDIDO' => 'A00051'],
         ]);
 
-        $this->artisan('totvs:import-pedidos-abertos')->assertSuccessful();
+        $this->artisan('totvs:import-pedidos-emitidos')->assertSuccessful();
 
         $this->assertSame(['992086', 'A00051'], $this->numerosNaBase());
         $this->assertNull(Pedido::where('numero_pedido', 'A00062')->first());
     }
 
-    /**
-     * O pedido faturado que volta a aparecer como aberto é CONTADO e AVISADO (ver o
-     * cabeçalho do import). Com a comparação numérica, esse aviso conta errado: qualquer
-     * alfanumérico faturado na base casa com qualquer alfanumérico do relatório.
-     */
-    public function test_aviso_de_reabertos_nao_conta_alfanumerico_por_engano(): void
+    /** O 200 atualiza a etapa do alfanumérico que existe, e só dele. */
+    public function test_200_atualiza_so_o_alfanumerico_que_existe(): void
     {
-        $this->pedidoEmAberto('A00900', faturadoEm: '2026-09-01');
+        $this->pedidoEmAberto('A00051');
+        $this->pedidoEmAberto('A00062', faturadoEm: '2026-09-01');
 
         $this->escreverRelatorio200([
             ['992086', 'PEDIDO 992086 INCLUIDO NA CARGA 190050'],
             ['A00051', 'PEDIDO A00051 COM BLOQUEIO DE ESTOQUE'],
+            ['A00062', 'PEDIDO A00062 INCLUIDO NA CARGA 190050'],
         ]);
 
-        $this->artisan('totvs:import-pedidos-abertos')
-            ->doesntExpectOutputToContain('Estavam FATURADOS e voltaram a aberto')
-            ->assertSuccessful();
+        $this->artisan('totvs:import-pedidos-abertos')->assertSuccessful();
+
+        $this->assertSame(['A00051', 'A00062'], $this->numerosNaBase(), '992086 não existia: não é criado');
+        $this->assertSame('bloqueio_estoque', Pedido::where('numero_pedido', 'A00051')->value('status'));
+        $this->assertSame('pendente_totvs', Pedido::where('numero_pedido', 'A00062')->value('status'), 'faturado não é tocado');
     }
 
     /** Os itens seguem o pedido alfanumérico — é o `pluck` que os localiza. */
     public function test_itens_do_pedido_alfanumerico_sao_gravados(): void
     {
-        $this->escreverRelatorio200([
-            ['992086', 'PEDIDO 992086 INCLUIDO NA CARGA 190050'],
-            ['A00051', 'PEDIDO A00051 COM BLOQUEIO DE ESTOQUE'],
+        $this->escreverRelatorio232([
+            ['PEDIDO' => '992086'],
+            ['PEDIDO' => 'A00051'],
         ]);
 
-        $this->artisan('totvs:import-pedidos-abertos')->assertSuccessful();
+        $this->artisan('totvs:import-pedidos-emitidos')->assertSuccessful();
 
         foreach (['992086', 'A00051'] as $numero) {
             $pedido = Pedido::where('numero_pedido', $numero)->firstOrFail();

@@ -2570,6 +2570,34 @@ a trava do formato do corpo.
 e o `PORTAL_PEDIDOS_HABILITADO` no `.env` de lá. O botão segue restrito a admin (`=== 'admin'`
 em `podeEnviarAoPortal`).
 
+### O 232 virou a fonte da venda; o 200 só dá a etapa — 2026-09-25
+
+Setembro/2026 saía **R$ 61,5 mi no CRM e no BI contra R$ 58,4 mi no Excel do 232**. O
+import do 232 gravava só as linhas faturadas e o pedido em aberto vinha do 200 — e os dois
+relatórios não contam a mesma coisa: o 232 só traz pedido que **gera financeiro**
+(`GERAFINANCEIRO` = "S" em 100% das linhas), o 200 traz também remessa de almoxarifado
+virtual (Fabia, Paulo de Tarso, Aline — papel, pilha, caneta para órgão público) e
+transferência entre filiais. Eram **+R$ 12,7 mi** de remessa, menos **R$ 9,6 mi** de pedido
+em aberto que o 200 (três dias mais velho) ainda não tinha.
+
+- **`totvs:import-pedidos-emitidos` grava TODAS as linhas.** Pedido só fica faturado quando
+  todos os itens faturaram; parcial fica em aberto com o valor cheio (é o que o 232 soma).
+- ⚠️ **Recorte por arquivo**: pedido com `data_pedido` dentro da faixa de datas de um 232 e
+  fora dele é APAGADO. Foi o que tirou as remessas e é o que apaga cancelado.
+- ⚠️ **`totvs:import-pedidos-abertos` não cria, não apaga e não muda valor** — só atualiza
+  etapa, texto do TOTVS, previsão, PCP e carga de pedido EM ABERTO que o 232 trouxe. O que
+  está no 200 e não no CRM é contado e avisado ("remessa ou mais novo que o último 232").
+  **Consequência: pedido novo só aparece no CRM quando o 232 for gerado de novo.**
+- ⚠️ No reimport, o 232 **não sobrescreve `status`** de pedido em aberto (a etapa é do 200,
+  que roda depois); pedido novo nasce `pendente_totvs` até o 200 classificá-lo.
+- Conferido em produção logo depois: setembro fechou em **R$ 58.447.611,59, igual ao Excel
+  centavo por centavo**, no banco e na view do BI.
+- Os outros meses (out/2025–ago/2026) também foram recalculados pelo 232 — número antigo
+  comparado com o novo vai divergir, e a diferença é a remessa removida.
+- ⚠️ O §10.2 de `docs/importacao-dados-legado.md` ("o 200 prevalece no empate") descreve o
+  desenho ANTIGO.
+- Testes: `PedidosFonteDaVendaTest` (8). ⚠️ Não verificados por mutação (feito às pressas).
+
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão
