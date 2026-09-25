@@ -45,7 +45,8 @@ class ImportarMaioresSegmento extends Command
 {
     protected $signature = 'diretor:importar-maiores-segmento
         {arquivo : caminho do .xlsx}
-        {--dry-run : faz tudo numa transação e desfaz no fim (mostra o relatório sem gravar)}';
+        {--dry-run : faz tudo numa transação e desfaz no fim (mostra o relatório sem gravar)}
+        {--somente-observacoes : só atualiza a coluna OBS das contas que já existem}';
 
     protected $description = 'Carga inicial das contas estratégicas (Visão Diretor) a partir da planilha';
 
@@ -64,6 +65,10 @@ class ImportarMaioresSegmento extends Command
         $planilha = IOFactory::createReaderForFile($arquivo)->setReadDataOnly(true)->load($arquivo);
         $abas = collect($planilha->getWorksheetIterator())
             ->keyBy(fn (Worksheet $w) => $this->normalizar($w->getTitle()));
+
+        if ($this->option('somente-observacoes')) {
+            return $this->atualizarObservacoes($abas);
+        }
 
         $catalogo = $sugestao->catalogo();
         $relatorio = ['contas' => 0, 'novas' => 0, 'sugestoes' => 0, 'semSugestao' => [], 'ambiguas' => [], 'excel' => []];
@@ -139,6 +144,138 @@ class ImportarMaioresSegmento extends Command
             if ($this->option('dry-run')) {
                 DB::rollBack();
                 $this->warn('Dry-run: tudo desfeito.');
+            } else {
+                DB::commit();
+                $this->info('Gravado.');
+            }
+        } catch (Throwable $e) {
+            DB::rollBack();
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Só a coluna OBS, sobre contas que JÁ existem.
+     *
+     * Existe porque a carga normal é conservadora de propósito — ela nunca sobrescreve
+     * campo preenchido, para não desfazer edição feita na tela. Quando a diretoria revisa
+     * as observações na planilha e quer trazê-las para o CRM (foi o caso de 25/09/2026,
+     * com 256 observações novas em cinco abas), aquele caminho não serve e o certo não é
+     * afrouxá-lo: é um modo explícito, que diz no nome o que faz.
+     *
+     * ⚠️ NÃO cria conta, não mexe em vínculo, especialista, UF, filiais nem site. Conta da
+     * planilha que não existe no CRM vira aviso, não INSERT — se a lista mudou, isso é
+     * decisão de quem mantém a tela, não efeito colateral de uma atualização de texto.
+     *
+     * ⚠️ OBS vazia na planilha NUNCA apaga a observação gravada. A planilha de 25/09 veio
+     * com a aba DROGARIAS inteira em branco enquanto o CRM tinha 61 observações lá: tratar
+     * vazio como "apagar" teria levado as 61 embora, em silêncio, no meio de uma operação
+     * que o usuário pediu como "subir observações".
+     *
+     * ⚠️ O nome é casado NORMALIZADO (maiúsculas, sem acento, espaços colapsados) dentro do
+     * segmento — "FARMÁCIAS ASSOCIADAS" na planilha e "FARMACIAS ASSOCIADAS" no banco são a
+     * mesma conta. Exato primeiro; normalizado só como segunda tentativa, e nome repetido
+     * no mesmo segmento é ignorado em vez de escolher um dos dois.
+     *
+     * @param  \Illuminate\Support\Collection<string, Worksheet>  $abas
+     */
+    private function atualizarObservacoes($abas): int
+    {
+        $atualizadas = 0;
+        $iguais = 0;
+        $semObs = 0;
+        $naoEncontradas = [];
+        $ambiguas = [];
+        $exemplos = [];
+
+        DB::beginTransaction();
+
+        try {
+            foreach (AbasDaPlanilha::ABAS as $nomeAba => $codigoSegmento) {
+                $aba = $abas->get($nomeAba);
+                $segmento = Segmento::where('codigo', $codigoSegmento)->first();
+
+                if (! $aba || ! $segmento) {
+                    $this->warn("Aba \"{$nomeAba}\" ou segmento {$codigoSegmento} ausente — pulada.");
+
+                    continue;
+                }
+
+                $contas = ContaEstrategica::where('segmento_id', $segmento->id)->get();
+                $porNome = $contas->keyBy(fn (ContaEstrategica $c) => $this->normalizar($c->nome));
+                $repetidos = $contas
+                    ->countBy(fn (ContaEstrategica $c) => $this->normalizar($c->nome))
+                    ->filter(fn (int $n) => $n > 1);
+
+                [, $linhas] = $this->lerAba($aba);
+
+                foreach ($linhas as $linha) {
+                    if (blank($linha['obs'])) {
+                        $semObs++;
+
+                        continue;
+                    }
+
+                    $chave = $this->normalizar($linha['nome']);
+
+                    if ($repetidos->has($chave)) {
+                        $ambiguas[] = "{$segmento->nome} · {$linha['nome']}";
+
+                        continue;
+                    }
+
+                    $conta = $porNome->get($chave);
+
+                    if (! $conta) {
+                        $naoEncontradas[] = "{$segmento->nome} · {$linha['nome']}";
+
+                        continue;
+                    }
+
+                    if ((string) $conta->observacao === (string) $linha['obs']) {
+                        $iguais++;
+
+                        continue;
+                    }
+
+                    if (count($exemplos) < 5) {
+                        $exemplos[] = [
+                            $segmento->nome,
+                            Str::limit($conta->nome, 28),
+                            Str::limit((string) $conta->observacao, 30) ?: '—',
+                            Str::limit($linha['obs'], 40),
+                        ];
+                    }
+
+                    $conta->observacao = $linha['obs'];
+                    $conta->save();
+                    $atualizadas++;
+                }
+            }
+
+            $this->newLine();
+            $this->info("Observações atualizadas: {$atualizadas} · já iguais: {$iguais} · sem OBS na planilha: {$semObs}");
+
+            if ($exemplos) {
+                $this->table(['Segmento', 'Conta', 'Antes', 'Depois'], $exemplos);
+            }
+
+            foreach ([['Conta da planilha que não existe no CRM', $naoEncontradas], ['Nome repetido no segmento (ignorada)', $ambiguas]] as [$rotulo, $lista]) {
+                if ($lista) {
+                    $this->warn(count($lista)." · {$rotulo}:");
+                    foreach ($lista as $l) {
+                        $this->line("  - {$l}");
+                    }
+                }
+            }
+
+            if ($this->option('dry-run')) {
+                DB::rollBack();
+                $this->warn('Dry-run: nada foi gravado.');
             } else {
                 DB::commit();
                 $this->info('Gravado.');

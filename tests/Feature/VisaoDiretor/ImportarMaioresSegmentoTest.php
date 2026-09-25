@@ -155,4 +155,140 @@ class ImportarMaioresSegmentoTest extends TestCase
 
         $this->assertSame(0, ContaEstrategicaVinculo::count());
     }
+
+    // ─── Modo "só observações" (2026-09-25) ─────────────────────────────────────
+
+    /**
+     * Uma segunda planilha, com OBS revisada — é o caso real: a diretoria mexe só no texto
+     * e quer trazê-lo para o CRM sem que o resto seja tocado.
+     */
+    private function planilhaDeObservacoes(array $linhasDrogarias, array $linhasLojas = []): string
+    {
+        $arquivo = tempnam(sys_get_temp_dir(), 'obs').'.xlsx';
+        $xlsx = new Spreadsheet;
+
+        $xlsx->getActiveSheet()->setTitle('DROGARIAS')->fromArray(array_merge([
+            [null, 'DROGARIAS - Inaya'],
+            [null, 'NOME', 'UF', 'FILIAIS', 'ATENDIMENTO', 'STATUS', 'OBS'],
+        ], $linhasDrogarias));
+
+        $xlsx->createSheet()->setTitle('REDE LOJAS')->fromArray(array_merge([
+            ['REDE DE LOJAS'],
+            ['NOME', 'UF', 'FILIAIS', 'ATENDIMENTO', 'STATUS', 'OBS', 'SITE'],
+        ], $linhasLojas));
+
+        (new Xlsx($xlsx))->save($arquivo);
+
+        return $arquivo;
+    }
+
+    public function test_so_observacoes_atualiza_o_texto_e_nao_toca_no_resto(): void
+    {
+        $this->artisan('diretor:importar-maiores-segmento', ['arquivo' => $this->arquivo])->assertSuccessful();
+
+        $pague = ContaEstrategica::where('nome', 'PAGUE MENOS')->firstOrFail();
+        $vinculosAntes = $pague->vinculos()->count();
+
+        $arquivo = $this->planilhaDeObservacoes([
+            [null, 'PAGUE MENOS', 'SP', 9999, 'OUTRO', 'ATIVO', 'Revisada pela diretoria'],
+        ]);
+
+        $this->artisan('diretor:importar-maiores-segmento', [
+            'arquivo' => $arquivo,
+            '--somente-observacoes' => true,
+        ])->assertSuccessful();
+
+        $pague->refresh();
+        $this->assertSame('Revisada pela diretoria', $pague->observacao);
+        // UF e filiais da planilha nova NÃO entram: o modo é só observação.
+        $this->assertSame('CE', $pague->uf);
+        $this->assertSame(1123, $pague->filiais_mercado);
+        $this->assertSame($vinculosAntes, $pague->vinculos()->count());
+
+        @unlink($arquivo);
+    }
+
+    /**
+     * ⚠️ O caso que motivou o modo: a planilha de 25/09 veio com a aba DROGARIAS em branco
+     * enquanto o CRM tinha 61 observações lá. Vazio apagando seria perda silenciosa.
+     */
+    public function test_obs_vazia_na_planilha_nao_apaga_a_do_crm(): void
+    {
+        $this->artisan('diretor:importar-maiores-segmento', ['arquivo' => $this->arquivo])->assertSuccessful();
+
+        $arquivo = $this->planilhaDeObservacoes([
+            [null, 'PAGUE MENOS', 'CE', 1123, '', 'LEAD', ''],
+            [null, 'RAIA DROGASIL', 'SP', 2390, '', 'ATIVO', 'OK'],
+        ]);
+
+        $this->artisan('diretor:importar-maiores-segmento', [
+            'arquivo' => $arquivo,
+            '--somente-observacoes' => true,
+        ])->assertSuccessful();
+
+        $this->assertSame('Trabalhar cliente', ContaEstrategica::where('nome', 'PAGUE MENOS')->value('observacao'));
+        // "OK" continua não sendo observação — nem para gravar, nem para apagar.
+        $this->assertNull(ContaEstrategica::where('nome', 'RAIA DROGASIL')->value('observacao'));
+
+        @unlink($arquivo);
+    }
+
+    public function test_so_observacoes_nao_cria_conta_que_nao_existe(): void
+    {
+        $this->artisan('diretor:importar-maiores-segmento', ['arquivo' => $this->arquivo])->assertSuccessful();
+        $antes = ContaEstrategica::count();
+
+        $arquivo = $this->planilhaDeObservacoes([
+            [null, 'DROGARIA INVENTADA', 'SP', 10, '', 'LEAD', 'Texto qualquer'],
+        ]);
+
+        $this->artisan('diretor:importar-maiores-segmento', [
+            'arquivo' => $arquivo,
+            '--somente-observacoes' => true,
+        ])->expectsOutputToContain('DROGARIA INVENTADA')->assertSuccessful();
+
+        $this->assertSame($antes, ContaEstrategica::count());
+
+        @unlink($arquivo);
+    }
+
+    /** Acento e caixa não podem impedir o casamento: o nome é o mesmo. */
+    public function test_so_observacoes_casa_nome_com_acento_e_caixa_diferentes(): void
+    {
+        $this->artisan('diretor:importar-maiores-segmento', ['arquivo' => $this->arquivo])->assertSuccessful();
+
+        $conta = ContaEstrategica::where('nome', 'Magazine Luiza')->firstOrFail();
+
+        $arquivo = $this->planilhaDeObservacoes([], [
+            ['MAGAZINE LUÍZA', 'SP', 1570, '', 'ATIVO', 'Ampliar mix', 'magazineluiza.com.br'],
+        ]);
+
+        $this->artisan('diretor:importar-maiores-segmento', [
+            'arquivo' => $arquivo,
+            '--somente-observacoes' => true,
+        ])->assertSuccessful();
+
+        $this->assertSame('Ampliar mix', $conta->refresh()->observacao);
+
+        @unlink($arquivo);
+    }
+
+    public function test_so_observacoes_com_dry_run_nao_grava(): void
+    {
+        $this->artisan('diretor:importar-maiores-segmento', ['arquivo' => $this->arquivo])->assertSuccessful();
+
+        $arquivo = $this->planilhaDeObservacoes([
+            [null, 'PAGUE MENOS', 'CE', 1123, '', 'LEAD', 'Nao deve gravar'],
+        ]);
+
+        $this->artisan('diretor:importar-maiores-segmento', [
+            'arquivo' => $arquivo,
+            '--somente-observacoes' => true,
+            '--dry-run' => true,
+        ])->assertSuccessful();
+
+        $this->assertSame('Trabalhar cliente', ContaEstrategica::where('nome', 'PAGUE MENOS')->value('observacao'));
+
+        @unlink($arquivo);
+    }
 }
