@@ -9,6 +9,9 @@
 > idempotência persistida. **O total bateu (R$ 125,00), o que fecha a questão do IPI.**
 > Ver **§4.7**, inclusive o que esse teste deliberadamente **não** prova.
 >
+> 🟢 **HOMOLOGAÇÃO FECHADA em 2026-09-25** — pedido 1131 criado no homolog novo com trinca
+> real, total R$ 1.704,50 conferido na tela (§4.9). Falta só URL/token de produção.
+>
 > 🟢 **DE-PARA ELIMINADO em 2026-09-25.** O time do Portal alterou a API para aceitar as
 > CHAVES DE NEGÓCIO do TOTVS direto (`sellerCode`, `clientCode`+`clientStore`,
 > `productCode`, `invoiceType` string) e resolver os ids internos deles do lado deles. Com
@@ -796,12 +799,16 @@ ponta a ponta:
 - `sellerCode 010244` resolveu o vendedor; `productCode V13354`/`V1337` aceitos; pedido com
   **2 itens**; `invoiceType: SALE` (string).
 
-🚨 **Pendente de conferência: reais × centavos.** O exemplo do time veio com
-`unitPrice: 125.50` (REAIS), mas o contrato é CENTAVOS inteiros — mandei `12550`/`8990` e deu
-201. O 201 não distingue: só o TOTAL do pedido 1131 diz. Esperado **R$ 1.704,50**
-(10×125,50 + 5×89,90). Se aparecer R$ 134.950,00, a API nova passou a esperar reais e o
-`precoEmCentavos()` do `PortalPedidoPayload` vira reais. Mesma pegadinha do IPI (1129):
-confirmar na tela antes de confiar. ⚠️ A chave `crmv2-homolog-tupla-001` está queimada.
+✅ **Centavos CONFIRMADO na tela (25/09).** O pedido 1131 apareceu no Portal com
+**Valor do pedido: R$ 1.704,50** (10×125,50 + 5×89,90) e Representante **Alan Dayan** (o
+`sellerCode 010244`). Ou seja: `unitPrice` em centavos inteiros está certo — o exemplo do
+time tinha vindo em reais (125.50), mas a API espera centavos, e o total bate. Nada a mudar
+no `precoEmCentavos()`. ⚠️ A chave `crmv2-homolog-tupla-001` está queimada.
+
+**Com isso a homologação está FECHADA**: formato de negócio, resolução de cliente/vendedor/
+produto, pedido multi-item, `invoiceType` string e centavos — tudo validado ponta a ponta.
+Falta só, para ligar em produção: **URL + token de produção** do Portal e o
+`PORTAL_PEDIDOS_HABILITADO` no `.env` de lá (mais liberar além de admin, se for o caso).
 
 ### Formato dos códigos — não perguntei, vou descobrir testando
 

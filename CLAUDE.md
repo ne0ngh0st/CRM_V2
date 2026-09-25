@@ -2566,6 +2566,12 @@ Testes: `PortalPedidoPayloadTest` (unit) e `PortalPedidoTest` (feature) reescrit
 formato novo — 32 verdes. Perderam os casos de CNPJ/representante (não existem mais) e ganharam
 a trava do formato do corpo.
 
+**✅ HOMOLOGAÇÃO FECHADA (2026-09-25)**: com uma trinca real do homolog do time, o envio
+deu **201, pedido 1131** (DECATHLON Raposo Tavares), e o **total bateu na tela: R$ 1.704,50**
+(10×125,50 + 5×89,90) — confirma que `unitPrice` é CENTAVOS (o exemplo deles tinha vindo em
+reais; a API espera centavos). Representante resolveu certo (Alan Dayan = sellerCode 010244),
+loja com zeros (`0004`) passou, pedido multi-item ok. Nada a ajustar no código.
+
 **Falta só para ligar de verdade**: URL + token de PRODUÇÃO do Portal (o que temos é homolog)
 e o `PORTAL_PEDIDOS_HABILITADO` no `.env` de lá. O botão segue restrito a admin (`=== 'admin'`
 em `podeEnviarAoPortal`).
