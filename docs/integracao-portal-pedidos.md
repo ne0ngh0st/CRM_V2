@@ -764,6 +764,28 @@ como antes — só a chamada HTTP vai para a fila.
 válido, o Portal recusa com 400 e a mensagem dele aparece no sino. Aceitável: não temos mais
 o dado para pré-conferir, e o custo é uma mensagem em vez de um bloqueio prévio.
 
+### E2E contra o homolog novo — 2026-09-25 (formato aceito)
+
+Rodado pelo nosso código (`preparar()`→`enviar()`) contra o `api-portal.autopel.com` já
+com a API nova. Corpo enviado, exatamente o formato de negócio:
+
+```
+{"clientCode":"000438","clientStore":"E001","sellerCode":"010740","shippingType":"CIF",
+ "orderReference":"ORC-2375",
+ "products":[{"productCode":"110423","quantity":10,"unitPrice":1250,"invoiceType":"SALE","orderLine":"3651"}]}
+```
+
+Resposta: **"Vendedor não encontrado"** — e isso é a boa notícia. **NÃO** foi 400 de formato:
+a API aceitou o corpo inteiro (chaves de negócio, `invoiceType` string, `productCode`) e
+chegou na RESOLUÇÃO; barrou no vendedor porque o `sellerCode` era um código da nossa
+PRODUÇÃO (`010740`), que não existe no banco de homolog deles. O encanamento novo está
+provado; o 201 depende de uma tupla que exista no homolog DELES.
+
+🔴 **Próximo passo (deles)**: um vendedor (código), um cliente (código+loja) e um produto
+(código) que existam no homolog, para o 201 ponta a ponta. A ordem de validação observada é
+**vendedor → (cliente → produto)**, então o formato de `clientStore`/`clientCode` ainda não
+foi exercitado — vai ser no próximo disparo, com a tupla certa.
+
 ### Formato dos códigos — não perguntei, vou descobrir testando
 
 Mando `cod_vendedor`, `cod_cliente` e `loja` **exatamente como estão no nosso banco** (já
