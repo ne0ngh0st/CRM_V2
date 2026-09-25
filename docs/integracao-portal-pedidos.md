@@ -786,6 +786,23 @@ provado; o 201 depende de uma tupla que exista no homolog DELES.
 **vendedor → (cliente → produto)**, então o formato de `clientStore`/`clientCode` ainda não
 foi exercitado — vai ser no próximo disparo, com a tupla certa.
 
+### ✅ 201 no homolog novo com trinca real — 2026-09-25
+
+O time mandou uma trinca de homologação e o envio deu **201, pedido nº 1131**, cliente
+**DECATHLON - RAPOSO TAVARES** (clientId 4079 do lado deles). Valida o formato de negócio
+ponta a ponta:
+- `clientCode 000646` + `clientStore 0004` resolveram o cliente — **o formato da loja com
+  zeros à esquerda passou** (era a dúvida punida).
+- `sellerCode 010244` resolveu o vendedor; `productCode V13354`/`V1337` aceitos; pedido com
+  **2 itens**; `invoiceType: SALE` (string).
+
+🚨 **Pendente de conferência: reais × centavos.** O exemplo do time veio com
+`unitPrice: 125.50` (REAIS), mas o contrato é CENTAVOS inteiros — mandei `12550`/`8990` e deu
+201. O 201 não distingue: só o TOTAL do pedido 1131 diz. Esperado **R$ 1.704,50**
+(10×125,50 + 5×89,90). Se aparecer R$ 134.950,00, a API nova passou a esperar reais e o
+`precoEmCentavos()` do `PortalPedidoPayload` vira reais. Mesma pegadinha do IPI (1129):
+confirmar na tela antes de confiar. ⚠️ A chave `crmv2-homolog-tupla-001` está queimada.
+
 ### Formato dos códigos — não perguntei, vou descobrir testando
 
 Mando `cod_vendedor`, `cod_cliente` e `loja` **exatamente como estão no nosso banco** (já
