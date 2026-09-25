@@ -12,18 +12,25 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Importa os pedidos JÁ FATURADOS do relatório 232, direto do arquivo.
+ * Importa os pedidos emitidos do relatório 232 — ABERTOS E FATURADOS —, direto do arquivo.
  *
- * Par do `totvs:import-pedidos-abertos`: aquele cobre `data_faturamento IS NULL`, este
- * cobre `data_faturamento IS NOT NULL`. Os dois nunca truncam — cada um mexe só na
- * metade que representa.
+ * 🥇 O 232 É A FONTE DA VENDA (decisão do Tony, 2026-09-25). Até esta data este comando
+ * gravava só as linhas faturadas e os pedidos em aberto vinham do relatório 200. Os dois
+ * relatórios não contam a mesma coisa: o 232 filtra pedido que GERA FINANCEIRO
+ * (`GERAFINANCEIRO` vem "S" em 100% das linhas) e o 200 não — traz também remessa de
+ * almoxarifado virtual e transferência entre filiais. Setembro/2026 saiu R$ 61,5 mi no
+ * CRM e no BI contra R$ 58,4 mi no Excel do 232: +R$ 12,7 mi de remessa do 200 e
+ * −R$ 9,6 mi de pedido em aberto que o 200 (três dias mais velho) ainda não tinha.
  *
- * ⚠️ FILTRA `DT_FATURAMENTO` PREENCHIDO, igual ao `legado:import-pedidos` sempre fez. O
- * 232 mudou de formato (23 → 32 colunas) mas manteve o comportamento antigo: 72% das
- * linhas (16.068 de 22.226 na primeira carga) são o MESMO pedido ainda em aberto, já
- * coberto pelo 200. Importar tudo duplicaria quase toda a base — é a mesma decisão que
- * já estava documentada no importador do legado, só verificada de novo contra o formato
- * novo.
+ * Agora: todas as linhas entram, o pedido só fica FATURADO quando todos os itens
+ * faturaram (faturamento parcial continua em aberto, com o valor cheio — é o que o
+ * relatório soma), e o 200 passou a só atualizar o STATUS de pedido que este comando
+ * trouxe ({@see ImportPedidosAbertosTotvs}). Resultado: o total do mês bate com o
+ * Excel do 232 por construção.
+ *
+ * ⚠️ RECORTE POR ARQUIVO: pedido com `data_pedido` dentro da faixa de datas de um
+ * arquivo e que NÃO está nele é apagado. É o que tira as remessas que o 200 gravou
+ * antes desta mudança, e o que apaga pedido cancelado no TOTVS.
  *
  * ⚠️ PROCESSA TODOS OS ARQUIVOS QUE ACHAR, um por mês. Encontrado na prática em 03/09:
  * apareceram DOIS arquivos na pasta ao mesmo tempo — "092026" (setembro, o vigente) e
@@ -62,7 +69,7 @@ class ImportPedidosEmitidosTotvs extends Command
     protected $signature = 'totvs:import-pedidos-emitidos
         {--dry-run : lê e conta, sem escrever nada}';
 
-    protected $description = 'Importa os pedidos faturados do relatório 232 do TOTVS, direto do arquivo';
+    protected $description = 'Importa os pedidos emitidos (abertos e faturados) do relatório 232 do TOTVS';
 
     public function handle(): int
     {
@@ -90,7 +97,7 @@ class ImportPedidosEmitidosTotvs extends Command
         });
 
         $prefixo = $dryRun ? '[dry-run] ' : '';
-        $this->info($prefixo.'Pedidos faturados gravados no total: '.number_format($totalPedidos, 0, ',', '.'));
+        $this->info($prefixo.'Pedidos emitidos gravados no total: '.number_format($totalPedidos, 0, ',', '.'));
         $this->line('Itens no total: '.number_format($totalItens, 0, ',', '.'));
 
         return self::SUCCESS;
@@ -126,7 +133,7 @@ class ImportPedidosEmitidosTotvs extends Command
         [$cabecalhos, $itens, $linhas, $foraDoFiltro, $semCliente] = $this->lerArquivo($leitor, $clientePorChave);
 
         $this->line(sprintf(
-            '  %s linhas, %s faturadas (%s fora do filtro — ainda em aberto), %s pedidos.',
+            '  %s linhas, %s faturadas, %s em aberto, %s pedidos.',
             number_format($linhas, 0, ',', '.'),
             number_format($linhas - $foraDoFiltro, 0, ',', '.'),
             number_format($foraDoFiltro, 0, ',', '.'),
@@ -177,15 +184,21 @@ class ImportPedidosEmitidosTotvs extends Command
             $linhas++;
             $numero = $linha['PEDIDO'];
 
-            // Mesmo filtro do legado: só a fatia faturada. O resto é o mesmo pedido
-            // ainda em aberto, já coberto por PEDIDOS_EM_ABERTO.
-            if ($numero === '' || $linha['DT_FATURAMENTO'] === '') {
-                $foraDoFiltro++;
-
+            if ($numero === '') {
                 continue;
             }
 
-            $tipoFaturamento = strtolower($linha['TP_FAT']) === 'servico' ? 'servico' : 'produto';
+            $dataFaturamento = Normalizador::data($linha['DT_FATURAMENTO']);
+            if ($dataFaturamento === null) {
+                $foraDoFiltro++; // item ainda em aberto — entra, e conta para o resumo
+            }
+
+            // `TP_FAT` só vem preenchido na linha faturada.
+            $tipoFaturamento = match (strtolower($linha['TP_FAT'])) {
+                'servico' => 'servico',
+                'produto' => 'produto',
+                default => null,
+            };
 
             if (! isset($cabecalhos[$numero])) {
                 $chave = Normalizador::chaveCliente($linha['COD_CLI'], $linha['LOJA_CLI']);
@@ -202,7 +215,8 @@ class ImportPedidosEmitidosTotvs extends Command
                     'cod_vendedor' => Normalizador::codigoVendedor($linha['COD_VENDEDOR']) ?? '',
                     'data_pedido' => Normalizador::data($linha['DT_EMISSAO']),
                     'data_previsao_faturamento' => Normalizador::data($linha['PREV_FAT']),
-                    'data_faturamento' => Normalizador::data($linha['DT_FATURAMENTO']),
+                    'data_faturamento' => $dataFaturamento,
+                    'tem_item_aberto' => false,
                     'data_entrega_prevista' => Normalizador::data($linha['PREV_ENTR']),
                     'data_pcp' => Normalizador::data($linha['DATA_PCP']),
                     'carga' => Normalizador::valorOuNull($linha['CARGA']),
@@ -216,12 +230,24 @@ class ImportPedidosEmitidosTotvs extends Command
                      * apagaria o único registro que o CRM tem de por onde o pedido passou.
                      */
                     'status' => StatusPedidoResolver::FATURADO,
-                    'tipo_faturamento' => $tipoFaturamento,
-                    // Só preenchido para serviço, com o número que NOTA_FISCAL carrega
-                    // quando SERIE=RPS — ver o cabeçalho da classe.
-                    'rps' => $tipoFaturamento === 'servico' ? Normalizador::valorOuNull($linha['NOTA_FISCAL']) : null,
+                    'tipo_faturamento' => null,
+                    'rps' => null,
                     'valor_total' => 0,
                 ];
+            }
+
+            // Pedido parcialmente faturado continua EM ABERTO: basta um item sem nota.
+            if ($dataFaturamento === null) {
+                $cabecalhos[$numero]['tem_item_aberto'] = true;
+            } elseif ($cabecalhos[$numero]['data_faturamento'] === null || $dataFaturamento > $cabecalhos[$numero]['data_faturamento']) {
+                $cabecalhos[$numero]['data_faturamento'] = $dataFaturamento;
+            }
+
+            if ($tipoFaturamento !== null && $cabecalhos[$numero]['tipo_faturamento'] === null) {
+                $cabecalhos[$numero]['tipo_faturamento'] = $tipoFaturamento;
+                // Só preenchido para serviço, com o número que NOTA_FISCAL carrega
+                // quando SERIE=RPS — ver o cabeçalho da classe.
+                $cabecalhos[$numero]['rps'] = $tipoFaturamento === 'servico' ? Normalizador::valorOuNull($linha['NOTA_FISCAL']) : null;
             }
 
             $valor = Normalizador::numero($linha['VLR_TOTAL']);
@@ -243,7 +269,17 @@ class ImportPedidosEmitidosTotvs extends Command
         foreach ($cabecalhos as $numero => $cab) {
             if ($cab['data_pedido'] === null) {
                 unset($cabecalhos[$numero], $itens[$numero]);
+
+                continue;
             }
+
+            if ($cab['tem_item_aberto']) {
+                // Em aberto (inteiro ou parcial): a etapa vem do 200, que roda depois.
+                $cabecalhos[$numero]['data_faturamento'] = null;
+                $cabecalhos[$numero]['status'] = StatusPedidoResolver::DESCONHECIDO;
+            }
+
+            unset($cabecalhos[$numero]['tem_item_aberto']);
         }
 
         return [$cabecalhos, $itens, $linhas, $foraDoFiltro, $semCliente];
@@ -263,18 +299,52 @@ class ImportPedidosEmitidosTotvs extends Command
         // esse resultado que decide quais itens de pedido são apagados logo abaixo.
         $numeros = Normalizador::numerosDePedido($cabecalhos);
 
-        $lote = [];
+        // Recorte: o arquivo é o retrato completo da faixa de datas que cobre. Pedido da
+        // faixa que não está nele saiu do 232 — cancelado, ou remessa sem financeiro que o
+        // 200 gravou antes de 2026-09-25. Os itens vão junto pelo ON DELETE CASCADE.
+        $datas = array_column($cabecalhos, 'data_pedido');
+        $removidos = DB::table('pedidos')
+            ->whereBetween('data_pedido', [min($datas), max($datas)])
+            ->whereNotIn('numero_pedido', $numeros)
+            ->delete();
+        $this->line('  removidos (na faixa '.min($datas).' a '.max($datas).' e fora do arquivo): '.number_format($removidos, 0, ',', '.'));
+
+        $faturados = [];
+        $abertos = [];
         foreach ($cabecalhos as $numero => $cab) {
-            $lote[] = $cab + ['numero_pedido' => $numero, 'created_at' => $agora, 'updated_at' => $agora];
+            $linha = $cab + ['numero_pedido' => $numero, 'created_at' => $agora, 'updated_at' => $agora];
+            if ($cab['data_faturamento'] === null) {
+                $abertos[] = $linha;
+            } else {
+                $faturados[] = $linha;
+            }
         }
 
-        foreach (array_chunk($lote, 500) as $pedaco) {
-            DB::table('pedidos')->upsert($pedaco, ['numero_pedido'], [
-                'cliente_id', 'filial', 'cod_vendedor', 'data_pedido', 'data_previsao_faturamento',
-                'data_faturamento', 'data_entrega_prevista', 'data_pcp', 'carga',
-                'condicao_pagamento', 'status', 'tipo_faturamento', 'rps', 'valor_total', 'updated_at',
-            ]);
+        $colunas = [
+            'cliente_id', 'filial', 'cod_vendedor', 'data_pedido', 'data_previsao_faturamento',
+            'data_faturamento', 'data_entrega_prevista', 'data_pcp', 'carga',
+            'condicao_pagamento', 'tipo_faturamento', 'rps', 'valor_total', 'updated_at',
+        ];
+
+        foreach (array_chunk($faturados, 500) as $pedaco) {
+            DB::table('pedidos')->upsert($pedaco, ['numero_pedido'], [...$colunas, 'status']);
         }
+
+        // ⚠️ Em aberto NÃO atualiza `status`: a etapa é do 200 e ele roda depois. Pedido
+        // novo nasce DESCONHECIDO (sem pill) até o 200 classificá-lo. Previsão, carga e
+        // PCP também são do 200, que é mais fresco para pedido em andamento.
+        $colunasAbertos = array_values(array_diff($colunas, ['data_previsao_faturamento', 'data_entrega_prevista', 'data_pcp', 'carga']));
+        foreach (array_chunk($abertos, 500) as $pedaco) {
+            DB::table('pedidos')->upsert($pedaco, ['numero_pedido'], $colunasAbertos);
+        }
+
+        // Estava faturado e voltou a ter item em aberto (faturamento parcial): o selo de
+        // faturado não vale mais. Sem etapa até o 200 dizer qual é.
+        DB::table('pedidos')
+            ->whereNull('data_faturamento')
+            ->where('status', StatusPedidoResolver::FATURADO)
+            ->whereIn('numero_pedido', $numeros)
+            ->update(['status' => StatusPedidoResolver::DESCONHECIDO]);
 
         $idPorNumero = DB::table('pedidos')->whereIn('numero_pedido', $numeros)->pluck('id', 'numero_pedido');
 

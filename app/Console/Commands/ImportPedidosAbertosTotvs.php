@@ -10,33 +10,18 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Importa os pedidos em aberto do relatório 200, direto do arquivo.
+ * Atualiza a ETAPA dos pedidos em aberto a partir do relatório 200.
  *
- * ⚠️ NÃO TRUNCA A TABELA. `pedidos` guarda as duas coisas — aberto e faturado —, e o 200
- * é o retrato de "o que está em aberto AGORA". O comando equivalente do legado
- * (`legado:import-pedidos`) trunca tudo porque importa as duas fontes de uma vez; aqui,
- * truncar apagaria os 12 mil pedidos faturados que vêm do 232.
+ * 🥇 DESDE 2026-09-25 ESTE COMANDO NÃO CRIA, NÃO APAGA E NÃO MEXE EM VALOR DE PEDIDO.
+ * Quem diz quais pedidos existem, quanto valem e se estão faturados é o 232
+ * ({@see ImportPedidosEmitidosTotvs}). O 200 traz também pedido que não gera
+ * financeiro (remessa de almoxarifado virtual, transferência) — R$ 12,7 mi só em
+ * setembro/2026 —, e era por ele que o total do CRM e do BI não batia com o Excel do
+ * 232. Aqui ele só atualiza, nos pedidos EM ABERTO que o 232 trouxe: etapa
+ * (`status`), texto cru do TOTVS, previsão de faturamento/entrega, PCP e carga.
  *
- * O que "em aberto" quer dizer no banco: `data_faturamento IS NULL`.
- *
- * ⚠️ UM PEDIDO PODE APARECER NAS DUAS FONTES, e aí o 200 ganha. Aconteceu com 13 pedidos
- * na primeira execução: estavam marcados como faturados (232 de 31/08) e apareceram no
- * relatório de abertos do dia. A causa provável é faturamento parcial — parte saiu, parte
- * continua pendente — e o v2 só tem UMA linha por `numero_pedido`, então não dá para
- * representar os dois estados.
- *
- * A escolha é deliberada: o 200 é a fonte mais nova e é o que o vendedor precisa ver como
- * pendente. O custo é que a nota fiscal e o peso daquele pedido somem até o próximo 232
- * trazê-los de volta. O comando CONTA e AVISA quantos foram convertidos — a primeira
- * versão fazia a mesma coisa em silêncio, que é o que não podia.
- *
- * Três coisas acontecem, nesta ordem, dentro de uma transação:
- *
- *   1. upsert dos pedidos do relatório (por `numero_pedido`, que é unique)
- *   2. troca dos itens desses pedidos
- *   3. remoção dos que estavam abertos e sumiram do relatório — foram faturados ou
- *      cancelados no TOTVS. Sem este passo, pedido faturado ficaria eternamente na
- *      tela de "em aberto", que é o defeito mais visível que este import poderia ter.
+ * Pedido que está no 200 e não no CRM é contado e avisado, não gravado: ou é remessa,
+ * ou é mais novo que o último 232 — e aparece quando o 232 for gerado de novo.
  *
  * ⚠️ O STATUS DO PEDIDO SAI DO `HISTORICO`, e este comentário já disse o contrário.
  * Ele mandava não adivinhar status a partir da frase, porque a redação poderia mudar —
@@ -160,34 +145,33 @@ class ImportPedidosAbertosTotvs extends Command
         // ⚠️ Nunca `array_keys()` cru contra `numero_pedido` — ver Normalizador::numerosDePedido().
         $numeros = Normalizador::numerosDePedido($cabecalhos);
 
-        $obsoletos = DB::table('pedidos')
-            ->whereNull('data_faturamento')
-            ->whereNotIn('numero_pedido', $numeros)
-            ->count();
-
-        // Estavam faturados e voltaram a aparecer como abertos — ver o aviso no
-        // cabeçalho da classe. Contado ANTES da escrita, senão já não dá para saber.
-        $reabertos = DB::table('pedidos')
-            ->whereNotNull('data_faturamento')
-            ->whereIn('numero_pedido', $numeros)
-            ->count();
-
-        if ($dryRun) {
-            $this->info('[dry-run] Gravaria '.number_format(count($cabecalhos), 0, ',', '.').' pedidos em aberto.');
-            $this->line('[dry-run] Removeria '.number_format($obsoletos, 0, ',', '.').' que saíram do relatório (faturados ou cancelados).');
-        } else {
-            DB::transaction(function () use ($cabecalhos, $itens) {
-                $this->gravar($cabecalhos, $itens);
-            });
-
-            $this->info('Pedidos em aberto gravados: '.number_format(count($cabecalhos), 0, ',', '.'));
-            $this->line('Removidos (saíram do relatório): '.number_format($obsoletos, 0, ',', '.'));
+        $emAberto = [];
+        foreach (array_chunk($numeros, 2000) as $pedaco) {
+            foreach (DB::table('pedidos')->whereNull('data_faturamento')->whereIn('numero_pedido', $pedaco)->pluck('numero_pedido') as $n) {
+                $emAberto[(string) $n] = true;
+            }
         }
 
-        if ($reabertos > 0) {
-            $this->warn('Estavam FATURADOS e voltaram a aberto: '.number_format($reabertos, 0, ',', '.'));
-            $this->line('  → o 200 é a fonte mais nova e prevalece (provável faturamento parcial).');
-            $this->line('  → a nota fiscal desses pedidos volta no próximo import do 232.');
+        $atualizar = array_intersect_key($cabecalhos, $emAberto);
+        $foraDoCrm = array_diff_key($cabecalhos, $emAberto);
+
+        if ($dryRun) {
+            $this->info('[dry-run] Atualizaria a etapa de '.number_format(count($atualizar), 0, ',', '.').' pedidos em aberto.');
+        } else {
+            DB::transaction(function () use ($atualizar) {
+                $this->gravar($atualizar);
+            });
+
+            $this->info('Etapa atualizada em '.number_format(count($atualizar), 0, ',', '.').' pedidos em aberto.');
+        }
+
+        if ($foraDoCrm !== []) {
+            $this->line(sprintf(
+                'No 200 e não no CRM (não gravados): %s pedidos, R$ %s',
+                number_format(count($foraDoCrm), 0, ',', '.'),
+                number_format(array_sum(array_column($foraDoCrm, 'valor_total')), 2, ',', '.')
+            ));
+            $this->line('  → remessa sem financeiro (não é venda) ou pedido mais novo que o último 232.');
         }
 
         if ($semCliente > 0) {
@@ -265,63 +249,24 @@ class ImportPedidosAbertosTotvs extends Command
     }
 
     /**
-     * @param  array<string, array<string, mixed>>  $cabecalhos
-     * @param  array<string, list<array<string, mixed>>>  $itens
+     * @param  array<string, array<string, mixed>>  $cabecalhos  só pedidos já em aberto no CRM
      */
-    private function gravar(array $cabecalhos, array $itens): void
+    private function gravar(array $cabecalhos): void
     {
         $agora = now();
 
-        // ⚠️ Nunca `array_keys()` cru contra `numero_pedido` — ver Normalizador::numerosDePedido().
-        // É este DELETE que estourou por 94 rodadas seguidas quando a série "A" apareceu.
-        $numeros = Normalizador::numerosDePedido($cabecalhos);
-
-        // Estava aberto e sumiu do relatório: foi faturado ou cancelado no TOTVS.
-        // Os itens vão junto pelo ON DELETE CASCADE de pedido_itens.
-        DB::table('pedidos')
-            ->whereNull('data_faturamento')
-            ->whereNotIn('numero_pedido', $numeros)
-            ->delete();
-
         $lote = [];
         foreach ($cabecalhos as $numero => $cab) {
-            $lote[] = $cab + ['numero_pedido' => $numero, 'created_at' => $agora, 'updated_at' => $agora];
+            $lote[] = $cab + ['numero_pedido' => (string) $numero, 'created_at' => $agora, 'updated_at' => $agora];
         }
 
+        // Todos existem (filtrados antes), então o upsert só ATUALIZA — e só as colunas
+        // de andamento. Valor, cliente, vendedor e itens são do 232.
         foreach (array_chunk($lote, 500) as $pedaco) {
             DB::table('pedidos')->upsert($pedaco, ['numero_pedido'], [
-                'cliente_id', 'filial', 'cod_vendedor', 'data_pedido', 'data_previsao_faturamento',
-                'data_faturamento', 'data_entrega_prevista', 'data_pcp', 'carga',
-                'condicao_pagamento', 'status', 'historico_totvs', 'historico_em',
-                'valor_total', 'updated_at',
+                'data_previsao_faturamento', 'data_entrega_prevista', 'data_pcp', 'carga',
+                'status', 'historico_totvs', 'historico_em', 'updated_at',
             ]);
-        }
-
-        $idPorNumero = DB::table('pedidos')->whereIn('numero_pedido', $numeros)->pluck('id', 'numero_pedido');
-
-        // Troca os itens em vez de acrescentar: o relatório é o retrato completo do
-        // pedido, e quantidade liberada muda de um dia para o outro.
-        DB::table('pedido_itens')->whereIn('pedido_id', $idPorNumero->values())->delete();
-
-        $buffer = [];
-        foreach ($itens as $numero => $linhas) {
-            $pedidoId = $idPorNumero[$numero] ?? null;
-            if ($pedidoId === null) {
-                continue;
-            }
-
-            foreach ($linhas as $item) {
-                $buffer[] = $item + ['pedido_id' => $pedidoId, 'created_at' => $agora, 'updated_at' => $agora];
-
-                if (count($buffer) >= 1000) {
-                    DB::table('pedido_itens')->insert($buffer);
-                    $buffer = [];
-                }
-            }
-        }
-
-        if ($buffer !== []) {
-            DB::table('pedido_itens')->insert($buffer);
         }
     }
 }
