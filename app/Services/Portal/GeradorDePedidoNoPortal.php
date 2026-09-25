@@ -11,10 +11,10 @@ use Illuminate\Support\Str;
  *
  * O trabalho é dividido em dois tempos de propósito:
  *
- *  - **preparar()** roda DENTRO da requisição. É tudo local (de-para + montagem do
- *    payload), custa milissegundos, e é onde moram os erros que o vendedor precisa ver
- *    na hora: cliente sem vínculo, produto fora do catálogo, CNPJ divergente,
- *    representante não cadastrado. Devolver isso pelo sino seria cruel.
+ *  - **preparar()** roda DENTRO da requisição. É tudo local (montagem do payload a
+ *    partir do próprio orçamento), custa milissegundos, e é onde moram os erros que o
+ *    vendedor precisa ver na hora: cliente sem vínculo, vendedor sem código, item de
+ *    etiqueta sem produto. Devolver isso pelo sino seria cruel.
  *
  *  - **enviar()** roda NA FILA. É a única parte que depende da rede, e o homolog
  *    responde em ~500 ms — sozinho já estoura o orçamento de 500 ms da Regra de ouro
@@ -23,7 +23,6 @@ use Illuminate\Support\Str;
 class GeradorDePedidoNoPortal
 {
     public function __construct(
-        private readonly PortalDeParaResolver $dePara,
         private readonly PortalPedidoPayload $payload,
         private readonly PortalPedidoClient $client,
         private readonly NotificacaoService $notificacoes,
@@ -38,8 +37,7 @@ class GeradorDePedidoNoPortal
     {
         $orcamento->loadMissing(['itens', 'cliente', 'user.vendedorPerfil']);
 
-        $ids = $this->dePara->resolver($orcamento);
-        $corpo = $this->payload->montar($orcamento, $ids);
+        $corpo = $this->payload->montar($orcamento);
 
         /*
          * 🚨 A chave nasce AQUI, persistida, ANTES de qualquer envio — e é reusada em

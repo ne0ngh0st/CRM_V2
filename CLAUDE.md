@@ -2526,6 +2526,50 @@ Virou o perfil próprio **`venda_interna`**, que opera como vendedor pelo própr
   Equipe (editar usuário → Perfil "Venda interna").
 - Natany (000197) continua `assistente`, de propósito.
 
+### O de-para do Portal morreu: a API aceita chave de negócio — 2026-09-25
+
+Fecha o arco da integração "orçamento vira pedido". Levei ao Marcelo a única pergunta que
+sobrava (resolver `clientId`/`createdBy` do nosso lado dependia de dado que só eles têm) e
+a resposta foi **alterar a API**: agora ela aceita as CHAVES DE NEGÓCIO do TOTVS e resolve
+os ids internos dela do lado deles. Era o desacoplamento que ELES tinham proposto lá no
+começo. Detalhe e payload em `docs/integracao-portal-pedidos.md` §4.9.
+
+**O payload virou 100% código do TOTVS**: `sellerCode` (cod_vendedor), `clientCode`+
+`clientStore` (cod_cliente+loja), `productCode` (cod_produto), `invoiceType` string
+(`SERVICE`/`SALE`/`SHIPMENT`/`RESALE`, era `invoiceTypeId` int). `clientRepresentativeId`
+sumiu — eles resolvem o representante pelo `sellerCode`. `deliveryClient*` é omitido (o CRM
+não tem endereço de entrega alternativo).
+
+**Isso APAGOU o de-para inteiro** — foi o que o Tony pediu (menos código):
+- `PortalDeParaResolver` e os 4 models `Portal*` — deletados.
+- Tabelas `portal_clientes`/`produtos`/`usuarios`/`representantes` — dropadas (migration
+  `2026_09_25_100000`; nasceram vazias, nunca populadas em produção).
+- 🚨 **A guarda de CNPJ (§4.4) não roda mais — decisão do Tony: CONFIAR na resolução do
+  Portal.** O risco do par `code`+`store` apontando para empresa diferente (1 em 9 na
+  amostra, o `000001/0001`) passou a ser deles. Escolha consciente: o de-para era o que se
+  queria matar, e manter só uma tabela-espelho para conferir CNPJ traria de volta o trabalho
+  de popular/sincronizar. Se um dia virar problema, o conserto é reintroduzir `portal_clientes`
+  só para a conferência.
+- ⚠️ **O fator de conversão** (múltiplo de caixa) deixou de ser pré-conferido — dependia de
+  `portal_produtos`. Agora o Portal recusa com 400 e a mensagem aparece no sino.
+
+**O `PortalPedidoPayload` continua dono das validações que são NOSSAS**: centavos com IPI
+(§5.1), quantidade inteira, etiqueta sem produto, produto repetido, consumo×revenda,
+orçamento sem cliente, usuário sem cod_vendedor. Tudo em `preparar()` (dentro da requisição);
+só o HTTP vai para a fila.
+
+⚠️ **Formato dos códigos: não perguntei, vou descobrir testando** (decisão do Tony). Mando
+`cod_vendedor`/`cod_cliente`/`loja` como estão no banco; se o Portal casar por string e a
+`loja` divergir (`E001` × `01`), o sintoma é "cliente não encontrado" no 1º envio real.
+
+Testes: `PortalPedidoPayloadTest` (unit) e `PortalPedidoTest` (feature) reescritos para o
+formato novo — 32 verdes. Perderam os casos de CNPJ/representante (não existem mais) e ganharam
+a trava do formato do corpo.
+
+**Falta só para ligar de verdade**: URL + token de PRODUÇÃO do Portal (o que temos é homolog)
+e o `PORTAL_PEDIDOS_HABILITADO` no `.env` de lá. O botão segue restrito a admin (`=== 'admin'`
+em `podeEnviarAoPortal`).
+
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão
@@ -2556,10 +2600,21 @@ Virou o perfil próprio **`venda_interna`**, que opera como vendedor pelo própr
   positivas ("quanto quem está atrás ainda precisa": R$ 3,2 mi em 16/09). É uma linha em
   `MetaRankingResolver::somarLinhas()`, e a invariante "soma dos subtotais = total" continua
   valendo nas duas versões.
-- 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA em 2026-09-10,
-  HOMOLOGADA ponta a ponta em 2026-09-14, falta dado REAL no de-para para liberar.**
-  **Análise, mapa e armadilhas em `docs/integracao-portal-pedidos.md`** — ler de lá antes
-  de encostar no assunto; o PDF original está em `docs/API-Pedidos-Autopel.pdf`.
+- 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA (2026-09-10),
+  HOMOLOGADA (2026-09-14), DE-PARA ELIMINADO (2026-09-25). Falta só URL/token de PRODUÇÃO
+  para ligar.** **Análise, payload atual e armadilhas em `docs/integracao-portal-pedidos.md`**
+  (a §4.9 é o estado de hoje; ler de lá antes de encostar). O PDF original está em
+  `docs/API-Pedidos-Autopel.pdf`.
+  - 🟢 **2026-09-25: a API passou a aceitar chave de negócio** (`sellerCode`/`clientCode`+
+    `clientStore`/`productCode`/`invoiceType` string) e resolve os ids dela do lado deles.
+    Caíram o `PortalDeParaResolver`, os 4 models `Portal*`, as tabelas `portal_*` e a guarda
+    de CNPJ. O payload é montado do próprio orçamento. **Vários sub-itens abaixo viraram
+    HISTÓRICO** (de-para, escopo de token, `/v1/clients`) — ficam como registro de como se
+    chegou aqui, mas não são mais o desenho.
+  - ⚠️ **`PORTAL_PEDIDOS_HABILITADO` nasce DESLIGADO** (rota 404). No dia do go-live é a
+    única proteção — não há mais base separada garantida quando existir URL de produção.
+  - ⚠️ **`unitPrice` em centavos com IPI embutido**; retentar com `Idempotency-Key` nova
+    duplica pedido (a chave nasce persistida no orçamento). Continuam valendo.
   - **O que existe**: botão "Transformar em pedido" em `/orcamentos` (só em orçamento
     **aprovado**) → `POST /orcamentos/{id}/portal` → `GeradorDePedidoNoPortal` →
     `EnviarPedidoAoPortalJob`. Config em `config/portal.php`, 4 tabelas de espelho
@@ -2590,11 +2645,8 @@ Virou o perfil próprio **`venda_interna`**, que opera como vendedor pelo própr
       tela deles: o pedido **1129** (10 × R$ 12,50 de um item que participa de IPI)
       aparece como **R$ 125,00** no Portal — exatamente o que mandamos. Eles não somam
       imposto por cima do `unitPrice`. `PORTAL_PEDIDOS_PRECO_COM_IPI` fica em `true`.
-    - 🔴 **O que ainda falta para LIBERAR: dado real nas tabelas `portal_*`.** As linhas
-      de hoje foram **semeadas à mão** para o teste — e, como o `document` da linha veio do
-      nosso próprio cliente, a guarda de CNPJ passou comparando o valor com ele mesmo. O
-      encanamento está provado; **a guarda não**. Pedir ao Marcelo um `clientId` de
-      homologação que corresponda a um cliente que exista **dos dois lados** (§4.1/§4.5).
+    - ~~🔴 Falta dado real nas `portal_*`~~ **OBSOLETO em 2026-09-25**: não há mais
+      `portal_*` nem de-para (§4.9). O payload vai com chave de negócio e o Portal resolve.
     - ⚠️ **A chave de idempotência não expira.** Toda chave usada em teste está queimada
       para sempre: reenviá-la devolve o pedido antigo, nunca um novo.
   - 🟢 **O DE-PARA FOI ENCONTRADO em 2026-09-10 — e o Portal é o `sic`.** A API identifica

@@ -58,23 +58,27 @@ return [
 
     /*
     |---------------------------------------------------------------------------
-    | Tipos de nota (invoiceTypeId) — constantes da API, não vêm de tabela nossa
+    | Tipos de nota (invoiceType) — constantes da API, não vêm de tabela nossa
     |---------------------------------------------------------------------------
+    | ⚠️ Em 2026-09-25 o time do Portal trocou `invoiceTypeId` (int 1/2/3/4) por
+    | `invoiceType` STRING: SERVICE / SALE / SHIPMENT / RESALE. O de-para de código
+    | numérico (§4.8) vira este enum de texto — mesma ordem, só a representação mudou.
+    |
     | ⚠️ Regra da API: um pedido NÃO aceita itens de Venda (Consumo) e Venda
     | (Revenda) ao mesmo tempo — responde 409. E Serviço só é aceito para
     | produto do grupo 3 no Portal.
     */
     'tipos_nota' => [
-        'servico' => 1,
-        'venda_consumo' => 2,
-        'remessa' => 3,
-        'venda_revenda' => 4,
+        'servico' => 'SERVICE',
+        'venda_consumo' => 'SALE',
+        'remessa' => 'SHIPMENT',
+        'venda_revenda' => 'RESALE',
     ],
 
     /*
     | Tipo de nota usado quando o item não diz outra coisa. O CRM-V2 não tem
     | campo de tipo de nota por item hoje; quando tiver, ele manda aqui.
     */
-    'tipo_nota_padrao' => (int) env('PORTAL_PEDIDOS_TIPO_NOTA_PADRAO', 2),
+    'tipo_nota_padrao' => (string) env('PORTAL_PEDIDOS_TIPO_NOTA_PADRAO', 'SALE'),
 
 ];

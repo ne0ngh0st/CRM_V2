@@ -9,8 +9,12 @@
 > idempotência persistida. **O total bateu (R$ 125,00), o que fecha a questão do IPI.**
 > Ver **§4.7**, inclusive o que esse teste deliberadamente **não** prova.
 >
-> Falta para liberar de verdade: **dado real nas tabelas `portal_*`**. As linhas de hoje
-> foram semeadas à mão para o teste. O que o Marcelo precisa mandar está na §4.5.
+> 🟢 **DE-PARA ELIMINADO em 2026-09-25.** O time do Portal alterou a API para aceitar as
+> CHAVES DE NEGÓCIO do TOTVS direto (`sellerCode`, `clientCode`+`clientStore`,
+> `productCode`, `invoiceType` string) e resolver os ids internos deles do lado deles. Com
+> isso caíram as tabelas `portal_*`, o `PortalDeParaResolver` e a guarda de CNPJ — o payload
+> é montado a partir do próprio orçamento. **Ver §4.9.** Não falta mais dado nosso; falta só
+> a URL/token de produção para ligar.
 >
 > ✅ **A pergunta que era pré-requisito foi respondida em 2026-09-14: o
 > `api-portal.autopel.com` é ambiente de homologação DE VERDADE, com base separada da
@@ -692,6 +696,87 @@ aparece como "não deixa enviar" na nossa tela.
 - **`api-portal` ≠ `api-integrador`.** O endpoint de busca de cliente que achei é do
   `api-portal` (a API de pedidos, onde temos token). O `/descoberta` lê o `api-integrador`
   (token deles, só leitura). São dois acessos diferentes; não misturar.
+
+## 4.9 A API passou a aceitar chave de negócio — o de-para morreu — 2026-09-25
+
+Depois da homologação (§4.7), levei ao Marcelo a pergunta que faltava (resolver `clientId`
+e `createdBy` do nosso lado dependia de dado que só eles têm). A resposta foi **alterar a
+API** para aceitar as chaves do TOTVS e resolver os ids internamente — exatamente o
+desacoplamento que ELES tinham proposto no começo (o topo deste doc). É a melhor saída
+possível: o CRM nunca mais depende do schema/id deles.
+
+### O payload final
+
+```
+POST /v1/api/orders
+{
+  "sellerCode": "000123",          // ← nosso cod_vendedor (era createdBy = id deles)
+  "clientCode": "001122",          // ← cod_cliente        (era clientId = id deles)
+  "clientStore": "01",             // ← loja
+  "shippingType": "CIF",
+  "orderReference": "ORC-77",
+  "orderNote": "...",              // opcional
+  "products": [
+    {
+      "productCode": "PA0001",     // ← cod_produto (era productId = id deles)
+      "quantity": 100,
+      "unitPrice": 1250,           // centavos, com IPI embutido (§5.1) — inalterado
+      "invoiceType": "SALE",       // ← string, era invoiceTypeId int
+      "orderLine": "10"
+    }
+  ]
+}
+```
+
+Mudanças, uma a uma:
+- `createdBy` (id do usuário deles) → **`sellerCode`** (nosso `cod_vendedor`).
+- `clientId` (id deles) → **`clientCode` + `clientStore`** (`cod_cliente` + `loja`).
+- `clientRepresentativeId` **sumiu** — o Portal resolve o representante do cliente a partir
+  do `sellerCode`.
+- `productId` (id deles) → **`productCode`** (nosso `cod_produto`).
+- `invoiceTypeId` int (1/2/3/4) → **`invoiceType` string** (`SERVICE`/`SALE`/`SHIPMENT`/`RESALE`).
+- `deliveryClientId` → a API aceita `deliveryClientCode`/`deliveryClientStore`, mas **omitimos**:
+  o CRM não modela endereço de entrega alternativo, e campo opcional vazio não vai.
+
+### O que isso apagou do nosso lado
+
+- **`PortalDeParaResolver`** e os 4 models `Portal*` — deletados.
+- As tabelas espelho `portal_clientes`/`produtos`/`usuarios`/`representantes` — dropadas
+  pela migration `2026_09_25_100000` (nasceram vazias, nunca populadas em produção).
+- **A guarda de CNPJ (§4.4)** — não roda mais aqui. 🚨 **Decisão do Tony (2026-09-25):
+  CONFIAR na resolução do Portal.** O risco documentado do par `code`+`store` apontando para
+  empresa diferente nos dois lados (1 em 9 na amostra, o `000001/0001`) agora é
+  responsabilidade deles — a gente manda o mesmo código que o TOTVS usa e a conferência é do
+  lado que resolve. Foi escolha consciente: o de-para era o que a gente queria matar, e
+  manter só uma tabela-espelho para conferir CNPJ traria de volta o trabalho de popular/
+  sincronizar que motivou tudo.
+
+### O que CONTINUA sendo nossa responsabilidade (segue no `PortalPedidoPayload`)
+
+`unitPrice` em centavos com IPI embutido (§5.1); quantidade inteira ≥ 1; item de etiqueta
+sem `cod_produto` é recusado com mensagem; produto repetido é recusado; Venda (Consumo) e
+Venda (Revenda) no mesmo pedido é recusado; orçamento sem cliente vinculado é recusado;
+usuário sem `cod_vendedor` é recusado. Tudo isso roda DENTRO da requisição (`preparar()`),
+como antes — só a chamada HTTP vai para a fila.
+
+⚠️ **O fator de conversão** (múltiplo de caixa) deixou de ser conferido aqui — dependia do
+`portal_produtos.fator_conversao`, que não existe mais. Se a quantidade não for múltiplo
+válido, o Portal recusa com 400 e a mensagem dele aparece no sino. Aceitável: não temos mais
+o dado para pré-conferir, e o custo é uma mensagem em vez de um bloqueio prévio.
+
+### Formato dos códigos — não perguntei, vou descobrir testando
+
+Mando `cod_vendedor`, `cod_cliente` e `loja` **exatamente como estão no nosso banco** (já
+canônicos do import). Se o Portal casar por string e algum formato divergir (ex.: `loja`
+`E001` contra `01`), o sintoma é "cliente não encontrado" no primeiro envio real — e aí
+ajusto. Decisão do Tony: não travar com pergunta de formato.
+
+### Testes
+
+`PortalPedidoPayloadTest` (unit, sem banco) reescrito para o formato novo — chaves de
+negócio, `invoiceType` string, cliente/vendedor ausente recusados; os fixtures de IPI
+(10,325 → 1000/1033) continuam. `PortalPedidoTest` (feature) perdeu os casos de CNPJ e
+representante (não existem mais) e trava o FORMATO do corpo no caminho feliz. 32 verdes.
 
 ## 5. Lacunas de schema — medidas, não estimadas
 

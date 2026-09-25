@@ -9,11 +9,17 @@ use App\Services\Orcamento\OrcamentoCalculoService;
 /**
  * Traduz um orçamento aprovado no corpo do `POST /v1/api/orders` do Portal Autopel.
  *
- * É o ÚNICO lugar que conhece o formato do payload (Regra de ouro nº 8). O job e o
- * controller passam os ids já resolvidos e recebem um array pronto — assim toda a
- * matemática perigosa fica testável sem tocar em HTTP nem em banco.
+ * É o ÚNICO lugar que conhece o formato do payload (Regra de ouro nº 8), e monta tudo
+ * a partir do PRÓPRIO orçamento — sem de-para nenhum.
  *
- * Ver docs/integracao-portal-pedidos.md §3 (as três armadilhas) e §5.1 (IPI).
+ * 🚨 Desde 2026-09-25 a API aceita as CHAVES DE NEGÓCIO do TOTVS e resolve os ids dela
+ * do lado deles: `sellerCode` (cod_vendedor), `clientCode`+`clientStore` (cod_cliente +
+ * loja), `productCode` (cod_produto). Não existe mais tabela `portal_*`, nem tradução de
+ * id, nem guarda de CNPJ do nosso lado — a resolução (e o risco do par code+store que
+ * aponta para empresa diferente, §4.4) passou a ser deles, por decisão do Tony em
+ * 2026-09-25. Mandamos o mesmo código que o TOTVS usa; a conferência é lá.
+ *
+ * Ver docs/integracao-portal-pedidos.md §3 (as armadilhas que continuam nossas) e §5.1 (IPI).
  */
 class PortalPedidoPayload
 {
@@ -23,11 +29,9 @@ class PortalPedidoPayload
     }
 
     /**
-     * @param  array{clientId:int, clientRepresentativeId:int, deliveryClientId:int, createdBy:int, produtos: array<string,int>}  $ids
-     *                                                                                                                                 `produtos` é um mapa cod_produto => id do produto no Portal.
      * @return array<string, mixed>
      */
-    public function montar(Orcamento $orcamento, array $ids): array
+    public function montar(Orcamento $orcamento): array
     {
         $itens = $orcamento->itens;
 
@@ -35,8 +39,36 @@ class PortalPedidoPayload
             throw new PortalPedidoInvalidoException('O orçamento não tem itens.');
         }
 
+        $cliente = $orcamento->cliente;
+
+        /*
+         * ⚠️ Orçamento de LEAD não tem cliente do TOTVS vinculado, e sem `clientCode`+
+         * `clientStore` o Portal não resolve o cliente. Barrar aqui com mensagem clara é
+         * melhor que um 400 cru — o caminho é concluir o cadastro do cliente primeiro.
+         */
+        if ($cliente === null) {
+            throw new PortalPedidoInvalidoException(
+                'Este orçamento não está vinculado a um cliente do TOTVS. '.
+                'Orçamento de lead precisa que o cadastro do cliente seja concluído antes de virar pedido.'
+            );
+        }
+
+        $sellerCode = trim((string) $orcamento->user?->vendedorPerfil?->cod_vendedor);
+
+        /*
+         * ⚠️ O pedido fica REGISTRADO no vendedor (`sellerCode`), e o Portal resolve o
+         * representante do cliente a partir dele. Usuário sem código de vendedor (ex.:
+         * assistente) não pode responder por uma venda — recusa com mensagem, não manda vazio.
+         */
+        if ($sellerCode === '') {
+            throw new PortalPedidoInvalidoException(
+                'O usuário que criou este orçamento não tem código de vendedor, '.
+                'então o pedido não pode ser registrado no Portal em nome dele.'
+            );
+        }
+
         $products = $itens
-            ->map(fn (OrcamentoItem $item) => $this->montarItem($item, $orcamento, $ids['produtos']))
+            ->map(fn (OrcamentoItem $item) => $this->montarItem($item, $orcamento))
             ->values()
             ->all();
 
@@ -44,17 +76,17 @@ class PortalPedidoPayload
         $this->garantirTiposDeNotaCompativeis($products);
 
         $corpo = [
-            'clientId' => $ids['clientId'],
-            'clientRepresentativeId' => $ids['clientRepresentativeId'],
-            'deliveryClientId' => $ids['deliveryClientId'],
-            'createdBy' => $ids['createdBy'],
+            'sellerCode' => $sellerCode,
+            'clientCode' => trim((string) $cliente->cod_cliente),
+            'clientStore' => trim((string) $cliente->loja),
             'products' => $products,
         ];
 
         /*
          * ⚠️ A API valida o corpo de forma ESTRITA: qualquer campo fora dos documentados
          * responde 400 em vez de ser ignorado. Por isso campo opcional vazio é OMITIDO,
-         * nunca mandado como null.
+         * nunca mandado como null. O CRM não modela endereço de entrega alternativo, então
+         * `deliveryClient*` fica de fora — o Portal entrega no próprio cliente.
          */
         if (in_array($orcamento->tipo_frete, ['CIF', 'FOB'], true)) {
             $corpo['shippingType'] = $orcamento->tipo_frete;
@@ -70,17 +102,16 @@ class PortalPedidoPayload
     }
 
     /**
-     * @param  array<string,int>  $produtosPortal
      * @return array<string, mixed>
      */
-    private function montarItem(OrcamentoItem $item, Orcamento $orcamento, array $produtosPortal): array
+    private function montarItem(OrcamentoItem $item, Orcamento $orcamento): array
     {
         $codigo = trim((string) $item->cod_produto);
 
         /*
          * ⚠️ Item de ETIQUETA nasce sem código de propósito — é precificado pela
          * calculadora, não sai do catálogo. Não é dado faltando: é produto que não
-         * existe no Portal, e não há `productId` que se possa inventar.
+         * existe no Portal, e não há `productCode` que se possa inventar.
          */
         if ($codigo === '') {
             throw new PortalPedidoInvalidoException(
@@ -89,17 +120,11 @@ class PortalPedidoPayload
             );
         }
 
-        if (! isset($produtosPortal[$codigo])) {
-            throw new PortalPedidoInvalidoException(
-                "O produto {$codigo} (\"{$item->descricao}\") não foi encontrado no Portal."
-            );
-        }
-
         return [
-            'productId' => $produtosPortal[$codigo],
+            'productCode' => $codigo,
             'quantity' => $this->quantidadeInteira($item),
             'unitPrice' => $this->precoEmCentavos($item, $orcamento),
-            'invoiceTypeId' => (int) config('portal.tipo_nota_padrao'),
+            'invoiceType' => (string) config('portal.tipo_nota_padrao'),
             'orderLine' => (string) $item->id,
         ];
     }
@@ -128,10 +153,9 @@ class PortalPedidoPayload
      * centavos e meio, e o `201` volta normal. É a falha mais silenciosa desta
      * integração, apontada pela própria documentação deles.
      *
-     * ⚠️ O IPI é decidido por `config('portal.preco_com_ipi')`, e o default manda SEM
-     * IPI. Não é chute: `autopel_sic.products` guarda `ipi`/`ipi_rate`/`ncm`, então o
-     * Portal calcula o imposto sozinho. Continua sendo hipótese até a confirmação do
-     * Marcelo — por isso é um interruptor, e não uma regra espalhada.
+     * ⚠️ O IPI é decidido por `config('portal.preco_com_ipi')`, hoje `true` (manda o
+     * valor COM IPI embutido, como o Portal pediu e como o pedido 1129 confirmou). O
+     * caminho SEM IPI continua aqui como interruptor caso eles passem a somar por cima.
      */
     private function precoEmCentavos(OrcamentoItem $item, Orcamento $orcamento): int
     {
@@ -158,7 +182,7 @@ class PortalPedidoPayload
     }
 
     /**
-     * ⚠️ O mesmo `productId` não pode aparecer duas vezes no pedido (409 do Portal).
+     * ⚠️ O mesmo produto não pode aparecer duas vezes no pedido (409 do Portal).
      * Barrar aqui com uma mensagem útil é melhor que devolver o erro cru deles, porque
      * o vendedor precisa saber que a saída é somar as quantidades numa linha só.
      *
@@ -166,8 +190,8 @@ class PortalPedidoPayload
      */
     private function garantirProdutoUnico(array $products): void
     {
-        $ids = array_column($products, 'productId');
-        $repetidos = array_diff_assoc($ids, array_unique($ids));
+        $codigos = array_column($products, 'productCode');
+        $repetidos = array_diff_assoc($codigos, array_unique($codigos));
 
         if ($repetidos !== []) {
             throw new PortalPedidoInvalidoException(
@@ -187,10 +211,10 @@ class PortalPedidoPayload
      */
     private function garantirTiposDeNotaCompativeis(array $products): void
     {
-        $tipos = array_unique(array_column($products, 'invoiceTypeId'));
+        $tipos = array_unique(array_column($products, 'invoiceType'));
 
-        $consumo = (int) config('portal.tipos_nota.venda_consumo');
-        $revenda = (int) config('portal.tipos_nota.venda_revenda');
+        $consumo = (string) config('portal.tipos_nota.venda_consumo');
+        $revenda = (string) config('portal.tipos_nota.venda_revenda');
 
         if (in_array($consumo, $tipos, true) && in_array($revenda, $tipos, true)) {
             throw new PortalPedidoInvalidoException(

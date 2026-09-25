@@ -9,9 +9,11 @@ use Illuminate\Support\Facades\Http;
  * Fala com o `POST /v1/api/orders` do Portal Autopel. Único lugar do projeto que
  * conhece a URL, o token e o formato de erro deles.
  *
- * Sondado contra o homolog em 10/09/2026: a ordem de validação é
- * `formato do corpo → createdBy → clientId → clientRepresentativeId → produto`,
- * e erro NUNCA grava nada do lado deles ("não existe pedido pela metade para limpar").
+ * Sondado contra o homolog em 10/09/2026: erro NUNCA grava nada do lado deles ("não
+ * existe pedido pela metade para limpar"). Desde 2026-09-25 o corpo vai com chave de
+ * negócio (sellerCode/clientCode/clientStore/productCode) e o Portal resolve os ids —
+ * a ordem de validação passou a ser deles, então uma recusa de resolução vem como 4xx
+ * com `message`, tratada em mensagemDeErro().
  */
 class PortalPedidoClient
 {

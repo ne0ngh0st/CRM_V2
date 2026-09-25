@@ -2,8 +2,11 @@
 
 namespace Tests\Unit\Portal;
 
+use App\Models\Cliente;
 use App\Models\Orcamento;
 use App\Models\OrcamentoItem;
+use App\Models\User;
+use App\Models\VendedorPerfil;
 use App\Services\Orcamento\OrcamentoCalculoService;
 use App\Services\Portal\PortalPedidoInvalidoException;
 use App\Services\Portal\PortalPedidoPayload;
@@ -17,6 +20,10 @@ use Tests\TestCase;
  * centavos e IPI é onde mora o erro caro desta integração, e teste que precisa de
  * fixture no banco é teste que ninguém roda enquanto desenvolve.
  *
+ * Desde 2026-09-25 o payload é 100% CHAVE DE NEGÓCIO do TOTVS (`sellerCode`,
+ * `clientCode`+`clientStore`, `productCode`) — o Portal resolve os ids dele. Não há
+ * mais de-para nem `$ids`.
+ *
  * Os valores dos fixtures são escolhidos para DISTINGUIR o certo do errado, não por
  * serem bonitos — R$ 10,325 com IPI vira exatamente 1000 centavos sem imposto e 1033
  * com, então trocar o lado do interruptor não passa despercebido.
@@ -28,8 +35,10 @@ class PortalPedidoPayloadTest extends TestCase
         return new PortalPedidoPayload(new OrcamentoCalculoService());
     }
 
-    /** @param array<int, array<string, mixed>> $itens */
-    private function orcamento(array $itens, array $atributos = []): Orcamento
+    /**
+     * @param  array<int, array<string, mixed>>  $itens
+     */
+    private function orcamento(array $itens, array $atributos = [], array $opcoes = []): Orcamento
     {
         $orcamento = (new Orcamento())->forceFill(array_merge([
             'id' => 77,
@@ -52,24 +61,31 @@ class PortalPedidoPayloadTest extends TestCase
             array_keys($itens)
         )));
 
-        return $orcamento;
-    }
+        // Cliente do TOTVS vinculado (o Portal casa por code+store), salvo quando o teste
+        // pede o caso "sem cliente".
+        if (! ($opcoes['semCliente'] ?? false)) {
+            $orcamento->setRelation('cliente', (new Cliente())->forceFill([
+                'cod_cliente' => $opcoes['cod_cliente'] ?? '001122',
+                'loja' => $opcoes['loja'] ?? '01',
+            ]));
+        } else {
+            $orcamento->setRelation('cliente', null);
+        }
 
-    /** @return array{clientId:int, clientRepresentativeId:int, deliveryClientId:int, createdBy:int, produtos: array<string,int>} */
-    private function ids(array $produtos = ['P1' => 811]): array
-    {
-        return [
-            'clientId' => 12,
-            'clientRepresentativeId' => 34,
-            'deliveryClientId' => 12,
-            'createdBy' => 7,
-            'produtos' => $produtos,
-        ];
+        $perfil = ($opcoes['semVendedor'] ?? false)
+            ? null
+            : (new VendedorPerfil())->forceFill(['cod_vendedor' => $opcoes['cod_vendedor'] ?? '000123']);
+
+        $user = (new User())->forceFill(['id' => 5, 'name' => 'Vend']);
+        $user->setRelation('vendedorPerfil', $perfil);
+        $orcamento->setRelation('user', $user);
+
+        return $orcamento;
     }
 
     public function test_preco_vai_em_centavos_e_nao_em_reais(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([[]]), $this->ids());
+        $corpo = $this->payload()->montar($this->orcamento([[]]));
 
         // R$ 12,50 → 1250. Se algum dia sair 12 ou 12.5, o pedido nasce com doze
         // centavos e meio e o Portal aceita sem reclamar.
@@ -87,8 +103,7 @@ class PortalPedidoPayloadTest extends TestCase
         config()->set('portal.preco_com_ipi', false);
 
         $corpo = $this->payload()->montar(
-            $this->orcamento([['valor_unitario' => 10.325, 'calcula_ipi' => true]]),
-            $this->ids()
+            $this->orcamento([['valor_unitario' => 10.325, 'calcula_ipi' => true]])
         );
 
         $this->assertSame(1000, $corpo['products'][0]['unitPrice']);
@@ -100,8 +115,7 @@ class PortalPedidoPayloadTest extends TestCase
         config()->set('portal.preco_com_ipi', true);
 
         $corpo = $this->payload()->montar(
-            $this->orcamento([['valor_unitario' => 10.325, 'calcula_ipi' => true]]),
-            $this->ids()
+            $this->orcamento([['valor_unitario' => 10.325, 'calcula_ipi' => true]])
         );
 
         $this->assertSame(1033, $corpo['products'][0]['unitPrice']);
@@ -117,8 +131,7 @@ class PortalPedidoPayloadTest extends TestCase
                 'cod_produto' => 'E9',
                 'valor_unitario' => 10.325,
                 'calcula_ipi' => true,
-            ]]),
-            $this->ids(['E9' => 500])
+            ]])
         );
 
         $this->assertSame(1033, $corpo['products'][0]['unitPrice']);
@@ -132,11 +145,57 @@ class PortalPedidoPayloadTest extends TestCase
             $this->orcamento(
                 [['valor_unitario' => 10.325, 'calcula_ipi' => true]],
                 ['tipo_produto_servico' => 'servico']
-            ),
-            $this->ids()
+            )
         );
 
         $this->assertSame(1033, $corpo['products'][0]['unitPrice']);
+    }
+
+    public function test_produto_vai_pelo_codigo_do_totvs_nao_por_id(): void
+    {
+        $corpo = $this->payload()->montar($this->orcamento([['cod_produto' => 'PA0001']]));
+
+        $this->assertSame('PA0001', $corpo['products'][0]['productCode']);
+        $this->assertArrayNotHasKey('productId', $corpo['products'][0]);
+    }
+
+    public function test_tipo_de_nota_vai_como_string_do_enum(): void
+    {
+        $corpo = $this->payload()->montar($this->orcamento([[]]));
+
+        // Default do config: SALE (Venda Consumo). Nunca o inteiro 2 antigo.
+        $this->assertSame('SALE', $corpo['products'][0]['invoiceType']);
+    }
+
+    public function test_chaves_de_negocio_vao_como_estao_no_orcamento(): void
+    {
+        $corpo = $this->payload()->montar($this->orcamento([[]], [], [
+            'cod_cliente' => '041626',
+            'loja' => '0002',
+            'cod_vendedor' => '010150',
+        ]));
+
+        $this->assertSame('010150', $corpo['sellerCode']);
+        $this->assertSame('041626', $corpo['clientCode']);
+        $this->assertSame('0002', $corpo['clientStore']);
+        // deliveryClient* fica de fora: o CRM não modela endereço de entrega alternativo.
+        $this->assertArrayNotHasKey('deliveryClientCode', $corpo);
+    }
+
+    public function test_orcamento_sem_cliente_vinculado_e_recusado(): void
+    {
+        $this->expectException(PortalPedidoInvalidoException::class);
+        $this->expectExceptionMessageMatches('/cliente do TOTVS/');
+
+        $this->payload()->montar($this->orcamento([[]], [], ['semCliente' => true]));
+    }
+
+    public function test_usuario_sem_codigo_de_vendedor_e_recusado(): void
+    {
+        $this->expectException(PortalPedidoInvalidoException::class);
+        $this->expectExceptionMessageMatches('/código de vendedor/');
+
+        $this->payload()->montar($this->orcamento([[]], [], ['semVendedor' => true]));
     }
 
     public function test_quantidade_fracionada_e_recusada_antes_de_chamar_a_api(): void
@@ -144,14 +203,14 @@ class PortalPedidoPayloadTest extends TestCase
         $this->expectException(PortalPedidoInvalidoException::class);
         $this->expectExceptionMessageMatches('/quantidade inteira/');
 
-        $this->payload()->montar($this->orcamento([['quantidade' => 2.5]]), $this->ids());
+        $this->payload()->montar($this->orcamento([['quantidade' => 2.5]]));
     }
 
     public function test_quantidade_menor_que_um_e_recusada(): void
     {
         $this->expectException(PortalPedidoInvalidoException::class);
 
-        $this->payload()->montar($this->orcamento([['quantidade' => 0.5]]), $this->ids());
+        $this->payload()->montar($this->orcamento([['quantidade' => 0.5]]));
     }
 
     public function test_item_sem_codigo_de_produto_explica_o_caso_da_etiqueta(): void
@@ -160,17 +219,8 @@ class PortalPedidoPayloadTest extends TestCase
         $this->expectExceptionMessageMatches('/etiqueta/i');
 
         $this->payload()->montar(
-            $this->orcamento([['cod_produto' => null, 'tipo_item' => 'etiqueta']]),
-            $this->ids()
+            $this->orcamento([['cod_produto' => null, 'tipo_item' => 'etiqueta']])
         );
-    }
-
-    public function test_produto_fora_do_de_para_e_recusado(): void
-    {
-        $this->expectException(PortalPedidoInvalidoException::class);
-        $this->expectExceptionMessageMatches('/não foi encontrado no Portal/');
-
-        $this->payload()->montar($this->orcamento([['cod_produto' => 'DESCONHECIDO']]), $this->ids());
     }
 
     public function test_produto_repetido_e_recusado_com_saida_pratica(): void
@@ -178,7 +228,7 @@ class PortalPedidoPayloadTest extends TestCase
         $this->expectException(PortalPedidoInvalidoException::class);
         $this->expectExceptionMessageMatches('/some as quantidades/');
 
-        $this->payload()->montar($this->orcamento([[], []]), $this->ids());
+        $this->payload()->montar($this->orcamento([[], []]));
     }
 
     public function test_frete_ausente_e_omitido_e_nao_vai_como_nulo(): void
@@ -186,8 +236,7 @@ class PortalPedidoPayloadTest extends TestCase
         // O corpo é validado de forma estrita do outro lado: campo desconhecido OU
         // nulo indevido responde 400.
         $corpo = $this->payload()->montar(
-            $this->orcamento([[]], ['tipo_frete' => null]),
-            $this->ids()
+            $this->orcamento([[]], ['tipo_frete' => null])
         );
 
         $this->assertArrayNotHasKey('shippingType', $corpo);
@@ -196,27 +245,23 @@ class PortalPedidoPayloadTest extends TestCase
 
     public function test_frete_preenchido_vai_no_payload(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([[]], ['tipo_frete' => 'FOB']), $this->ids());
+        $corpo = $this->payload()->montar($this->orcamento([[]], ['tipo_frete' => 'FOB']));
 
         $this->assertSame('FOB', $corpo['shippingType']);
     }
 
     public function test_referencia_liga_o_pedido_ao_orcamento(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([[]]), $this->ids());
+        $corpo = $this->payload()->montar($this->orcamento([[]]));
 
         $this->assertSame('ORC-77', $corpo['orderReference']);
         $this->assertSame('900', $corpo['products'][0]['orderLine']);
     }
 
-    public function test_ids_resolvidos_entram_como_vieram(): void
+    public function test_quantidade_inteira_entra_como_int(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([[]]), $this->ids());
+        $corpo = $this->payload()->montar($this->orcamento([['quantidade' => 10]]));
 
-        $this->assertSame(12, $corpo['clientId']);
-        $this->assertSame(34, $corpo['clientRepresentativeId']);
-        $this->assertSame(12, $corpo['deliveryClientId']);
-        $this->assertSame(7, $corpo['createdBy']);
         $this->assertSame(10, $corpo['products'][0]['quantity']);
     }
 }

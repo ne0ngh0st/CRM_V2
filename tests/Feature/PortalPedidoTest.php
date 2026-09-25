@@ -7,10 +7,6 @@ use App\Models\Cliente;
 use App\Models\Notificacao;
 use App\Models\Orcamento;
 use App\Models\OrcamentoItem;
-use App\Models\PortalCliente;
-use App\Models\PortalProduto;
-use App\Models\PortalRepresentante;
-use App\Models\PortalUsuario;
 use App\Models\User;
 use App\Models\VendedorPerfil;
 use App\Services\Portal\GeradorDePedidoNoPortal;
@@ -23,10 +19,11 @@ use Tests\TestCase;
 /**
  * "Transformar em pedido": do clique até o pedido criado no Portal.
  *
- * O caso mais importante deste arquivo é `test_cnpj_divergente_bloqueia_o_envio`.
- * Ele existe porque foi MEDIDO que há par `code`+`store` apontando para empresas
- * diferentes nos dois sistemas — e um `clientId` errado cria pedido para a empresa
- * errada devolvendo `201` normalmente.
+ * Desde 2026-09-25 o payload é 100% CHAVE DE NEGÓCIO do TOTVS — `sellerCode`,
+ * `clientCode`+`clientStore`, `productCode` — e o Portal resolve os ids internos dele.
+ * Não há mais de-para local (`portal_*`), nem guarda de CNPJ nossa: a resolução é deles
+ * (decisão do Tony, confiar). O caso mais importante aqui é `test_caminho_feliz_*`, que
+ * trava o FORMATO do corpo — o resto do fluxo (fila, idempotência, notificação) já era.
  */
 class PortalPedidoTest extends TestCase
 {
@@ -38,7 +35,6 @@ class PortalPedidoTest extends TestCase
         $this->seed(RoleSeeder::class);
         config()->set('portal.habilitado', true);
         config()->set('portal.token', 'token-de-teste');
-        config()->set('portal.preco_com_ipi', false);
     }
 
     private function vendedor(): User
@@ -62,7 +58,7 @@ class PortalPedidoTest extends TestCase
         return $admin;
     }
 
-    /** Monta o cenário inteiro já ligado: cliente, de-para, orçamento aprovado e item. */
+    /** Cenário ligado: cliente do TOTVS, orçamento aprovado e um item de catálogo. */
     private function cenario(array $sobrescreve = []): array
     {
         $vendedor = $this->vendedor();
@@ -75,35 +71,9 @@ class PortalPedidoTest extends TestCase
             'cod_vendedor' => '010150',
         ]);
 
-        PortalCliente::create([
-            'portal_id' => 501,
-            'code' => '041626',
-            'store' => '0002',
-            // Só dígitos, como o Portal guarda — a nossa vem mascarada.
-            'document' => $sobrescreve['documentPortal'] ?? '08019075000207',
-            'razao_social' => 'CENTRAL SUPERMERCADOS',
-        ]);
-
-        $portalUsuario = PortalUsuario::create([
-            'portal_id' => 900,
-            'email' => 'vend@autopel.com',
-            'protheus_seller_code' => '010150',
-            'ativo' => true,
-        ]);
-
-        if ($sobrescreve['comRepresentante'] ?? true) {
-            PortalRepresentante::create([
-                'portal_id' => 700,
-                'portal_cliente_id' => 501,
-                'portal_usuario_id' => $portalUsuario->portal_id,
-            ]);
-        }
-
-        PortalProduto::create(['portal_id' => 811, 'code' => 'V23730', 'descricao' => 'BOBINA']);
-
         $orcamento = Orcamento::create([
             'user_id' => $vendedor->id,
-            'cliente_id' => $sobrescreve['semCliente'] ?? false ? null : $cliente->id,
+            'cliente_id' => ($sobrescreve['semCliente'] ?? false) ? null : $cliente->id,
             'cliente_nome' => 'CENTRAL SUPERMERCADOS',
             'cliente_cnpj' => '08019075000207',
             'tipo_produto_servico' => 'servico',
@@ -242,23 +212,6 @@ class PortalPedidoTest extends TestCase
                 ->where('orcamentos.data.0.podeEnviarAoPortal', true));
     }
 
-    /**
-     * 🚨 O teste que justifica a guarda existir. Sem ele, o pedido nasceria para a
-     * empresa errada e o `201` voltaria bonito.
-     */
-    public function test_cnpj_divergente_bloqueia_o_envio(): void
-    {
-        Bus::fake();
-        [$vendedor, $orcamento] = $this->cenario(['documentPortal' => '99999999000199']);
-
-        $this->actingAs($this->admin())
-            ->post(route('orcamentos.portal', $orcamento->id))
-            ->assertRedirect();
-
-        Bus::assertNotDispatched(EnviarPedidoAoPortalJob::class);
-        $this->assertNull($orcamento->fresh()->portal_idempotency_key);
-    }
-
     public function test_orcamento_sem_cliente_vinculado_e_recusado(): void
     {
         Bus::fake();
@@ -267,18 +220,13 @@ class PortalPedidoTest extends TestCase
         $this->actingAs($this->admin())->post(route('orcamentos.portal', $orcamento->id));
 
         Bus::assertNotDispatched(EnviarPedidoAoPortalJob::class);
+        $this->assertNull($orcamento->fresh()->portal_idempotency_key);
     }
 
-    public function test_representante_nao_vinculado_e_recusado_antes_de_chamar_a_api(): void
-    {
-        Bus::fake();
-        [$vendedor, $orcamento] = $this->cenario(['comRepresentante' => false]);
-
-        $this->actingAs($this->admin())->post(route('orcamentos.portal', $orcamento->id));
-
-        Bus::assertNotDispatched(EnviarPedidoAoPortalJob::class);
-    }
-
+    /**
+     * 🚨 O teste do FORMATO do corpo. Chaves de negócio do TOTVS, e o Portal resolve o
+     * resto. Se algum campo voltar a ser um id interno, isto quebra.
+     */
     public function test_caminho_feliz_congela_o_payload_e_enfileira(): void
     {
         Bus::fake();
@@ -291,13 +239,17 @@ class PortalPedidoTest extends TestCase
         Bus::assertDispatched(EnviarPedidoAoPortalJob::class);
 
         $orcamento->refresh();
+        $corpo = $orcamento->portal_payload;
+
         $this->assertNotNull($orcamento->portal_idempotency_key);
+        $this->assertSame('010150', $corpo['sellerCode']);
+        $this->assertSame('041626', $corpo['clientCode']);
+        $this->assertSame('0002', $corpo['clientStore']);
         // Centavos, não reais: R$ 3,00 × 900.
-        $this->assertSame(300, $orcamento->portal_payload['products'][0]['unitPrice']);
-        $this->assertSame(900, $orcamento->portal_payload['products'][0]['quantity']);
-        $this->assertSame(501, $orcamento->portal_payload['clientId']);
-        $this->assertSame(700, $orcamento->portal_payload['clientRepresentativeId']);
-        $this->assertSame(900, $orcamento->portal_payload['createdBy']);
+        $this->assertSame(300, $corpo['products'][0]['unitPrice']);
+        $this->assertSame(900, $corpo['products'][0]['quantity']);
+        $this->assertSame('V23730', $corpo['products'][0]['productCode']);
+        $this->assertSame('SALE', $corpo['products'][0]['invoiceType']);
     }
 
     /**
@@ -382,7 +334,7 @@ class PortalPedidoTest extends TestCase
     public function test_erro_do_portal_notifica_toda_vez_e_nao_e_deduplicado(): void
     {
         Http::fake([
-            '*/v1/api/orders' => Http::response(['message' => 'Representante não encontrado'], 404),
+            '*/v1/api/orders' => Http::response(['message' => 'Cliente inexistente'], 404),
         ]);
 
         [$vendedor, $orcamento] = $this->cenario();
