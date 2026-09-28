@@ -2645,15 +2645,28 @@ editado na tela Equipe (select no editar usuário, só admin/diretor). Fora do `
 - **Equipe** = `EquipeScopeResolver::codigosEquipeDe()` (quem tem `cod_super` = o gestor,
   mais ele) — a regra de /metas, NÃO a do Painel (lá o supervisor em modo Equipe vê a
   equipe pura). Ninguém abaixo → não manda e-mail vazio, só loga aviso.
-- **Consolidado** = as equipes de TODOS os marcados como `equipe`, uma seção cada
-  (maior venda do dia primeiro). Gestor novo marcado entra sozinho. ⚠️ O total é recalculado sobre a **união**
-  dos códigos, nunca a soma das seções: o `cod_super` de supervisor aponta para diretor,
-  então o código de um supervisor pode estar em duas equipes.
-- **Nenhum número novo** (Regra nº 8): venda/faturamento do dia e do mês vêm de
-  `MetaRankingResolver::realizadoPorCodigo()`, meta de `metasPorCodigo()`, pedidos de
-  `pedidosNoPeriodo()` (mesmo recorte `contaComoVenda` do Painel), contatos de
-  `App\Services\Contatos\ContatosPorUsuario`. A lista de pessoas é a do ranking do
-  /metas. Teste compara o resumão com o /metas.
+- 🚨 **OS NÚMEROS BATEM COM O POWER BI, centavo por centavo** (Tony, 2026-09-28). Conferido
+  em produção contra as views `vw_bi_fato_*` — dia e mês, consolidado, Américo e Beto.
+  Duas regras sustentam isso; não "simplificar" nenhuma:
+  - **A equipe soma TODOS os códigos** de `codigosEquipeDe()`, qualquer perfil, uma linha
+    por código. A 1ª versão partia do ranking do /metas (só vendedor/representante/
+    supervisor ativos) e a equipe do Beto (diretor) saía sem os R$ 23,7 mi do código dele.
+    Código inativo e parado some da tabela, mas continua no total.
+  - **O consolidado é a EMPRESA INTEIRA** (`MetaRankingResolver::realizadoTotal()` /
+    `pedidosTotal()` / `metaTotal()`, sem filtro de código — como o BI), não a soma das
+    equipes marcadas: essa versão mostrava R$ 11 mi de faturamento contra R$ 55 mi no BI.
+    Quem vende fora das equipes (Natany, Paulo de Tarso, almoxarifado virtual…) vai na seção
+    **"Fora das equipes"**, e a diferença que sobra (nota sem vendedor) fecha na linha
+    **"Sem vendedor"** — por construção, o total é sempre o do BI.
+- **Consolidado** = uma seção por gestor marcado como `equipe` (maior venda do dia
+  primeiro) + "Fora das equipes". Gestor novo marcado entra sozinho. ⚠️ As seções se
+  sobrepõem (o `cod_super` de supervisor aponta para diretor, então a Sandra está na equipe
+  dela e na do Beto) — o total é a empresa, nunca a soma das seções.
+- **Nenhum número novo** (Regra nº 8): venda/faturamento/meta pelo `MetaRankingResolver`
+  (`realizadoPorCodigo()`, `metasPorCodigo()`, `pedidosNoPeriodo()`, e os `*Total()` da
+  empresa), contatos pelo `ContatosPorUsuario`.
+- ⚠️ A Tainara aparece em "Fora das equipes": o perfil dela está com `00006` (5 dígitos) e
+  os pedidos vêm como `000006` — é a pendência já registrada, não defeito do e-mail.
 
 **Peças:** `ResumoEquipeBuilder` · `ResumoEquipeMail` (NÃO ShouldQueue — quem envia já é
 job) · `EnviarResumosEquipeJob` (agendado, um job por destinatário) ·
@@ -2670,7 +2683,7 @@ sem enviar; `--para=EMAIL` envia só para ele (funciona com o agendamento deslig
 `php artisan resumo-equipe:enviar --usuario=<email do Leandro> --para=<email do Leandro>`
 (com ele marcado como `consolidado`), ou `--consolidado --para=...`.
 
-Testes: `tests/Feature/ResumoEquipeTest.php` (18). No formato diário, duas mutações
+Testes: `tests/Feature/ResumoEquipeTest.php` (20, incluindo "consolidado bate com a empresa" e "código do diretor entra na equipe"). No formato diário, duas mutações
 aplicadas e mordidas: segunda deixar de cair na sexta, e a venda do dia virar a do mês.
 
 ## Pendências
