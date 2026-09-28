@@ -137,6 +137,11 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/cadastros', [CadastroController::class, 'index'])->name('cadastros.index');
     Route::get('/cadastros/titularidade', [CadastroController::class, 'titularidade'])->name('cadastros.titularidade');
+    // CNPJ só com dígitos no caminho (não na query): o modal acrescenta `?atualizar=1` na URL.
+    Route::get('/cadastros/cartao-cnpj/{cnpj}', [CadastroController::class, 'cartaoCnpj'])
+        ->where('cnpj', '[0-9]{14}')
+        ->middleware('throttle:30,1')
+        ->name('cadastros.cartaoCnpj');
     Route::post('/cadastros/exportar', [CadastroController::class, 'exportar'])->name('cadastros.exportar');
     Route::post('/cadastros/bobinas', [CadastroController::class, 'storeBobina'])->name('cadastros.bobinas.store');
     Route::get('/cadastros/bobinas/{bobina}/pdf', [CadastroController::class, 'pdfBobina'])->name('cadastros.bobinas.pdf');

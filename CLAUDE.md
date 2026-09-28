@@ -1239,6 +1239,12 @@ responsável e supervisor. Nada mais.
   com dígitos.
 - Inclui as solicitações pendentes de `clientes_para_cadastro` — é o que impede a segunda
   solicitação duplicada.
+- **Cartão CNPJ (2026-09-28)**: coluna "Receita" em cada resultado e, com CNPJ de 14
+  dígitos digitado, o botão "Cartão CNPJ na Receita" — que vale até para CNPJ que não
+  existe no CRM (o cliente novo). Rota `cadastros.cartaoCnpj/{cnpj}`, mesmo
+  `CartaoCnpjModal`. ⚠️ **Nunca compara com o TOTVS** (cadastro vazio): a busca ignora o
+  escopo, e as divergências exporiam CEP/município de cliente de outra carteira. Travado
+  por teste em `CartaoCnpjTest`.
 
 #### Performance — tudo medido com volume real (Regras nº 6 e nº 9)
 

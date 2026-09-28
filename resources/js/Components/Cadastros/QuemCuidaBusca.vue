@@ -21,8 +21,9 @@
  * branco de card, os tokens de tabela do projeto voltam a funcionar como em todas as
  * outras telas.
  */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import DarkCard from '@/Components/DarkCard.vue';
+import CartaoCnpjModal from '@/Components/Receita/CartaoCnpjModal.vue';
 
 const termo = ref('');
 const resultados = ref(null);
@@ -66,6 +67,30 @@ async function buscar() {
     }
 }
 
+/*
+ * Cartão CNPJ da Receita. Vale para QUALQUER CNPJ digitado — inclusive o que não está
+ * em lugar nenhum do CRM, que é justamente o cliente novo que vai virar solicitação.
+ * Sem comparação com o TOTVS aqui (ver CadastroController::cartaoCnpj).
+ */
+const digitos = (v) => String(v ?? '').replace(/\D/g, '');
+
+const cnpjDigitado = computed(() => {
+    const d = digitos(termo.value);
+    return d.length === 14 ? d : null;
+});
+
+const cartao = ref(null); // { razaoSocial, cnpj, url }
+
+function abrirCartao(cnpj, razaoSocial = '') {
+    const d = digitos(cnpj);
+    if (d.length !== 14) return;
+    cartao.value = {
+        razaoSocial,
+        cnpj: d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5'),
+        url: route('cadastros.cartaoCnpj', d),
+    };
+}
+
 function limpar() {
     termo.value = '';
     resultados.value = null;
@@ -76,7 +101,7 @@ function limpar() {
 <template>
     <DarkCard
         title="Quem cuida do cliente?"
-        subtitle="Confira de quem é o cliente antes de solicitar — vale para a base inteira, não só para a sua carteira"
+        subtitle="Confira de quem é o cliente antes de solicitar — na base inteira e, pelo CNPJ, no cartão da Receita"
     >
         <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
@@ -114,6 +139,22 @@ function limpar() {
                 {{ buscando ? 'Buscando…' : 'Verificar' }}
             </button>
 
+            <!-- Só aparece com CNPJ completo digitado: nome não tem cartão na Receita. -->
+            <button
+                v-if="cnpjDigitado"
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded border border-navy px-3 py-1.5 text-xs font-semibold text-navy transition hover:bg-navy/5"
+                title="Consultar o cartão CNPJ na Receita Federal"
+                @click="abrirCartao(cnpjDigitado)"
+            >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-3.5 w-3.5">
+                    <rect x="3" y="5" width="18" height="14" rx="1.5" />
+                    <circle cx="8.5" cy="11" r="2" />
+                    <path d="M5.5 16c.6-1.5 1.7-2.2 3-2.2s2.4.7 3 2.2M14 10h4.5M14 13.5h3" stroke-linecap="round" />
+                </svg>
+                Cartão CNPJ na Receita
+            </button>
+
             <button
                 v-if="resultados !== null || termo"
                 type="button"
@@ -129,7 +170,9 @@ function limpar() {
         <div v-if="resultados !== null && !erro" class="mt-4 border-t border-gray-100 pt-4">
             <p v-if="!resultados.length" class="text-xs text-gray-500">
                 Nenhum cliente nem solicitação pendente com esse nome ou documento. Pode seguir com
-                a solicitação.
+                a solicitação<template v-if="cnpjDigitado"> — antes, vale
+                    <button type="button" class="font-semibold text-navy hover:underline" @click="abrirCartao(cnpjDigitado)">conferir o cartão CNPJ na Receita</button>
+                    (situação cadastral e razão social certa)</template>.
             </p>
 
             <template v-else>
@@ -148,6 +191,7 @@ function limpar() {
                                 <th class="tbl-th">CNPJ / CPF</th>
                                 <th class="tbl-th">Quem cuida</th>
                                 <th class="tbl-th">Supervisor</th>
+                                <th class="tbl-th">Receita</th>
                             </tr>
                         </thead>
                         <tbody class="tbl-body">
@@ -175,11 +219,32 @@ function limpar() {
                                     <span v-else class="text-gray-400">sem responsável</span>
                                 </td>
                                 <td class="tbl-td">{{ r.supervisor || '—' }}</td>
+                                <td class="tbl-td">
+                                    <!-- CPF (11 dígitos) não tem cartão CNPJ: botão desabilitado, não sumido,
+                                         para a coluna não parecer quebrada. -->
+                                    <div class="tbl-acoes">
+                                        <button
+                                            type="button"
+                                            class="tbl-acao tbl-acao-navy"
+                                            :disabled="digitos(r.cnpj).length !== 14"
+                                            :title="digitos(r.cnpj).length === 14 ? 'Verificar cartão CNPJ na Receita' : 'Sem CNPJ (pode ser CPF)'"
+                                            @click="abrirCartao(r.cnpj, r.razaoSocial)"
+                                        >
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                <rect x="3" y="5" width="18" height="14" rx="1.5" />
+                                                <circle cx="8.5" cy="11" r="2" />
+                                                <path d="M5.5 16c.6-1.5 1.7-2.2 3-2.2s2.4.7 3 2.2M14 10h4.5M14 13.5h3" stroke-linecap="round" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
             </template>
         </div>
+
+        <CartaoCnpjModal :show="cartao !== null" :cliente="cartao" :url="cartao?.url ?? ''" @close="cartao = null" />
     </DarkCard>
 </template>

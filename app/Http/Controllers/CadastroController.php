@@ -11,6 +11,7 @@ use App\Models\SolicitacaoEtiqueta;
 use App\Models\User;
 use App\Services\Cadastros\BuscaTitularidade;
 use App\Services\Cadastros\SolicitacaoTituloResolver;
+use App\Services\Receita\CartaoCnpjService;
 use App\Services\Solicitacoes\BobinaPdfPresenter;
 use App\Services\Solicitacoes\EtiquetaPdfPresenter;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -49,6 +50,24 @@ class CadastroController extends Controller
             'minimo' => BuscaTitularidade::MINIMO_CARACTERES,
             'resultados' => $busca->buscar((string) $request->string('termo')),
         ]);
+    }
+
+    /**
+     * Cartão CNPJ de QUALQUER CNPJ, a partir do "Quem cuida do cliente?".
+     *
+     * É o caso que a Carteira e os Leads não cobrem: o cliente que ainda não existe em
+     * lugar nenhum do CRM — exatamente quem vai virar solicitação de cadastro. Conferir
+     * na Receita antes de pedir evita mandar para o Cadastro um CNPJ baixado ou com a
+     * razão social digitada errada.
+     *
+     * ⚠️ Sem comparação com o TOTVS, de propósito (`cadastro` nulo): esta consulta ignora
+     * o escopo do vendedor, e as divergências exporiam CEP e município do cadastro de um
+     * cliente de outra carteira — conteúdo que a titularidade não mostra (ver o docblock
+     * de BuscaTitularidade). O cartão em si é dado público da Receita.
+     */
+    public function cartaoCnpj(Request $request, string $cnpj, CartaoCnpjService $servico): JsonResponse
+    {
+        return $servico->resposta($cnpj, $request->boolean('atualizar'), []);
     }
 
     private const ESTADOS = [

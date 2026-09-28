@@ -429,4 +429,47 @@ class CartaoCnpjTest extends TestCase
 
         Http::assertNothingSent();
     }
+
+    // ------------------------------------------------------ cadastros ("Quem cuida do cliente?")
+
+    public function test_cadastros_consulta_cnpj_que_nao_existe_no_crm(): void
+    {
+        Http::fake(['brasilapi.com.br/*' => Http::response($this->respostaBrasilApi())]);
+
+        // Vendedor comum, sem cliente nenhum com esse CNPJ: é o caso do cliente novo.
+        $this->actingAs($this->usuario('vendedor', '000999'))
+            ->getJson(route('cadastros.cartaoCnpj', self::CNPJ))
+            ->assertOk()
+            ->assertJsonPath('cartao.situacao', 'ATIVA')
+            ->assertJsonPath('cartao.razaoSocial', 'BANCO DO BRASIL SA');
+    }
+
+    /**
+     * ⚠️ Esta consulta ignora o escopo do vendedor. Comparar com o TOTVS exporia CEP e
+     * município do cadastro de um cliente de outra carteira — por isso nunca compara.
+     */
+    public function test_cadastros_nao_compara_com_o_totvs_de_cliente_alheio(): void
+    {
+        Http::fake(['brasilapi.com.br/*' => Http::response($this->respostaBrasilApi())]);
+        $this->cliente(['cod_vendedor' => '000010', 'cep' => '01310-100', 'razao_social' => 'OUTRA EMPRESA LTDA']);
+
+        $resposta = $this->actingAs($this->usuario('vendedor', '000999'))
+            ->getJson(route('cadastros.cartaoCnpj', self::CNPJ))
+            ->assertOk()
+            ->assertJsonPath('divergencias', [])
+            ->assertJsonPath('origemCadastro', null);
+
+        $this->assertStringNotContainsString('01310-100', $resposta->getContent());
+    }
+
+    public function test_cadastros_recusa_o_que_nao_e_cnpj(): void
+    {
+        Http::fake();
+        $user = $this->usuario();
+
+        $this->actingAs($user)->getJson('/cadastros/cartao-cnpj/12345678901')->assertNotFound();
+        $this->actingAs($user)->getJson('/cadastros/cartao-cnpj/abc')->assertNotFound();
+
+        Http::assertNothingSent();
+    }
 }
