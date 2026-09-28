@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Ligacao;
 use App\Models\Observacao;
 use App\Models\User;
+use App\Services\Contatos\ContatosPorUsuario;
 use App\Services\Dashboard\DashboardScopeResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class VisaoGestorController extends Controller
 
     public function __construct(
         private readonly DashboardScopeResolver $scopeResolver,
+        private readonly ContatosPorUsuario $contatos,
     ) {
     }
 
@@ -54,7 +56,7 @@ class VisaoGestorController extends Controller
         $inicioMes = now()->startOfMonth()->toDateTimeString();
         $fimMes = now()->endOfMonth()->toDateTimeString();
 
-        $ligMes = $this->agregarLigacoesMes($ids, $inicioMes, $fimMes);
+        $ligMes = $this->contatos->porUsuario($ids, $inicioMes, $fimMes);
         $obsMes = $this->agregarObservacoesMes($ids, $inicioMes, $fimMes);
         $ultimaLig = $this->ultimaLigacao($ids);
         $ultimaObs = $this->ultimaObservacao($ids);
@@ -161,37 +163,6 @@ class VisaoGestorController extends Controller
             ->with(['vendedorPerfil', 'roles']);
 
         return $query->get()->sortBy(fn (User $u) => mb_strtolower($u->display_name ?: $u->name))->values();
-    }
-
-    /**
-     * Contatos do mês por vendedor, já quebrados por canal.
-     *
-     * ⚠️ Continua sendo UMA query com um GROUP BY — a quebra por canal entra como
-     * coluna (`Ligacao::somarPorCanal`), não como uma consulta por canal. Quatro canais
-     * viraria quatro varreduras da mesma faixa de datas por nada.
-     *
-     * @param  list<int>  $ids
-     * @return array<int, array{total: int, porCanal: array<string, int>}>
-     */
-    private function agregarLigacoesMes(array $ids, string $inicio, string $fim): array
-    {
-        if ($ids === []) {
-            return [];
-        }
-
-        return Ligacao::query()
-            ->selectRaw('usuario_id, COUNT(*) as total')
-            ->tap(fn ($q) => Ligacao::somarPorCanal($q))
-            ->whereIn('usuario_id', $ids)
-            ->where('status', '!=', 'excluida')
-            ->whereBetween('data_ligacao', [$inicio, $fim])
-            ->groupBy('usuario_id')
-            ->get()
-            ->mapWithKeys(fn ($linha) => [(int) $linha->usuario_id => [
-                'total' => (int) $linha->total,
-                'porCanal' => Ligacao::lerPorCanal($linha),
-            ]])
-            ->all();
     }
 
     /**

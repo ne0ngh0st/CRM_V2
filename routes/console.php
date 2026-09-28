@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\AquecerCacheDashboardJob;
+use App\Jobs\EnviarResumosEquipeJob;
 use App\Jobs\ExpurgarCapturasWpJob;
 use App\Jobs\ExpurgarExportacoesJob;
 use App\Jobs\ExpurgarNotificacoesLidasJob;
@@ -35,6 +36,14 @@ Schedule::job(new NotificarPedidosAtencaoJob)->dailyAt('07:05')->onOneServer();
 Schedule::job(new ExpurgarNotificacoesLidasJob)->weeklyOn(1, '03:00')->onOneServer();
 // Planilhas vencidas: sem expurgo o disco do servidor so cresce (ver ExpurgarExportacoesJob).
 Schedule::job(new ExpurgarExportacoesJob)->dailyAt('03:30')->onOneServer();
+
+/*
+ * Resumo diário da equipe por e-mail para os gestores — dias úteis, 18:00 (fim do
+ * expediente: "o retrato do dia que acabou de fechar"). Quem recebe se marca na tela
+ * Equipe; o job em si não faz nada enquanto `resumo_equipe.habilitado` for false.
+ */
+// Fuso explícito: 18:00 é horário de expediente, não pode depender do APP_TIMEZONE.
+Schedule::job(new EnviarResumosEquipeJob)->weekdays()->at('18:00')->timezone('America/Sao_Paulo')->onOneServer();
 
 /*
  * Cache warming do Dashboard (ver docs/performance.md §1.3).

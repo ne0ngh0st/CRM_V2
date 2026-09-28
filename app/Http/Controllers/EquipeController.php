@@ -85,6 +85,7 @@ class EquipeController extends Controller
                 'tipoUsuario' => $u->tipo_usuario,
                 'codVendedor' => $codVendedor,
                 'codSuper' => $u->vendedorPerfil?->cod_super,
+                'resumoDiario' => $u->resumo_diario,
                 'ultimoLogin' => optional($u->last_login_at)->toIso8601String(),
                 'online' => $u->estaOnline(),
                 'fotoUrl' => $u->foto_url,
@@ -375,6 +376,7 @@ class EquipeController extends Controller
             'tipo_usuario' => ['nullable', Rule::in(['INTERNO', 'EXTERNO'])],
             'segmentos' => ['nullable', 'array'],
             'segmentos.*' => ['integer', Rule::exists('segmentos', 'id')],
+            'resumo_diario' => ['nullable', Rule::in(['nenhum', 'equipe', 'consolidado'])],
         ]);
 
         $usuario->update([
@@ -384,6 +386,15 @@ class EquipeController extends Controller
             'estado' => $data['estado'] ?? null,
             'tipo_usuario' => $data['tipo_usuario'] ?? $usuario->tipo_usuario,
         ]);
+
+        /*
+         * Fora do `$fillable` do User, de propósito: é decisão de admin/diretor (quem
+         * recebe e-mail automático), e deixar preenchível abriria caminho para outro
+         * formulário — o de perfil do próprio usuário, por exemplo — gravá-la.
+         */
+        if (array_key_exists('resumo_diario', $data) && $data['resumo_diario'] !== null) {
+            $usuario->forceFill(['resumo_diario' => $data['resumo_diario']])->save();
+        }
 
         $usuario->syncRoles([$data['perfil']]);
 
