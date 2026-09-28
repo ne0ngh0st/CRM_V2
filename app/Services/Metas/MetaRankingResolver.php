@@ -494,6 +494,36 @@ class MetaRankingResolver
     }
 
     /**
+     * Quantidade de pedidos emitidos por código no mês — mesma janela (D-1) e mesmo
+     * recorte (`contaComoVenda`, regra dos 180 dias) do realizado de venda.
+     *
+     * ⚠️ Mesmo recorte de `DashboardBlocos::pedidosEmitidos()`, que conta só o total: o
+     * resumo diário por e-mail precisa da quebra por vendedor, e com recortes diferentes
+     * o gestor leria "12 pedidos" no e-mail e outro número no Painel.
+     *
+     * @param  list<string>  $codigos
+     * @return array<string, int>
+     */
+    public function pedidosPorCodigo(array $codigos, int $ano, int $mes): array
+    {
+        [$inicio, $fim] = $this->intervaloDatas($ano, $mes, $mes);
+
+        if ($codigos === [] || $fim < $inicio) {
+            return [];
+        }
+
+        return Pedido::query()
+            ->contaComoVenda()
+            ->selectRaw('cod_vendedor, COUNT(*) as total')
+            ->whereBetween('data_pedido', [$inicio, $fim])
+            ->whereIn('cod_vendedor', $codigos)
+            ->groupBy('cod_vendedor')
+            ->pluck('total', 'cod_vendedor')
+            ->map(fn ($v) => (int) $v)
+            ->all();
+    }
+
+    /**
      * Carteira em aberto por código, no recorte que ainda fatura até `$fimDoMes`.
      *
      * O recorte mora em {@see Pedido::scopeContaParaFaturamentoDe()}; aqui só se agrega.

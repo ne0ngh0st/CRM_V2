@@ -8,6 +8,7 @@ import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { ROTULOS_PERFIL } from '@/constants/perfis.js';
+import { OPCOES_RESUMO_DIARIO } from '@/constants/resumoDiario.js';
 
 const props = defineProps({
     show: { type: Boolean, default: false },
@@ -27,6 +28,7 @@ const form = useForm({
     estado: '',
     tipo_usuario: '',
     segmentos: [],
+    resumo_diario: 'nenhum',
 });
 
 watch(
@@ -43,6 +45,7 @@ watch(
             estado: usuario.estado || '',
             tipo_usuario: usuario.tipoUsuario || '',
             segmentos: usuario.segmentosIds ? [...usuario.segmentosIds] : [],
+            resumo_diario: usuario.resumoDiario || 'nenhum',
         }).reset();
     },
     { immediate: true },
@@ -166,6 +169,15 @@ function salvar() {
                     Supermercadista
                 </p>
                 <InputError :message="form.errors.segmentos" class="mt-1" />
+            </div>
+
+            <div class="mt-4">
+                <InputLabel for="edit_resumo_diario" value="Resumo diário por e-mail (dias úteis, 18h)" />
+                <select id="edit_resumo_diario" v-model="form.resumo_diario" class="mt-1 block w-full rounded-md border-gray-300 text-sm focus:border-cyan focus:ring-cyan">
+                    <option v-for="o in OPCOES_RESUMO_DIARIO" :key="o.valor" :value="o.valor">{{ o.rotulo }}</option>
+                </select>
+                <p class="mt-1 text-xs text-gray-500">{{ OPCOES_RESUMO_DIARIO.find((o) => o.valor === form.resumo_diario)?.ajuda }}</p>
+                <InputError :message="form.errors.resumo_diario" class="mt-1" />
             </div>
 
             <div class="mt-6 flex justify-end gap-3">

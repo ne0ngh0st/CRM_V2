@@ -2604,6 +2604,56 @@ em aberto que o 200 (três dias mais velho) ainda não tinha.
   desenho ANTIGO.
 - Testes: `PedidosFonteDaVendaTest` (8). ⚠️ Não verificados por mutação (feito às pressas).
 
+### Resumo diário da equipe por e-mail — 2026-09-28
+
+Todo dia útil às **18:00 (America/Sao_Paulo)** cada gestor recebe por e-mail o retrato da
+equipe: contatos (ligação/WhatsApp/e-mail) de hoje e do mês, pedidos emitidos no mês,
+venda e faturamento com % da meta, e Ativos / Perdendo / A trabalhar — totais no topo e
+uma linha por vendedor. Visual de newsletter (header navy, cartões de KPI, barra
+empilhada de carteira), HTML de e-mail puro (tabela + estilo inline).
+
+**Quem recebe mora em `users.resumo_diario`** (`nenhum` | `equipe` | `consolidado`),
+editado na tela Equipe (select no editar usuário, só admin/diretor). Fora do `$fillable`.
+
+| Pessoa | Valor |
+|---|---|
+| Américo, Cleber, Welington, Sandra (supervisores) | `equipe` |
+| Beto (diretor com representantes abaixo) | `equipe` — a regra é `cod_super`, não perfil |
+| Paulo (diretor sem equipe) e Leandro (cópia dele) | `consolidado` |
+
+- **Equipe** = `EquipeScopeResolver::codigosEquipeDe()` (quem tem `cod_super` = o gestor,
+  mais ele) — a regra de /metas, NÃO a do Painel (lá o supervisor em modo Equipe vê a
+  equipe pura). Ninguém abaixo → não manda e-mail vazio, só loga aviso.
+- **Consolidado** = as equipes de TODOS os marcados como `equipe`, uma seção cada, mais um
+  ranking. Gestor novo marcado entra sozinho. ⚠️ O total é recalculado sobre a **união**
+  dos códigos, nunca a soma das seções: o `cod_super` de supervisor aponta para diretor,
+  então o código de um supervisor pode estar em duas equipes.
+- **Nenhum número novo** (Regra nº 8): venda/faturamento/meta vêm de
+  `MetaRankingResolver::ranking()`, pedidos de `pedidosPorCodigo()` (mesmo recorte do
+  Painel), contatos de `App\Services\Contatos\ContatosPorUsuario` (extraído da Visão do
+  Gestor, que passou a usá-lo), carteira de `ClienteStatusResolver::contagem()` (mesma
+  consolidação por `cod_cliente` do card). Teste compara com /metas e com o card.
+- ⚠️ Venda/faturamento até **D-1** (igual ao Painel); contatos até **agora**. O e-mail diz.
+- ⚠️ Carteira da equipe ≠ soma das linhas quando um cliente tem filiais com vendedores
+  diferentes — o total da equipe é o verdadeiro.
+
+**Peças:** `ResumoEquipeBuilder` · `ResumoEquipeMail` (NÃO ShouldQueue — quem envia já é
+job) · `EnviarResumosEquipeJob` (agendado, um job por destinatário) ·
+`EnviarResumoEquipeJob` (idempotente por dia, marca gravada DEPOIS do SMTP aceitar; o
+consolidado é montado uma vez por rodada) · views em `resources/views/emails/resumo*`.
+
+**Interruptores** (`config/resumo_equipe.php`, sempre via `config()`):
+`RESUMO_EQUIPE_HABILITADO` (nasce **false**) e `RESUMO_EQUIPE_REDIRECIONAR_PARA` (mesmo
+desenho do de Cadastros).
+
+**Comando** `resumo-equipe:enviar`: `--previa` grava o HTML em `storage/app/relatorios/`
+sem enviar; `--para=EMAIL` envia só para ele (funciona com o agendamento desligado);
+`--consolidado` ou `--usuario=ID|EMAIL` escolhem o conteúdo. Validação com o Leandro:
+`php artisan resumo-equipe:enviar --usuario=<email do Leandro> --para=<email do Leandro>`
+(com ele marcado como `consolidado`), ou `--consolidado --para=...`.
+
+Testes: `tests/Feature/ResumoEquipeTest.php` (18), **11 mutações aplicadas, 11 mordidas**.
+
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão
