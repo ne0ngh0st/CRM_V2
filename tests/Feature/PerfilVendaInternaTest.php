@@ -15,8 +15,8 @@ use Tests\TestCase;
  *
  * Até 2026-09-24 a conta da venda interna (comercial@autopel.com, 010617) era
  * `assistente` — Painel sem blocos e Carteira vazia, apesar de ter clientes no código.
- * O contraste com o assistente, no mesmo fixture, é o que prova que o perfil novo não é
- * só um rótulo diferente.
+ * (Desde 2026-09-28 o assistente também vê o próprio código — ver AcessoAssistenteTest.
+ * A diferença que sobrou é que a venda interna VENDE: meta, ranking e dropdown.)
  */
 class PerfilVendaInternaTest extends TestCase
 {
@@ -47,14 +47,6 @@ class PerfilVendaInternaTest extends TestCase
         $resposta->assertOk();
         $razoes = collect($resposta->viewData('page')['props']['clientes']['data'])->pluck('razaoSocial')->all();
         $this->assertSame(['DA VENDA INTERNA'], $razoes);
-    }
-
-    public function test_assistente_com_o_mesmo_codigo_continua_sem_carteira(): void
-    {
-        $resposta = $this->actingAs($this->usuario('assistente'))->get(route('carteira.index'));
-
-        $resposta->assertOk();
-        $this->assertSame([], $resposta->viewData('page')['props']['clientes']['data']);
     }
 
     public function test_painel_da_venda_interna_tem_os_blocos_comerciais(): void

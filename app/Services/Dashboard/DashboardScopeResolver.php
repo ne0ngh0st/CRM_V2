@@ -51,7 +51,9 @@ class DashboardScopeResolver
         $role = $this->roleDe($user);
         $proprio = $user->vendedorPerfil?->cod_vendedor;
 
-        if (in_array($role, User::PERFIS_CARTEIRA, true)) {
+        // Inclui o assistente: ele tem o código do supervisor que apoia (ver
+        // User::PERFIS_ESCOPO_PROPRIO) e vê a carteira pessoal dele, nunca a equipe.
+        if (in_array($role, User::PERFIS_ESCOPO_PROPRIO, true)) {
             return ['codVendedores' => $proprio ? [$proprio] : [], 'visaoSupervisor' => null, 'visaoVendedor' => null];
         }
 
@@ -102,7 +104,7 @@ class DashboardScopeResolver
             return ['codVendedores' => null, 'visaoSupervisor' => null, 'visaoVendedor' => null];
         }
 
-        // assistente e qualquer outro perfil sem escopo de vendas.
+        // Qualquer outro perfil sem escopo de vendas.
         return ['codVendedores' => [], 'visaoSupervisor' => null, 'visaoVendedor' => null];
     }
 
@@ -191,9 +193,10 @@ class DashboardScopeResolver
     private function calcularUsuarioIds(User $user, array $scope): array
     {
         // Vendedor/representante/assistente agrega só o próprio histórico, mesmo que o
-        // código de vendedor seja compartilhado com outra conta (acontece no legado).
-        // Assistente não tem carteira, mas cria orçamento no próprio user_id.
-        if (in_array($this->roleDe($user), [...User::PERFIS_CARTEIRA, 'assistente'], true)) {
+        // código de vendedor seja compartilhado com outra conta — é exatamente o caso do
+        // assistente, que tem o código do supervisor: as ligações e os orçamentos dele
+        // são dele, não do supervisor.
+        if (in_array($this->roleDe($user), User::PERFIS_ESCOPO_PROPRIO, true)) {
             return [$user->id];
         }
 

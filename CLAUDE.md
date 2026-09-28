@@ -322,7 +322,7 @@ Rodada grande que expandiu bastante o escopo original das ~16 páginas core. Adi
 - **Metas** (`/metas`, `MetaController` + `MetaRankingResolver`) — ranking de metas vs. realizado, só gestor (admin/diretor/supervisor), com edição de meta escopada (supervisor só edita quem é `cod_super` dele).
 - **Visão do Gestor** (`/visao-gestor`) — painel gerencial de observações/ligações da equipe.
 - **Visão Diretor** (`/visao-diretor/*`) — análises estratégicas para admin + diretor (gate `ver-visao-diretor`). Primeira página: **Maiores por Segmento**. Padrão da seção, modelo e rollup em `docs/visao-diretor.md` — ler de lá antes de encostar. Não usa `DashboardScopeResolver`; faturamento nunca agrega `faturamentos` ao vivo.
-- **Tabela de Preços** (`/tabela-precos`) — consulta de produtos, aberta a todos os perfis exceto assistente.
+- **Tabela de Preços** (`/tabela-precos`) — consulta de produtos, aberta a todos os perfis.
 - **Pedidos Emitidos** (`/pedidos-emitidos`) — complementa `/pedidos-abertos` (que já existia).
 - **Perfil** — upload de foto (`ProfileController::updateFoto`/`destroyFoto`); auto-exclusão de conta removida (não fazia sentido, usuário vem do TOTVS/admin).
 - **Carteira**: ganhou `detalhes` (KPIs + histórico de pedidos do cliente, só gestor) e trocou "ocultar"/"marcar contatado" por ligação/agendamento/observações (ver seção "Reformulação das ações da Carteira" acima).
@@ -2531,6 +2531,26 @@ Virou o perfil próprio **`venda_interna`**, que opera como vendedor pelo própr
 - A migration `2026_09_24_120000` só CRIA o perfil. Passar a conta para ele é pela tela
   Equipe (editar usuário → Perfil "Venda interna").
 - Natany (000197) continua `assistente`, de propósito.
+
+### Assistente vê a carteira do próprio código — 2026-09-28
+
+O assistente tem o **mesmo `cod_vendedor` do supervisor que apoia** (Natany = 000197,
+ROBERTO). Até esta data ele via só os leads do site e nada da carteira. Agora opera pelo
+próprio código: **Carteira, Leads, Pedidos (abertos e emitidos)**, com as ações de linha
+(ligar, WhatsApp, agendar, orçar). Sem Visão Gestor nem Visão Diretor.
+
+- **`User::PERFIS_ESCOPO_PROPRIO`** (= `PERFIS_CARTEIRA` + `assistente`) decide o escopo no
+  `DashboardScopeResolver`. Espelho em `constants/perfis.js`, usado pelos botões de ação.
+- ⚠️ **Lista SEPARADA de `PERFIS_CARTEIRA` de propósito**: aquela alimenta o dropdown de
+  vendedores do gestor, o ranking de Metas e a Visão do Gestor, onde o assistente seria uma
+  linha duplicada do supervisor (mesmo código, meta contada duas vezes). Travado por teste.
+- **Escopo = só o código, nunca a equipe** do supervisor.
+- **Painel**: carteira por segmento, segmentos atendidos, pedidos em atenção, orçamentos e
+  contatos (esses dois pelo `user_id` do próprio assistente). **Sem meta e sem Evolução
+  Comercial** (`$mostraDesempenho` no `DashboardController`): medem o supervisor.
+- **O modo "só leads do WordPress" foi removido** (`somenteWordpress` no `LeadController`).
+  Existia para o Murilo quando era assistente; ele virou `venda_interna` em 24/09.
+- Testes: `AcessoAssistenteTest` (10), verificado por mutação.
 
 ### O de-para do Portal morreu: a API aceita chave de negócio — 2026-09-25
 

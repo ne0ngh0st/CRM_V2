@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { PERFIS_CARTEIRA } from '@/constants/perfis.js';
+import { PERFIS_ESCOPO_PROPRIO } from '@/constants/perfis.js';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
@@ -48,7 +48,7 @@ const props = defineProps({
 const page = usePage();
 
 const podeOperar = computed(
-    () => PERFIS_CARTEIRA.includes(props.role)
+    () => PERFIS_ESCOPO_PROPRIO.includes(props.role)
         || (props.role === 'supervisor' && page.props.modoVisao?.modo === 'pessoal'),
 );
 

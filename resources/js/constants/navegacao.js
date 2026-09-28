@@ -20,24 +20,16 @@
 
 /**
  * Visibilidade por perfil. Recebe sempre o mesmo objeto de papéis
- * (`{ isGestor, isDiretor, isAssistente, isAdmin }`), montado uma vez pelo layout.
+ * (`{ isGestor, isDiretor, isAdmin }`), montado uma vez pelo layout.
  *
  * Item sem `visivel` aparece para todos — é o default de propósito: perfil comercial novo
  * deve nascer vendo o menu inteiro e perdendo o que não é dele, nunca o contrário.
  */
 const soGestor = ({ isGestor }) => isGestor;
-const soAssistente = ({ isAssistente }) => isAssistente;
 const soAdmin = ({ isAdmin }) => isAdmin;
 // Admin + diretor. Espelha o gate `ver-visao-diretor` do servidor — o menu só esconde;
 // quem proíbe é o gate (docs/visao-diretor.md).
 const soDiretor = ({ isDiretor }) => isDiretor;
-
-/**
- * Assistente não atende carteira nem pedido — o trabalho dele é lead e cadastro.
- * Escrito como negação do assistente (e não como lista dos outros cinco perfis) porque é
- * assim que o `CarteiraController` e os resolvers de escopo já decidem isso no servidor.
- */
-const comercial = ({ isAssistente }) => !isAssistente;
 
 /**
  * O menu principal, na ordem em que aparece.
@@ -93,7 +85,6 @@ export const NAV_PRINCIPAL = [
         chave: 'carteira',
         rotulo: 'Carteira',
         icone: 'carteira',
-        visivel: comercial,
         largura: '48',
         ativoEm: ['carteira.*', 'leads.*'],
         itens: [
@@ -105,23 +96,12 @@ export const NAV_PRINCIPAL = [
         chave: 'pedidos',
         rotulo: 'Pedidos',
         icone: 'pedidos',
-        visivel: comercial,
         largura: '48',
         ativoEm: ['pedidos.*'],
         itens: [
             { chave: 'pedidos-abertos', rotulo: 'Pedidos em aberto', icone: 'pedidos', rota: 'pedidos.index', ativoEm: ['pedidos.index'], prefetch: 'hover' },
             { chave: 'pedidos-emitidos', rotulo: 'Pedidos emitidos', icone: 'pedidos-emitidos', rota: 'pedidos.emitidos', ativoEm: ['pedidos.emitidos'], prefetch: 'hover' },
         ],
-    },
-    {
-        // O assistente não tem o grupo "Carteira", então Leads sobe para link de topo.
-        chave: 'leads-assistente',
-        rotulo: 'Leads',
-        icone: 'leads',
-        visivel: soAssistente,
-        rota: 'leads.index',
-        ativoEm: ['leads.*'],
-        prefetch: 'hover',
     },
     {
         chave: 'orcamentos',
@@ -191,11 +171,9 @@ export const NAV_USUARIO = [
  */
 const DESTINOS_MOBILE = [
     { chave: 'inicio', rotulo: 'Início', icone: 'inicio', rota: 'dashboard', ativoEm: ['dashboard'] },
-    { chave: 'carteira', rotulo: 'Carteira', icone: 'carteira', rota: 'carteira.index', ativoEm: ['carteira.*'], visivel: comercial },
+    { chave: 'carteira', rotulo: 'Carteira', icone: 'carteira', rota: 'carteira.index', ativoEm: ['carteira.*'] },
     { chave: 'leads', rotulo: 'Leads', icone: 'leads', rota: 'leads.index', ativoEm: ['leads.*'] },
-    { chave: 'pedidos', rotulo: 'Pedidos', icone: 'pedidos', rota: 'pedidos.index', ativoEm: ['pedidos.*'], visivel: comercial },
-    { chave: 'orcamentos', rotulo: 'Orçamentos', icone: 'orcamentos', rota: 'orcamentos.index', ativoEm: ['orcamentos.index'], visivel: soAssistente },
-    { chave: 'cadastros', rotulo: 'Cadastros', icone: 'cadastros', rota: 'cadastros.index', ativoEm: ['cadastros.*'], visivel: soAssistente },
+    { chave: 'pedidos', rotulo: 'Pedidos', icone: 'pedidos', rota: 'pedidos.index', ativoEm: ['pedidos.*'] },
 ];
 
 /** Aplica a visibilidade por perfil a uma lista, preservando a ordem declarada. */

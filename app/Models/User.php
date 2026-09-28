@@ -39,6 +39,20 @@ class User extends Authenticatable
     public const PERFIS_CARTEIRA = ['vendedor', 'representante', 'venda_interna'];
 
     /**
+     * Perfis cujo escopo é o PRÓPRIO `cod_vendedor`: quem opera carteira mais o assistente.
+     *
+     * O assistente (2026-09-28) tem o MESMO código do supervisor que ele apoia, e por isso
+     * enxerga a carteira pessoal desse supervisor — Carteira, Leads, Pedidos e os blocos
+     * operacionais do Painel. Espelhada em `constants/perfis.js`.
+     *
+     * ⚠️ É uma lista SEPARADA de `PERFIS_CARTEIRA` de propósito: aquela também alimenta o
+     * dropdown de vendedores do gestor, o ranking de Metas e a Visão do Gestor. O assistente
+     * ali seria uma linha duplicada do supervisor (mesmo código, meta contada duas vezes).
+     * Aqui é só "de quem é o escopo", nunca "quem vende".
+     */
+    public const PERFIS_ESCOPO_PROPRIO = [...self::PERFIS_CARTEIRA, 'assistente'];
+
+    /**
      * Perfis que só existem no CRM-V2, sem equivalente no `USUARIOS.PERFIL` do legado.
      * O `legado:import-usuarios` não sobrescreve quem está num deles — senão a próxima
      * importação devolveria a venda interna para `assistente`.

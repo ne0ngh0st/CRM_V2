@@ -22,7 +22,7 @@ import IconeNav from '@/Components/Icones/IconeNav.vue';
 import { barraInferior, estaAtivo } from '@/constants/navegacao';
 
 const props = defineProps({
-    /** `{ isGestor, isAssistente, isAdmin }`, montado uma vez pelo layout. */
+    /** `{ isGestor, isDiretor, isAdmin }`, montado uma vez pelo layout. */
     perfil: { type: Object, required: true },
     /** Marca o "Mais" como aceso enquanto a gaveta está aberta. */
     gavetaAberta: { type: Boolean, default: false },

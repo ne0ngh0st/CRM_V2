@@ -29,7 +29,7 @@ import { estaAtivo, menuPrincipal, menuUsuario } from '@/constants/navegacao';
 
 const props = defineProps({
     show: { type: Boolean, default: false },
-    /** `{ isGestor, isAssistente, isAdmin }`, montado uma vez pelo layout. */
+    /** `{ isGestor, isDiretor, isAdmin }`, montado uma vez pelo layout. */
     perfil: { type: Object, required: true },
 });
 

@@ -43,10 +43,16 @@ class DashboardController extends Controller
         $codVendedores = $scope['codVendedores'];
         $usuarioIds = $this->scopeResolver->usuarioIds($user, $scope);
 
-        // Assistente não tem escopo comercial; escopo vazio (`[]`) significa vendedor sem
-        // código de vendedor cadastrado — nos dois casos os blocos escopados ficam nulos.
+        // Escopo vazio (`[]`) significa usuário sem código de vendedor cadastrado — os
+        // blocos escopados ficam nulos.
         $temEscopo = $codVendedores === null || count($codVendedores) > 0;
-        $mostraBlocos = $role !== 'assistente';
+        /*
+         * O assistente (2026-09-28) vê a carteira do código dele — que é o do supervisor que
+         * apoia — e por isso recebe os blocos operacionais: carteira, segmentos, pedidos em
+         * atenção, orçamentos e os próprios contatos. Ficam de fora meta e Evolução
+         * Comercial: medem o desempenho do supervisor, não o trabalho do assistente.
+         */
+        $mostraDesempenho = $role !== 'assistente';
         $eGestor = in_array($role, ['supervisor', 'admin', 'diretor'], true);
 
         $porVendedor = ChaveEscopo::deCodVendedores($codVendedores);
@@ -70,13 +76,13 @@ class DashboardController extends Controller
                 'visaoSupervisor' => $scope['visaoSupervisor'],
                 'visaoVendedor' => $scope['visaoVendedor'],
             ],
-            'metaGauge' => $temEscopo && $mostraBlocos
+            'metaGauge' => $temEscopo && $mostraDesempenho
                 // `isRepresentante` fica fora do cache de propósito: depende de quem olha,
                 // não do escopo. Ver o docblock de DashboardBlocos::metaGauge().
                 ? ['isRepresentante' => $role === 'representante'] + $this->blocos->metaGauge($porVendedor, $codVendedores)
                 : null,
-            'ligacoesStats' => $mostraBlocos ? $this->blocos->ligacoesStats($usuarioIds) : null,
-            'observacoesStats' => $mostraBlocos ? $this->blocos->observacoesStats($usuarioIds) : null,
+            'ligacoesStats' => $this->blocos->ligacoesStats($usuarioIds),
+            'observacoesStats' => $this->blocos->observacoesStats($usuarioIds),
             /*
              * Gestores veem o embed do Power BI no lugar do gráfico Chart.js. As agregações
              * (as queries mais caras da Home no escopo empresa) não rodam pra eles —
@@ -90,10 +96,10 @@ class DashboardController extends Controller
              * cacheadas, e ir buscar a outra aba no clique tornaria o alternador lento
              * justamente para quem alterna.
              */
-            'vendaComparacao' => $temEscopo && $mostraBlocos
+            'vendaComparacao' => $temEscopo && $mostraDesempenho
                 ? $this->blocos->vendaComparacao($porVendedor, $codVendedores)
                 : null,
-            'faturamentoComparacao' => $temEscopo && $mostraBlocos
+            'faturamentoComparacao' => $temEscopo && $mostraDesempenho
                 ? $this->blocos->faturamentoComparacao($porVendedor, $codVendedores)
                 : null,
             'biEmbedUrl' => $eGestor ? $this->urlDoBi() : null,
@@ -105,7 +111,7 @@ class DashboardController extends Controller
              * assim que a pessoa lê. Uma query sobre uma tabela de centenas de linhas.
              */
             'intranet' => IntranetPublicacao::contagensPara($user),
-            'carteiraSegmento' => $temEscopo && $mostraBlocos ? $this->blocos->carteiraSegmento($porVendedor, $codVendedores) : null,
+            'carteiraSegmento' => $temEscopo ? $this->blocos->carteiraSegmento($porVendedor, $codVendedores) : null,
             /*
              * Clientes inativos por segmento atendido. Visível para TODO perfil com escopo,
              * gestor incluído — pedido do diretor em 2026-09-06 ("na tela inicial dos ADM
@@ -119,7 +125,7 @@ class DashboardController extends Controller
              * (39 ms por vendedor). Se a família voltar ao quadro, esta condição volta a
              * precisar de `&& ! $eGestor` — ou de uma tabela de apoio.
              */
-            'segmentosInativos' => $temEscopo && $mostraBlocos
+            'segmentosInativos' => $temEscopo
                 ? $this->blocos->segmentosInativos($porVendedor, $codVendedores)
                 : null,
             /*
@@ -128,7 +134,7 @@ class DashboardController extends Controller
              * tem que aparecer no F5 seguinte, e o bloco vive 30 min. Uma consulta sobre
              * ~25 segmentos — e não exige bump de ChaveEscopo::VERSAO.
              */
-            'especialistasSegmento' => $temEscopo && $mostraBlocos
+            'especialistasSegmento' => $temEscopo
                 ? $this->especialistas->porCodigo()
                 : [],
             /*
@@ -144,8 +150,8 @@ class DashboardController extends Controller
             'segmentosVendedor' => is_array($codVendedores) && count($codVendedores) === 1
                 ? $this->segmentosDoVendedor->nomes($codVendedores[0])
                 : [],
-            'orcamentosStats' => $mostraBlocos ? $this->blocos->orcamentosStats($porUsuario, $usuarioIds) : null,
-            'pedidosAtencao' => $temEscopo && $mostraBlocos ? $this->blocos->pedidosAtencao($porVendedor, $codVendedores) : null,
+            'orcamentosStats' => $this->blocos->orcamentosStats($porUsuario, $usuarioIds),
+            'pedidosAtencao' => $temEscopo ? $this->blocos->pedidosAtencao($porVendedor, $codVendedores) : null,
         ]);
     }
 

@@ -52,10 +52,8 @@ class LeadController extends Controller
      */
     private function opcoesDeFiltro(Request $request, ?array $codVendedores): array
     {
-        $extras = $this->somenteWordpress($request) ? ['origem' => Lead::ORIGEM_WORDPRESS] : [];
-
         return $this->cache->lembrarPorHoras(
-            ChaveEscopo::deCodVendedores($codVendedores)->para('leads-opcoes', $extras),
+            ChaveEscopo::deCodVendedores($codVendedores)->para('leads-opcoes'),
             (int) config('perf.ttl_lookup_minutos', 360) / 60,
             fn () => [
                 'estados' => $this->scopeQuery($request)->whereNotNull('estado')->where('estado', '!=', '')->distinct()->orderBy('estado')->pluck('estado'),
@@ -81,11 +79,7 @@ class LeadController extends Controller
         $origem = (string) $request->string('origem');
         $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
         $aba = (string) $request->string('aba') ?: 'leads';
-        $somenteWordpress = $this->somenteWordpress($request);
-
-        if ($somenteWordpress) {
-            $origem = Lead::ORIGEM_WORDPRESS;
-        } elseif (! in_array($origem, Lead::ORIGENS, true)) {
+        if (! in_array($origem, Lead::ORIGENS, true)) {
             $origem = '';
         }
         if (! in_array($status, Lead::ETAPAS, true)) {
@@ -215,7 +209,6 @@ class LeadController extends Controller
                 'visaoSupervisor' => $scope['visaoSupervisor'],
                 'visaoVendedor' => $scope['visaoVendedor'],
             ],
-            'somenteWordpress' => $somenteWordpress,
             'wordpressCaptura' => $this->wpCaptura->resumir(
                 podeTestar: in_array($role, ['admin', 'diretor'], true),
             ),
@@ -444,10 +437,6 @@ class LeadController extends Controller
     {
         $query = Lead::query()->visivel();
 
-        if ($this->somenteWordpress($request)) {
-            return $query->where('origem', Lead::ORIGEM_WORDPRESS);
-        }
-
         $scope = $this->scopeResolver->resolve(
             $request->user(),
             $request->string('visao_supervisor')->value() ?: null,
@@ -469,10 +458,7 @@ class LeadController extends Controller
         $segmento = (string) $request->string('segmento');
         $status = (string) $request->string('status');
         $origem = (string) $request->string('origem');
-        $somenteWordpress = $this->somenteWordpress($request);
-        if ($somenteWordpress) {
-            $origem = '';
-        } elseif (! in_array($origem, Lead::ORIGENS, true)) {
+        if (! in_array($origem, Lead::ORIGENS, true)) {
             $origem = '';
         }
         if (! in_array($status, Lead::ETAPAS, true)) {
@@ -580,14 +566,10 @@ class LeadController extends Controller
         $agendamento->load('lead');
         abort_unless($agendamento->lead_id, 404);
 
-        if ($this->somenteWordpress($request)) {
-            abort_unless($agendamento->lead?->origem === Lead::ORIGEM_WORDPRESS, 403);
-        } else {
-            $scope = $this->scopeResolver->resolve($request->user(), null, null);
-            if ($scope['codVendedores'] !== null
-                && ! in_array($agendamento->lead?->cod_vendedor, $scope['codVendedores'], true)) {
-                abort(403);
-            }
+        $scope = $this->scopeResolver->resolve($request->user(), null, null);
+        if ($scope['codVendedores'] !== null
+            && ! in_array($agendamento->lead?->cod_vendedor, $scope['codVendedores'], true)) {
+            abort(403);
         }
 
         $data = $request->validate([
@@ -621,21 +603,10 @@ class LeadController extends Controller
 
     private function autorizarLead(Request $request, Lead $lead): void
     {
-        if ($this->somenteWordpress($request)) {
-            abort_unless($lead->origem === Lead::ORIGEM_WORDPRESS, 403);
-
-            return;
-        }
-
         $scope = $this->scopeResolver->resolve($request->user(), null, null);
         if ($scope['codVendedores'] !== null && ! in_array($lead->cod_vendedor, $scope['codVendedores'], true)) {
             abort(403);
         }
-    }
-
-    private function somenteWordpress(Request $request): bool
-    {
-        return $request->user()->getRoleNames()->first() === 'assistente';
     }
 
     /**
@@ -653,9 +624,7 @@ class LeadController extends Controller
             ->orderBy('data_agendamento')
             ->limit(500);
 
-        if ($this->somenteWordpress($request)) {
-            $query->whereIn('lead_id', Lead::query()->select('id')->where('origem', Lead::ORIGEM_WORDPRESS));
-        } elseif ($codVendedores !== null) {
+        if ($codVendedores !== null) {
             // Subquery IN em vez de whereHas: o whereHas gera EXISTS correlacionado,
             // avaliado por linha de agendamento.
             $query->whereIn('lead_id', Lead::query()->select('id')->whereIn('cod_vendedor', $codVendedores));

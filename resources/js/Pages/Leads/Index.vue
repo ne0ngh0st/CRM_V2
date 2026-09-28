@@ -1,6 +1,6 @@
 <script setup>
 import FunilQuadro from '@/Components/Leads/FunilQuadro.vue';
-import { PERFIS_CARTEIRA } from '@/constants/perfis.js';
+import { PERFIS_ESCOPO_PROPRIO } from '@/constants/perfis.js';
 import CapturaWordpressDetalhe from '@/Components/Leads/CapturaWordpressDetalhe.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
@@ -31,13 +31,10 @@ const props = defineProps({
     filtros: Object,
     opcoes: Object,
     visao: Object,
-    somenteWordpress: { type: Boolean, default: false },
     wordpressCaptura: { type: Object, default: null },
 });
 
-const podeAgirNoLead = computed(() =>
-    PERFIS_CARTEIRA.includes(props.role) || props.somenteWordpress,
-);
+const podeAgirNoLead = computed(() => PERFIS_ESCOPO_PROPRIO.includes(props.role));
 
 const filtros = reactive({
     busca: props.filtros.busca || '',
@@ -102,7 +99,7 @@ function onBuscaInput() {
 function limparFiltros() {
     Object.assign(filtros, {
         busca: '', estado: '', segmento: '', status: '',
-        origem: props.somenteWordpress ? 'wordpress' : '',
+        origem: '',
         ordenar: 'nome_asc', visao_supervisor: '', visao_vendedor: '',
     });
     aplicarFiltros();
@@ -157,9 +154,7 @@ async function abrirCaptura(lead) {
  * do Excel responde outra pergunta ("o arquivo sai recortado?") e aí a busca conta.
  */
 const filtrosAtivos = computed(() => {
-    const campos = ['estado', 'segmento', 'status', 'visao_supervisor', 'visao_vendedor'];
-
-    if (! props.somenteWordpress) campos.push('origem');
+    const campos = ['estado', 'segmento', 'status', 'origem', 'visao_supervisor', 'visao_vendedor'];
 
     return contarFiltrosAtivos(filtros, campos);
 });
@@ -182,17 +177,12 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
                         </svg>
                     </template>
                     <template #subtitle>
-                        <template v-if="somenteWordpress">
-                            Leads capturados pelo site (WordPress). Sem transferência — a atribuição continua no TOTVS/import.
-                        </template>
-                        <template v-else>
-                            Carteira de prospects — base do sistema, leads manuais e leads do site (WordPress). Sem transferência (TOTVS/import cuida da atribuição).
-                        </template>
+                        Carteira de prospects — base do sistema, leads manuais e leads do site (WordPress). Sem transferência (TOTVS/import cuida da atribuição).
                     </template>
                     <template #meta>
                         <KpiTile :value="kpis.total" label="Total" />
-                        <KpiTile v-if="!somenteWordpress" :value="kpis.sistema" label="Sistema" tone="info" :href="route('leads.index', { ...filtros, origem: 'sistema', aba: 'leads' })" />
-                        <KpiTile v-if="!somenteWordpress" :value="kpis.manual" label="Manuais" tone="warn" :href="route('leads.index', { ...filtros, origem: 'manual', aba: 'leads' })" />
+                        <KpiTile :value="kpis.sistema" label="Sistema" tone="info" :href="route('leads.index', { ...filtros, origem: 'sistema', aba: 'leads' })" />
+                        <KpiTile :value="kpis.manual" label="Manuais" tone="warn" :href="route('leads.index', { ...filtros, origem: 'manual', aba: 'leads' })" />
                         <KpiTile :value="kpis.wordpress ?? 0" label="WordPress" tone="ok" :href="route('leads.index', { ...filtros, origem: 'wordpress', aba: 'leads' })" />
                         <KpiTile :value="kpis.ativos" label="Ativos" tone="ok" />
                     </template>
@@ -229,7 +219,7 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
                             <option v-for="s in opcoes.segmentos" :key="s" :value="s">{{ s }}</option>
                         </FilterField>
 
-                        <FilterField v-if="!somenteWordpress" label="Origem" :model-value="filtros.origem" @update:model-value="(v) => { filtros.origem = v; aplicarFiltros(); }">
+                        <FilterField label="Origem" :model-value="filtros.origem" @update:model-value="(v) => { filtros.origem = v; aplicarFiltros(); }">
                             <option value="">Todas</option>
                             <option value="sistema">Sistema</option>
                             <option value="manual">Manual</option>
