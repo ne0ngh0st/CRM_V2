@@ -98,7 +98,11 @@
                             <p style="margin:0; font-size:12px; line-height:16px; color:{{ $cinza }};">Resumo do dia</p>
                             <h1 style="margin:2px 0 0 0; font-size:22px; line-height:28px; color:{{ $tinta }}; font-weight:bold;">{{ $r['titulo'] }}</h1>
                             <p style="margin:4px 0 0 0; font-size:13px; line-height:18px; color:{{ $cinza }};">
-                                {{ $fmt->int($r['vendedores']) }} {{ $r['vendedores'] === 1 ? 'pessoa' : 'pessoas' }}{{ $consolidado ? ' em '.count($r['secoes']).' equipes' : '' }}
+                                @if ($consolidado)
+                                    Empresa inteira — os mesmos totais do Power BI, abertos por equipe.
+                                @else
+                                    {{ $fmt->int($r['vendedores']) }} {{ $r['vendedores'] === 1 ? 'pessoa' : 'pessoas' }}
+                                @endif
                             </p>
                         </td>
                     </tr>
@@ -147,7 +151,7 @@
                                     @if ($consolidado)
                                         @php $st = $s['totais']; $g = 'padding:14px 0 8px 0; font-size:13px; line-height:18px; color:'.$tinta.'; font-weight:bold; border-bottom:1px solid #e4e7ec;'; @endphp
                                         <tr>
-                                            <td align="left" style="{{ $g }}">Equipe {{ $nomeBonito($s['nome']) }} <span style="font-weight:normal; color:#98a2b3;">· {{ $st['vendedores'] }}</span></td>
+                                            <td align="left" style="{{ $g }}">{{ $s['nome'] }} <span style="font-weight:normal; color:#98a2b3;">· {{ $st['vendedores'] }}</span></td>
                                             <td align="right" style="{{ $g }}">{!! $num($st['contatos'], 'int') !!}</td>
                                             <td align="right" style="{{ $g }}">{!! $num($st['pedidos'], 'int') !!}</td>
                                             <td align="right" style="{{ $g }} white-space:nowrap;">{!! $num($st['venda'], 'reais') !!}</td>

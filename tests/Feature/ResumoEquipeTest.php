@@ -214,16 +214,68 @@ class ResumoEquipeTest extends TestCase
         $resumo = app(ResumoEquipeBuilder::class)->consolidado();
 
         $nomes = collect($resumo['secoes'])->pluck('nome')->sort()->values()->all();
-        $this->assertSame(['ROBERTO ALVES', 'SANDRA LIMA'], $nomes);
+        $this->assertSame(['Equipe Roberto Alves', 'Equipe Sandra Lima'], $nomes);
 
         // Dia: Bruno 700 + Sandra 3.300 na equipe da Sandra; Sandra 3.300 na do Beto.
         $somaSecoes = collect($resumo['secoes'])->sum(fn ($s) => $s['totais']['pedidos']);
         $this->assertSame(3, $somaSecoes, 'o pedido da Sandra aparece nas duas seções');
-        $this->assertSame(2, $resumo['totais']['pedidos'], 'mas o total conta a união dos códigos');
+        $this->assertSame(2, $resumo['totais']['pedidos'], 'mas o total conta cada pedido uma vez');
         $this->assertEqualsWithDelta(4000.0, $resumo['totais']['venda'], 0.001);
 
-        // O resumão do mês também é sobre a união: 1.000 + 700 + 3.300.
-        $this->assertEqualsWithDelta(5000.0, $resumo['resumao']['mes']['venda']['realizado'], 0.001);
+        // O resumão é a EMPRESA: 1.000 + 700 + 3.300 das equipes + 55.555 de quem está fora.
+        $this->assertEqualsWithDelta(60555.0, $resumo['resumao']['mes']['venda']['realizado'], 0.001);
+    }
+
+    /**
+     * 🚨 O consolidado é a EMPRESA INTEIRA — o total do Power BI —, não a soma das equipes.
+     * Quem vende fora delas ganha seção própria, e o que não tem vendedor fecha a conta.
+     */
+    public function test_consolidado_bate_com_a_empresa_inteira(): void
+    {
+        $this->pedido('000101', '2026-06-16', 700.0);      // equipe
+        $this->pedido('000999', '2026-06-16', 12000.0);    // fora das equipes
+        $this->pedido('', '2026-06-16', 80.0);             // sem vendedor
+        $this->nota('000102', '2026-06-16', 40.0);
+        $this->nota('000999', '2026-06-16', 9000.0);
+        $this->nota('', '2026-06-16', 7.0);
+        $this->meta('000101', 'venda', 4000);
+        $this->meta('000999', 'venda', 1000);              // meta de quem está fora também conta
+
+        $resumo = app(ResumoEquipeBuilder::class)->consolidado();
+
+        // Os totais são os da empresa, lidos sem filtro — como as views do BI.
+        $this->assertSame(3, $resumo['totais']['pedidos']);
+        $this->assertEqualsWithDelta(12780.0, $resumo['totais']['venda'], 0.001);
+        $this->assertEqualsWithDelta(9047.0, $resumo['totais']['faturamento'], 0.001);
+        $this->assertEqualsWithDelta(5000.0, $resumo['resumao']['mes']['venda']['meta'], 0.001);
+
+        $fora = collect($resumo['secoes'])->firstWhere('nome', 'Fora das equipes');
+        $this->assertNotNull($fora);
+        $linhas = collect($fora['linhas']);
+        $this->assertEqualsWithDelta(12000.0, $linhas->firstWhere('codVendedor', '000999')['venda'], 0.001);
+        $sem = $linhas->firstWhere('nome', 'Sem vendedor');
+        $this->assertEqualsWithDelta(80.0, $sem['venda'], 0.001);
+        $this->assertEqualsWithDelta(7.0, $sem['faturamento'], 0.001);
+
+        // E fecha: o que é das equipes (700 / 40) + o de fora = empresa.
+        $this->assertEqualsWithDelta($resumo['totais']['venda'], 700.0 + $fora['totais']['venda'], 0.001);
+        $this->assertEqualsWithDelta($resumo['totais']['faturamento'], 40.0 + $fora['totais']['faturamento'], 0.001);
+    }
+
+    /** O código do gestor entra na equipe dele, seja qual for o perfil (o caso do Beto). */
+    public function test_codigo_do_gestor_diretor_entra_na_equipe_dele(): void
+    {
+        $this->pedido(self::BETO, '2026-06-16', 23700.0);
+        $this->nota(self::BETO, '2026-06-16', 1500.0);
+
+        $resumo = app(ResumoEquipeBuilder::class)->equipe($this->beto);
+        $beto = collect($resumo['secoes'][0]['linhas'])->firstWhere('codVendedor', self::BETO);
+
+        $this->assertNotNull($beto, 'o diretor aparece como linha da própria equipe');
+        $this->assertEqualsWithDelta(23700.0, $beto['venda'], 0.001);
+        $this->assertEqualsWithDelta(23700.0, $resumo['totais']['venda'], 0.001);
+        $this->assertEqualsWithDelta(1500.0, $resumo['totais']['faturamento'], 0.001);
+        $this->assertEqualsWithDelta(23700.0, $resumo['resumao']['mes']['venda']['realizado'], 0.001);
     }
 
     public function test_consolidado_acompanha_quem_esta_marcado(): void
@@ -232,7 +284,8 @@ class ResumoEquipeTest extends TestCase
 
         $resumo = app(ResumoEquipeBuilder::class)->consolidado();
 
-        $this->assertSame(['SANDRA LIMA'], collect($resumo['secoes'])->pluck('nome')->all());
+        $equipes = collect($resumo['secoes'])->pluck('nome')->reject(fn ($n) => $n === 'Fora das equipes')->values()->all();
+        $this->assertSame(['Equipe Sandra Lima'], $equipes);
     }
 
     // ── 3. O envio ──────────────────────────────────────────────────────────────
@@ -318,7 +371,7 @@ class ResumoEquipeTest extends TestCase
         $this->assertStringContainsString('Equipe Sandra Lima', $html);
         $this->assertStringContainsString('Ana Souza', $html);
         $this->assertStringContainsString('R$ 700', $html);          // venda do dia (Bruno)
-        $this->assertStringContainsString('R$ 1.700', $html);        // resumão do mês
+        $this->assertStringContainsString('R$ 57 mil', $html);       // resumão = empresa: 1.000 + 700 + 55.555
 
         // O dia da semana escrito, dos dois lados da linha.
         $this->assertStringContainsString('Hoje, quarta, 17/06', $html);

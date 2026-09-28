@@ -571,6 +571,40 @@ class MetaRankingResolver
     }
 
     /**
+     * Realizado da EMPRESA INTEIRA numa janela — sem filtro de código, inclusive a linha
+     * sem vendedor. É o número do total do Power BI (as views `vw_bi_fato_*` não filtram
+     * vendedor), e o do consolidado do resumo diário, que tem que bater com ele.
+     */
+    public function realizadoTotal(string $tipo, string $inicio, string $fim): float
+    {
+        if ($fim < $inicio) {
+            return 0.0;
+        }
+
+        return (float) $this->queryRealizado($tipo)
+            ->whereBetween($this->colunaDataDoTipo($tipo), [$inicio, $fim])
+            ->sum('valor_total');
+    }
+
+    /** Pedidos da empresa inteira numa janela — mesmo recorte de {@see self::pedidosNoPeriodo()}. */
+    public function pedidosTotal(string $inicio, string $fim): int
+    {
+        if ($fim < $inicio) {
+            return 0;
+        }
+
+        return Pedido::query()->contaComoVenda()->whereBetween('data_pedido', [$inicio, $fim])->count();
+    }
+
+    /** Toda meta gravada para o mês, de qualquer código — a régua da `vw_bi_fato_metas`. */
+    public function metaTotal(int $ano, int $mes, string $tipo): float
+    {
+        $this->garantirTipo($tipo);
+
+        return (float) MetaMensal::query()->where('ano', $ano)->where('mes', $mes)->where('tipo', $tipo)->sum('valor_meta');
+    }
+
+    /**
      * A ÚNICA definição de "de onde vem o realizado de cada tipo de meta".
      *
      * venda       → `pedidos` (todo pedido emitido, aberto ou faturado)
