@@ -2612,11 +2612,26 @@ em aberto que o 200 (três dias mais velho) ainda não tinha.
 
 ### Resumo diário da equipe por e-mail — 2026-09-28
 
-Todo dia útil às **18:00 (America/Sao_Paulo)** cada gestor recebe por e-mail o retrato da
-equipe: contatos (ligação/WhatsApp/e-mail) de hoje e do mês, pedidos emitidos no mês,
-venda e faturamento com % da meta, e Ativos / Perdendo / A trabalhar — totais no topo e
-uma linha por vendedor. Visual de newsletter (header navy, cartões de KPI, barra
-empilhada de carteira), HTML de e-mail puro (tabela + estilo inline).
+Todo dia útil às **18:15 (America/Sao_Paulo)** cada gestor recebe por e-mail o retrato
+do DIA da equipe. **Ligado em produção em 2026-09-28.**
+
+**Formato validado com o Leandro (2026-09-28)** — a primeira versão (cartões, mês por
+vendedor, carteira) foi recusada por "clutter". O que ficou, e o que não voltar a pôr:
+1. **O dia em UMA linha**: Contatos · Pedidos · Venda · Faturamento, com o dia da semana
+   escrito embaixo de cada número.
+2. **A mesma linha por vendedor** (maior venda do dia primeiro; zero vira "–"; valor
+   cheio, `reaisCheio()`, porque coluna com "R$ 77 mil" ao lado de "R$ 4.491" engana a
+   comparação). No consolidado, uma linha de subtotal por equipe.
+3. **Resumão do mês** no rodapé: venda e faturamento contra a meta, só total.
+- ❌ **Carteira (ativos/perdendo) e acumulado do ANO saíram por decisão do Tony** — não
+  mudam de um dia para o outro. `ClienteStatusResolver::contagem()` ficou sem uso.
+
+⚠️ **Dois dias na mesma linha, de propósito**: contatos são de **hoje** (CRM, ao vivo);
+pedidos, venda e faturamento são do **último dia fechado**
+(`MetaRankingResolver::ultimoDiaFechado()` — ontem, ou sexta na segunda). Às 18h o TOTVS de
+hoje ainda não entrou; "venda de hoje" sairia zero todo dia. O e-mail escreve as duas
+datas por extenso ("Hoje, segunda, 28/09" / "Sexta, 25/09") no topo e sobre as colunas.
+Se o import do TOTVS de ontem atrasar, a linha do dia sai zerada — não é bug do e-mail.
 
 **Quem recebe mora em `users.resumo_diario`** (`nenhum` | `equipe` | `consolidado`),
 editado na tela Equipe (select no editar usuário, só admin/diretor). Fora do `$fillable`.
@@ -2630,18 +2645,15 @@ editado na tela Equipe (select no editar usuário, só admin/diretor). Fora do `
 - **Equipe** = `EquipeScopeResolver::codigosEquipeDe()` (quem tem `cod_super` = o gestor,
   mais ele) — a regra de /metas, NÃO a do Painel (lá o supervisor em modo Equipe vê a
   equipe pura). Ninguém abaixo → não manda e-mail vazio, só loga aviso.
-- **Consolidado** = as equipes de TODOS os marcados como `equipe`, uma seção cada, mais um
-  ranking. Gestor novo marcado entra sozinho. ⚠️ O total é recalculado sobre a **união**
+- **Consolidado** = as equipes de TODOS os marcados como `equipe`, uma seção cada
+  (maior venda do dia primeiro). Gestor novo marcado entra sozinho. ⚠️ O total é recalculado sobre a **união**
   dos códigos, nunca a soma das seções: o `cod_super` de supervisor aponta para diretor,
   então o código de um supervisor pode estar em duas equipes.
-- **Nenhum número novo** (Regra nº 8): venda/faturamento/meta vêm de
-  `MetaRankingResolver::ranking()`, pedidos de `pedidosPorCodigo()` (mesmo recorte do
-  Painel), contatos de `App\Services\Contatos\ContatosPorUsuario` (extraído da Visão do
-  Gestor, que passou a usá-lo), carteira de `ClienteStatusResolver::contagem()` (mesma
-  consolidação por `cod_cliente` do card). Teste compara com /metas e com o card.
-- ⚠️ Venda/faturamento até **D-1** (igual ao Painel); contatos até **agora**. O e-mail diz.
-- ⚠️ Carteira da equipe ≠ soma das linhas quando um cliente tem filiais com vendedores
-  diferentes — o total da equipe é o verdadeiro.
+- **Nenhum número novo** (Regra nº 8): venda/faturamento do dia e do mês vêm de
+  `MetaRankingResolver::realizadoPorCodigo()`, meta de `metasPorCodigo()`, pedidos de
+  `pedidosNoPeriodo()` (mesmo recorte `contaComoVenda` do Painel), contatos de
+  `App\Services\Contatos\ContatosPorUsuario`. A lista de pessoas é a do ranking do
+  /metas. Teste compara o resumão com o /metas.
 
 **Peças:** `ResumoEquipeBuilder` · `ResumoEquipeMail` (NÃO ShouldQueue — quem envia já é
 job) · `EnviarResumosEquipeJob` (agendado, um job por destinatário) ·
@@ -2649,7 +2661,7 @@ job) · `EnviarResumosEquipeJob` (agendado, um job por destinatário) ·
 consolidado é montado uma vez por rodada) · views em `resources/views/emails/resumo*`.
 
 **Interruptores** (`config/resumo_equipe.php`, sempre via `config()`):
-`RESUMO_EQUIPE_HABILITADO` (nasce **false**) e `RESUMO_EQUIPE_REDIRECIONAR_PARA` (mesmo
+`RESUMO_EQUIPE_HABILITADO` (default **false**; **`true` nos dois nós desde 2026-09-28**) e `RESUMO_EQUIPE_REDIRECIONAR_PARA` (mesmo
 desenho do de Cadastros).
 
 **Comando** `resumo-equipe:enviar`: `--previa` grava o HTML em `storage/app/relatorios/`
@@ -2658,7 +2670,8 @@ sem enviar; `--para=EMAIL` envia só para ele (funciona com o agendamento deslig
 `php artisan resumo-equipe:enviar --usuario=<email do Leandro> --para=<email do Leandro>`
 (com ele marcado como `consolidado`), ou `--consolidado --para=...`.
 
-Testes: `tests/Feature/ResumoEquipeTest.php` (18), **11 mutações aplicadas, 11 mordidas**.
+Testes: `tests/Feature/ResumoEquipeTest.php` (18). No formato diário, duas mutações
+aplicadas e mordidas: segunda deixar de cair na sexta, e a venda do dia virar a do mês.
 
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado

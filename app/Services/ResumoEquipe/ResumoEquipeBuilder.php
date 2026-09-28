@@ -2,9 +2,7 @@
 
 namespace App\Services\ResumoEquipe;
 
-use App\Models\Ligacao;
 use App\Models\User;
-use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Contatos\ContatosPorUsuario;
 use App\Services\Equipe\EquipeScopeResolver;
 use App\Services\Metas\MetaRankingResolver;
@@ -13,12 +11,15 @@ use Illuminate\Support\Collection;
 /**
  * Monta o "retrato do dia" de uma equipe para o e-mail diário dos gestores.
  *
+ * O e-mail é DIÁRIO (validado com o Leandro em 2026-09-28): a leitura principal é uma
+ * linha só — contatos, pedidos, venda e faturamento do dia —, repetida por vendedor. O
+ * mês contra a meta fica no "resumão" do rodapé, só no total.
+ *
  * ⚠️ NÃO CALCULA NADA DE NOVO. Cada número vem da mesma peça que o mostra na tela:
  *
- *   venda / faturamento / meta ... MetaRankingResolver::ranking()  (o mesmo do /metas)
- *   pedidos emitidos ............. MetaRankingResolver::pedidosPorCodigo()
- *   contatos por canal ........... ContatosPorUsuario             (o mesmo da Visão do Gestor)
- *   ativos/perdendo/a trabalhar .. ClienteStatusResolver::contagem()
+ *   venda / faturamento / meta ... MetaRankingResolver (o mesmo do /metas)
+ *   pedidos emitidos ............. MetaRankingResolver::pedidosNoPeriodo()
+ *   contatos ..................... ContatosPorUsuario   (o mesmo da Visão do Gestor)
  *
  * Um e-mail que diz um número e uma tela que diz outro é pior que não ter e-mail: o
  * gestor deixa de confiar nos dois (Regra de ouro nº 8, e a regra "os números têm que
@@ -26,12 +27,14 @@ use Illuminate\Support\Collection;
  *
  * ⚠️ QUEM É A EQUIPE: {@see EquipeScopeResolver::codigosEquipeDe()} — quem tem
  * `cod_super` igual ao código do gestor, MAIS o próprio gestor. É a regra das telas de
- * gestão (/equipe, /metas), não a do Painel (lá o supervisor em modo Equipe vê a equipe
- * PURA). A regra decide pelo `cod_super`, não pelo perfil — é o que faz o Beto (diretor
- * com representantes abaixo dele) funcionar igual a um supervisor.
+ * gestão (/equipe, /metas), não a do Painel. Decide pelo `cod_super`, não pelo perfil —
+ * é o que faz o Beto (diretor com representantes abaixo dele) funcionar igual a um
+ * supervisor.
  *
- * ⚠️ JANELAS: venda, faturamento e pedidos vão até D-1 (D-3 na segunda), igual ao Painel
- * e ao /metas; contatos vão até AGORA. O e-mail declara as duas datas no cabeçalho.
+ * ⚠️ DOIS "DIAS" NA MESMA LINHA, de propósito: contatos são de HOJE (vêm do CRM, ao
+ * vivo); pedidos, venda e faturamento são do último dia FECHADO
+ * ({@see MetaRankingResolver::ultimoDiaFechado()}), porque às 18h o TOTVS de hoje ainda
+ * não entrou — "venda de hoje" sairia zero todo dia. O e-mail escreve as duas datas.
  */
 class ResumoEquipeBuilder
 {
@@ -39,7 +42,6 @@ class ResumoEquipeBuilder
         private readonly EquipeScopeResolver $equipes,
         private readonly MetaRankingResolver $metas,
         private readonly ContatosPorUsuario $contatos,
-        private readonly ClienteStatusResolver $carteira,
     ) {}
 
     /**
@@ -78,6 +80,7 @@ class ResumoEquipeBuilder
             'titulo' => 'Equipe '.$this->primeiroNome($gestor),
             'secoes' => [$secao],
             'totais' => $secao['totais'],
+            'resumao' => $this->resumao($secao['codigos']),
             'vendedores' => $secao['totais']['vendedores'],
             'periodo' => $this->periodo(),
         ];
@@ -93,7 +96,7 @@ class ResumoEquipeBuilder
      * ⚠️ O TOTAL NÃO É A SOMA DAS SEÇÕES: é recalculado sobre a UNIÃO dos códigos. Um
      * supervisor pode estar debaixo de um diretor (o `cod_super` do supervisor aponta para
      * o diretor), e aí o próprio código dele aparece em duas equipes. Somar as seções
-     * contaria a carteira dele duas vezes; a união conta uma.
+     * contaria o dia dele duas vezes; a união conta uma.
      *
      * @return array<string, mixed>
      */
@@ -120,20 +123,19 @@ class ResumoEquipeBuilder
             $uniao = [...$uniao, ...$codigos];
         }
 
-        // Ranking das equipes: melhor % de venda no mês primeiro, sem meta por último.
-        usort($secoes, fn (array $a, array $b) => $this->compararPct($a['totais']['vendaPct'], $b['totais']['vendaPct'])
+        // Equipes pela venda do dia, maior primeiro.
+        usort($secoes, fn (array $a, array $b) => $b['totais']['venda'] <=> $a['totais']['venda']
             ?: strcmp($a['nome'], $b['nome']));
 
-        $totais = $uniao === []
-            ? $this->totaisVazios()
-            : $this->secao('Total', array_values(array_unique($uniao)))['totais'];
+        $total = $uniao === [] ? null : $this->secao('Total', array_values(array_unique($uniao)));
 
         return [
             'tipo' => 'consolidado',
             'titulo' => 'Visão consolidada das equipes',
             'secoes' => $secoes,
-            'totais' => $totais,
-            'vendedores' => $totais['vendedores'],
+            'totais' => $total['totais'] ?? $this->diaVazio(0),
+            'resumao' => $this->resumao($total['codigos'] ?? []),
+            'vendedores' => $total['totais']['vendedores'] ?? 0,
             'periodo' => $this->periodo(),
         ];
     }
@@ -153,138 +155,97 @@ class ResumoEquipeBuilder
     }
 
     /**
-     * Uma equipe: linha por pessoa + totais.
+     * Uma equipe: o dia de cada pessoa + o total do dia.
+     *
+     * A lista de pessoas é a do ranking do /metas (ativos com código) — assim quem aparece
+     * aqui é quem aparece lá, e o resumão soma exatamente esses códigos.
      *
      * @param  list<string>  $codigos
-     * @return array{nome: string, linhas: list<array<string, mixed>>, totais: array<string, mixed>}
+     * @return array{nome: string, codigos: list<string>, linhas: list<array<string, mixed>>, totais: array<string, mixed>}
      */
     private function secao(string $nome, array $codigos): array
     {
-        $ano = (int) now()->year;
-        $mes = (int) now()->month;
+        $pessoas = collect($this->metas->ranking($codigos, (int) now()->year, (int) now()->month)['linhas']);
+        $codigosAtivos = $pessoas->pluck('codVendedor')->filter()->unique()->values()->all();
 
-        $ranking = $this->metas->ranking($codigos, $ano, $mes);
-        $linhasRanking = collect($ranking['linhas']);
+        $dia = $this->metas->ultimoDiaFechado()->toDateString();
+        $venda = $this->metas->realizadoPorCodigo('venda', $codigosAtivos, $dia, $dia);
+        $faturamento = $this->metas->realizadoPorCodigo('faturamento', $codigosAtivos, $dia, $dia);
+        $pedidos = $this->metas->pedidosNoPeriodo($codigosAtivos, $dia, $dia);
 
-        $ids = $linhasRanking->pluck('userId')->map(fn ($id) => (int) $id)->all();
-        $agora = now()->toDateTimeString();
-        $hoje = $this->contatos->porUsuario($ids, now()->startOfDay()->toDateTimeString(), $agora);
-        $noMes = $this->contatos->porUsuario($ids, now()->startOfMonth()->toDateTimeString(), $agora);
+        $ids = $pessoas->pluck('userId')->map(fn ($id) => (int) $id)->all();
+        $contatos = $this->contatos->porUsuario($ids, now()->startOfDay()->toDateTimeString(), now()->toDateTimeString());
 
-        $pedidos = $this->metas->pedidosPorCodigo($codigos, $ano, $mes);
-        $carteiraPorVendedor = $this->carteira->contagem($codigos, porVendedor: true);
-
-        $vazioContato = ['total' => 0, 'porCanal' => Ligacao::lerPorCanal(null)];
-        $vazioCarteira = ['ativos' => 0, 'inativando' => 0, 'inativos' => 0, 'total' => 0];
-
-        $linhas = $linhasRanking->map(fn (array $l) => [
+        $linhas = $pessoas->map(fn (array $l) => [
             'nome' => $l['nome'],
             'codVendedor' => $l['codVendedor'],
             'perfil' => $l['perfil'],
-            'contatosHoje' => $hoje[$l['userId']] ?? $vazioContato,
-            'contatosMes' => $noMes[$l['userId']] ?? $vazioContato,
-            'pedidos' => $pedidos[$l['codVendedor']] ?? 0,
-            'vendaRealizado' => $l['vendaRealizado'],
-            'vendaMeta' => $l['vendaMeta'],
-            'vendaPct' => $l['vendaPct'],
-            'fatRealizado' => $l['fatRealizado'],
-            'fatMeta' => $l['fatMeta'],
-            'fatPct' => $l['fatPct'],
-            'carteira' => $this->comPercentuais($carteiraPorVendedor[$l['codVendedor']] ?? $vazioCarteira),
+            'contatos' => (int) ($contatos[$l['userId']]['total'] ?? 0),
+            'pedidos' => (int) ($pedidos[$l['codVendedor']] ?? 0),
+            'venda' => (float) ($venda[$l['codVendedor']] ?? 0),
+            'faturamento' => (float) ($faturamento[$l['codVendedor']] ?? 0),
         ])
-            ->sort(fn (array $a, array $b) => $this->compararPct($a['vendaPct'], $b['vendaPct'])
+            ->sort(fn (array $a, array $b) => $b['venda'] <=> $a['venda']
+                ?: $b['contatos'] <=> $a['contatos']
                 ?: strcmp($a['nome'], $b['nome']))
             ->values();
 
-        return [
-            'nome' => $nome,
-            'linhas' => $linhas->all(),
-            'totais' => $this->totais($linhas, $ranking['totais'], $pedidos, $codigos),
-        ];
+        // Venda, faturamento e pedidos por CÓDIGO, não por linha: duas contas que dividem
+        // um código mostram o mesmo número nas duas linhas, mas o pedido é um só.
+        $totais = $this->diaVazio($linhas->count());
+        $totais['contatos'] = (int) $linhas->sum('contatos');
+        $totais['pedidos'] = (int) array_sum($pedidos);
+        $totais['venda'] = (float) array_sum($venda);
+        $totais['faturamento'] = (float) array_sum($faturamento);
+
+        return ['nome' => $nome, 'codigos' => $codigosAtivos, 'linhas' => $linhas->all(), 'totais' => $totais];
     }
 
     /**
-     * @param  Collection<int, array<string, mixed>>  $linhas
-     * @param  array<string, float|null>  $totaisRanking
-     * @param  array<string, int>  $pedidos
+     * O "resumão" do rodapé: o mês contra a meta, só no total.
+     *
+     * Acumulado do ano e saúde da carteira saíram por decisão do Tony/Leandro
+     * (2026-09-28): o e-mail é do DIA, e o que não muda de um dia para o outro vira ruído.
+     *
      * @param  list<string>  $codigos
-     * @return array<string, mixed>
+     * @return array{mes: array<string, array{realizado: float, meta: float, pct: float|null}>}
      */
-    private function totais(Collection $linhas, array $totaisRanking, array $pedidos, array $codigos): array
+    private function resumao(array $codigos): array
     {
-        $somarContatos = function (string $campo) use ($linhas): array {
-            $porCanal = [];
-            foreach (Ligacao::TIPOS_CONTATO as $canal) {
-                $porCanal[$canal] = (int) $linhas->sum(fn (array $l) => $l[$campo]['porCanal'][$canal] ?? 0);
-            }
+        $ano = (int) now()->year;
+        $mes = (int) now()->month;
+        $inicio = now()->startOfMonth()->toDateString();
+        $fim = $this->metas->fimRealizado($ano, $mes)->toDateString();
 
-            return ['total' => (int) $linhas->sum(fn (array $l) => $l[$campo]['total']), 'porCanal' => $porCanal];
-        };
+        $out = [];
+        foreach (['venda', 'faturamento'] as $tipo) {
+            $realizado = (float) array_sum($this->metas->realizadoPorCodigo($tipo, $codigos, $inicio, $fim));
+            $meta = (float) array_sum($this->metas->metasPorCodigo($codigos, $ano, $mes, $mes, $tipo));
+            $out[$tipo] = [
+                'realizado' => $realizado,
+                'meta' => $meta,
+                'pct' => $meta > 0 ? round($realizado / $meta * 100, 1) : null,
+            ];
+        }
 
-        return [
-            'vendedores' => $linhas->count(),
-            'contatosHoje' => $somarContatos('contatosHoje'),
-            'contatosMes' => $somarContatos('contatosMes'),
-            // Por código, não por linha: duas contas que dividem um código mostram o mesmo
-            // número nas duas linhas, mas os pedidos são um só.
-            'pedidos' => (int) array_sum(array_intersect_key($pedidos, array_flip($linhas->pluck('codVendedor')->unique()->all()))),
-            'vendaRealizado' => $totaisRanking['vendaRealizado'],
-            'vendaMeta' => $totaisRanking['vendaMeta'],
-            'vendaPct' => $totaisRanking['vendaPct'],
-            'fatRealizado' => $totaisRanking['fatRealizado'],
-            'fatMeta' => $totaisRanking['fatMeta'],
-            'fatPct' => $totaisRanking['fatPct'],
-            // Da equipe inteira, e não a soma das linhas — ver ClienteStatusResolver::contagem().
-            'carteira' => $this->comPercentuais($this->carteira->contagem($codigos)),
-        ];
+        return ['mes' => $out];
     }
 
-    /**
-     * @param  array{ativos: int, inativando: int, inativos: int, total: int}  $c
-     * @return array<string, int|float>
-     */
-    private function comPercentuais(array $c): array
+    /** @return array<string, int|float> */
+    private function diaVazio(int $vendedores): array
     {
-        $pct = fn (int $n) => $c['total'] > 0 ? round($n / $c['total'] * 100, 1) : 0.0;
-
-        return $c + [
-            'pctAtivos' => $pct($c['ativos']),
-            'pctInativando' => $pct($c['inativando']),
-            'pctInativos' => $pct($c['inativos']),
-        ];
+        return ['vendedores' => $vendedores, 'contatos' => 0, 'pedidos' => 0, 'venda' => 0.0, 'faturamento' => 0.0];
     }
 
-    /** @return array<string, mixed> */
-    private function totaisVazios(): array
-    {
-        return $this->totais(collect(), [
-            'vendaRealizado' => 0.0, 'vendaMeta' => 0.0, 'vendaPct' => null,
-            'fatRealizado' => 0.0, 'fatMeta' => 0.0, 'fatPct' => null,
-        ], [], []);
-    }
-
-    /** @return array{vendaAte: string, contatosAte: string, geradoEm: string} */
+    /** @return array{dia: string, vendaAte: string, contatosAte: string, geradoEm: string} */
     private function periodo(): array
     {
-        $fim = $this->metas->fimRealizado((int) now()->year, (int) now()->month);
-
         return [
-            'vendaAte' => $fim->toDateString(),
+            'dia' => $this->metas->ultimoDiaFechado()->toDateString(),
+            'vendaAte' => $this->metas->fimRealizado((int) now()->year, (int) now()->month)->toDateString(),
             'contatosAte' => now()->toDateTimeString(),
             'geradoEm' => now()->toDateTimeString(),
         ];
-    }
-
-    private function compararPct(?float $a, ?float $b): int
-    {
-        if ($a === $b) {
-            return 0;
-        }
-        if ($a === null || $b === null) {
-            return $a === null ? 1 : -1;
-        }
-
-        return $b <=> $a;
     }
 
     private function nomeDe(User $u): string

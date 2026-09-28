@@ -42,6 +42,24 @@ class FormatoResumo
     }
 
     /**
+     * Dinheiro cheio, sem centavos — para COLUNA de tabela. Numa coluna o olho compara
+     * pelo comprimento do número; "R$ 77 mil" ao lado de "R$ 4.491" mistura escalas e
+     * engana a comparação. No destaque (um número sozinho) vale o compacto de reais().
+     */
+    public function reaisCheio(int|float|null $v): string
+    {
+        return 'R$ '.number_format((float) $v, 0, ',', '.');
+    }
+
+    /** "sexta, 25/09" — o dia de venda/faturamento, sem o "-feira". */
+    public function diaCurto(\DateTimeInterface $d): string
+    {
+        $c = \Illuminate\Support\Carbon::instance($d);
+
+        return str_replace('-feira', '', $c->translatedFormat('l')).', '.$c->format('d/m');
+    }
+
+    /**
      * Tom do % da meta — as mesmas faixas do /metas (atingiu ≥ 100, quase ≥ 80, abaixo).
      *
      * @return array{0: string, 1: string, 2: string} [fundo, texto, borda]

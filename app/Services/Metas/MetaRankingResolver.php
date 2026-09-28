@@ -390,10 +390,7 @@ class MetaRankingResolver
         }
 
         // Mês corrente: D-1; segunda → D-3 (sexta).
-        $fim = $hoje->copy()->subDay();
-        if ($hoje->isMonday()) {
-            $fim = $hoje->copy()->subDays(3);
-        }
+        $fim = $this->ultimoDiaFechado();
 
         $inicioMes = Carbon::create($ano, $mes, 1)->startOfDay();
         if ($fim->lt($inicioMes)) {
@@ -401,6 +398,18 @@ class MetaRankingResolver
         }
 
         return $fim;
+    }
+
+    /**
+     * O último dia com venda e faturamento fechados: ontem, e sexta quando hoje é
+     * segunda. É o "D-1" do Painel e do /metas — e o "dia" do resumo diário por e-mail,
+     * que não pode ser hoje: às 18h o TOTVS de hoje ainda não entrou.
+     */
+    public function ultimoDiaFechado(): Carbon
+    {
+        $hoje = now()->startOfDay();
+
+        return $hoje->isMonday() ? $hoje->copy()->subDays(3) : $hoje->copy()->subDay();
     }
 
     private function usaD1(int $ano, int $mes): bool
@@ -448,7 +457,7 @@ class MetaRankingResolver
      * @param  list<string>  $codigos
      * @return array<string, float>
      */
-    private function metasPorCodigo(array $codigos, int $ano, int $mesInicio, int $mesFim, string $tipo): array
+    public function metasPorCodigo(array $codigos, int $ano, int $mesInicio, int $mesFim, string $tipo): array
     {
         if ($codigos === []) {
             return [];
@@ -477,7 +486,7 @@ class MetaRankingResolver
      * @param  list<string>  $codigos
      * @return array<string, float>
      */
-    private function realizadoPorCodigo(string $tipo, array $codigos, string $inicio, string $fim): array
+    public function realizadoPorCodigo(string $tipo, array $codigos, string $inicio, string $fim): array
     {
         if ($codigos === [] || $fim < $inicio) {
             return [];
@@ -508,6 +517,18 @@ class MetaRankingResolver
     {
         [$inicio, $fim] = $this->intervaloDatas($ano, $mes, $mes);
 
+        return $this->pedidosNoPeriodo($codigos, $inicio, $fim);
+    }
+
+    /**
+     * Mesma contagem de {@see self::pedidosPorCodigo()}, numa janela qualquer (o resumo
+     * diário usa um dia só).
+     *
+     * @param  list<string>  $codigos
+     * @return array<string, int>
+     */
+    public function pedidosNoPeriodo(array $codigos, string $inicio, string $fim): array
+    {
         if ($codigos === [] || $fim < $inicio) {
             return [];
         }

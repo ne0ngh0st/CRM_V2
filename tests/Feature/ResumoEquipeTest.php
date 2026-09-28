@@ -26,8 +26,8 @@ use Tests\TestCase;
  *
  * O que estes testes travam, em ordem de importância:
  *
- * 1. OS NÚMEROS BATEM COM AS TELAS — venda/faturamento/meta iguais ao /metas, carteira
- *    igual ao card do Painel. O e-mail não pode ter aritmética própria.
+ * 1. OS NÚMEROS BATEM COM AS TELAS — o mês igual ao /metas, e o dia sendo o último dia
+ *    fechado (o D-1 do Painel). O e-mail não pode ter aritmética própria.
  * 2. QUEM É A EQUIPE — `cod_super`, não perfil (o caso do Beto, diretor com
  *    representantes), e o consolidado ser a lista de quem recebe `equipe`.
  * 3. O ENVIO — interruptor, idempotência, redirecionamento, gestor sem equipe.
@@ -36,7 +36,7 @@ use Tests\TestCase;
  * 500 / 90, metas 4.000 / 2.500 / 800 / 250): venda e faturamento têm o mesmo formato, e
  * com números parecidos trocar um pelo outro passaria verde.
  *
- * Relógio congelado numa QUARTA às 18:00 (o horário do envio): D-1 é terça, e "hoje"
+ * Relógio congelado numa QUARTA às 18:00 (perto do horário do envio, 18:15): D-1 é terça, e "hoje"
  * tem contatos que o mês também conta.
  */
 class ResumoEquipeTest extends TestCase
@@ -93,97 +93,90 @@ class ResumoEquipeTest extends TestCase
 
     // ── 1. Os números batem com as telas ────────────────────────────────────────
 
-    public function test_venda_faturamento_e_meta_sao_os_do_ranking_de_metas(): void
+    public function test_resumao_do_mes_e_o_do_ranking_de_metas(): void
     {
         $this->cenarioComercial();
 
         $resumo = app(ResumoEquipeBuilder::class)->equipe($this->sandra);
         $codigos = app(ResumoEquipeBuilder::class)->codigosDaEquipe($this->sandra);
-        $ranking = app(MetaRankingResolver::class)->ranking($codigos, 2026, 6);
+        $ranking = app(MetaRankingResolver::class)->ranking($codigos, 2026, 6)['totais'];
+        $mes = $resumo['resumao']['mes'];
 
-        foreach (['vendaRealizado', 'vendaMeta', 'vendaPct', 'fatRealizado', 'fatMeta', 'fatPct'] as $campo) {
-            $this->assertEquals($ranking['totais'][$campo], $resumo['totais'][$campo], $campo);
-        }
+        $this->assertEqualsWithDelta($ranking['vendaRealizado'], $mes['venda']['realizado'], 0.001);
+        $this->assertEqualsWithDelta($ranking['vendaMeta'], $mes['venda']['meta'], 0.001);
+        $this->assertEquals($ranking['vendaPct'], $mes['venda']['pct']);
+        $this->assertEqualsWithDelta($ranking['fatRealizado'], $mes['faturamento']['realizado'], 0.001);
+        $this->assertEqualsWithDelta($ranking['fatMeta'], $mes['faturamento']['meta'], 0.001);
+        $this->assertEquals($ranking['fatPct'], $mes['faturamento']['pct']);
 
         // E os valores esperados, para o teste não passar com as duas fontes erradas juntas.
         // Pedido de hoje (D-0) não entra: a janela é D-1, igual ao Painel.
-        $this->assertEqualsWithDelta(1700.0, $resumo['totais']['vendaRealizado'], 0.001);
-        $this->assertEqualsWithDelta(500.0, $resumo['totais']['fatRealizado'], 0.001);
-        $this->assertEqualsWithDelta(6500.0, $resumo['totais']['vendaMeta'], 0.001);
-        $this->assertEqualsWithDelta(1050.0, $resumo['totais']['fatMeta'], 0.001);
+        $this->assertEqualsWithDelta(1700.0, $mes['venda']['realizado'], 0.001);
+        $this->assertEqualsWithDelta(500.0, $mes['faturamento']['realizado'], 0.001);
+        $this->assertEqualsWithDelta(6500.0, $mes['venda']['meta'], 0.001);
+        $this->assertEqualsWithDelta(1050.0, $mes['faturamento']['meta'], 0.001);
     }
 
-    public function test_carteira_da_equipe_bate_com_o_card_do_painel(): void
+    /**
+     * O "dia" de venda/faturamento/pedidos é o último dia FECHADO (terça, com o relógio
+     * na quarta) — nem o mês inteiro, nem hoje, que às 18h ainda não entrou do TOTVS.
+     */
+    public function test_pedidos_venda_e_faturamento_sao_do_ultimo_dia_fechado(): void
     {
-        $this->cliente('1', '01', '000101', now()->subDays(10));            // ativo
-        $this->cliente('1', '02', '000101', now()->subDays(700));           // mesma empresa: vale a mais recente
-        $this->cliente('2', '01', '000101', now()->subDays(320));           // perdendo
-        $this->cliente('3', '01', '000102', null);                          // a trabalhar (nunca comprou)
-        $this->cliente('4', '01', '000102', now()->subDays(400));           // a trabalhar
-        $this->cliente('5', '01', '000999', now()->subDays(5));             // fora da equipe
-        // Mesma empresa com filiais em DOIS vendedores: conta uma vez em cada carteira,
-        // mas uma vez só na equipe — é o que separa "total da equipe" de "soma das linhas".
-        $this->cliente('6', '01', '000101', now()->subDays(20));
-        $this->cliente('6', '02', '000102', now()->subDays(800));
+        $this->cenarioComercial();
+        $this->nota('000101', '2026-06-16', 320.0);
+        $this->nota('000102', '2026-06-16', 45.0);
 
-        $builder = app(ResumoEquipeBuilder::class);
-        $resumo = $builder->equipe($this->sandra);
-
-        $card = app(CarteiraAderenciaResolver::class)->resolver(
-            Cliente::query()->whereIn('clientes.cod_vendedor', $builder->codigosDaEquipe($this->sandra)),
-        );
-        $somaCard = fn (string $campo) => $card['dentroSegmento'][$campo] + $card['foraSegmento'][$campo] + $card['semSegmentoDefinido'][$campo];
-
-        $carteira = $resumo['totais']['carteira'];
-        $this->assertSame($card['total'], $carteira['total']);
-        $this->assertSame($somaCard('ativos'), $carteira['ativos']);
-        $this->assertSame($somaCard('inativando'), $carteira['inativando']);
-        $this->assertSame($somaCard('inativos'), $carteira['inativos']);
-
-        $this->assertSame(['ativos' => 2, 'inativando' => 1, 'inativos' => 2, 'total' => 5],
-            array_intersect_key($carteira, array_flip(['ativos', 'inativando', 'inativos', 'total'])));
-        $this->assertSame(40.0, $carteira['pctAtivos']);
-
-        // Por vendedor, cada um vê a filial dele do cliente 6.
+        $resumo = app(ResumoEquipeBuilder::class)->equipe($this->sandra);
         $linhas = collect($resumo['secoes'][0]['linhas']);
         $ana = $linhas->firstWhere('codVendedor', '000101');
         $bruno = $linhas->firstWhere('codVendedor', '000102');
-        $this->assertSame(['ativos' => 2, 'inativando' => 1, 'inativos' => 0, 'total' => 3],
-            array_intersect_key($ana['carteira'], array_flip(['ativos', 'inativando', 'inativos', 'total'])));
-        $this->assertSame(3, $bruno['carteira']['inativos']);
+
+        $this->assertSame('2026-06-16', $resumo['periodo']['dia']);
+
+        // Ana: pedido do dia 05 e nota do dia 09 ficam de fora; só a nota de terça entra.
+        $this->assertSame(0, $ana['pedidos']);
+        $this->assertEqualsWithDelta(0.0, $ana['venda'], 0.001);
+        $this->assertEqualsWithDelta(320.0, $ana['faturamento'], 0.001);
+
+        // Bruno: o pedido de terça entra; o de hoje (9.999) e a nota de hoje (90) não.
+        $this->assertSame(1, $bruno['pedidos']);
+        $this->assertEqualsWithDelta(700.0, $bruno['venda'], 0.001);
+        $this->assertEqualsWithDelta(45.0, $bruno['faturamento'], 0.001);
+
+        $this->assertSame(1, $resumo['totais']['pedidos']);
+        $this->assertEqualsWithDelta(700.0, $resumo['totais']['venda'], 0.001);
+        $this->assertEqualsWithDelta(365.0, $resumo['totais']['faturamento'], 0.001);
+
+        // Maior venda do dia primeiro.
+        $this->assertSame('000102', $linhas->first()['codVendedor']);
     }
 
-    public function test_contatos_separam_hoje_do_mes_e_ignoram_excluida(): void
+    public function test_na_segunda_o_dia_fechado_e_a_sexta(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 6, 22, 18, 15)); // segunda
+        $this->pedido('000101', '2026-06-19', 1234.0);           // sexta
+        $this->pedido('000101', '2026-06-21', 50.0);             // domingo: não é o dia
+
+        $resumo = app(ResumoEquipeBuilder::class)->equipe($this->sandra);
+
+        $this->assertSame('2026-06-19', $resumo['periodo']['dia']);
+        $this->assertEqualsWithDelta(1234.0, $resumo['totais']['venda'], 0.001);
+    }
+
+    public function test_contatos_sao_so_os_de_hoje_e_ignoram_excluida(): void
     {
         $this->contato($this->ana, 'telefonica', now()->subHours(2));
         $this->contato($this->ana, 'whatsapp', now()->subHour());
-        $this->contato($this->ana, 'email', now()->subDays(3));
-        $this->contato($this->ana, 'whatsapp', now()->subDays(40));          // mês passado
+        $this->contato($this->ana, 'email', now()->subDays(1));              // ontem: não é hoje
         $this->contato($this->bruno, 'telefonica', now()->subMinutes(5), 'excluida');
-
-        $resumo = app(ResumoEquipeBuilder::class)->equipe($this->sandra);
-        $ana = collect($resumo['secoes'][0]['linhas'])->firstWhere('codVendedor', '000101');
-        $bruno = collect($resumo['secoes'][0]['linhas'])->firstWhere('codVendedor', '000102');
-
-        $this->assertSame(2, $ana['contatosHoje']['total']);
-        $this->assertSame(3, $ana['contatosMes']['total']);
-        $this->assertSame(['telefonica' => 1, 'whatsapp' => 1, 'email' => 1, 'presencial' => 0], $ana['contatosMes']['porCanal']);
-        $this->assertSame(0, $bruno['contatosHoje']['total']);
-
-        $this->assertSame(2, $resumo['totais']['contatosHoje']['total']);
-        $this->assertSame(1, $resumo['totais']['contatosHoje']['porCanal']['whatsapp']);
-    }
-
-    public function test_pedidos_do_mes_ate_ontem_por_vendedor(): void
-    {
-        $this->cenarioComercial();
 
         $resumo = app(ResumoEquipeBuilder::class)->equipe($this->sandra);
         $linhas = collect($resumo['secoes'][0]['linhas']);
 
-        $this->assertSame(1, $linhas->firstWhere('codVendedor', '000101')['pedidos']);
-        $this->assertSame(1, $linhas->firstWhere('codVendedor', '000102')['pedidos']);
-        $this->assertSame(2, $resumo['totais']['pedidos']);
+        $this->assertSame(2, $linhas->firstWhere('codVendedor', '000101')['contatos']);
+        $this->assertSame(0, $linhas->firstWhere('codVendedor', '000102')['contatos']);
+        $this->assertSame(2, $resumo['totais']['contatos']);
     }
 
     // ── 2. Quem é a equipe ──────────────────────────────────────────────────────
@@ -215,18 +208,22 @@ class ResumoEquipeTest extends TestCase
     public function test_consolidado_tem_uma_secao_por_gestor_marcado_e_total_sem_dupla_contagem(): void
     {
         $this->cenarioComercial();
-        // Pedido da própria Sandra: o código dela está na equipe dela E na do Beto.
-        $this->pedido('000100', '2026-06-10', 3300.0);
+        // Pedido da própria Sandra no dia fechado: o código dela está na equipe dela E na do Beto.
+        $this->pedido('000100', '2026-06-16', 3300.0);
 
         $resumo = app(ResumoEquipeBuilder::class)->consolidado();
 
         $nomes = collect($resumo['secoes'])->pluck('nome')->sort()->values()->all();
         $this->assertSame(['ROBERTO ALVES', 'SANDRA LIMA'], $nomes);
 
+        // Dia: Bruno 700 + Sandra 3.300 na equipe da Sandra; Sandra 3.300 na do Beto.
         $somaSecoes = collect($resumo['secoes'])->sum(fn ($s) => $s['totais']['pedidos']);
-        $this->assertSame(4, $somaSecoes, 'o pedido da Sandra aparece nas duas seções');
-        $this->assertSame(3, $resumo['totais']['pedidos'], 'mas o total conta a união dos códigos');
-        $this->assertEqualsWithDelta(5000.0, $resumo['totais']['vendaRealizado'], 0.001);
+        $this->assertSame(3, $somaSecoes, 'o pedido da Sandra aparece nas duas seções');
+        $this->assertSame(2, $resumo['totais']['pedidos'], 'mas o total conta a união dos códigos');
+        $this->assertEqualsWithDelta(4000.0, $resumo['totais']['venda'], 0.001);
+
+        // O resumão do mês também é sobre a união: 1.000 + 700 + 3.300.
+        $this->assertEqualsWithDelta(5000.0, $resumo['resumao']['mes']['venda']['realizado'], 0.001);
     }
 
     public function test_consolidado_acompanha_quem_esta_marcado(): void
@@ -318,11 +315,18 @@ class ResumoEquipeTest extends TestCase
 
         $html = (new ResumoEquipeMail($resumo, 'Leandro'))->render();
 
-        $this->assertStringContainsString('Olá, Leandro', $html);
-        $this->assertStringContainsString('Ranking das equipes', $html);
-        $this->assertStringContainsString('Equipe SANDRA LIMA', $html);
-        $this->assertStringContainsString('ANA SOUZA', $html);
-        $this->assertStringContainsString('R$ 1.700', $html);
+        $this->assertStringContainsString('Equipe Sandra Lima', $html);
+        $this->assertStringContainsString('Ana Souza', $html);
+        $this->assertStringContainsString('R$ 700', $html);          // venda do dia (Bruno)
+        $this->assertStringContainsString('R$ 1.700', $html);        // resumão do mês
+
+        // O dia da semana escrito, dos dois lados da linha.
+        $this->assertStringContainsString('Hoje, quarta, 17/06', $html);
+        $this->assertStringContainsString('Terça, 16/06', $html);
+
+        // Saíram em 2026-09-28: carteira e acumulado do ano.
+        $this->assertStringNotContainsString('Carteira', $html);
+        $this->assertStringNotContainsString('acumulado', $html);
     }
 
     public function test_comando_de_previa_grava_html_sem_enviar(): void
@@ -413,15 +417,6 @@ class ResumoEquipeTest extends TestCase
     private function meta(string $cod, string $tipo, float $valor): void
     {
         MetaMensal::create(['cod_vendedor' => $cod, 'ano' => 2026, 'mes' => 6, 'tipo' => $tipo, 'valor_meta' => $valor]);
-    }
-
-    private function cliente(string $cod, string $loja, string $vendedor, ?Carbon $ultimaCompra): void
-    {
-        Cliente::create([
-            'cod_cliente' => $cod, 'loja' => $loja, 'razao_social' => "CLIENTE {$cod}-{$loja}",
-            'cod_vendedor' => $vendedor, 'estado' => 'SP',
-            'data_ultima_compra' => $ultimaCompra?->toDateString(),
-        ]);
     }
 
     private function contato(User $u, string $canal, Carbon $quando, string $status = 'finalizada'): void

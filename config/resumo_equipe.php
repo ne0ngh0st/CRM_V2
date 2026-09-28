@@ -7,7 +7,7 @@ return [
     | Resumo diário da equipe por e-mail
     |--------------------------------------------------------------------------
     |
-    | Interruptor do ENVIO AGENDADO (dias úteis às 18:00). Nasce desligado: quem
+    | Interruptor do ENVIO AGENDADO (dias úteis às 18:15). Nasce desligado: quem
     | recebe se marca na tela Equipe, e o agendamento só passa a mandar quando
     | isto virar true. O comando `resumo-equipe:enviar --para=...` funciona com
     | ele desligado — é o caminho para o primeiro envio de validação.
