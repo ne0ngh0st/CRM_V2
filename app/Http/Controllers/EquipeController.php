@@ -354,7 +354,7 @@ class EquipeController extends Controller
             VendedorPerfil::create([
                 'user_id' => $usuario->id,
                 'cod_vendedor' => $data['cod_vendedor'],
-                'cod_super' => $data['cod_super'] ?: null,
+                'cod_super' => ($data['cod_super'] ?? null) ?: null,
             ]);
         }
 
@@ -403,7 +403,7 @@ class EquipeController extends Controller
         if (! empty($data['cod_vendedor'])) {
             VendedorPerfil::updateOrCreate(
                 ['user_id' => $usuario->id],
-                ['cod_vendedor' => $data['cod_vendedor'], 'cod_super' => $data['cod_super'] ?: null],
+                ['cod_vendedor' => $data['cod_vendedor'], 'cod_super' => ($data['cod_super'] ?? null) ?: null],
             );
 
             if ($codVendedorAnterior && $codVendedorAnterior !== $data['cod_vendedor']) {
