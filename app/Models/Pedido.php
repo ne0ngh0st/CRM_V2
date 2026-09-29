@@ -38,6 +38,8 @@ class Pedido extends Model
         'valor_total',
     ];
 
+    // ⚠️ `fora_do_200` fica FORA do $fillable: quem escreve é só o import do 200.
+
     protected function casts(): array
     {
         return [
@@ -132,7 +134,7 @@ class Pedido extends Model
      */
     public function scopeContaParaFaturamentoDe(Builder $query, string $fimDoMes): Builder
     {
-        return $query->emAberto()
+        return $query->naCarteiraAberta()
             ->where('data_previsao_faturamento', '<=', $fimDoMes)
             ->where('data_pedido', '>=', self::limiteEmAberto());
     }
@@ -147,6 +149,25 @@ class Pedido extends Model
     public function scopeEmAberto(Builder $query): Builder
     {
         return $query->whereNull('data_faturamento');
+    }
+
+    /**
+     * A carteira de pedidos em aberto como o TOTVS a vê HOJE: em aberto no CRM E presente
+     * no último relatório 200.
+     *
+     * ⚠️ É isto que `/pedidos-abertos`, o card "Pedidos que requerem atenção", o aviso de
+     * atraso e a "falta vender" do /metas usam — não o `emAberto()` cru. O 232 é recorte
+     * pela data do pedido (o mês corrente), então pedido de mês anterior que faturou
+     * depois nunca recebe a nota no CRM e ficaria "em aberto" para sempre. Quem sabe que
+     * ele saiu da carteira é o 200 (`fora_do_200`, gravado pelo import).
+     *
+     * ⚠️ NÃO usar em métrica de VENDA (`contaComoVenda`) nem em `/pedidos-emitidos`: lá a
+     * pergunta é "o que foi vendido", e a resposta é do 232 — um pedido que saiu do 200
+     * continua sendo venda.
+     */
+    public function scopeNaCarteiraAberta(Builder $query): Builder
+    {
+        return $query->emAberto()->where('fora_do_200', false);
     }
 
     /**

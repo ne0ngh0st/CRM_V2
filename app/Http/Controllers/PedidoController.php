@@ -170,7 +170,7 @@ class PedidoController extends Controller
         ];
     }
 
-    /** Escopo (cod_vendedor) + busca/status/data. Pedidos em aberto (data_faturamento nula). Usado por index() (KPIs e lista) e exportarAbertos(). */
+    /** Escopo (cod_vendedor) + busca/status/data. Pedidos em aberto que estão no último 200 (Pedido::naCarteiraAberta). Usado por index() (KPIs e lista) e exportarAbertos(). */
     protected function baseQueryAbertos(Request $request): Builder
     {
         $scope = $this->scopeResolver->resolve(
@@ -184,7 +184,7 @@ class PedidoController extends Controller
         $dataInicio = (string) $request->string('data_inicio');
         $dataFim = (string) $request->string('data_fim');
 
-        $query = Pedido::query()->emAberto();
+        $query = Pedido::query()->naCarteiraAberta();
 
         if ($scope['codVendedores'] !== null) {
             $query->whereIn('cod_vendedor', $scope['codVendedores']);

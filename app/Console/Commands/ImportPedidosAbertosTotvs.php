@@ -23,6 +23,10 @@ use Illuminate\Support\Facades\DB;
  * Pedido que está no 200 e não no CRM é contado e avisado, não gravado: ou é remessa,
  * ou é mais novo que o último 232 — e aparece quando o 232 for gerado de novo.
  *
+ * O contrário também é tratado (2026-09-29): pedido em aberto no CRM que SAIU do 200 é
+ * marcado `fora_do_200` e some de `/pedidos-abertos`, que volta a ser espelho do 200.
+ * Sem apagar nem dar baixa — a venda continua sendo do 232. Ver marcarForaDo200().
+ *
  * ⚠️ O STATUS DO PEDIDO SAI DO `HISTORICO`, e este comentário já disse o contrário.
  * Ele mandava não adivinhar status a partir da frase, porque a redação poderia mudar —
  * e o efeito foi todo pedido em aberto entrar como `pendente_totvs`, deixando a tela com
@@ -160,9 +164,22 @@ class ImportPedidosAbertosTotvs extends Command
         } else {
             DB::transaction(function () use ($atualizar) {
                 $this->gravar($atualizar);
+                $this->marcarForaDo200($atualizar);
             });
 
             $this->info('Etapa atualizada em '.number_format(count($atualizar), 0, ',', '.').' pedidos em aberto.');
+
+            $fora = DB::table('pedidos')->whereNull('data_faturamento')->where('fora_do_200', true)
+                ->selectRaw('COUNT(*) as n, COALESCE(SUM(valor_total), 0) as valor')->first();
+
+            if ((int) $fora->n > 0) {
+                $this->line(sprintf(
+                    'Em aberto no CRM e fora do 200 (escondidos de /pedidos-abertos): %s pedidos, R$ %s',
+                    number_format((int) $fora->n, 0, ',', '.'),
+                    number_format((float) $fora->valor, 2, ',', '.')
+                ));
+                $this->line('  → faturados ou cancelados depois do último 232 do mês deles. Somem da venda só quando o 232 daquele mês for gerado de novo.');
+            }
         }
 
         if ($foraDoCrm !== []) {
@@ -245,6 +262,32 @@ class ImportPedidosAbertosTotvs extends Command
 
         foreach (array_slice($naoReconhecidos, 0, 10, true) as $frase => $quantos) {
             $this->line(sprintf('     %5s × %s', $quantos, mb_strimwidth($frase, 0, 90, '…')));
+        }
+    }
+
+    /**
+     * Espelho do 200: pedido em aberto no CRM que não veio neste arquivo é marcado
+     * `fora_do_200` e sai de `/pedidos-abertos` (ver {@see \App\Models\Pedido::scopeNaCarteiraAberta()}).
+     *
+     * ⚠️ Arquivo sem nenhum pedido reconhecido NÃO marca nada: um 200 truncado ou gerado
+     * vazio esconderia a carteira inteira. Nesse caso fica a marca da rodada anterior.
+     *
+     * ⚠️ `DB::table` e não o model: não é edição do pedido, não deve tocar `updated_at`.
+     *
+     * @param  array<string, array<string, mixed>>  $noArquivo  pedidos em aberto do CRM presentes no 200
+     */
+    private function marcarForaDo200(array $noArquivo): void
+    {
+        if ($noArquivo === []) {
+            $this->warn('Nenhum pedido do 200 casou com o CRM: a marca "fora do 200" NÃO foi atualizada.');
+
+            return;
+        }
+
+        DB::table('pedidos')->whereNull('data_faturamento')->where('fora_do_200', false)->update(['fora_do_200' => true]);
+
+        foreach (array_chunk(Normalizador::numerosDePedido($noArquivo), 2000) as $pedaco) {
+            DB::table('pedidos')->whereIn('numero_pedido', $pedaco)->update(['fora_do_200' => false]);
         }
     }
 

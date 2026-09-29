@@ -7,6 +7,7 @@ use App\Models\PedidoItem;
 use App\Services\Pedidos\StatusPedidoResolver;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\EscreveRelatorio200;
 use Tests\Concerns\EscreveRelatorio232;
 use Tests\TestCase;
@@ -168,6 +169,55 @@ class PedidosFonteDaVendaTest extends TestCase
         $pedido = Pedido::where('numero_pedido', '995007')->firstOrFail();
         $this->assertNull($pedido->data_faturamento);
         $this->assertSame(StatusPedidoResolver::DESCONHECIDO, $pedido->status);
+    }
+
+    /**
+     * 🥇 A página de pedidos em aberto é espelho do 200 (2026-09-29): o que saiu do 200 é
+     * marcado e some da tela, sem perder valor nem ganhar data de faturamento inventada.
+     */
+    public function test_200_marca_pedido_em_aberto_que_saiu_do_relatorio(): void
+    {
+        $this->pedido('990010', '2026-08-14', valor: 321.0);   // está no 200
+        $this->pedido('990011', '2026-08-20', valor: 654.0);   // faturou fora do 232: saiu do 200
+        $this->pedido('990012', '2026-08-01', faturadoEm: '2026-08-10'); // faturado: não se mexe
+
+        $this->escreverRelatorio200([['990010', 'PEDIDO 990010 INCLUIDO NA CARGA 190050']]);
+
+        $this->artisan('totvs:import-pedidos-abertos')
+            ->expectsOutputToContain('fora do 200 (escondidos de /pedidos-abertos): 1 pedidos, R$ 654,00')
+            ->assertSuccessful();
+
+        $this->assertSame(['990010'], Pedido::query()->naCarteiraAberta()->pluck('numero_pedido')->all());
+
+        $fora = Pedido::where('numero_pedido', '990011')->firstOrFail();
+        $this->assertNull($fora->data_faturamento, 'o 200 não sabe se foi nota ou cancelamento');
+        $this->assertEqualsWithDelta(654.0, (float) $fora->valor_total, 0.001, 'a venda continua sendo do 232');
+        $this->assertFalse((bool) DB::table('pedidos')->where('numero_pedido', '990012')->value('fora_do_200'));
+    }
+
+    public function test_pedido_que_volta_ao_200_volta_para_a_tela(): void
+    {
+        $this->pedido('990013', '2026-08-14');
+        DB::table('pedidos')->where('numero_pedido', '990013')->update(['fora_do_200' => true]);
+
+        $this->escreverRelatorio200([['990013', 'PEDIDO 990013 INCLUIDO NA CARGA 190050']]);
+        $this->artisan('totvs:import-pedidos-abertos')->assertSuccessful();
+
+        $this->assertSame(['990013'], Pedido::query()->naCarteiraAberta()->pluck('numero_pedido')->all());
+    }
+
+    /** Um 200 vazio ou truncado não pode esconder a carteira inteira. */
+    public function test_200_sem_nenhum_pedido_do_crm_nao_esconde_nada(): void
+    {
+        $this->pedido('990014', '2026-08-14');
+
+        $this->escreverRelatorio200([['990099', 'PEDIDO 990099 INCLUIDO NA CARGA 190050']]);
+
+        $this->artisan('totvs:import-pedidos-abertos')
+            ->expectsOutputToContain('NÃO foi atualizada')
+            ->assertSuccessful();
+
+        $this->assertSame(['990014'], Pedido::query()->naCarteiraAberta()->pluck('numero_pedido')->all());
     }
 
     private function pedido(string $numero, string $data, ?string $faturadoEm = null, float $valor = 100.0, ?string $status = null): void

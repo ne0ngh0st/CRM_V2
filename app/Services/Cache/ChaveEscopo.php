@@ -84,8 +84,12 @@ final readonly class ChaveEscopo
      *   ele a tela seguiria mostrando o número errado por até 10 min depois do deploy, com
      *   o código novo no ar e nada quebrado para acusar. Quem for conferir o conserto na
      *   hora veria o bug.
+     *
+     *   v9 → v10 (2026-09-29) — `pedidos-atencao` passou a contar só pedido em aberto que
+     *   está no último relatório 200 (`Pedido::naCarteiraAberta()`). Pedido de mês
+     *   anterior que já faturou deixava de sair da carteira. Muda de VALOR, não de forma.
      */
-    public const VERSAO = 'v9';
+    public const VERSAO = 'v10';
 
     private const PREFIXO = 'agg';
 

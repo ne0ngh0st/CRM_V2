@@ -333,7 +333,8 @@ class ViewsBi
             JOIN '.self::a('pedido_itens').' i ON i.pedido_id = p.id
             LEFT JOIN '.self::a('clientes').' c ON c.id = p.cliente_id
             '.self::joinMunicipio('dp', 'c.estado', 'c.municipio').'
-            WHERE p.data_faturamento IS NULL';
+            WHERE p.data_faturamento IS NULL
+              AND p.fora_do_200 = 0'; // espelho do 200, igual a Pedido::naCarteiraAberta()
     }
 
     /**

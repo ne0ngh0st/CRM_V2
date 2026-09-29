@@ -251,7 +251,12 @@ class ViewsBiTest extends TestCase
             'numero_pedido' => '900000', 'cod_vendedor' => '010585', 'data_pedido' => '2026-01-01',
             'data_faturamento' => '2026-01-05', 'valor_total' => 10,
         ]);
-        foreach ([$aberto, $noPrazo, $faturado] as $id) {
+        // Em aberto no CRM mas fora do último 200 (faturou depois do 232 do mês dele).
+        $saiuDo200 = DB::table('pedidos')->insertGetId([
+            'numero_pedido' => '900001', 'cod_vendedor' => '010585', 'data_pedido' => now()->toDateString(),
+            'fora_do_200' => true, 'valor_total' => 10,
+        ]);
+        foreach ([$aberto, $noPrazo, $faturado, $saiuDo200] as $id) {
             DB::table('pedido_itens')->insert(['pedido_id' => $id, 'cod_produto' => 'V1', 'descricao' => 'X', 'quantidade' => 2, 'quantidade_liberada' => 1, 'valor_unitario' => 5, 'valor_total' => 10]);
         }
 

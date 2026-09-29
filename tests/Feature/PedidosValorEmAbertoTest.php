@@ -10,6 +10,7 @@ use App\Services\Cache\ChaveEscopo;
 use App\Services\Dashboard\DashboardBlocos;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -121,6 +122,28 @@ class PedidosValorEmAbertoTest extends TestCase
 
         $this->assertSame(3, $bloco['totalAberto']);
         $this->assertEqualsWithDelta(1230.0, $bloco['valorEmAberto'], 0.001);
+    }
+
+    /**
+     * Pedido que saiu do 200 (faturou ou cancelou depois do último 232 do mês dele) não é
+     * mais carteira em aberto — nem na tela, nem no card do Painel, nem na lista.
+     */
+    public function test_pedido_fora_do_200_sai_da_tela_e_do_painel(): void
+    {
+        DB::table('pedidos')->where('numero_pedido', '900003')->update(['fora_do_200' => true]);
+
+        $kpis = $this->kpisDaTela($this->admin);
+        $this->assertSame(3, $kpis['totalAberto']);
+        $this->assertEqualsWithDelta(1207.0, $kpis['valorEmAberto'], 0.001);
+
+        $bloco = app(DashboardBlocos::class)->pedidosAtencao(ChaveEscopo::deCodVendedores(null), null);
+        $this->assertSame(3, $bloco['totalAberto']);
+        $this->assertEqualsWithDelta(1207.0, $bloco['valorEmAberto'], 0.001);
+
+        $this->actingAs($this->admin)->get(route('pedidos.index'))->assertInertia(function ($page) {
+            $numeros = array_column($page->toArray()['props']['pedidos']['data'], 'numeroPedido');
+            $this->assertNotContains('900003', $numeros);
+        });
     }
 
     /**
