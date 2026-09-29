@@ -119,7 +119,7 @@ class LeadDaContaTest extends TestCase
         $this->gerar($this->conta(), $this->inaya);
 
         $this->actingAs($this->inaya)
-            ->get(route('carteira.index', ['aba' => 'leads']))
+            ->get(route('leads.index'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('leads.total', 1)
@@ -127,7 +127,7 @@ class LeadDaContaTest extends TestCase
 
         $outro = $this->usuario('vendedor', '010999');
         $this->actingAs($outro)
-            ->get(route('carteira.index', ['aba' => 'leads']))
+            ->get(route('leads.index'))
             ->assertInertia(fn (Assert $page) => $page->where('leads.total', 0));
     }
 

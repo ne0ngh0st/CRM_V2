@@ -79,16 +79,16 @@ class FunilDeQueriesTest extends TestCase
      */
     private function abrirQuadro(User $user): array
     {
-        $completa = $this->actingAs($user)->get(route('carteira.index', ['aba' => 'funil']));
+        $completa = $this->actingAs($user)->get(route('leads.index', ['aba' => 'funil']));
         $versao = $completa->viewData('page')['version'];
 
         DB::flushQueryLog();
         DB::enableQueryLog();
 
-        $resposta = $this->actingAs($user)->get(route('carteira.index', ['aba' => 'funil']), [
+        $resposta = $this->actingAs($user)->get(route('leads.index', ['aba' => 'funil']), [
             'X-Inertia' => 'true',
             'X-Inertia-Version' => $versao,
-            'X-Inertia-Partial-Component' => 'Carteira/Index',
+            'X-Inertia-Partial-Component' => 'Leads/Index',
             'X-Inertia-Partial-Data' => 'funil',
         ])->assertOk();
 

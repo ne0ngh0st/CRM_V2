@@ -58,7 +58,7 @@ class SimulacaoUsuarioTest extends TestCase
             route('dashboard'),
             route('carteira.index'),
             route('carteira.index', ['aderencia' => 'dentro', 'busca' => 'teste']),
-            route('carteira.index', ['aba' => 'leads', 'status' => 'novo']),
+            route('leads.index', ['status' => 'novo']),
             route('orcamentos.index'),
             route('pedidos.index'),
             route('tabela-precos.index', ['busca' => 'bobina']),

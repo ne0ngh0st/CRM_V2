@@ -21,16 +21,6 @@ import { computed, reactive, ref } from 'vue';
 
 const props = defineProps({
     funil: { type: Object, required: true },
-    /*
-     * Os filtros APLICADOS da página (busca, visão, UF, segmento, origem). O "carregar
-     * mais" tem que pedir a próxima página do MESMO recorte que o quadro mostra — sem
-     * eles, com uma busca ativa, a coluna ganhava cards de fora da busca. Desde
-     * 2026-09-29 a busca da Carteira vale para o funil, e isso deixou de ser raro.
-     *
-     * ⚠️ O quadro copia as colunas ao montar (atualização otimista). Quem o usa o
-     * REMONTA (`:key`) quando os filtros mudam; sem isso, trocar a busca não mudaria nada.
-     */
-    filtros: { type: Object, default: () => ({}) },
 });
 
 /** Cópia local: é ela que a atualização otimista mexe. */
@@ -200,7 +190,7 @@ async function carregarMais(coluna) {
 
     try {
         const ultimo = coluna.cards[coluna.cards.length - 1];
-        const url = route('leads.funil.mais', { ...props.filtros, etapa: coluna.etapa, depois: ultimo?.id ?? '' });
+        const url = route('leads.funil.mais', { etapa: coluna.etapa, depois: ultimo?.id ?? '' });
         const res = await fetch(url, {
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin',

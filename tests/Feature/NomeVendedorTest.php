@@ -240,7 +240,7 @@ class NomeVendedorTest extends TestCase
             'origem' => 'sistema',
         ]);
 
-        $props = $this->props($this->actingAs($this->admin())->get(route('carteira.index', ['aba' => 'leads'])));
+        $props = $this->props($this->actingAs($this->admin())->get(route('leads.index')));
 
         $this->assertSame('RICARDO CAMPOS SANTANA', $props['leads']['data'][0]['vendedorNome']);
     }

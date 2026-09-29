@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\AtualizacaoDadosController;
-use App\Http\Controllers\BuscaCruzadaController;
 use App\Http\Controllers\CadastroController;
 use App\Http\Controllers\CarteiraController;
 use App\Http\Controllers\CatalogoFacaController;
@@ -55,13 +54,6 @@ Route::middleware('auth')->group(function () {
     Route::post('/pedidos-emitidos/exportar', [PedidoController::class, 'exportarEmitidos'])->name('pedidos.exportarEmitidos');
 
     Route::get('/carteira', [CarteiraController::class, 'index'])->name('carteira.index');
-    // Aviso cruzado Carteira ↔ Leads: "N leads também batem com esta busca". Só conta.
-    // O throttle é contra termo digitado em rajada, não contra uso normal (a tela já
-    // espera a lista voltar antes de perguntar).
-    Route::get('/busca-cruzada/{alvo}', BuscaCruzadaController::class)
-        ->whereIn('alvo', ['clientes', 'leads'])
-        ->middleware('throttle:60,1')
-        ->name('buscaCruzada');
     /*
      * ⚠️ TODO endpoint de exportação é POST, não GET, e isso não é purismo REST: pedir uma
      * planilha CRIA um registro em `exportacoes` e pode enfileirar um job. Como GET, um

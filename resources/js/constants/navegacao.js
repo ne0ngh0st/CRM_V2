@@ -81,18 +81,16 @@ export const NAV_PRINCIPAL = [
             { chave: 'maiores-por-segmento', rotulo: 'Maiores por segmento', icone: 'segmentos', rota: 'visao-diretor.maiores.index', ativoEm: ['visao-diretor.maiores.*'], prefetch: 'hover' },
         ],
     },
-    /*
-     * Link direto desde 2026-09-29: clientes e leads moram na MESMA página (abas
-     * Clientes · Leads · Funil · Calendário, uma busca só). Era um dropdown com as duas
-     * páginas separadas.
-     */
     {
         chave: 'carteira',
         rotulo: 'Carteira',
         icone: 'carteira',
-        rota: 'carteira.index',
+        largura: '48',
         ativoEm: ['carteira.*', 'leads.*'],
-        prefetch: 'hover',
+        itens: [
+            { chave: 'clientes', rotulo: 'Clientes', icone: 'clientes', rota: 'carteira.index', ativoEm: ['carteira.*'], prefetch: 'hover' },
+            { chave: 'leads', rotulo: 'Leads', icone: 'leads', rota: 'leads.index', ativoEm: ['leads.*'], prefetch: 'hover' },
+        ],
     },
     {
         chave: 'pedidos',
@@ -175,10 +173,8 @@ export const NAV_USUARIO = [
  */
 const DESTINOS_MOBILE = [
     { chave: 'inicio', rotulo: 'Início', icone: 'inicio', rota: 'dashboard', ativoEm: ['dashboard'] },
-    // As duas apontam para a mesma página. `aba` decide qual botão acende: sem isso os
-    // dois ficariam acesos juntos, porque a rota é a mesma.
-    { chave: 'carteira', rotulo: 'Carteira', icone: 'carteira', rota: 'carteira.index', ativoEm: ['carteira.*'], aba: 'clientes' },
-    { chave: 'leads', rotulo: 'Leads', icone: 'leads', rota: 'carteira.index', params: { aba: 'leads' }, ativoEm: ['carteira.index'], aba: 'leads' },
+    { chave: 'carteira', rotulo: 'Carteira', icone: 'carteira', rota: 'carteira.index', ativoEm: ['carteira.*'] },
+    { chave: 'leads', rotulo: 'Leads', icone: 'leads', rota: 'leads.index', ativoEm: ['leads.*'] },
     { chave: 'pedidos', rotulo: 'Pedidos', icone: 'pedidos', rota: 'pedidos.index', ativoEm: ['pedidos.*'] },
 ];
 
@@ -219,21 +215,10 @@ export function barraInferior(perfil) {
  * `route` é global (vem do `@routes` no `<head>`, antes do bundle), então não precisa de
  * import — é o mesmo acesso que o layout já fazia.
  */
-export function estaAtivo(ativoEm, abaEsperada = null) {
+export function estaAtivo(ativoEm) {
     if (!ativoEm?.length) {
         return false;
     }
 
-    const rotaCasa = ativoEm.some((padrao) => route().current(padrao));
-    if (!rotaCasa || abaEsperada == null) {
-        return rotaCasa;
-    }
-
-    // A Carteira e os Leads são a mesma rota. Quem distingue o botão aceso é a aba.
-    const aba = new URLSearchParams(window.location.search).get('aba') || 'clientes';
-    if (abaEsperada === 'leads') {
-        return aba === 'leads' || aba === 'funil' || aba === 'calendario';
-    }
-
-    return aba === abaEsperada;
+    return ativoEm.some((padrao) => route().current(padrao));
 }

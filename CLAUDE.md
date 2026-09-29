@@ -2706,59 +2706,6 @@ sem enviar; `--para=EMAIL` envia só para ele (funciona com o agendamento deslig
 Testes: `tests/Feature/ResumoEquipeTest.php` (20, incluindo "consolidado bate com a empresa" e "código do diretor entra na equipe"). No formato diário, duas mutações
 aplicadas e mordidas: segunda deixar de cair na sexta, e a venda do dia virar a do mês.
 
-### Carteira única: Clientes e Leads na mesma página — 2026-09-29
-
-A equipe pediu para procurar um nome e achá-lo sem trocar de página. O aviso cruzado
-(abaixo, no mesmo dia) resolvia a busca e ainda obrigava a navegar; o Tony recusou:
-"eles precisam estar na mesma visão". `/carteira` passou a ter as abas **Clientes ·
-Leads · Funil · Calendário**, com uma busca só. `GET /leads` redireciona para
-`/carteira?aba=leads` (notificação e favorito continuam válidos).
-
-| O que se repete | Onde mora |
-|---|---|
-| Listagem, KPIs, funil e opções de lead | `App\Services\Leads\ListagemDeLeads` |
-| Formato do CNPJ do lead | mutator `Lead::cnpj` → `Normalizador::documento()` |
-| Calendário de cliente e de lead | `CarteiraController::agendamentosDoEscopo()` |
-| Contador da aba que não está aberta | `BuscaCruzada` (o componente do aviso saiu) |
-
-- 🥇 **Cada aba só paga o próprio conteúdo.** As props são closures que devolvem null
-  fora da aba ativa. Juntar as páginas não somou o custo delas.
-- ⚠️ **Na troca de aba viajam só busca e visão.** `status`, `segmento`, `estado` e
-  `ordenar` significam coisas diferentes nos dois lados; levá-los daria tela vazia.
-- ⚠️ **Busca que dá 0 na aba atual e tem resultado na outra pula sozinha** — só quando
-  a pessoa digitou, e só sem outro filtro da aba. É o que resolve "busquei e não achei".
-- **"Já é cliente"** na aba Leads é por CNPJ, não por nome. O selo aparece mesmo quando
-  o cliente é de outra carteira; o link para a ficha só sai se estiver no escopo.
-- ⚠️ **Lead manual, do site e do legado gravavam o CNPJ como veio.** O mutator e a
-  migration `2026_09_29_120000` põem tudo no formato dos clientes (`12.345.678/0001-90`).
-  Comparar as duas strings cruas diria que são empresas diferentes.
-- Testes: `CarteiraUnicaTest`. O `BuscaCruzadaTest` continua valendo para o contador.
-
-### Aviso cruzado Carteira ↔ Leads — 2026-09-29
-
-Pedido da equipe: "procurar o nome X e achar, seja lead ou cliente". A primeira resposta
-foi um aviso ("N leads também correspondem"), e no mesmo dia virou a página única acima.
-O componente `AvisoBuscaCruzada.vue` saiu. Ficaram a regra de busca e o endpoint, que
-agora alimentam o contador da aba.
-
-| O que se repete | Onde mora |
-|---|---|
-| O que a busca casa | `Cliente::scopeBusca()` / `Lead::scopeBusca()` (as telas também usam) |
-| A contagem cruzada | `App\Services\Busca\BuscaCruzada` |
-
-- 🚨 **Número do contador == total da aba que ele anuncia.** Clientes contam por
-  `cod_cliente` (a Carteira abre agrupada), leads passam por `visivel()`, e a troca de
-  aba leva SÓ busca + visão. Filtro que uma aba passe a aplicar por PADRÃO tem que entrar
-  no `BuscaCruzada` também. Travado por teste comparando com a própria tela.
-- ⚠️ O contador olha a busca **aplicada** (`props.filtros.busca`), não a digitada: a
-  consulta sai depois que a lista voltou, fora da primeira pintura, e uma vez por termo.
-- **Sem cache**, de propósito. Medido no dev: clientes 31 ms (vendedor) / 120–180 ms
-  (empresa); leads 2 ms / 84 ms.
-- ⚠️ **FULLTEXT foi medido e descartado** (0,6 ms contra ~200 ms): casa só início de
-  palavra, e "mercado" deixaria de achar "SUPERMERCADO" (7.062 → 1.177). Misturado com
-  `OR cnpj LIKE` na mesma consulta volta a 175 ms. Reabrir só se a busca do admin incomodar.
-- Testes: `BuscaCruzadaTest` (6). **5 mutações, 5 mordidas.**
-
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão

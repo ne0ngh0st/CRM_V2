@@ -44,7 +44,7 @@ const destinos = computed(() => barraInferior(props.perfil));
 const ativos = computed(() => {
     void pagina.url;
 
-    return destinos.value.map((destino) => estaAtivo(destino.ativoEm, destino.aba ?? null));
+    return destinos.value.map((destino) => estaAtivo(destino.ativoEm));
 });
 </script>
 
@@ -68,7 +68,7 @@ const ativos = computed(() => {
             <Link
                 v-for="(destino, i) in destinos"
                 :key="destino.chave"
-                :href="route(destino.rota, destino.params ?? {})"
+                :href="route(destino.rota)"
                 prefetch="hover"
                 class="flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 border-t-2 px-1 pb-1 pt-1.5 transition"
                 :class="ativos[i]

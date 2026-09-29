@@ -82,13 +82,8 @@ function mesProximo() {
     }
 }
 
-/*
- * Desde 2026-09-29 o calendário da Carteira mostra cliente E lead juntos, e cada evento
- * traz a própria rota (`statusRoute`): as duas continuam separadas porque autorizam por
- * escopo de tabelas diferentes. A prop do componente fica como fallback.
- */
 function alterarStatus(agendamento, status) {
-    router.patch(route(agendamento.statusRoute ?? props.statusRoute, agendamento.id), { status }, {
+    router.patch(route(props.statusRoute, agendamento.id), { status }, {
         preserveScroll: true,
         preserveState: true,
         only: ['agendamentos'],
@@ -153,9 +148,9 @@ function alterarStatus(agendamento, status) {
                                     'bg-emerald-50 text-emerald-800': item.status === 'realizado',
                                     'bg-red-50 text-red-700': item.status === 'cancelado',
                                 }"
-                                :title="`${item.hora} · ${item.tipo === 'lead' ? 'Lead · ' : ''}${item.clienteNome}`"
+                                :title="`${item.hora} · ${item.clienteNome}`"
                             >
-                                {{ item.hora }} <template v-if="item.tipo === 'lead'">◆ </template>{{ item.clienteNome }}
+                                {{ item.hora }} {{ item.clienteNome }}
                             </div>
                             <p v-if="cell.itens.length > 3" class="text-[0.6rem] text-gray-400">+{{ cell.itens.length - 3 }}</p>
                         </div>
@@ -179,12 +174,7 @@ function alterarStatus(agendamento, status) {
                     class="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-200 px-3 py-2"
                 >
                     <div class="min-w-0 flex-1">
-                        <p class="truncate text-sm font-semibold text-gray-800">
-                            <span
-                                v-if="item.tipo === 'lead'"
-                                class="mr-1 rounded bg-cyan/10 px-1 py-px text-[0.6rem] font-semibold uppercase tracking-wide text-cyan-dark"
-                            >Lead</span>{{ item.clienteNome }}
-                        </p>
+                        <p class="truncate text-sm font-semibold text-gray-800">{{ item.clienteNome }}</p>
                         <p class="text-xs text-gray-500">{{ item.dataLabel }} · {{ item.autor }}</p>
                         <p v-if="item.observacao" class="mt-0.5 truncate text-xs text-gray-400">{{ item.observacao }}</p>
                     </div>
