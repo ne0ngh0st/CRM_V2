@@ -50,4 +50,24 @@ class Cliente extends Model
     {
         return $this->hasMany(CarteiraMotivoInatividade::class);
     }
+
+    /**
+     * O que o campo de busca da Carteira casa.
+     *
+     * ⚠️ Mora aqui, e não no CarteiraController, porque os Leads também perguntam
+     * "quantos clientes batem com esta busca?" para o aviso cruzado (`BuscaCruzada`).
+     * Com a regra copiada, o aviso e a tela que ele abre diriam números diferentes.
+     * Regra de ouro nº 8.
+     *
+     * Colunas qualificadas porque a listagem da Carteira faz join com outras tabelas.
+     */
+    public function scopeBusca($query, string $termo)
+    {
+        return $query->where(function ($q) use ($termo) {
+            $q->where('clientes.razao_social', 'like', "%{$termo}%")
+                ->orWhere('clientes.nome_fantasia', 'like', "%{$termo}%")
+                ->orWhere('clientes.cnpj', 'like', "%{$termo}%")
+                ->orWhere('clientes.cod_cliente', 'like', "%{$termo}%");
+        });
+    }
 }

@@ -468,14 +468,7 @@ class LeadController extends Controller
         $query = $this->scopeQuery($request);
 
         if ($busca !== '') {
-            $query->where(function ($q) use ($busca) {
-                $q->where('nome', 'like', "%{$busca}%")
-                    ->orWhere('razao_social', 'like', "%{$busca}%")
-                    ->orWhere('nome_fantasia', 'like', "%{$busca}%")
-                    ->orWhere('cnpj', 'like', "%{$busca}%")
-                    ->orWhere('email', 'like', "%{$busca}%")
-                    ->orWhere('telefone', 'like', "%{$busca}%");
-            });
+            $query->busca($busca);
         }
 
         if ($estado !== '') {
