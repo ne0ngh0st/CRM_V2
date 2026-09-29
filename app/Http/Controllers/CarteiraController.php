@@ -428,12 +428,7 @@ class CarteiraController extends Controller
         $query = (clone $escopada)->select('clientes.*');
 
         if ($busca !== '') {
-            $query->where(function ($q) use ($busca) {
-                $q->where('clientes.razao_social', 'like', "%{$busca}%")
-                    ->orWhere('clientes.nome_fantasia', 'like', "%{$busca}%")
-                    ->orWhere('clientes.cnpj', 'like', "%{$busca}%")
-                    ->orWhere('clientes.cod_cliente', 'like', "%{$busca}%");
-            });
+            $query->busca($busca);
         }
 
         if ($estado !== '') {

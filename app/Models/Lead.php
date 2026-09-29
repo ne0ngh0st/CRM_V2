@@ -272,4 +272,24 @@ class Lead extends Model
     {
         return $query->where('status', '!=', 'excluido');
     }
+
+    /**
+     * O que o campo de busca da tela de Leads casa.
+     *
+     * ⚠️ Mora aqui, e não no LeadController, porque a Carteira também pergunta "quantos
+     * leads batem com esta busca?" para o aviso cruzado (`BuscaCruzada`). Com a regra
+     * copiada nos dois lugares, o aviso prometeria "3 leads" e a tela de Leads, ao
+     * clicar, mostraria outro número. Regra de ouro nº 8.
+     */
+    public function scopeBusca($query, string $termo)
+    {
+        return $query->where(function ($q) use ($termo) {
+            $q->where('nome', 'like', "%{$termo}%")
+                ->orWhere('razao_social', 'like', "%{$termo}%")
+                ->orWhere('nome_fantasia', 'like', "%{$termo}%")
+                ->orWhere('cnpj', 'like', "%{$termo}%")
+                ->orWhere('email', 'like', "%{$termo}%")
+                ->orWhere('telefone', 'like', "%{$termo}%");
+        });
+    }
 }
