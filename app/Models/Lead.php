@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\Totvs\Normalizador;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -125,6 +127,24 @@ class Lead extends Model
             'valor_estimado' => 'decimal:2',
             'etapa_alterada_em' => 'datetime',
         ];
+    }
+
+    /**
+     * O CNPJ sai SEMPRE no formato dos clientes (`12.345.678/0001-90`), venha de onde vier.
+     *
+     * Até 2026-09-29 o formato dependia de quem gravou: o import do TOTVS normalizava, mas
+     * o lead manual e o do site guardavam o que foi digitado. Com isso,
+     * `12345678000190` e `12.345.678/0001-90` pareciam empresas diferentes — e o selo
+     * "Já é cliente" da aba Leads, a busca por CNPJ e o cruzamento com `clientes` erravam
+     * em silêncio.
+     *
+     * ⚠️ Mutator, e não normalização em cada controller: pega qualquer caminho futuro de
+     * escrita pelo model. Quem grava por `DB::table()->insert()` (os imports) passa por
+     * fora dele e tem que chamar `Normalizador::documento()` sozinho — os dois já chamam.
+     */
+    protected function cnpj(): Attribute
+    {
+        return Attribute::make(set: fn ($valor) => Normalizador::documento($valor));
     }
 
     public function user(): BelongsTo

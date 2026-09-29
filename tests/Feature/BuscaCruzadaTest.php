@@ -97,7 +97,7 @@ class BuscaCruzadaTest extends TestCase
     private function totalDosLeads(User $como, string $busca): int
     {
         return $this->actingAs($como)
-            ->get(route('leads.index', ['busca' => $busca]))
+            ->get(route('carteira.index', ['aba' => 'leads', 'busca' => $busca]))
             ->assertOk()
             ->viewData('page')['props']['leads']['total'];
     }

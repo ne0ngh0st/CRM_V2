@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Legado\LegadoConexao;
+use App\Services\Totvs\Normalizador;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use PDO;
@@ -53,7 +54,9 @@ class ImportLeadsLegado extends Command
                 'nome' => self::valorOuNull($row['nomefinal']) ?? $razaoSocial,
                 'razao_social' => $razaoSocial,
                 'nome_fantasia' => self::valorOuNull($row['NOMEFANTASIA']),
-                'cnpj' => self::valorOuNull($row['cnpj']),
+                // Mesmo formato dos clientes: `DB::table()->insert()` passa por fora do
+                // mutator de Lead::cnpj, então normaliza aqui.
+                'cnpj' => Normalizador::documento(self::valorOuNull($row['cnpj'])),
                 'email' => self::valorOuNull($row['Email']),
                 'telefone' => self::valorOuNull($row['TelefonePrincipalFINAL']),
                 'endereco' => self::valorOuNull($row['endereoCNPJJA']),

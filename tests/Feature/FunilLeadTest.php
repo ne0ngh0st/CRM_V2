@@ -248,13 +248,15 @@ class FunilLeadTest extends TestCase
     // ---------------------------------------------------------------- o quadro
 
     /**
-     * ⚠️ Trava a armadilha documentada do `Inertia::optional()`: prop opcional NÃO vem em
-     * visita completa. Entrar por /leads?aba=funil ou dar F5 traz a página SEM o quadro —
-     * é por isso que Leads/Index.vue tem um `onMounted` que pede `only: ['funil']`. Sem
-     * essa segunda metade, o funil abriria vazio e pareceria quebrado.
+     * O quadro só é calculado quando a aba ativa é o Funil — e aí vem já na visita
+     * completa (F5, link salvo), sem segunda requisição.
+     *
+     * Até 2026-09-29 era o contrário: o funil era `Inertia::optional()` na página de
+     * Leads, não vinha em visita completa, e um `onMounted` pedia de novo. Com a Carteira
+     * única, quem decide o que calcular é a aba da URL.
      */
     #[Test]
-    public function test_quadro_nao_vem_em_visita_completa_e_vem_no_recarregamento_parcial(): void
+    public function test_quadro_so_vem_na_aba_funil_e_ja_na_visita_completa(): void
     {
         $vendedor = $this->vendedor();
         $this->lead(Lead::ETAPA_NOVO);
@@ -262,18 +264,14 @@ class FunilLeadTest extends TestCase
         $this->lead(Lead::ETAPA_NEGOCIACAO);
         $this->lead(Lead::ETAPA_GANHO);
 
-        $completa = $this->actingAs($vendedor)->get(route('leads.index', ['aba' => 'funil']))->assertOk();
-        $this->assertArrayNotHasKey('funil', $completa->viewData('page')['props']);
+        $outraAba = $this->actingAs($vendedor)->get(route('carteira.index', ['aba' => 'leads']))->assertOk();
+        $this->assertNull($outraAba->viewData('page')['props']['funil'], 'a aba Leads não paga pelo quadro');
 
-        $parcial = $this->actingAs($vendedor)->get(route('leads.index', ['aba' => 'funil']), [
-            'X-Inertia' => 'true',
-            'X-Inertia-Version' => $completa->viewData('page')['version'],
-            'X-Inertia-Partial-Component' => 'Leads/Index',
-            'X-Inertia-Partial-Data' => 'funil',
-        ])->assertOk();
-
-        $funil = $parcial->json('props.funil');
-        $this->assertNotNull($funil, 'o recarregamento parcial tem que trazer o quadro');
+        $funil = $this->actingAs($vendedor)
+            ->get(route('carteira.index', ['aba' => 'funil']))
+            ->assertOk()
+            ->viewData('page')['props']['funil'];
+        $this->assertNotNull($funil, 'a visita completa à aba Funil tem que trazer o quadro');
 
         $totais = collect($funil['colunas'])->pluck('total', 'etapa');
         $this->assertSame(2, $totais[Lead::ETAPA_NOVO]);
@@ -452,8 +450,8 @@ class FunilLeadTest extends TestCase
         $this->lead(Lead::ETAPA_GANHO);
 
         $kpis = $this->actingAs($vendedor)
-            ->get(route('leads.index'))
-            ->viewData('page')['props']['kpis'];
+            ->get(route('carteira.index', ['aba' => 'leads']))
+            ->viewData('page')['props']['leadsKpis'];
 
         $this->assertSame(6, $kpis['total']);
         $this->assertSame(2, $kpis['ativos'], '"em jogo" são os 2 da esteira — nem os 3 triados nem o ganho');
@@ -474,7 +472,7 @@ class FunilLeadTest extends TestCase
         $triado = $this->lead(Lead::ETAPA_OUTROS);
 
         $leads = $this->actingAs($vendedor)
-            ->get(route('leads.index', ['status' => Lead::ETAPA_OUTROS]))
+            ->get(route('carteira.index', ['aba' => 'leads', 'status' => Lead::ETAPA_OUTROS]))
             ->viewData('page')['props']['leads']['data'];
 
         $this->assertCount(1, $leads);
@@ -484,13 +482,9 @@ class FunilLeadTest extends TestCase
     /** @return array<string, mixed> */
     private function quadroDe(User $usuario): array
     {
-        $completa = $this->actingAs($usuario)->get(route('leads.index', ['aba' => 'funil']))->assertOk();
-
-        return $this->actingAs($usuario)->get(route('leads.index', ['aba' => 'funil']), [
-            'X-Inertia' => 'true',
-            'X-Inertia-Version' => $completa->viewData('page')['version'],
-            'X-Inertia-Partial-Component' => 'Leads/Index',
-            'X-Inertia-Partial-Data' => 'funil',
-        ])->assertOk()->json('props.funil');
+        return $this->actingAs($usuario)
+            ->get(route('carteira.index', ['aba' => 'funil']))
+            ->assertOk()
+            ->viewData('page')['props']['funil'];
     }
 }

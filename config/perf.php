@@ -80,7 +80,10 @@ return [
         'carteira:ordenada' => ['rota' => 'carteira.index', 'params' => ['ordenar' => 'segmento_asc']],
         'carteira:calendario' => ['rota' => 'carteira.index', 'params' => ['aba' => 'calendario']],
 
-        'leads' => ['rota' => 'leads.index'],
+        // Desde 2026-09-29 os leads são abas da Carteira (`/leads` só redireciona). Cada
+        // aba é medida à parte: é o que prova que juntar as páginas não somou o custo.
+        'leads' => ['rota' => 'carteira.index', 'params' => ['aba' => 'leads'], 'partial' => ['leads']],
+        'carteira:funil' => ['rota' => 'carteira.index', 'params' => ['aba' => 'funil']],
         'pedidos-abertos' => ['rota' => 'pedidos.index'],
         'pedidos-emitidos' => ['rota' => 'pedidos.emitidos'],
         'orcamentos' => ['rota' => 'orcamentos.index'],

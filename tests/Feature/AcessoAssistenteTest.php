@@ -88,12 +88,12 @@ class AcessoAssistenteTest extends TestCase
         $this->lead('010999', 'Site de Outro Ltda', Lead::ORIGEM_WORDPRESS);
 
         $this->actingAs($this->assistente())
-            ->get(route('leads.index'))
+            ->get(route('carteira.index', ['aba' => 'leads']))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->component('Leads/Index')
+                ->component('Carteira/Index')
                 ->missing('somenteWordpress')
-                ->where('kpis.total', 2)
+                ->where('leadsKpis.total', 2)
                 ->has('leads.data', 2)
             );
     }

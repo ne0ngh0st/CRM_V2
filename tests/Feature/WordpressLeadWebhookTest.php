@@ -197,12 +197,12 @@ class WordpressLeadWebhookTest extends TestCase
         ]);
 
         $this->actingAs($admin)
-            ->get(route('leads.index', ['origem' => 'wordpress']))
+            ->get(route('carteira.index', ['aba' => 'leads', 'origem' => 'wordpress']))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->component('Leads/Index')
-                ->where('kpis.wordpress', 1)
-                ->where('kpis.manual', 0)
+                ->component('Carteira/Index')
+                ->where('leadsKpis.wordpress', 1)
+                ->where('leadsKpis.manual', 0)
                 ->has('leads.data', 1)
                 ->where('leads.data.0.origem', 'wordpress')
                 ->where('wordpressCaptura.ligado', false)

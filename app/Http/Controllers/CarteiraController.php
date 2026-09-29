@@ -8,6 +8,7 @@ use App\Models\CarteiraMotivoInatividade;
 use App\Models\Cliente;
 use App\Models\ContaEstrategica;
 use App\Models\GrupoCliente;
+use App\Models\Lead;
 use App\Models\Ligacao;
 use App\Models\Pedido;
 use App\Models\Segmento;
@@ -19,6 +20,8 @@ use App\Services\Pedidos\StatusPedidoResolver;
 use App\Services\Receita\CartaoCnpjService;
 use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
+use App\Services\Leads\ListagemDeLeads;
+use App\Services\Marketing\WpLeadCapturaStatus;
 use App\Services\Potencial\FamiliaProduto;
 use App\Services\Potencial\PotencialCarteiraResolver;
 use App\Services\Vendedores\NomeVendedorResolver;
@@ -48,6 +51,8 @@ class CarteiraController extends Controller
         private readonly PotencialCarteiraResolver $potencial,
         private readonly NomeVendedorResolver $nomeVendedor,
         private readonly ClientesDaConta $clientesDaConta,
+        private readonly ListagemDeLeads $leads,
+        private readonly WpLeadCapturaStatus $wpCaptura,
     ) {
     }
 
@@ -182,6 +187,30 @@ class CarteiraController extends Controller
         return md5(json_encode($filtros));
     }
 
+    /**
+     * As abas da página. Desde 2026-09-29 a Carteira é a casa dos clientes E dos leads
+     * (antes `/leads` era outra página), com uma busca só valendo para todas.
+     */
+    public const ABAS = ['clientes', 'leads', 'funil', 'calendario'];
+
+    /**
+     * A página única da Carteira: Clientes · Leads · Funil · Calendário.
+     *
+     * 🥇 CADA ABA SÓ PAGA O PRÓPRIO CONTEÚDO (Regra de ouro nº 9). Toda prop de aba é uma
+     * closure que devolve `null` quando a aba ativa é outra — e, nas recargas parciais
+     * (`only: [...]`), o Inertia nem avalia a closure que não foi pedida. Juntar as duas
+     * páginas NÃO somou o custo delas: abrir a aba Clientes custa o que a `/carteira`
+     * custava, e a aba Leads o que a `/leads` custava. Travado por teste de contagem de
+     * queries.
+     *
+     * ⚠️ Por isso não há mais `Inertia::optional` + `onMounted` recarregando calendário e
+     * funil: a visita completa a `?aba=funil` já calcula o funil, porque a aba ativa decide.
+     *
+     * ⚠️ Os filtros de cada aba mantêm os nomes de parâmetro de antes (`status`,
+     * `segmento`, `estado`, `ordenar` existem nos dois lados com significados diferentes).
+     * Isso só é seguro porque a tela, ao trocar de aba, leva SÓ busca e visão — ver
+     * `paramsDaTroca()` no Carteira/Index.vue.
+     */
     public function index(Request $request): Response
     {
         $user = $request->user();
@@ -194,30 +223,97 @@ class CarteiraController extends Controller
         );
         $codVendedores = $scope['codVendedores'];
 
-        $busca = trim((string) $request->string('busca'));
-        $estado = (string) $request->string('estado');
-        $segmento = (string) $request->string('segmento');
-        $status = (string) $request->string('status');
-        $aderencia = (string) $request->string('aderencia');
+        $aba = in_array($request->string('aba')->value(), self::ABAS, true) ? $request->string('aba')->value() : 'clientes';
+        $ehClientes = $aba === 'clientes';
+        $ehLeads = $aba === 'leads';
+
         $semFamiliaBruto = (string) $request->string('sem_familia');
         $semFamilia = in_array($semFamiliaBruto, FamiliaProduto::chaves(), true) ? $semFamiliaBruto : '';
-        $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
-        $aba = (string) $request->string('aba') ?: 'clientes';
-
-        $kpis = $this->aderencia($request, $codVendedores);
-
-        /*
-         * O total vem de `filtradaQuery()`, sem a camada de ordenação. Continua valendo
-         * como separação de responsabilidade — contar não precisa ordenar —, embora o
-         * ganho original tenha sumido junto com os joins de grupo/segmento (removidos em
-         * 2026-08-29, ver ORDENACOES).
-         *
-         * ⚠️ `paginaSegura()` limita a profundidade. Sem isso, `?page=3044` custava 2,5 s
-         * — não por o OFFSET encarecer aos poucos, mas porque o otimizador do MySQL troca
-         * de plano e passa a varrer a tabela inteira com filesort. Ver `paginaSegura()`.
-         */
         $agrupado = $this->agrupar($request);
 
+        // Os KPIs de lead servem à aba Leads E ao Funil, e a lista precisa deles para
+        // saber se paga o eager load do site: calculados uma vez só por requisição.
+        $kpisLeads = null;
+        $kpisDosLeads = function () use ($request, &$kpisLeads) {
+            return $kpisLeads ??= $this->leads->kpis($request);
+        };
+
+        $filtrosLeads = $this->leads->filtros($request);
+
+        return Inertia::render('Carteira/Index', [
+            'role' => $role,
+            'aba' => $aba,
+
+            // --- aba Clientes -------------------------------------------------------
+            'clientes' => fn () => $ehClientes ? $this->paginaDeClientes($request, $codVendedores, $agrupado) : null,
+            'kpis' => fn () => $ehClientes ? $this->aderencia($request, $codVendedores) : null,
+            'opcoes' => fn () => $ehClientes ? $this->opcoesDeFiltro($request, $codVendedores) : null,
+
+            // --- aba Leads / Funil --------------------------------------------------
+            'leads' => fn () => $ehLeads
+                ? $this->leads->pagina($request, $codVendedores, $kpisDosLeads()['wordpress'] > 0)
+                : null,
+            'leadsKpis' => fn () => in_array($aba, ['leads', 'funil'], true) ? $kpisDosLeads() : null,
+            'leadsOpcoes' => fn () => $ehLeads ? $this->leads->opcoes($request, $codVendedores) : null,
+            'wordpressCaptura' => fn () => $ehLeads
+                ? $this->wpCaptura->resumir(podeTestar: in_array($role, ['admin', 'diretor'], true))
+                : null,
+            'funil' => fn () => $aba === 'funil' ? $this->leads->funil($request) : null,
+
+            // --- aba Calendário (clientes E leads) ---------------------------------
+            'agendamentos' => fn () => $aba === 'calendario' ? $this->agendamentosDoEscopo($codVendedores) : [],
+
+            'filtros' => [
+                'busca' => trim((string) $request->string('busca')),
+                'estado' => (string) $request->string('estado'),
+                'segmento' => (string) $request->string('segmento'),
+                'status' => (string) $request->string('status'),
+                'aderencia' => (string) $request->string('aderencia'),
+                'ordenar' => (string) $request->string('ordenar') ?: 'nome_asc',
+                // Só da aba Leads; já validado contra a whitelist.
+                'origem' => $filtrosLeads['origem'],
+                /*
+                 * Uma linha por cliente (com as filiais contadas) ou uma por filial.
+                 * É ela que alimenta o botão "ver filiais".
+                 */
+                'agrupado' => $agrupado,
+                // Vem do card de Potencial da Carteira do Painel. Fica na prop para a tela
+                // poder anunciar o recorte e oferecer o "limpar" — filtro que a pessoa não
+                // consegue ver nem desfazer é o que faz a lista parecer quebrada.
+                'semFamilia' => $semFamilia,
+                'semFamiliaRotulo' => $semFamilia !== '' ? FamiliaProduto::rotuloDe($semFamilia) : null,
+                // Quantas EMPRESAS o recorte tem — é ele que bate com o card do Painel.
+                'semFamiliaEmpresas' => fn () => $ehClientes && $semFamilia !== '' ? count($this->codigosSemFamilia($request) ?? []) : null,
+                // Vem da Visão Diretor (Maiores por Segmento). Anunciado por faixa com
+                // "limpar", pelo mesmo motivo do `semFamilia`.
+                'contaAlvo' => $this->contaAlvoParaTela($request),
+            ],
+            'visao' => [
+                'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
+                'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
+                'vendedores' => in_array($role, ['supervisor', 'admin', 'diretor'], true)
+                    ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
+                    : [],
+                'visaoSupervisor' => $scope['visaoSupervisor'],
+                'visaoVendedor' => $scope['visaoVendedor'],
+            ],
+        ]);
+    }
+
+    /**
+     * A página da lista de clientes, pronta para a tela.
+     *
+     * O total vem de `filtradaQuery()`, sem a camada de ordenação — contar não precisa
+     * ordenar.
+     *
+     * ⚠️ `paginaSegura()` limita a profundidade. Sem isso, `?page=3044` custava 2,5 s —
+     * não por o OFFSET encarecer aos poucos, mas porque o otimizador do MySQL troca de
+     * plano e passa a varrer a tabela inteira com filesort. Ver `paginaSegura()`.
+     *
+     * @param  array<string>|null  $codVendedores
+     */
+    private function paginaDeClientes(Request $request, ?array $codVendedores, bool $agrupado): LengthAwarePaginator
+    {
         $clientes = $agrupado
             ? $this->linhasAgrupadas($request, $codVendedores)
             : $this->listaQuery($request)
@@ -290,58 +386,7 @@ class CarteiraController extends Controller
             ];
         });
 
-        return Inertia::render('Carteira/Index', [
-            'role' => $role,
-            'aba' => in_array($aba, ['clientes', 'calendario'], true) ? $aba : 'clientes',
-            'clientes' => $clientes,
-            'kpis' => $kpis,
-            /*
-             * Prop opcional: só é enviada quando a requisição pede explicitamente
-             * (`only: ['agendamentos']`). A aba Clientes, que é onde a maioria das
-             * visitas para, deixou de pagar por uma consulta que ia direto pro lixo.
-             *
-             * ⚠️ Visita completa (F5, ou entrar por /carteira?aba=calendario) NÃO traz
-             * prop opcional — é o `onMounted` do Carteira/Index.vue que busca nesse caso.
-             */
-            'agendamentos' => Inertia::optional(fn () => $this->agendamentosDoEscopo($codVendedores)),
-            'filtros' => [
-                'busca' => $busca,
-                'estado' => $estado,
-                'segmento' => $segmento,
-                'status' => $status,
-                'aderencia' => $aderencia,
-                'ordenar' => $ordenar,
-                /*
-                 * Uma linha por cliente (com as filiais contadas) ou uma por filial.
-                 * Enquanto for opt-in por `?agrupar=1`, a prop é o que permite conferir
-                 * os dois modos lado a lado; quando virar o padrão, é ela que alimenta o
-                 * botão "ver filiais".
-                 */
-                'agrupado' => $agrupado,
-                // Vem do card de Potencial da Carteira do Painel. Fica na prop para a tela
-                // poder anunciar o recorte e oferecer o "limpar" — filtro que a pessoa não
-                // consegue ver nem desfazer é o que faz a lista parecer quebrada.
-                'semFamilia' => $semFamilia,
-                'semFamiliaRotulo' => $semFamilia !== '' ? FamiliaProduto::rotuloDe($semFamilia) : null,
-                // Quantas EMPRESAS o recorte tem. A tabela lista filiais, então este número
-                // é menor que o total da listagem — e é ele que bate com o card do Painel.
-                'semFamiliaEmpresas' => $semFamilia !== '' ? count($this->codigosSemFamilia($request) ?? []) : null,
-                // Vem da Visão Diretor (Maiores por Segmento). Anunciado por faixa com
-                // "limpar", pelo mesmo motivo do `semFamilia`: recorte invisível parece
-                // lista quebrada.
-                'contaAlvo' => $this->contaAlvoParaTela($request),
-            ],
-            'opcoes' => $this->opcoesDeFiltro($request, $codVendedores),
-            'visao' => [
-                'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
-                'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => in_array($role, ['supervisor', 'admin', 'diretor'], true)
-                    ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
-                    : [],
-                'visaoSupervisor' => $scope['visaoSupervisor'],
-                'visaoVendedor' => $scope['visaoVendedor'],
-            ],
-        ]);
+        return $clientes;
     }
 
     /**
@@ -1490,41 +1535,59 @@ class CarteiraController extends Controller
     }
 
     /**
+     * A aba Calendário: agendamentos de CLIENTE e de LEAD numa consulta só.
+     *
+     * Até 2026-09-29 eram duas funções quase idênticas, uma aqui e outra no
+     * `LeadController`, cada uma alimentando o calendário da sua página. Com os leads
+     * dentro da Carteira, o vendedor vê a agenda inteira num lugar. Cada evento sai
+     * marcado com `tipo` e com a rota que muda o status dele — as duas rotas continuam
+     * separadas porque autorizam por escopo de tabelas diferentes.
+     *
      * @param  array<string>|null  $codVendedores
      * @return array<int, array<string, mixed>>
      */
     private function agendamentosDoEscopo(?array $codVendedores): array
     {
         $query = AgendamentoLigacao::query()
-            ->with(['cliente:id,razao_social,cnpj,telefone,cod_vendedor', 'user:id,name,display_name'])
-            // Janela de -1 a +3 meses (era -3/+6) com teto de 500. O calendário mostra um
-            // mês por vez; trazer meio ano de cada lado era payload que ninguém abria.
+            ->with([
+                'cliente:id,razao_social,cnpj,telefone,cod_vendedor',
+                'lead:id,razao_social,nome,cnpj,telefone,cod_vendedor',
+                'user:id,name,display_name',
+            ])
+            // Janela de -1 a +3 meses com teto de 500. O calendário mostra um mês por vez;
+            // trazer meio ano de cada lado era payload que ninguém abria.
             ->whereBetween('data_agendamento', [now()->subMonth()->startOfMonth(), now()->addMonths(3)->endOfMonth()])
             ->orderBy('data_agendamento')
             ->limit(500);
 
         if ($codVendedores !== null) {
             // Subquery IN em vez de whereHas: o whereHas gera um EXISTS correlacionado,
-            // avaliado por linha de agendamento. A subquery resolve a lista de clientes
-            // uma vez só e tem plano de execução mais previsível.
-            $query->whereIn(
-                'cliente_id',
-                Cliente::query()->select('id')->whereIn('cod_vendedor', $codVendedores),
-            );
+            // avaliado por linha de agendamento. A subquery resolve a lista uma vez só.
+            $query->where(fn ($q) => $q
+                ->whereIn('cliente_id', Cliente::query()->select('id')->whereIn('cod_vendedor', $codVendedores))
+                ->orWhereIn('lead_id', Lead::query()->select('id')->whereIn('cod_vendedor', $codVendedores)));
         }
 
-        return $query->get()->map(fn (AgendamentoLigacao $a) => [
-            'id' => $a->id,
-            'dataAgendamento' => $a->data_agendamento->toIso8601String(),
-            'dataLabel' => $a->data_agendamento->format('d/m/Y H:i'),
-            'dia' => $a->data_agendamento->format('Y-m-d'),
-            'hora' => $a->data_agendamento->format('H:i'),
-            'observacao' => $a->observacao,
-            'status' => $a->status,
-            'clienteId' => $a->cliente_id,
-            'clienteNome' => $a->cliente?->razao_social ?? '—',
-            'clienteCnpj' => $a->cliente?->cnpj,
-            'autor' => $a->user?->display_name ?: $a->user?->name,
-        ])->values()->all();
+        return $query->get()->map(function (AgendamentoLigacao $a) {
+            $eLead = $a->lead_id !== null;
+
+            return [
+                'id' => $a->id,
+                'tipo' => $eLead ? 'lead' : 'cliente',
+                'statusRoute' => $eLead ? 'leads.agendamentoStatus' : 'carteira.agendamentoStatus',
+                'dataAgendamento' => $a->data_agendamento->toIso8601String(),
+                'dataLabel' => $a->data_agendamento->format('d/m/Y H:i'),
+                'dia' => $a->data_agendamento->format('Y-m-d'),
+                'hora' => $a->data_agendamento->format('H:i'),
+                'observacao' => $a->observacao,
+                'status' => $a->status,
+                'clienteId' => $a->cliente_id,
+                'clienteNome' => $eLead
+                    ? ($a->lead?->razao_social ?: ($a->lead?->nome ?? '—'))
+                    : ($a->cliente?->razao_social ?? '—'),
+                'clienteCnpj' => $eLead ? $a->lead?->cnpj : $a->cliente?->cnpj,
+                'autor' => $a->user?->display_name ?: $a->user?->name,
+            ];
+        })->values()->all();
     }
 }

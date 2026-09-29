@@ -8,11 +8,15 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Endpoint do aviso cruzado (`AvisoBuscaCruzada.vue`). Devolve só uma contagem.
+ * Contagem da outra aba da Carteira. Devolve só um número.
+ *
+ * Desde 2026-09-29 clientes e leads moram na mesma página. O botão da aba que não está
+ * aberta mostra "Leads (15)" perguntando aqui — fora da primeira pintura, uma vez por
+ * termo. O número tem que ser o total que aquela aba mostra ao ser aberta.
  *
  * ⚠️ O escopo sai do MESMO resolver e dos MESMOS parâmetros (`visao_supervisor`,
- * `visao_vendedor`) que as duas páginas usam — o aviso nunca pode contar algo que o
- * clique não vá mostrar, nem vazar o tamanho da carteira de outra pessoa.
+ * `visao_vendedor`) que a página usa — o contador nunca pode contar algo que a aba não
+ * vá mostrar, nem vazar o tamanho da carteira de outra pessoa.
  */
 class BuscaCruzadaController extends Controller
 {

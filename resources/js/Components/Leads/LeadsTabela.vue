@@ -1,5 +1,5 @@
 <script setup>
-import { router } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import BotoesContato from '@/Components/Contato/BotoesContato.vue';
 import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
@@ -81,6 +81,22 @@ async function excluir(lead) {
                         </span>
                         <span class="tbl-sub">{{ lead.cnpj || lead.email || '—' }}</span>
                         <span v-if="lead.formularioNome" class="tbl-sub">{{ lead.formularioNome }}</span>
+                        <!--
+                            "Já é cliente": o MESMO CNPJ existe na carteira de clientes. É a
+                            resposta para lead e cliente "com o mesmo nome" — nome não
+                            identifica empresa, CNPJ sim. Com link só quando o cliente é do
+                            escopo de quem vê (o servidor manda `clienteId` só nesse caso).
+                        -->
+                        <span v-if="lead.jaECliente" class="mt-0.5 block">
+                            <Link
+                                v-if="lead.jaECliente.clienteId"
+                                :href="route('carteira.detalhes', lead.jaECliente.clienteId)"
+                                title="Abrir a ficha do cliente"
+                            >
+                                <StatusPill tone="ok" size="sm">Já é cliente →</StatusPill>
+                            </Link>
+                            <StatusPill v-else tone="ok" size="sm" title="Este CNPJ já é cliente de outra carteira">Já é cliente</StatusPill>
+                        </span>
                     </td>
                     <td class="tbl-td" data-rotulo="Vendedor">
                         <span class="tbl-trunc sm:max-w-[180px]" :title="lead.vendedorNome ?? ''">{{ lead.vendedorNome || '—' }}</span>
