@@ -36,6 +36,8 @@ Schedule::job(new NotificarPedidosAtencaoJob)->dailyAt('07:05')->onOneServer();
 Schedule::job(new ExpurgarNotificacoesLidasJob)->weeklyOn(1, '03:00')->onOneServer();
 // Planilhas vencidas: sem expurgo o disco do servidor so cresce (ver ExpurgarExportacoesJob).
 Schedule::job(new ExpurgarExportacoesJob)->dailyAt('03:30')->onOneServer();
+// Log do SMTP (/emails): 90 dias, ver EmailEnviado::DIAS_RETENCAO.
+Schedule::command('model:prune', ['--model' => [\App\Models\EmailEnviado::class]])->dailyAt('03:35')->onOneServer();
 
 /*
  * Resumo diário da equipe por e-mail para os gestores — dias úteis, 18:15 (fim do

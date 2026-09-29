@@ -5,6 +5,7 @@ use App\Http\Controllers\CadastroController;
 use App\Http\Controllers\CarteiraController;
 use App\Http\Controllers\CatalogoFacaController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EmailEnviadoController;
 use App\Http\Controllers\EquipeController;
 use App\Http\Controllers\EtiquetaMateriaPrimaController;
 use App\Http\Controllers\ExportacaoController;
@@ -218,6 +219,9 @@ Route::middleware('auth')->group(function () {
     // EtiquetaMateriaPrimaController e no CRUD do Catalogo de Facas.
     Route::get('/atualizacoes', [AtualizacaoDadosController::class, 'index'])->name('atualizacoes.index');
     Route::post('/atualizacoes', [AtualizacaoDadosController::class, 'disparar'])->name('atualizacoes.disparar');
+
+    // Log do SMTP. Admin-only checado no controller.
+    Route::get('/emails', [EmailEnviadoController::class, 'index'])->name('emails.index');
 
     /*
      * Visão Diretor — admin + diretor. O gate vale para o GRUPO inteiro: página nova entra

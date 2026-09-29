@@ -3,7 +3,11 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Services\Email\RegistroDeEmails;
+use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
@@ -43,5 +47,9 @@ class AppServiceProvider extends ServiceProvider
          * pergunta isto antes de aceitar o filtro `?conta_alvo=`. Ver docs/visao-diretor.md.
          */
         Gate::define('ver-visao-diretor', fn (User $user) => $user->hasAnyRole(['admin', 'diretor']));
+
+        // Log do que sai pelo SMTP, para a tela admin /emails.
+        Event::listen(MessageSent::class, [RegistroDeEmails::class, 'enviado']);
+        Event::listen(JobFailed::class, [RegistroDeEmails::class, 'falhou']);
     }
 }

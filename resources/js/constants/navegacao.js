@@ -152,6 +152,8 @@ export const NAV_USUARIO = [
         ativoEm: ['atualizacoes.*'],
         visivel: soAdmin,
     },
+    // Log do SMTP — mostra destinatários de todo e-mail do sistema, então só admin.
+    { chave: 'emails', rotulo: 'E-mails enviados', icone: 'emails', rota: 'emails.index', ativoEm: ['emails.*'], visivel: soAdmin },
 ];
 
 /**
