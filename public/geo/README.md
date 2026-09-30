@@ -10,10 +10,10 @@ contagem por código IBGE; a coordenada vem daqui e fica no cache do navegador.
 | `mesorregioes.json` | GeoJSON das 137 mesorregiões, qualidade mínima, coordenadas arredondadas a 3 casas; `properties.nome` acrescentado | Mesma API, `intrarregiao=mesorregiao`; o nome vem de `database/dados-bi/IBGE_MUNICIPIOS.csv` | 2026-09-30 |
 
 - **O quinto elemento de cada município em `municipios.json` é o código da mesorregião**,
-  tirado do mesmo `IBGE_MUNICIPIOS.csv`. ⚠️ O SERVIDOR lê este arquivo para contar os
-  clientes de cada mesorregião (`App\Services\Geografia\Mesorregioes`), e o navegador lê
-  o mesmo arquivo para saber em que região desenhar cada cidade — é o que garante que o
-  número do selo e o contorno usam a mesma divisão. Ao regenerar, manter os dois lados.
+  tirado do mesmo `IBGE_MUNICIPIOS.csv`. ⚠️ É o SERVIDOR quem lê este arquivo
+  (`App\Services\Geografia\Mesorregioes`): conta os clientes de cada região para a pill E
+  aplica o filtro `?mesorregiao=` da lista a partir dele — é o que garante que o número da
+  pill e a lista aberta por ela usam a mesma divisão. O navegador hoje só lê os contornos.
 - `mesorregioes.json` tem 538 KB (134 KB comprimido) e só é baixado quando alguém entra
   num estado.
 

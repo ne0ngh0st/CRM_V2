@@ -300,6 +300,53 @@ class CarteiraMapaTest extends TestCase
         $this->assertSame(1, $mesos[3515]['ativos'], 'status do cliente, não da loja parada da capital');
     }
 
+    public function test_o_numero_de_toda_regiao_bate_com_a_lista_que_ela_abre(): void
+    {
+        // Americana é da mesma região de Campinas: o 960 tem duas cidades lá e conta uma vez.
+        $this->cliente('960', '0001', '001', null, 'SP', 'CAMPINAS', self::CAMPINAS);
+        $this->cliente('960', '0002', '001', null, 'SP', 'AMERICANA', 3501608);
+
+        foreach ([[], ['status' => 'ativo'], ['status' => 'inativo'], ['busca' => 'CLIENTE 1']] as $filtros) {
+            $regioes = $this->mapa($this->vendedor, $filtros)['mesorregioes'];
+            $this->assertNotEmpty($regioes, 'fixture degenerado: sem região em '.json_encode($filtros));
+
+            foreach ($regioes as $regiao) {
+                $this->assertSame(
+                    $this->props($this->vendedor, $filtros + ['mesorregiao' => $regiao['cod']])['clientes']['total'],
+                    $regiao['clientes'],
+                    "região {$regiao['cod']} ≠ lista em ".json_encode($filtros),
+                );
+            }
+        }
+    }
+
+    public function test_filtro_de_regiao_lista_quem_tem_endereco_nela_e_mostra_esse_endereco(): void
+    {
+        $props = $this->props($this->vendedor, ['mesorregiao' => 3507]);
+        $linhas = collect($props['clientes']['data'])->keyBy('codCliente');
+
+        $this->assertSame(['100', '200', '800'], $linhas->pluck('codCliente')->sort()->values()->all());
+
+        // A âncora do 100 é a capital (outra região). A linha tem que dizer Campinas.
+        $this->assertSame('CAMPINAS', $linhas['100']['municipio']);
+        $this->assertSame('0001', $linhas['100']['loja'], 'as ações da linha continuam na âncora');
+
+        $this->assertSame(['cod' => 3507, 'nome' => 'Campinas (SP)'], $props['filtros']['mesorregiao']);
+        $this->assertSame('Campinas', collect($this->mapa($this->vendedor)['mesorregioes'])->firstWhere('cod', 3507)['nome']);
+    }
+
+    public function test_regiao_invalida_na_url_nao_filtra_nada(): void
+    {
+        $semFiltro = $this->props($this->vendedor)['clientes']['total'];
+
+        foreach (['abc', '9999', '35071', "1' OR '1'='1"] as $lixo) {
+            $props = $this->props($this->vendedor, ['mesorregiao' => $lixo]);
+
+            $this->assertSame($semFiltro, $props['clientes']['total'], "mesorregiao={$lixo}");
+            $this->assertNull($props['filtros']['mesorregiao']);
+        }
+    }
+
     public function test_filtro_de_status_no_mapa_e_por_cliente_mesmo_pedindo_a_lista_por_filial(): void
     {
         /*

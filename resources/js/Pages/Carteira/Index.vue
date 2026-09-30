@@ -71,7 +71,9 @@ const filtros = reactive({
     // barra: é anunciado pela faixa acima da tabela, com "limpar".
     conta_alvo: props.filtros.contaAlvo?.id ? String(props.filtros.contaAlvo.id) : '',
     // Código IBGE, vindo do clique numa bolha do mapa. Sem campo na barra: faixa com "limpar".
-    municipio: props.filtros.municipio?.cod ? String(props.filtros.municipio.cod) : '',
+    // Código da mesorregião, vindo do clique numa região do mapa. Sem campo na barra:
+    // faixa com "limpar" e "voltar ao mapa".
+    mesorregiao: props.filtros.mesorregiao?.cod ? String(props.filtros.mesorregiao.cod) : '',
     ordenar: props.filtros.ordenar || 'nome_asc',
     /*
      * Precisa viajar junto de todo filtro, ordenação e troca de aba: `paramsComAba()`
@@ -197,24 +199,24 @@ watch(() => props.aba === 'mapa' && ! props.mapa, (falta) => {
 });
 
 /*
- * O clique na bolha: a lista dos clientes com endereço naquele município. É por isso que
- * o "N clientes" da bolha tem que ser o total desta lista — travado em `CarteiraMapaTest`.
+ * O clique numa região do mapa: a lista dos clientes com endereço nela. É por isso que o
+ * número da pill tem que ser o total desta lista — travado em `CarteiraMapaTest`.
  */
-function abrirMunicipio(cod) {
-    filtros.municipio = String(cod);
+function abrirRegiao(cod) {
+    filtros.mesorregiao = String(cod);
     trocarAba('clientes');
 }
 
 // "Ver os clientes de SP": é o filtro de Estado que a barra já tem, então o caminho de
-// volta é o próprio dropdown. Limpa o município para os dois recortes não se somarem.
+// volta é o próprio dropdown. Limpa a região para os dois recortes não se somarem.
 function abrirEstado(uf) {
     filtros.estado = uf;
-    filtros.municipio = '';
+    filtros.mesorregiao = '';
     trocarAba('clientes');
 }
 
-function limparMunicipio() {
-    filtros.municipio = '';
+function limparRegiao() {
+    filtros.mesorregiao = '';
     aplicarFiltros();
 }
 
@@ -236,7 +238,7 @@ function onBuscaInput() {
 
 function limparFiltros() {
     Object.assign(filtros, {
-        busca: '', estado: '', segmento: '', status: '', aderencia: '', municipio: '',
+        busca: '', estado: '', segmento: '', status: '', aderencia: '', mesorregiao: '',
         ordenar: 'nome_asc', visao_supervisor: '', visao_vendedor: '',
     });
     aplicarFiltros();
@@ -279,7 +281,7 @@ function abrirCartaoCnpj(cliente) {
  * — e aí a busca conta.
  */
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
-    'estado', 'segmento', 'status', 'aderencia', 'sem_familia', 'conta_alvo', 'municipio',
+    'estado', 'segmento', 'status', 'aderencia', 'sem_familia', 'conta_alvo', 'mesorregiao',
     'visao_supervisor', 'visao_vendedor',
 ]));
 
@@ -508,15 +510,15 @@ function limparContaAlvo() {
                         </button>
                     </div>
 
-                    <!-- Recorte vindo do clique numa bolha do mapa. Mesmo motivo das duas
+                    <!-- Recorte vindo do clique numa região do mapa. Mesmo motivo das duas
                          faixas de cima, e o "limpar" é o caminho de volta. -->
                     <div
-                        v-if="props.filtros.municipio"
+                        v-if="props.filtros.mesorregiao"
                         class="flex flex-wrap items-center justify-between gap-2 rounded border border-navy/30 bg-navy/5 px-3 py-2"
                     >
                         <p class="text-sm text-gray-700">
-                            Mostrando apenas clientes com endereço em
-                            <strong class="font-semibold">{{ props.filtros.municipio.nome }}</strong>.
+                            Mostrando apenas clientes com endereço na região
+                            <strong class="font-semibold">{{ props.filtros.mesorregiao.nome }}</strong>.
                         </p>
                         <div class="flex gap-2">
                             <button
@@ -529,7 +531,7 @@ function limparContaAlvo() {
                             <button
                                 type="button"
                                 class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
-                                @click="limparMunicipio"
+                                @click="limparRegiao"
                             >
                                 Limpar recorte
                             </button>
@@ -584,8 +586,8 @@ function limparContaAlvo() {
                     v-else-if="aba === 'mapa'"
                     :mapa="mapa"
                     :status="props.filtros.status || ''"
-                    :municipio-ativo="props.filtros.municipio?.cod ?? null"
-                    @abrir="abrirMunicipio"
+                    :regiao-ativa="props.filtros.mesorregiao?.cod ?? null"
+                    @abrir-regiao="abrirRegiao"
                     @abrir-estado="abrirEstado"
                 />
 

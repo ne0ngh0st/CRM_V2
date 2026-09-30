@@ -175,6 +175,7 @@ class CarteiraController extends Controller
             'sem_familia' => (string) $request->string('sem_familia'),
             // Já normalizado: `?municipio=abc` não filtra nada e por isso não pode mudar a chave.
             'municipio' => (string) ($this->municipioFiltrado($request) ?? ''),
+            'mesorregiao' => (string) ($this->regiaoFiltrada($request) ?? ''),
             // Id + VERSÃO dos vínculos: editar a conta na Visão Diretor muda a chave, e o
             // total cacheado não fica 10 min atrás do número que a pessoa acabou de clicar.
             'conta_alvo' => $this->assinaturaContaAlvo($request) ?? '',
@@ -355,6 +356,8 @@ class CarteiraController extends Controller
                 // Vem do clique numa bolha do mapa. `{cod, nome}` ou null — anunciado por
                 // faixa com "limpar", como os dois recortes acima.
                 'municipio' => $this->municipioParaTela($request),
+                // Vem do clique numa região (mesorregião) do mapa. Mesma faixa com "limpar".
+                'mesorregiao' => $this->regiaoParaTela($request),
             ],
             'opcoes' => $this->opcoesDeFiltro($request, $codVendedores),
             'visao' => [
@@ -486,6 +489,13 @@ class CarteiraController extends Controller
             $query->where('clientes.cod_municipio', $municipio);
         }
 
+        // Mesorregião (o clique na região do mapa): o mesmo filtro de lugar, sobre a lista
+        // de municípios dela. Mesma fonte que conta a pill (`Mesorregioes`), então a pill
+        // e a lista aberta por ela não têm como divergir. O mapa ignora, porque desenha.
+        if (! $paraMapa && ($municipios = $this->municipiosDaRegiaoFiltrada($request)) !== []) {
+            $query->whereIntegerInRaw('clientes.cod_municipio', $municipios);
+        }
+
         $this->aplicarSemFamilia($request, $query);
 
         if (($contaAlvo = $this->contaAlvoId($request)) !== null) {
@@ -548,6 +558,46 @@ class CarteiraController extends Controller
         return [
             'cod' => $cod,
             'nome' => $filial ? trim($filial->municipio.'/'.$filial->estado, '/') : (string) $cod,
+        ];
+    }
+
+    /**
+     * O código da mesorregião de `?mesorregiao=`, ou null. Só dígitos, e só uma região que
+     * exista: código desconhecido não filtra nada (em vez de esvaziar a lista sem motivo).
+     */
+    private function regiaoFiltrada(Request $request): ?int
+    {
+        $bruto = (string) $request->string('mesorregiao');
+
+        if ($bruto === '' || ! ctype_digit($bruto) || strlen($bruto) > 4) {
+            return null;
+        }
+
+        return $this->mesorregioes->municipiosDe((int) $bruto) !== [] ? (int) $bruto : null;
+    }
+
+    /** @return list<int> */
+    private function municipiosDaRegiaoFiltrada(Request $request): array
+    {
+        $regiao = $this->regiaoFiltrada($request);
+
+        return $regiao === null ? [] : $this->mesorregioes->municipiosDe($regiao);
+    }
+
+    /** @return array{cod: int, nome: string}|null */
+    private function regiaoParaTela(Request $request): ?array
+    {
+        $regiao = $this->regiaoFiltrada($request);
+
+        if ($regiao === null) {
+            return null;
+        }
+
+        $uf = MapaDaCarteira::UF_POR_CODIGO[intdiv($regiao, 100)] ?? null;
+
+        return [
+            'cod' => $regiao,
+            'nome' => trim(($this->mesorregioes->nome($regiao) ?? "Região {$regiao}").($uf ? " ({$uf})" : '')),
         ];
     }
 
@@ -1095,10 +1145,13 @@ class CarteiraController extends Controller
         $pagina = $this->paginaSegura($request);
         $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
 
-        $lugar = array_filter([
-            'clientes.estado' => (string) $request->string('estado'),
-            'clientes.cod_municipio' => $this->municipioFiltrado($request),
-        ], fn ($v) => $v !== null && $v !== '');
+        // Pares [coluna, valor]; valor lista vira `IN`. Lista e não mapa por coluna porque
+        // município e mesorregião filtram a MESMA coluna.
+        $lugar = array_values(array_filter([
+            ['clientes.estado', (string) $request->string('estado')],
+            ['clientes.cod_municipio', $this->municipioFiltrado($request)],
+            ['clientes.cod_municipio', $this->municipiosDaRegiaoFiltrada($request)],
+        ], fn ($par) => $par[1] !== null && $par[1] !== '' && $par[1] !== []));
 
         $codigos = $this->codigosDaPagina($request, $pagina, $ordenar);
         $resumo = $this->resumoDosCodigos($codVendedores, $codigos, $lugar);
@@ -1239,7 +1292,7 @@ class CarteiraController extends Controller
      *
      * @param  array<string>|null  $codVendedores
      * @param  Collection<int, string>  $codigos
-     * @param  array<string, string|int>  $lugar  coluna qualificada => valor filtrado
+     * @param  list<array{0: string, 1: string|int|list<int>}>  $lugar  pares [coluna qualificada, valor]; lista vira IN
      */
     protected function resumoDosCodigos(?array $codVendedores, Collection $codigos, array $lugar = []): Collection
     {
@@ -1250,6 +1303,19 @@ class CarteiraController extends Controller
         $entrega = self::sqlEhEntrega();
         $ordemDaAncora = "CONCAT(IF({$entrega}, '1', '0'), LPAD(clientes.loja, 10, '0'), ':', clientes.id)";
 
+        $condicoes = [];
+        $valores = [];
+
+        foreach ($lugar as [$coluna, $valor]) {
+            if (is_array($valor)) {
+                $condicoes[] = "{$coluna} IN (".implode(',', array_fill(0, count($valor), '?')).')';
+                array_push($valores, ...$valor);
+            } else {
+                $condicoes[] = "{$coluna} = ?";
+                $valores[] = $valor;
+            }
+        }
+
         return $this->comEscopo($codVendedores)
             ->select([])
             ->whereIn('clientes.cod_cliente', $codigos)
@@ -1259,11 +1325,10 @@ class CarteiraController extends Controller
             ->selectRaw("SUM({$entrega}) as entregas")
             // Em quantas cidades o cliente tem endereço, para o "+2 cidades" da linha.
             ->selectRaw('COUNT(DISTINCT clientes.cod_municipio) as cidades')
-            ->when($lugar !== [], fn ($q) => $q->selectRaw(
-                'SUBSTRING_INDEX(MIN(CASE WHEN '
-                    .implode(' AND ', array_map(fn (string $coluna) => "{$coluna} = ?", array_keys($lugar)))
+            ->when($condicoes !== [], fn ($q) => $q->selectRaw(
+                'SUBSTRING_INDEX(MIN(CASE WHEN '.implode(' AND ', $condicoes)
                     ." THEN {$ordemDaAncora} END), ':', -1) as local_id",
-                array_values($lugar),
+                $valores,
             ))
             ->selectRaw('MAX(clientes.data_ultima_compra) as uc')
             ->selectRaw('MAX(clientes.data_ultimo_contato) as uct')
@@ -1339,7 +1404,8 @@ class CarteiraController extends Controller
             // antiga, o payload v1 ainda em cache seria entregue ao front novo por até
             // 10 min depois do deploy — mapa sem selos, e nada em vermelho para acusar.
             // Renomear o bloco basta; bumpar `ChaveEscopo::VERSAO` esfriaria o Painel todo.
-            ->paraDoDia('carteira-mapa-v2', ['f' => $this->assinaturaDosFiltros($request, ['municipio'])]);
+            // `-v3`: as mesorregiões passaram a levar o nome (2026-09-30).
+            ->paraDoDia('carteira-mapa-v3', ['f' => $this->assinaturaDosFiltros($request, ['municipio', 'mesorregiao'])]);
 
         return $this->cache->lembrarPorMinutos($chave, 10, function () use ($request, $codVendedores) {
             $entrega = self::sqlEhEntrega();
@@ -1393,7 +1459,7 @@ class CarteiraController extends Controller
                 ->toBase()
                 ->get();
 
-            return $this->mapa->agregar(
+            $mapa = $this->mapa->agregar(
                 $linhas,
                 $semCodigo,
                 $ultimaCompraPorCliente,
@@ -1402,6 +1468,14 @@ class CarteiraController extends Controller
                 (string) $request->string('status'),
                 $this->mesorregioes->porMunicipio(),
             );
+
+            // O nome vai pronto: é o mesmo texto da faixa da lista aberta pela pill.
+            $mapa['mesorregioes'] = array_map(
+                fn (array $m) => $m + ['nome' => $this->mesorregioes->nome($m['cod']) ?? "Região {$m['cod']}"],
+                $mapa['mesorregioes'],
+            );
+
+            return $mapa;
         });
     }
 
