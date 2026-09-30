@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Geografia\MunicipioSincronizador;
 use App\Services\Totvs\ClientesLookup;
 use App\Services\Totvs\LeitorRelatorio;
 use App\Services\Totvs\Normalizador;
@@ -153,6 +154,16 @@ class ImportClientesTotvs extends Command
         }
 
         $this->info(($dryRun ? '[dry-run] ' : '').'Clientes importados/atualizados: '.number_format($total, 0, ',', '.'));
+
+        // `cod_municipio` é derivado de `municipio` + `estado` e tem dono único; o upsert
+        // acima não o toca. Só escreve o que mudou, então custa quase nada na rodada horária.
+        if (! $dryRun) {
+            $municipios = app(MunicipioSincronizador::class)->sincronizar();
+
+            if ($municipios > 0) {
+                $this->line('Município (código IBGE) atualizado em: '.number_format($municipios, 0, ',', '.'));
+            }
+        }
 
         if ($novos > 0) {
             $this->line('Cadastros novos (não existiam no banco): '.number_format($novos, 0, ',', '.'));

@@ -7,6 +7,7 @@ import DarkCard from '@/Components/DarkCard.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import CartaoCnpjModal from '@/Components/Receita/CartaoCnpjModal.vue';
+import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
 import Pagination from '@/Components/Pagination.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira.js';
 // Esta página já manteve uma cópia local do mapa de rótulos de status, e a cópia não
@@ -159,6 +160,23 @@ const campos = [
                         <div v-for="campo in campos" :key="campo.label">
                             <dt class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ campo.label }}</dt>
                             <dd class="mt-0.5 text-sm text-gray-800">{{ campo.valor(cliente) }}</dd>
+                        </div>
+                        <!-- Fora do `campos` porque é o único que não é texto puro: abre o
+                             Google Maps. No TOTVS logradouro e número vêm num campo só, e
+                             não existe bairro. -->
+                        <div class="sm:col-span-2">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-gray-400">Endereço</dt>
+                            <dd class="mt-0.5 text-sm text-gray-800">
+                                <EnderecoLink
+                                    :logradouro="cliente.endereco ?? ''"
+                                    :municipio="cliente.municipio ?? ''"
+                                    :uf="cliente.estado ?? ''"
+                                    :cep="cliente.cep ?? ''"
+                                    :documento="cliente.cnpj ?? ''"
+                                >
+                                    {{ [cliente.endereco, [cliente.municipio, cliente.estado].filter(Boolean).join('/')].filter(Boolean).join(' — ') || '—' }}
+                                </EnderecoLink>
+                            </dd>
                         </div>
                     </dl>
                 </DarkCard>

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, reactive, ref, watch } from 'vue';
 import { PERFIS_ESCOPO_PROPRIO } from '@/constants/perfis.js';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
@@ -21,12 +21,18 @@ import AvisoBuscaCruzada from '@/Components/Busca/AvisoBuscaCruzada.vue';
 import { ROTULOS_STATUS_CARTEIRA, ORDENACOES_CARTEIRA } from '@/constants/carteira';
 import { contarFiltrosAtivos } from '@/utils/filtros';
 
+// Carregado só quando a aba Mapa abre: o componente puxa o Leaflet, e quem fica na lista
+// (a maioria das visitas) não deve baixar nem um byte dele.
+const MapaCarteira = defineAsyncComponent(() => import('@/Components/Carteira/MapaCarteira.vue'));
+
 const props = defineProps({
     role: String,
     aba: { type: String, default: 'clientes' },
     clientes: Object,
     kpis: Object,
     agendamentos: { type: Array, default: () => [] },
+    // Opcional no servidor, como `agendamentos`: só vem quando a aba Mapa pede.
+    mapa: { type: Object, default: null },
     filtros: Object,
     opcoes: Object,
     visao: Object,
@@ -65,6 +71,8 @@ const filtros = reactive({
     // Vem da Visão Diretor → Maiores por Segmento. Também sem campo na
     // barra: é anunciado pela faixa acima da tabela, com "limpar".
     conta_alvo: props.filtros.contaAlvo?.id ? String(props.filtros.contaAlvo.id) : '',
+    // Código IBGE, vindo do clique numa bolha do mapa. Sem campo na barra: faixa com "limpar".
+    municipio: props.filtros.municipio?.cod ? String(props.filtros.municipio.cod) : '',
     ordenar: props.filtros.ordenar || 'nome_asc',
     /*
      * Precisa viajar junto de todo filtro, ordenação e troca de aba: `paramsComAba()`
@@ -144,20 +152,21 @@ function alternarAgrupamento() {
 // `agendamentos` é uma prop opcional no servidor (Inertia::optional): só vem quando
 // pedida explicitamente no `only`. Filtrar mexe na lista de clientes, não na agenda —
 // então NÃO pedimos agendamentos aqui, e a consulta deixa de rodar à toa.
+//
+// ⚠️ Quem está no Mapa CONTINUA no mapa ao filtrar: o mapa é a mesma lista vista por
+// outro ângulo, e mudar o estado ou o status ali tem que redesenhar as bolhas, não
+// devolver a pessoa para a tabela.
 function aplicarFiltros() {
-    router.get(route('carteira.index'), paramsComAba('clientes'), {
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-        only: ['clientes', 'kpis', 'filtros', 'visao', 'aba'],
-    });
+    trocarAba(props.aba === 'mapa' ? 'mapa' : 'clientes');
 }
 
 function trocarAba(aba) {
     const apenas = ['clientes', 'kpis', 'filtros', 'visao', 'aba'];
 
-    // Só a aba Calendário paga pelos agendamentos.
+    // Cada aba paga só pelo que mostra: agendamentos no Calendário, contagem por
+    // município no Mapa.
     if (aba === 'calendario') apenas.push('agendamentos');
+    if (aba === 'mapa') apenas.push('mapa');
 
     router.get(route('carteira.index'), paramsComAba(aba), {
         preserveState: true,
@@ -168,12 +177,39 @@ function trocarAba(aba) {
 }
 
 // Entrar direto por URL (/carteira?aba=calendario) é uma visita completa, e visita
-// completa não traz prop opcional — sem isto o calendário abriria vazio.
+// completa não traz prop opcional — sem isto o calendário (ou o mapa) abriria vazio.
 onMounted(() => {
     if (props.aba === 'calendario' && !props.agendamentos.length) {
         router.reload({ only: ['agendamentos'], preserveState: true, preserveScroll: true });
     }
+
+    if (props.aba === 'mapa' && ! props.mapa) {
+        router.reload({ only: ['mapa'], preserveState: true, preserveScroll: true });
+    }
 });
+
+// O mesmo buraco, sem desmontar a página: os tiles do card de cima são `<Link>` — visita
+// completa, que devolve a página SEM a prop opcional. Sem isto, clicar em "A trabalhar"
+// com o mapa aberto deixaria o mapa em "Carregando…" para sempre.
+watch(() => props.aba === 'mapa' && ! props.mapa, (falta) => {
+    if (falta) {
+        router.reload({ only: ['mapa'], preserveState: true, preserveScroll: true });
+    }
+});
+
+/*
+ * O clique na bolha: a lista dos clientes com endereço naquele município. É por isso que
+ * o "N clientes" da bolha tem que ser o total desta lista — travado em `CarteiraMapaTest`.
+ */
+function abrirMunicipio(cod) {
+    filtros.municipio = String(cod);
+    trocarAba('clientes');
+}
+
+function limparMunicipio() {
+    filtros.municipio = '';
+    aplicarFiltros();
+}
 
 // Atende os DOIS acessos à ordenação: o clique no header da coluna (desktop) e o seletor
 // "Ordenar por" do celular, que existe porque abaixo de 640px a tabela vira cartão e o
@@ -193,7 +229,7 @@ function onBuscaInput() {
 
 function limparFiltros() {
     Object.assign(filtros, {
-        busca: '', estado: '', segmento: '', status: '', aderencia: '',
+        busca: '', estado: '', segmento: '', status: '', aderencia: '', municipio: '',
         ordenar: 'nome_asc', visao_supervisor: '', visao_vendedor: '',
     });
     aplicarFiltros();
@@ -236,7 +272,7 @@ function abrirCartaoCnpj(cliente) {
  * — e aí a busca conta.
  */
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
-    'estado', 'segmento', 'status', 'aderencia', 'sem_familia', 'conta_alvo',
+    'estado', 'segmento', 'status', 'aderencia', 'sem_familia', 'conta_alvo', 'municipio',
     'visao_supervisor', 'visao_vendedor',
 ]));
 
@@ -350,7 +386,10 @@ function limparContaAlvo() {
                 </PageHero>
 
                 <EscopoVazioAviso :total="kpis.total" recurso="cliente" />
-                <CarteiraSegmentoCard :carteira-segmento="kpis" :base-filtros="filtros" />
+                <!-- Com o mapa aberto, os tiles do card filtram O MAPA (o link carrega a
+                     aba junto): clicar em "A trabalhar" recolore as bolhas em vez de
+                     devolver a pessoa para a tabela. -->
+                <CarteiraSegmentoCard :carteira-segmento="kpis" :base-filtros="aba === 'mapa' ? { ...filtros, aba: 'mapa' } : filtros" />
 
                 <div class="flex gap-2">
                     <button
@@ -368,6 +407,14 @@ function limparContaAlvo() {
                         @click="trocarAba('calendario')"
                     >
                         Calendário
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition"
+                        :class="aba === 'mapa' ? 'border-navy bg-navy text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100'"
+                        @click="trocarAba('mapa')"
+                    >
+                        Mapa
                     </button>
 
                     <!-- Alternador de unidade da lista. Fica à direita das abas porque não
@@ -461,6 +508,34 @@ function limparContaAlvo() {
                         </button>
                     </div>
 
+                    <!-- Recorte vindo do clique numa bolha do mapa. Mesmo motivo das duas
+                         faixas de cima, e o "limpar" é o caminho de volta. -->
+                    <div
+                        v-if="props.filtros.municipio"
+                        class="flex flex-wrap items-center justify-between gap-2 rounded border border-navy/30 bg-navy/5 px-3 py-2"
+                    >
+                        <p class="text-sm text-gray-700">
+                            Mostrando apenas clientes com endereço em
+                            <strong class="font-semibold">{{ props.filtros.municipio.nome }}</strong>.
+                        </p>
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
+                                @click="trocarAba('mapa')"
+                            >
+                                Voltar ao mapa
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
+                                @click="limparMunicipio"
+                            >
+                                Limpar recorte
+                            </button>
+                        </div>
+                    </div>
+
                     <DarkCard title="Carteira de Clientes" :subtitle="subtituloDaTabela">
                         <template #icon>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
@@ -504,6 +579,14 @@ function limparContaAlvo() {
                         </div>
                     </DarkCard>
                 </template>
+
+                <MapaCarteira
+                    v-else-if="aba === 'mapa'"
+                    :mapa="mapa"
+                    :status="props.filtros.status || ''"
+                    :municipio-ativo="props.filtros.municipio?.cod ?? null"
+                    @abrir="abrirMunicipio"
+                />
 
                 <CalendarioAgendamentos v-else :agendamentos="agendamentos" />
             </div>

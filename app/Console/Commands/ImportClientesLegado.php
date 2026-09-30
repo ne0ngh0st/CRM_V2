@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Geografia\MunicipioSincronizador;
 use App\Services\Legado\LegadoConexao;
 use App\Services\Totvs\ClientesLookup;
 use App\Services\Totvs\Normalizador;
@@ -113,6 +114,14 @@ class ImportClientesLegado extends Command
         }
 
         $this->info("Importados/atualizados: {$total}");
+
+        // Mesmo passo do `totvs:import-clientes`: os dois caminhos escrevem a MESMA
+        // tabela, e `cod_municipio` é derivado do que acabou de ser gravado.
+        $municipios = app(MunicipioSincronizador::class)->sincronizar();
+        if ($municipios > 0) {
+            $this->info("Município (código IBGE) atualizado em: {$municipios}");
+        }
+
         if ($ignorados > 0) {
             $this->warn("Ignorados (sem cod_cliente ou loja): {$ignorados}");
         }

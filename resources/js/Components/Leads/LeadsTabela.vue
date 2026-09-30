@@ -2,6 +2,7 @@
 import { router } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import BotoesContato from '@/Components/Contato/BotoesContato.vue';
+import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
 import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao.js';
 import { ROTULOS_ETAPA_LEAD, TONS_ETAPA_LEAD, ROTULOS_ORIGEM_LEAD, TONS_ORIGEM_LEAD } from '@/constants/leads.js';
@@ -86,7 +87,17 @@ async function excluir(lead) {
                         <span class="tbl-trunc sm:max-w-[180px]" :title="lead.vendedorNome ?? ''">{{ lead.vendedorNome || '—' }}</span>
                     </td>
                     <td class="tbl-td" data-rotulo="UF / Cidade">
-                        <span v-if="lead.estado || lead.cidade">{{ lead.estado || '—' }}{{ lead.cidade ? ` · ${lead.cidade}` : '' }}</span>
+                        <!-- Vira link para o Maps só quando o lead tem endereço: a cidade
+                             sozinha abriria o mapa num lugar que não é o lead. -->
+                        <EnderecoLink
+                            v-if="lead.estado || lead.cidade"
+                            :logradouro="lead.endereco ?? ''"
+                            :municipio="lead.cidade ?? ''"
+                            :uf="lead.estado ?? ''"
+                            :documento="lead.cnpj ?? ''"
+                        >
+                            {{ lead.estado || '—' }}{{ lead.cidade ? ` · ${lead.cidade}` : '' }}
+                        </EnderecoLink>
                         <span v-else>—</span>
                     </td>
                     <td class="tbl-td" data-rotulo="Segmento">{{ lead.segmento || '—' }}</td>

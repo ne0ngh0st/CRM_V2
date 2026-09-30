@@ -97,8 +97,12 @@ class ViewsBi
      * Nome de município no formato de `de_para_municipio.nome_norm`: maiúsculas, hífen
      * e apóstrofo viram espaço, espaço duplo colapsado. Cópia exata da normalização
      * que gerou o de-para no legado — mudar um lado sem o outro zera a cobertura.
+     *
+     * Pública porque o `MunicipioSincronizador` (que grava `clientes.cod_municipio`) usa
+     * a MESMA expressão: o município que o Power BI resolve e o que o mapa da Carteira
+     * plota têm que ser o mesmo, e duas normalizações divergiriam sem erro nenhum.
      */
-    private static function nomeMunicipio(string $coluna): string
+    public static function nomeMunicipio(string $coluna): string
     {
         return "REPLACE(REPLACE(REPLACE(REPLACE(UPPER(TRIM({$coluna})), '-', ' '), '''', ' '), '  ', ' '), '  ', ' ')";
     }

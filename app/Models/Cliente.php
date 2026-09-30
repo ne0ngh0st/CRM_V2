@@ -29,6 +29,9 @@ class Cliente extends Model
          * (`UltimoContatoSincronizador`); deixá-las preenchíveis por `create()`/
          * `update()` é justamente como um import ou um seeder acabaria gravando um
          * valor que não veio de `ligacoes` — e aí a coluna passa a mentir sem erro.
+         *
+         * Mesmo caso de `cod_municipio` (código IBGE derivado de `municipio` + `estado`):
+         * o dono único é o `MunicipioSincronizador`.
          */
     ];
 

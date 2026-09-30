@@ -4,6 +4,7 @@ import ModalPadrao from '@/Components/ModalPadrao.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
 
 /*
  * "Verificar cartão CNPJ": o cartão da Receita da filial, lado a lado com o que o
@@ -215,7 +216,16 @@ const consultadoTexto = computed(() => {
             <div class="grid gap-3 sm:grid-cols-2">
                 <div>
                     <p :class="ROTULO">Endereço na Receita</p>
-                    <p>{{ enderecoLinha1 || '—' }}</p>
+                    <!-- O link leva logradouro + número; complemento ("SALA 3") só
+                         atrapalha a busca do Maps e fica apenas no texto. -->
+                    <EnderecoLink
+                        :logradouro="[cartao.endereco?.logradouro, cartao.endereco?.numero].filter(Boolean).join(', ')"
+                        :municipio="cartao.endereco?.municipio ?? ''"
+                        :uf="cartao.endereco?.uf ?? ''"
+                        :cep="cartao.endereco?.cep ?? ''"
+                    >
+                        {{ enderecoLinha1 || '—' }}
+                    </EnderecoLink>
                     <p class="text-xs text-gray-500">{{ enderecoLinha2 }}</p>
                 </div>
                 <div>

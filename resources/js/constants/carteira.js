@@ -38,7 +38,8 @@ export const TONS_STATUS_CARTEIRA = {
 export const ORDENACOES_CARTEIRA = [
     { campo: 'nome', rotulo: 'Cliente' },
     { campo: 'vendedor', rotulo: 'Vendedor' },
-    { campo: 'estado', rotulo: 'Estado' },
+    // A coluna exibe cidade e UF; o que o servidor ordena é a UF (`campo: 'estado'`).
+    { campo: 'estado', rotulo: 'Cidade / UF' },
     { campo: 'status', rotulo: 'Status' },
     { campo: 'ultima_compra', rotulo: 'Última Compra' },
     { campo: 'ultimo_contato', rotulo: 'Último contato' },

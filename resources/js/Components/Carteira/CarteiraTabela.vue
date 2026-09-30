@@ -4,6 +4,7 @@ import { router, Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import SortableTh from '@/Components/Tabela/SortableTh.vue';
 import BotoesContato from '@/Components/Contato/BotoesContato.vue';
+import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA, rotuloOrdenacao } from '@/constants/carteira.js';
 import { ROTULOS_CANAL_CURTO } from '@/constants/contatos.js';
 
@@ -76,6 +77,9 @@ async function alternar(cliente) {
 }
 
 const emit = defineEmits(['motivo-inatividade', 'observacao', 'agendar-ligacao', 'ordenar', 'cartao-cnpj']);
+
+// "CAMPINAS/SP" — serve à linha do cliente e à de cada filial.
+const localDe = (c) => [c?.municipio, c?.estado].filter(Boolean).join('/') || '—';
 
 // Cartão CNPJ só existe para CNPJ: cliente pessoa física (CPF) tem o botão desabilitado.
 const temCnpj = (c) => String(c?.cnpj ?? '').replace(/\D/g, '').length === 14;
@@ -167,7 +171,16 @@ function criarOrcamento(cliente) {
                     <td class="tbl-td" data-rotulo="Vendedor">
                         <span class="tbl-trunc sm:max-w-[180px]" :title="cliente.vendedorNome">{{ cliente.vendedorNome }}</span>
                     </td>
-                    <td class="tbl-td" data-rotulo="Estado">{{ cliente.estado ?? '—' }}</td>
+                    <!-- A cidade é a da filial que casou com o filtro de lugar (o servidor
+                         decide); sem filtro, a da âncora. "+N cidades" diz que o cliente
+                         tem endereço em outros municípios — são esses que aparecem em
+                         mais de uma bolha do mapa. -->
+                    <td class="tbl-td" data-rotulo="Cidade / UF">
+                        <span class="tbl-trunc sm:max-w-[170px]" :title="localDe(cliente)">{{ localDe(cliente) }}</span>
+                        <span v-if="cliente.outrasCidades" class="tbl-sub">
+                            +{{ cliente.outrasCidades }} {{ cliente.outrasCidades === 1 ? 'cidade' : 'cidades' }}
+                        </span>
+                    </td>
                     <td class="tbl-td" data-rotulo="Segmento">{{ cliente.segmento ?? '—' }}</td>
                     <td class="tbl-td" data-rotulo="Status">
                         <button
@@ -327,7 +340,7 @@ function criarOrcamento(cliente) {
                                         <th class="tbl-itens-th">Loja</th>
                                         <th class="tbl-itens-th">Razão social</th>
                                         <th class="tbl-itens-th">CNPJ</th>
-                                        <th class="tbl-itens-th">UF</th>
+                                        <th class="tbl-itens-th">Cidade / UF</th>
                                         <th class="tbl-itens-th">Status</th>
                                         <th class="tbl-itens-th">Última compra</th>
                                         <th class="tbl-itens-th">Ações</th>
@@ -343,7 +356,17 @@ function criarOrcamento(cliente) {
                                         </td>
                                         <td class="tbl-itens-td">{{ filial.razaoSocial }}</td>
                                         <td class="tbl-itens-td">{{ filial.cnpj ?? '—' }}</td>
-                                        <td class="tbl-itens-td">{{ filial.estado ?? '—' }}</td>
+                                        <td class="tbl-itens-td">
+                                            <EnderecoLink
+                                                :logradouro="filial.endereco ?? ''"
+                                                :municipio="filial.municipio ?? ''"
+                                                :uf="filial.estado ?? ''"
+                                                :cep="filial.cep ?? ''"
+                                                :documento="filial.cnpj ?? ''"
+                                            >
+                                                {{ localDe(filial) }}
+                                            </EnderecoLink>
+                                        </td>
                                         <td class="tbl-itens-td">
                                             <StatusPill :tone="TONS_STATUS_CARTEIRA[filial.status]" size="sm">
                                                 {{ ROTULOS_STATUS_CARTEIRA[filial.status] }}

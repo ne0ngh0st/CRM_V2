@@ -299,11 +299,17 @@ class CarteiraAgrupadaTest extends TestCase
     public function test_filtro_traz_o_cliente_quando_qualquer_filial_casa(): void
     {
         // A matriz do cliente 100 é de SP e a filial é do RJ. Filtrando por RJ, o cliente
-        // tem que aparecer — com os dados da âncora (SP) na linha.
+        // tem que aparecer — com os dados da âncora (razão social, ações) na linha.
+        //
+        // ⚠️ Até 2026-09-30 este teste exigia 'SP' na coluna de estado: era a pendência
+        // aberta em 15/09 (filtrar RJ e ver "SP" na linha). Com o clique na bolha do mapa
+        // isso deixou de ser tolerável, e a coluna de LOCAL passou a exibir a filial que
+        // casou com o filtro. O resto da linha continua sendo a âncora.
         $linhas = $this->linhas($this->vendedor, ['estado' => 'RJ']);
 
         $this->assertArrayHasKey('100', $linhas);
-        $this->assertSame('SP', $linhas['100']['estado']);
+        $this->assertSame('RJ', $linhas['100']['estado']);
+        $this->assertSame('ALFA INDUSTRIA', $linhas['100']['razaoSocial'], 'a linha continua sendo a da âncora');
         $this->assertArrayNotHasKey('200', $linhas, 'BETA é de MG e não pode entrar no filtro de RJ');
     }
 

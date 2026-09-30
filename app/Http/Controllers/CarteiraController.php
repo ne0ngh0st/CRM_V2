@@ -29,6 +29,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -168,6 +169,8 @@ class CarteiraController extends Controller
             'status' => (string) $request->string('status'),
             'aderencia' => (string) $request->string('aderencia'),
             'sem_familia' => (string) $request->string('sem_familia'),
+            // Já normalizado: `?municipio=abc` não filtra nada e por isso não pode mudar a chave.
+            'municipio' => (string) ($this->municipioFiltrado($request) ?? ''),
             // Id + VERSÃO dos vínculos: editar a conta na Visão Diretor muda a chave, e o
             // total cacheado não fica 10 min atrás do número que a pessoa acabou de clicar.
             'conta_alvo' => $this->assinaturaContaAlvo($request) ?? '',
@@ -247,6 +250,15 @@ class CarteiraController extends Controller
         $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $nomePorCodigo, $nomePorGrupo, $hoje) {
             $motivo = $motivosPorCliente->get($cliente->id);
 
+            /*
+             * O local EXIBIDO. Agrupado, `linhasAgrupadas()` já trocou a cidade da âncora
+             * pela da filial que casou com o filtro de lugar (`local_*`) — sem isso,
+             * filtrar por Campinas listava o cliente com "SAO PAULO" na coluna, porque a
+             * âncora é a matriz. Por filial, é o endereço da própria linha.
+             */
+            $municipio = $cliente->local_municipio ?? $cliente->municipio;
+            $estado = $cliente->local_estado ?? $cliente->estado;
+
             return [
                 'id' => $cliente->id,
                 'codCliente' => $cliente->cod_cliente,
@@ -265,7 +277,11 @@ class CarteiraController extends Controller
                 'cnpj' => $cliente->cnpj,
                 'telefone' => $cliente->telefone,
                 'email' => $cliente->email,
-                'estado' => $cliente->estado,
+                'municipio' => $municipio,
+                'estado' => $estado,
+                // Em quantas OUTRAS cidades o cliente tem endereço no escopo ("+2 cidades").
+                // Só agrupado; por filial a linha é um endereço só e não há o que somar.
+                'outrasCidades' => isset($cliente->cidades) ? max(0, (int) $cliente->cidades - 1) : null,
                 'segmento' => $cliente->cod_segmento ? ($nomePorCodigo[$cliente->cod_segmento] ?? $cliente->cod_segmento) : null,
                 'grupo' => $cliente->cod_grupo ? ($nomePorGrupo[$cliente->cod_grupo] ?? $cliente->cod_grupo) : null,
                 'codVendedor' => $cliente->cod_vendedor,
@@ -292,9 +308,11 @@ class CarteiraController extends Controller
 
         return Inertia::render('Carteira/Index', [
             'role' => $role,
-            'aba' => in_array($aba, ['clientes', 'calendario'], true) ? $aba : 'clientes',
+            'aba' => in_array($aba, ['clientes', 'calendario', 'mapa'], true) ? $aba : 'clientes',
             'clientes' => $clientes,
             'kpis' => $kpis,
+            // Opcional pelo mesmo motivo dos agendamentos: só a aba Mapa paga por ele.
+            'mapa' => Inertia::optional(fn () => $this->mapaDoEscopo($request, $codVendedores)),
             /*
              * Prop opcional: só é enviada quando a requisição pede explicitamente
              * (`only: ['agendamentos']`). A aba Clientes, que é onde a maioria das
@@ -330,6 +348,9 @@ class CarteiraController extends Controller
                 // "limpar", pelo mesmo motivo do `semFamilia`: recorte invisível parece
                 // lista quebrada.
                 'contaAlvo' => $this->contaAlvoParaTela($request),
+                // Vem do clique numa bolha do mapa. `{cod, nome}` ou null — anunciado por
+                // faixa com "limpar", como os dois recortes acima.
+                'municipio' => $this->municipioParaTela($request),
             ],
             'opcoes' => $this->opcoesDeFiltro($request, $codVendedores),
             'visao' => [
@@ -409,8 +430,16 @@ class CarteiraController extends Controller
      * ⚠️ `comFacetas: false` é só para os KPIs do card, que DESENHAM a quebra por status e
      * por aderência e por isso não podem filtrar por elas — ver `FACETAS_DO_CARD`. Quem
      * lista, conta ou exporta sempre usa o padrão.
+     *
+     * ⚠️ `paraMapa: true` é só para a aba Mapa, e muda duas coisas — pelo mesmo princípio
+     * das facetas do card:
+     *
+     *   - IGNORA `?municipio=`: o mapa DESENHA a dimensão município, então não pode se
+     *     filtrar por ela (clicar numa bolha e voltar ao mapa mostraria uma bolha só);
+     *   - consolida status e aderência POR CLIENTE mesmo com `?agrupar=0`: a cor da bolha
+     *     é o status do cliente, e o "K clientes" do cabeçalho é o total da lista agrupada.
      */
-    protected function baseQuery(Request $request, bool $comFacetas = true): Builder
+    protected function baseQuery(Request $request, bool $comFacetas = true, bool $paraMapa = false): Builder
     {
         $busca = trim((string) $request->string('busca'));
         $estado = (string) $request->string('estado');
@@ -439,6 +468,15 @@ class CarteiraController extends Controller
             $query->where('clientes.cod_segmento', $segmento);
         }
 
+        /*
+         * Filtro de LUGAR, como `estado`: compara a filial. O cliente entra na lista se
+         * tem algum endereço naquele município — e a linha passa a exibir esse endereço,
+         * não o da âncora (ver `linhasAgrupadas()`).
+         */
+        if (! $paraMapa && ($municipio = $this->municipioFiltrado($request)) !== null) {
+            $query->where('clientes.cod_municipio', $municipio);
+        }
+
         $this->aplicarSemFamilia($request, $query);
 
         if (($contaAlvo = $this->contaAlvoId($request)) !== null) {
@@ -446,11 +484,59 @@ class CarteiraController extends Controller
         }
 
         if ($comFacetas) {
-            $this->aplicarFiltroDeStatus($request, $query, $escopada);
-            $this->aplicarFiltroDeAderencia($request, $query, $escopada);
+            $porCliente = $paraMapa || $this->agrupar($request);
+
+            $this->aplicarFiltroDeStatus($request, $query, $escopada, $porCliente);
+            $this->aplicarFiltroDeAderencia($request, $query, $escopada, $porCliente);
         }
 
         return $query;
+    }
+
+    /**
+     * O código IBGE de `?municipio=`, ou null.
+     *
+     * Vem da query string e vira valor de `WHERE`: só dígitos passam. Valor inválido não
+     * filtra nada, em vez de derrubar a tela — mesma escolha de `aplicarSemFamilia()`.
+     */
+    private function municipioFiltrado(Request $request): ?int
+    {
+        $bruto = (string) $request->string('municipio');
+
+        return $bruto !== '' && ctype_digit($bruto) && strlen($bruto) <= 7 ? (int) $bruto : null;
+    }
+
+    /**
+     * O município filtrado, com nome, para a faixa "Mostrando clientes com endereço em…".
+     *
+     * O nome vem do cadastro (o texto do TOTVS de uma filial daquele código, dentro do
+     * ESCOPO de quem pergunta): é o mesmo texto que a coluna da tabela exibe, e não
+     * depende de tabela de outro schema numa tela de uso diário.
+     *
+     * @return array{cod: int, nome: string}|null
+     */
+    private function municipioParaTela(Request $request): ?array
+    {
+        $cod = $this->municipioFiltrado($request);
+
+        if ($cod === null) {
+            return null;
+        }
+
+        $filial = $this->scopeQuery($request)
+            ->where('clientes.cod_municipio', $cod)
+            ->first(['clientes.municipio', 'clientes.estado']);
+
+        return [
+            'cod' => $cod,
+            'nome' => $filial ? trim($filial->municipio.'/'.$filial->estado, '/') : (string) $cod,
+        ];
+    }
+
+    /** SQL de "esta loja é endereço de entrega" — ver `PREFIXOS_ENTREGA`. */
+    private static function sqlEhEntrega(): string
+    {
+        return "LEFT(clientes.loja, 1) IN ('".implode("','", self::PREFIXOS_ENTREGA)."')";
     }
 
     /**
@@ -503,7 +589,7 @@ class CarteiraController extends Controller
      * equivalente e devolve o mesmo número, mas custa 16,5 SEGUNDOS no escopo empresa.
      * Não reescrever "para evitar a subconsulta agrupada".
      */
-    private function aplicarFiltroDeStatus(Request $request, Builder $query, Builder $escopada): void
+    private function aplicarFiltroDeStatus(Request $request, Builder $query, Builder $escopada, bool $porCliente): void
     {
         $status = (string) $request->string('status');
 
@@ -514,7 +600,7 @@ class CarteiraController extends Controller
         $limiteAtivo = $this->statusResolver->limiteAtivo()->toDateString();
         $limiteInativando = $this->statusResolver->limiteInativando()->toDateString();
 
-        if (! $this->agrupar($request)) {
+        if (! $porCliente) {
             match ($status) {
                 'ativo' => $query->where('clientes.data_ultima_compra', '>=', $limiteAtivo),
                 'inativando' => $query->where('clientes.data_ultima_compra', '<', $limiteAtivo)
@@ -814,7 +900,7 @@ class CarteiraController extends Controller
      * ⚠️ "Fora" é ANTI-JOIN (`leftJoinSub` + `IS NULL`), não `whereNotIn`: mesma família
      * de armadilha do `whereIn` documentada em `aplicarFiltroDeStatus()`.
      */
-    private function aplicarFiltroDeAderencia(Request $request, Builder $query, Builder $escopada): void
+    private function aplicarFiltroDeAderencia(Request $request, Builder $query, Builder $escopada, bool $porCliente): void
     {
         $aderencia = (string) $request->string('aderencia');
 
@@ -837,7 +923,7 @@ class CarteiraController extends Controller
         }
 
         // Por filial: a linha exibida é a loja, e a pill dela é a aderência dela.
-        if (! $this->agrupar($request)) {
+        if (! $porCliente) {
             $query->whereExists($temSegmentoDefinido)
                 ->leftJoin('segmentos', 'segmentos.codigo', '=', 'clientes.cod_segmento')
                 ->leftJoin('segmentos_vendedor', function ($join) {
@@ -904,7 +990,7 @@ class CarteiraController extends Controller
 
         abort_if($total === 0, 404);
 
-        $entrega = "LEFT(clientes.loja, 1) IN ('".implode("','", self::PREFIXOS_ENTREGA)."')";
+        $entrega = self::sqlEhEntrega();
         $hoje = now();
 
         $filiais = $query
@@ -921,7 +1007,10 @@ class CarteiraController extends Controller
                 'cnpj' => $filial->cnpj,
                 'telefone' => $filial->telefone,
                 'email' => $filial->email,
+                'endereco' => $filial->endereco,
+                'municipio' => $filial->municipio,
                 'estado' => $filial->estado,
+                'cep' => $filial->cep,
                 'ehEntrega' => in_array(mb_substr((string) $filial->loja, 0, 1), self::PREFIXOS_ENTREGA, true),
                 'status' => $this->statusResolver->statusPara($filial->data_ultima_compra, $hoje),
                 'dataUltimaCompra' => optional($filial->data_ultima_compra)->format('d/m/Y'),
@@ -988,9 +1077,15 @@ class CarteiraController extends Controller
         $pagina = $this->paginaSegura($request);
         $ordenar = (string) $request->string('ordenar') ?: 'nome_asc';
 
+        $lugar = array_filter([
+            'clientes.estado' => (string) $request->string('estado'),
+            'clientes.cod_municipio' => $this->municipioFiltrado($request),
+        ], fn ($v) => $v !== null && $v !== '');
+
         $codigos = $this->codigosDaPagina($request, $pagina, $ordenar);
-        $resumo = $this->resumoDosCodigos($codVendedores, $codigos);
+        $resumo = $this->resumoDosCodigos($codVendedores, $codigos, $lugar);
         $ancoras = $this->ancorasDoResumo($codVendedores, $resumo);
+        $locais = $this->locaisDoResumo($codVendedores, $resumo);
 
         /*
          * A ordem de `$codigos` é a que o passo 1 decidiu; `$resumo` e `$ancoras` vêm
@@ -999,7 +1094,7 @@ class CarteiraController extends Controller
          * cai fora em vez de virar linha vazia.
          */
         $linhas = $codigos
-            ->map(function (string $codigo) use ($resumo, $ancoras) {
+            ->map(function (string $codigo) use ($resumo, $ancoras, $locais) {
                 $dados = $resumo->get($codigo);
 
                 if (! $dados) {
@@ -1031,6 +1126,17 @@ class CarteiraController extends Controller
 
                 $cliente->lojas = (int) $dados->total_lojas;
                 $cliente->entregas = (int) $dados->entregas;
+                $cliente->cidades = (int) $dados->cidades;
+
+                /*
+                 * Sob filtro de lugar, o local EXIBIDO é o da filial que casou com o
+                 * filtro, não o da âncora. As AÇÕES da linha continuam apontando para a
+                 * âncora (é ela que o de-para do Portal usa) — só a coluna de local muda.
+                 */
+                if ($local = $locais->get($codigo)) {
+                    $cliente->local_municipio = $local->municipio;
+                    $cliente->local_estado = $local->estado;
+                }
 
                 return $cliente;
             })
@@ -1107,16 +1213,24 @@ class CarteiraController extends Controller
      * o resto era o escopo sendo redescoberto. Mesma lição de 2026-09-04, quando
      * `codigosDoEscopo()` virou público pelo mesmo motivo.
      *
+     * ⚠️ `$lugar` é a ÚNICA concessão aos filtros de tela, e não mexe em contagem nenhuma:
+     * só escolhe, entre as filiais do cliente, qual endereço a coluna de local exibe
+     * (`local_id`). Filtrando por Campinas, a linha mostra a filial de Campinas — mesma
+     * regra de desempate da âncora, restrita às que casam com o filtro. Sem isto a linha
+     * dizia "SAO PAULO" (a matriz) numa lista filtrada por Campinas.
+     *
      * @param  array<string>|null  $codVendedores
      * @param  Collection<int, string>  $codigos
+     * @param  array<string, string|int>  $lugar  coluna qualificada => valor filtrado
      */
-    protected function resumoDosCodigos(?array $codVendedores, Collection $codigos): Collection
+    protected function resumoDosCodigos(?array $codVendedores, Collection $codigos, array $lugar = []): Collection
     {
         if ($codigos->isEmpty()) {
             return collect();
         }
 
-        $entrega = "LEFT(clientes.loja, 1) IN ('".implode("','", self::PREFIXOS_ENTREGA)."')";
+        $entrega = self::sqlEhEntrega();
+        $ordemDaAncora = "CONCAT(IF({$entrega}, '1', '0'), LPAD(clientes.loja, 10, '0'), ':', clientes.id)";
 
         return $this->comEscopo($codVendedores)
             ->select([])
@@ -1125,6 +1239,14 @@ class CarteiraController extends Controller
             ->selectRaw('clientes.cod_cliente')
             ->selectRaw('COUNT(*) as total_lojas')
             ->selectRaw("SUM({$entrega}) as entregas")
+            // Em quantas cidades o cliente tem endereço, para o "+2 cidades" da linha.
+            ->selectRaw('COUNT(DISTINCT clientes.cod_municipio) as cidades')
+            ->when($lugar !== [], fn ($q) => $q->selectRaw(
+                'SUBSTRING_INDEX(MIN(CASE WHEN '
+                    .implode(' AND ', array_map(fn (string $coluna) => "{$coluna} = ?", array_keys($lugar)))
+                    ." THEN {$ordemDaAncora} END), ':', -1) as local_id",
+                array_values($lugar),
+            ))
             ->selectRaw('MAX(clientes.data_ultima_compra) as uc')
             ->selectRaw('MAX(clientes.data_ultimo_contato) as uct')
             /*
@@ -1137,9 +1259,137 @@ class CarteiraController extends Controller
              * limite de tamanho do GROUP_CONCAT, que truncaria em silêncio o cliente com
              * 4.179 lojas. O LPAD existe para o caso de lojas com larguras diferentes.
              */
-            ->selectRaw("SUBSTRING_INDEX(MIN(CONCAT(IF({$entrega}, '1', '0'), LPAD(clientes.loja, 10, '0'), ':', clientes.id)), ':', -1) as ancora_id")
+            ->selectRaw("SUBSTRING_INDEX(MIN({$ordemDaAncora}), ':', -1) as ancora_id")
             ->get()
             ->keyBy('cod_cliente');
+    }
+
+    /**
+     * Município e UF da filial que casou com o filtro de lugar, por `cod_cliente`.
+     *
+     * Vazio quando não há filtro de lugar (`local_id` nem é calculado) — aí a coluna
+     * exibe o endereço da âncora. Busca por chave primária, pelo mesmo motivo de
+     * `ancorasDoResumo()`.
+     *
+     * @param  array<string>|null  $codVendedores
+     */
+    protected function locaisDoResumo(?array $codVendedores, Collection $resumo): Collection
+    {
+        $ids = $resumo->pluck('local_id')->filter()->all();
+
+        if ($ids === []) {
+            return collect();
+        }
+
+        return $this->comEscopo($codVendedores)
+            ->whereIntegerInRaw('clientes.id', $ids)
+            ->get(['clientes.cod_cliente', 'clientes.municipio', 'clientes.estado'])
+            ->keyBy('cod_cliente');
+    }
+
+    /**
+     * Os dados da aba Mapa: a carteira do recorte atual contada por município.
+     *
+     * 🥇 O MAPA NÃO DECIDE QUEM ESTÁ NA LISTA, SÓ MOSTRA ONDE ELES ESTÃO. Sai da mesma
+     * `baseQuery()` da lista (`paraMapa: true`), agrupada por município em vez de por
+     * cliente. As regras de grão, fechadas com o Tony em 2026-09-30:
+     *
+     *   - a bolha é dimensionada por FILIAIS COMERCIAIS; ponto de entrega (loja `E`/`X`)
+     *     é número à parte — a AUTOPASS tem 2 filiais e 218 entregas, e somadas virariam
+     *     a maior bolha de São Paulo por causa de estações de metrô;
+     *   - `comerciais + entregas` de todas as linhas (com a "sem localização") fecha com
+     *     o total de FILIAIS do recorte;
+     *   - `clientes` de cada município é o que a lista mostra ao clicar na bolha
+     *     (`?municipio=`). Um cliente com lojas em duas cidades aparece nas duas bolhas,
+     *     e por isso `totais.clientes` é contado À PARTE — somar "clientes por cidade"
+     *     daria um número que não fecha com nada;
+     *   - o status é o do CLIENTE (o `MAX` consolidado no escopo, a mesma pill da lista),
+     *     nunca o da filial: loja parada de quem compra por outra loja não é inativo.
+     *
+     * 🚨 `joinSub`, nunca `whereIn(subconsulta)` — ver `aplicarFiltroDeStatus()`.
+     *
+     * Cacheado 10 min por escopo + filtros, como o total da lista: trocar de aba e voltar
+     * não repaga a agregação. A chave IGNORA `municipio` porque a consulta também ignora.
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return array{municipios: list<array<string, int>>, semLocalizacao: array<string, int>, totais: array<string, int>}
+     */
+    protected function mapaDoEscopo(Request $request, ?array $codVendedores): array
+    {
+        $chave = ChaveEscopo::deCodVendedores($codVendedores)
+            ->paraDoDia('carteira-mapa', ['f' => $this->assinaturaDosFiltros($request, ['municipio'])]);
+
+        return $this->cache->lembrarPorMinutos($chave, 10, function () use ($request, $codVendedores) {
+            $entrega = self::sqlEhEntrega();
+            $limiteAtivo = $this->statusResolver->limiteAtivo()->toDateString();
+            $limiteInativando = $this->statusResolver->limiteInativando()->toDateString();
+
+            // Mesma consolidação de `resumoDosCodigos()`: pelo ESCOPO, sem filtro de tela.
+            $ultimaCompra = $this->comEscopo($codVendedores)
+                ->select([])
+                ->selectRaw('clientes.cod_cliente, MAX(clientes.data_ultima_compra) as uc')
+                ->groupBy('clientes.cod_cliente');
+
+            /*
+             * Dois degraus, e a separação é o que cabe no orçamento. Primeiro uma linha
+             * por (município, cliente); depois o município soma essas linhas — aí
+             * "clientes" é `COUNT(*)` e cada status é um `SUM(condição)`.
+             *
+             * ⚠️ A versão de um degrau só, com quatro `COUNT(DISTINCT CASE …)` direto
+             * sobre as filiais, dava o MESMO resultado e custava 774 ms no escopo empresa
+             * (92 mil filiais, medido em 2026-09-30) — cada DISTINCT monta a própria
+             * estrutura de deduplicação. Não "simplificar" de volta.
+             */
+            $porCliente = $this->baseQuery($request, paraMapa: true)
+                ->select([])
+                // Nesta ordem: é a do índice `clientes_mapa_index` (ver a migration).
+                ->groupBy('clientes.cod_cliente', 'clientes.cod_municipio')
+                ->selectRaw('clientes.cod_municipio as cod, clientes.cod_cliente')
+                ->selectRaw("SUM(IF({$entrega}, 0, 1)) as comerciais")
+                ->selectRaw("SUM(IF({$entrega}, 1, 0)) as entregas");
+
+            $linhas = DB::query()
+                ->fromSub($porCliente, 'pc')
+                ->joinSub($ultimaCompra, 'mapa_uc', 'mapa_uc.cod_cliente', '=', 'pc.cod_cliente')
+                ->groupBy('pc.cod')
+                ->selectRaw('pc.cod')
+                ->selectRaw('SUM(pc.comerciais) as comerciais, SUM(pc.entregas) as entregas, COUNT(*) as clientes')
+                ->selectRaw('SUM(mapa_uc.uc >= ?) as ativos', [$limiteAtivo])
+                ->selectRaw('SUM(mapa_uc.uc < ? AND mapa_uc.uc >= ?) as inativando', [$limiteAtivo, $limiteInativando])
+                ->selectRaw('SUM(mapa_uc.uc IS NULL OR mapa_uc.uc < ?) as inativos', [$limiteInativando])
+                ->get();
+
+            $numeros = fn ($l) => [
+                'comerciais' => (int) $l->comerciais,
+                'entregas' => (int) $l->entregas,
+                'clientes' => (int) $l->clientes,
+                'ativos' => (int) $l->ativos,
+                'inativando' => (int) $l->inativando,
+                'inativos' => (int) $l->inativos,
+            ];
+
+            // Município que o de-para não resolveu (0,09% da base): fica fora do mapa e
+            // DENTRO da conta, para os totais fecharem com a lista.
+            $semLocal = $linhas->first(fn ($l) => $l->cod === null);
+            $comLocal = $linhas->filter(fn ($l) => $l->cod !== null);
+
+            return [
+                'municipios' => $comLocal
+                    ->map(fn ($l) => ['cod' => (int) $l->cod] + $numeros($l))
+                    ->values()
+                    ->all(),
+                'semLocalizacao' => $semLocal
+                    ? $numeros($semLocal)
+                    : ['comerciais' => 0, 'entregas' => 0, 'clientes' => 0, 'ativos' => 0, 'inativando' => 0, 'inativos' => 0],
+                'totais' => [
+                    // À parte, e não a soma das bolhas: cliente com lojas em duas cidades
+                    // está nas duas. É o MESMO número do total da lista agrupada.
+                    'clientes' => (int) $this->baseQuery($request, paraMapa: true)->distinct()->count('clientes.cod_cliente'),
+                    'comerciais' => (int) $linhas->sum('comerciais'),
+                    'entregas' => (int) $linhas->sum('entregas'),
+                ],
+            ];
+        });
     }
 
     /**
@@ -1377,6 +1627,8 @@ class CarteiraController extends Controller
                 'razaoSocial' => $cliente->razao_social,
                 'nomeFantasia' => $cliente->nome_fantasia,
                 'cnpj' => $cliente->cnpj,
+                'endereco' => $cliente->endereco,
+                'municipio' => $cliente->municipio,
                 'estado' => $cliente->estado,
                 'cep' => $cliente->cep,
                 'telefone' => $cliente->telefone,
