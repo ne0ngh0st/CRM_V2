@@ -113,8 +113,11 @@ const geo = shallowRef(null);
 let camadaUfs = null;
 let camadaSelos = null;
 let camadaBolhas = null;
+let camadaRotulos = null;
 let anel = null;
 let zoomDoEstado = null;
+// As feições de UF, guardadas para ligar/desligar o tooltip conforme o nível.
+const layersUf = [];
 
 const cor = computed(() => COR_STATUS[props.status] ?? COR_PADRAO);
 const fmt = (n) => (n ?? 0).toLocaleString('pt-BR');
@@ -175,6 +178,26 @@ function limparCamada(camada) {
     return null;
 }
 
+/*
+ * O tooltip da UF só existe no nível Brasil. Sem isto, passar o mouse pelo estado VIZINHO
+ * (cinza) dentro do nível estado abria um tooltip "Mato Grosso do Sul — 454 clientes" por
+ * cima do estado aberto — o fantasma que aparecia ao entrar em SP. `unbindTooltip` também
+ * fecha o que estiver aberto.
+ */
+function tooltipsUf(ativar) {
+    layersUf.forEach((l) => {
+        l.unbindTooltip();
+
+        if (ativar) {
+            l.bindTooltip(() => {
+                const e = estados.value.find((x) => x.uf === l._uf);
+
+                return e ? `${nomeUf(l._uf)} — ${plural(e.clientes, 'cliente', 'clientes')}` : `${nomeUf(l._uf)} — sem clientes neste recorte`;
+            }, { sticky: true, direction: 'top' });
+        }
+    });
+}
+
 /* ── Nível 1: Brasil ─────────────────────────────────────────────────────────────── */
 
 function estiloDoEstado(feicao) {
@@ -206,11 +229,13 @@ function desenharBrasil() {
     const mapa = instancia.value;
 
     camadaBolhas = limparCamada(camadaBolhas);
+    camadaRotulos = limparCamada(camadaRotulos);
     anel = limparCamada(anel);
     camadaSelos = limparCamada(camadaSelos);
     selecionado.value = null;
     zoomDoEstado = null;
 
+    tooltipsUf(true);
     camadaUfs.setStyle(estiloDoEstado);
 
     camadaSelos = L.layerGroup();
@@ -237,16 +262,19 @@ function desenharBrasil() {
 /* ── Nível 2: um estado ──────────────────────────────────────────────────────────── */
 
 /*
- * Bolha grande de propósito (piso de 5 px, e cresce com o zoom): com as cidades de um
- * estado só há espaço, e o piso é o que deixa a cidade de uma loja só clicável.
+ * O raio é quase FIXO em pixels (cresce muito de leve com o zoom): como a bolha é
+ * desenhada em pixels, ao aproximar as cidades se afastam na tela e as bolhas se separam
+ * sozinhas — é o que desfaz a sopa da região metropolitana. Inflar a bolha com o zoom
+ * (a versão anterior dobrava) fazia o contrário: quanto mais perto, mais grudado.
+ *
+ * Piso de 4 px para a cidade de uma loja só continuar clicável; 3 px num estado com
+ * centenas de cidades (MG tem 467 com cliente), senão o sul do estado vira mancha.
  */
 function raio(c, zoom) {
-    const escala = zoomDoEstado === null ? 1 : Math.max(1, 1 + (zoom - zoomDoEstado) * 0.4);
-    // Estado com centenas de cidades (MG tem 467 com cliente): piso menor, senão o sul
-    // do estado vira mancha. Aproximando, a escala devolve o tamanho.
-    const piso = cidades.value.length > 250 ? 3.5 : 5;
+    const escala = zoomDoEstado === null ? 1 : Math.max(0.85, 1 + (zoom - zoomDoEstado) * 0.12);
+    const piso = cidades.value.length > 250 ? 3 : 4;
 
-    return (piso + 17 * Math.sqrt(c.comerciais / maiorFilialDoEstado.value)) * escala;
+    return (piso + 14 * Math.sqrt(c.comerciais / maiorFilialDoEstado.value)) * escala;
 }
 
 function desenharEstado() {
@@ -255,8 +283,10 @@ function desenharEstado() {
 
     camadaSelos = limparCamada(camadaSelos);
     camadaBolhas = limparCamada(camadaBolhas);
+    camadaRotulos = limparCamada(camadaRotulos);
     anel = limparCamada(anel);
 
+    tooltipsUf(false);
     camadaUfs.setStyle(estiloDoEstado);
 
     let limites = null;
@@ -274,33 +304,73 @@ function desenharEstado() {
     // As maiores primeiro: as pequenas ficam por cima e continuam clicáveis.
     [...cidades.value]
         .sort((a, b) => b.comerciais - a.comerciais)
-        .forEach((c, posicao) => {
+        .forEach((c) => {
             const m = geo.value.municipios[c.cod];
             if (! m) return; // código que a base geográfica não conhece: fica só na lista
 
             const bolha = L.circleMarker([m[0], m[1]], {
                 radius: raio(c, zoomDoEstado),
                 color: cor.value,
-                weight: 1,
+                weight: 0.6,
                 fillColor: cor.value,
-                fillOpacity: c.comerciais ? 0.45 : 0.15,
+                fillOpacity: c.comerciais ? 0.4 : 0.15,
             });
 
             bolha.cidade = c;
             bolha.bindTooltip(`${m[2]} — ${plural(c.clientes, 'cliente', 'clientes')}`, { direction: 'top', sticky: true });
             bolha.on('click', () => selecionar(c, false));
             bolha.addTo(camadaBolhas);
-
-            // Só as maiores ganham nome fixo: rotular tudo cobriria o próprio mapa.
-            if (posicao < 6) {
-                L.marker([m[0], m[1]], {
-                    interactive: false,
-                    icon: L.divIcon({ html: Object.assign(document.createElement('span'), { className: 'mapa-rotulo', textContent: m[2] }), className: 'mapa-rotulo-icone', iconSize: null }),
-                }).addTo(camadaBolhas);
-            }
         });
 
     camadaBolhas.addTo(mapa);
+    desenharRotulos();
+}
+
+/*
+ * Nomes de cidade SEM sobreposição. Rotular as N maiores em posição fixa empilhava
+ * "Osasco / Guarulhos / São Bernardo do Campo" na Grande São Paulo. Aqui cada candidato
+ * (da maior para a menor) só ganha nome se a caixa dele não encostar numa já colocada —
+ * então a região metropolitana mostra uma cidade, não seis por cima uma da outra.
+ *
+ * Refeito a cada zoom (`zoomend`): aproximando, as cidades se afastam e mais nomes cabem.
+ */
+function desenharRotulos() {
+    const L = leaflet.value;
+    const mapa = instancia.value;
+
+    camadaRotulos = limparCamada(camadaRotulos);
+    if (! L || ! mapa || ! geo.value) return;
+
+    camadaRotulos = L.layerGroup();
+    const caixas = [];
+    const colide = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+    for (const c of [...cidades.value].sort((a, b) => b.comerciais - a.comerciais)) {
+        if (caixas.length >= 16) break;
+
+        const m = geo.value.municipios[c.cod];
+        if (! m) continue;
+
+        const p = mapa.latLngToContainerPoint([m[0], m[1]]);
+        // Caixa de colisão INFLADA com folga (gap de 5 px): estimar a largura justa deixava
+        // dois nomes vizinhos passarem e encostarem no DOM ("São Paulo"/"São Bernardo do
+        // Campo"). A folga larga é o que mantém o mapa arejado — melhor um nome a menos do
+        // que dois grudados.
+        const gap = 5;
+        const w = m[2].length * 6.6 + 12 + 2 * gap;
+        // Acima da bolha (o translate do rótulo é -150%).
+        const caixa = { x: p.x - w / 2, y: p.y - raio(c, mapa.getZoom()) - 22 - gap, w, h: 18 + 2 * gap };
+
+        if (caixas.some((b) => colide(caixa, b))) continue;
+
+        caixas.push(caixa);
+        L.marker([m[0], m[1]], {
+            interactive: false,
+            icon: L.divIcon({ html: Object.assign(document.createElement('span'), { className: 'mapa-rotulo', textContent: m[2] }), className: 'mapa-rotulo-icone', iconSize: null }),
+        }).addTo(camadaRotulos);
+    }
+
+    camadaRotulos.addTo(mapa);
 }
 
 function redimensionar() {
@@ -401,20 +471,21 @@ onMounted(async () => {
             style: estiloDoEstado,
             onEachFeature: (feicao, camada) => {
                 const uf = ufDaFeicao(feicao);
+                camada._uf = uf;
+                layersUf.push(camada);
 
                 camada.on('click', () => {
                     if (uf && uf !== ufAtiva.value && estados.value.some((e) => e.uf === uf)) entrar(uf);
                 });
-                camada.bindTooltip(() => {
-                    const e = estados.value.find((x) => x.uf === uf);
-
-                    return e ? `${nomeUf(uf)} — ${plural(e.clientes, 'cliente', 'clientes')}` : `${nomeUf(uf)} — sem clientes neste recorte`;
-                }, { sticky: true, direction: 'top' });
+                // O tooltip é ligado por `tooltipsUf()`, que o desliga no nível estado.
             },
         }).addTo(mapa);
 
         mapa.on('zoomend', () => {
+            if (! ufAtiva.value) return;
+
             redimensionar();
+            desenharRotulos();
             if (selecionado.value) marcar(selecionado.value);
         });
 
