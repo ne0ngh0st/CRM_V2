@@ -762,6 +762,53 @@ adotado** — 2× sobre uma base de 23 ms não paga perder o número exato, que 
 notificação exibem ("92.209 linhas"). Fica registrado caso a Carteira cresça uma ordem de
 grandeza.
 
+## 1.19 🔴 O índice que eu criei virou o sequestrador — mapa da Carteira (2026-09-30)
+
+A aba Mapa da Carteira agrega a carteira por (município, cliente) e a lista ganhou o filtro
+`?mesorregiao=` (clique numa região do mapa). Medido em dev, 92 mil filiais, cache frio,
+mediana de 7 execuções **intercaladas** entre os escopos:
+
+| Escopo | Mapa | Lista por região (Campinas / Metropolitana SP) |
+|---|---:|---:|
+| Representante (515 filiais) | 15 ms | 30 ms / 31 ms |
+| Supervisor (10 mil) | 225 ms | 240 ms / 414 ms |
+| Admin / empresa (92 mil) | 540 ms | **162 ms / 995 ms** |
+
+**O desastre que a medição pegou antes de subir**: a primeira versão da lista por região
+levava **8,1 s** no escopo empresa. A culpa era de um índice que eu mesmo tinha criado
+para o mapa, `(cod_cliente, cod_municipio, loja)`: para `COUNT(DISTINCT cod_cliente)
+WHERE cod_municipio IN (<49 municípios>)`, o MySQL escolhia esse índice (que começa por
+cliente) e estimava 1,9 milhão de linhas, em vez de ir pelos municípios. A mesma contagem
+pelo índice de `cod_municipio` levava 22 ms. **Trocar a ordem das colunas** para
+`(cod_municipio, cod_cliente, loja)` resolveu os dois usos com um índice só — o filtro vira
+faixa na primeira coluna e o mapa continua lido inteiro dentro do índice (migration
+`2026_09_30_110000`).
+
+⚠️ **O índice antigo chegou a produção** (deploy de 2026-09-30 de manhã). O que ele
+afetava lá era só o filtro de UM município (269 ms contra 116 ms sem ele) — as demais
+contagens da Carteira continuavam escolhendo os índices de antes. Conferido um a um:
+sem filtro, estado, busca, escopo de vendedor e segmento.
+
+**Lição**: índice novo muda o plano de consultas que NÃO foram escritas para ele. Depois de
+criar um, medir também as consultas vizinhas na mesma tabela — foi uma contagem que já
+existia, e não a do mapa, que explodiu.
+
+**Os ~1 s da Metropolitana não são do filtro de região**: 695 ms são o card de KPIs de
+aderência recalculado sobre o recorte e 380 ms a ordenação da página sobre 15 mil
+clientes. É o mesmo custo de qualquer filtro grande do admin — `estado=SP`, que já existe,
+mediu 1,5 s nas mesmas condições — e depois fica 10 min em cache.
+
+**O que ficou mais barato no caminho, e por quê** (mapa, escopo empresa):
+
+- quatro `COUNT(DISTINCT CASE …)` direto nas filiais: 774 ms → duas etapas + agregação em
+  PHP. Município, região, estado e total contam cliente DISTINTO e não se somam; em SQL
+  seriam quatro agregações sobre a mesma base;
+- `joinSub` da última compra por cliente: 535 ms → consulta própria casada em PHP;
+- filtro de status aplicado na consulta: 1,1 s → aplicado em PHP sobre a última compra
+  que o mapa já carrega (mesma faixa, mesmo `MAX` consolidado);
+- o payload do escopo empresa tem 331 KB antes de compressão (3.290 municípios que o mapa
+  de dois níveis nem usa mais) — candidato a enxugar.
+
 
 - [ ] Job de cache warming dos escopos de gestor (10 min / TTL 30 min)
 - [ ] Cache da aderência no `CarteiraController::index()`

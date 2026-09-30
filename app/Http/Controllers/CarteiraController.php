@@ -1430,8 +1430,9 @@ class CarteiraController extends Controller
              */
             $porCliente = $this->baseQuery($request, paraMapa: true)
                 ->select([])
-                // Nesta ordem: é a do índice `clientes_mapa_index` (ver a migration).
-                ->groupBy('clientes.cod_cliente', 'clientes.cod_municipio')
+                // Nesta ordem: é a do índice `clientes_municipio_cliente_index` (migration
+                // `2026_09_30_110000`). Inverter devolve a tabela temporária sem erro nenhum.
+                ->groupBy('clientes.cod_municipio', 'clientes.cod_cliente')
                 ->selectRaw('clientes.cod_municipio as cod, clientes.cod_cliente')
                 ->selectRaw("SUM(IF({$entrega}, 0, 1)) as comerciais")
                 ->selectRaw("SUM(IF({$entrega}, 1, 0)) as entregas");
