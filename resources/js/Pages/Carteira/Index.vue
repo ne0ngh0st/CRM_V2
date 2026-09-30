@@ -205,6 +205,14 @@ function abrirMunicipio(cod) {
     trocarAba('clientes');
 }
 
+// "Ver os clientes de SP": é o filtro de Estado que a barra já tem, então o caminho de
+// volta é o próprio dropdown. Limpa o município para os dois recortes não se somarem.
+function abrirEstado(uf) {
+    filtros.estado = uf;
+    filtros.municipio = '';
+    trocarAba('clientes');
+}
+
 function limparMunicipio() {
     filtros.municipio = '';
     aplicarFiltros();
@@ -578,6 +586,7 @@ function limparContaAlvo() {
                     :status="props.filtros.status || ''"
                     :municipio-ativo="props.filtros.municipio?.cod ?? null"
                     @abrir="abrirMunicipio"
+                    @abrir-estado="abrirEstado"
                 />
 
                 <CalendarioAgendamentos v-else :agendamentos="agendamentos" />

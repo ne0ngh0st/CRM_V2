@@ -15,6 +15,7 @@ use App\Services\Cache\CacheDeAgregacao;
 use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Carteira\ClienteStatusResolver;
+use App\Services\Carteira\MapaDaCarteira;
 use App\Services\Pedidos\StatusPedidoResolver;
 use App\Services\Receita\CartaoCnpjService;
 use App\Services\Dashboard\DashboardBlocos;
@@ -49,6 +50,7 @@ class CarteiraController extends Controller
         private readonly PotencialCarteiraResolver $potencial,
         private readonly NomeVendedorResolver $nomeVendedor,
         private readonly ClientesDaConta $clientesDaConta,
+        private readonly MapaDaCarteira $mapa,
     ) {
     }
 
@@ -491,7 +493,16 @@ class CarteiraController extends Controller
         if ($comFacetas) {
             $porCliente = $paraMapa || $this->agrupar($request);
 
-            $this->aplicarFiltroDeStatus($request, $query, $escopada, $porCliente);
+            /*
+             * O mapa NÃO aplica o status aqui: ele já carrega a última compra consolidada
+             * de cada cliente para pintar as bolhas, e filtra por ela em PHP
+             * (`MapaDaCarteira::agregar()`, mesma faixa, mesmo `MAX` no escopo). O join
+             * consolidado dobraria o custo da aba — 1,1 s contra 0,5 s no escopo empresa.
+             */
+            if (! $paraMapa) {
+                $this->aplicarFiltroDeStatus($request, $query, $escopada, $porCliente);
+            }
+
             $this->aplicarFiltroDeAderencia($request, $query, $escopada, $porCliente);
         }
 
@@ -1336,14 +1347,14 @@ class CarteiraController extends Controller
                 ->groupBy('clientes.cod_cliente');
 
             /*
-             * Dois degraus, e a separação é o que cabe no orçamento. Primeiro uma linha
-             * por (município, cliente); depois o município soma essas linhas — aí
-             * "clientes" é `COUNT(*)` e cada status é um `SUM(condição)`.
+             * O banco devolve UMA LINHA POR (cliente, município) — já com filiais e
+             * entregas somadas e o status consolidado do cliente ao lado — e quem sobe
+             * daí para município, estado e total é `MapaDaCarteira::agregar()`.
              *
-             * ⚠️ A versão de um degrau só, com quatro `COUNT(DISTINCT CASE …)` direto
-             * sobre as filiais, dava o MESMO resultado e custava 774 ms no escopo empresa
-             * (92 mil filiais, medido em 2026-09-30) — cada DISTINCT monta a própria
-             * estrutura de deduplicação. Não "simplificar" de volta.
+             * ⚠️ Os três níveis contam cliente DISTINTO e não se somam entre si; em SQL
+             * seriam três agregações sobre a mesma base. A de município sozinha, com
+             * quatro `COUNT(DISTINCT CASE …)` direto sobre as filiais, custava 774 ms no
+             * escopo empresa (92 mil filiais, medido em 2026-09-30).
              */
             $porCliente = $this->baseQuery($request, paraMapa: true)
                 ->select([])
@@ -1353,47 +1364,37 @@ class CarteiraController extends Controller
                 ->selectRaw("SUM(IF({$entrega}, 0, 1)) as comerciais")
                 ->selectRaw("SUM(IF({$entrega}, 1, 0)) as entregas");
 
-            $linhas = DB::query()
-                ->fromSub($porCliente, 'pc')
-                ->joinSub($ultimaCompra, 'mapa_uc', 'mapa_uc.cod_cliente', '=', 'pc.cod_cliente')
-                ->groupBy('pc.cod')
-                ->selectRaw('pc.cod')
-                ->selectRaw('SUM(pc.comerciais) as comerciais, SUM(pc.entregas) as entregas, COUNT(*) as clientes')
-                ->selectRaw('SUM(mapa_uc.uc >= ?) as ativos', [$limiteAtivo])
-                ->selectRaw('SUM(mapa_uc.uc < ? AND mapa_uc.uc >= ?) as inativando', [$limiteAtivo, $limiteInativando])
-                ->selectRaw('SUM(mapa_uc.uc IS NULL OR mapa_uc.uc < ?) as inativos', [$limiteInativando])
+            /*
+             * A última compra de cada cliente vem em consulta PRÓPRIA e é casada em PHP.
+             * Como `joinSub` na consulta de cima dava o mesmo resultado e custava 535 ms
+             * no escopo empresa: o MySQL materializa as duas derivadas e junta 56 mil
+             * linhas sem índice. Separadas, cada uma lê só o seu índice.
+             */
+            $linhas = $porCliente->toBase()->get();
+            $ultimaCompraPorCliente = $ultimaCompra->toBase()->pluck('uc', 'cod_cliente')->all();
+
+            /*
+             * Município que o de-para não resolveu (0,09% da base): fica fora das bolhas
+             * e DENTRO da conta. O ESTADO dessas filiais é conhecido, e tem que entrar no
+             * selo do estado — sem isto o selo de SP diria 12 clientes a menos que a
+             * lista aberta por `?estado=SP`.
+             */
+            //
+            $semCodigo = $this->baseQuery($request, paraMapa: true)
+                ->select([])
+                ->whereNull('clientes.cod_municipio')
+                ->selectRaw("clientes.cod_cliente, clientes.estado, {$entrega} as entrega")
+                ->toBase()
                 ->get();
 
-            $numeros = fn ($l) => [
-                'comerciais' => (int) $l->comerciais,
-                'entregas' => (int) $l->entregas,
-                'clientes' => (int) $l->clientes,
-                'ativos' => (int) $l->ativos,
-                'inativando' => (int) $l->inativando,
-                'inativos' => (int) $l->inativos,
-            ];
-
-            // Município que o de-para não resolveu (0,09% da base): fica fora do mapa e
-            // DENTRO da conta, para os totais fecharem com a lista.
-            $semLocal = $linhas->first(fn ($l) => $l->cod === null);
-            $comLocal = $linhas->filter(fn ($l) => $l->cod !== null);
-
-            return [
-                'municipios' => $comLocal
-                    ->map(fn ($l) => ['cod' => (int) $l->cod] + $numeros($l))
-                    ->values()
-                    ->all(),
-                'semLocalizacao' => $semLocal
-                    ? $numeros($semLocal)
-                    : ['comerciais' => 0, 'entregas' => 0, 'clientes' => 0, 'ativos' => 0, 'inativando' => 0, 'inativos' => 0],
-                'totais' => [
-                    // À parte, e não a soma das bolhas: cliente com lojas em duas cidades
-                    // está nas duas. É o MESMO número do total da lista agrupada.
-                    'clientes' => (int) $this->baseQuery($request, paraMapa: true)->distinct()->count('clientes.cod_cliente'),
-                    'comerciais' => (int) $linhas->sum('comerciais'),
-                    'entregas' => (int) $linhas->sum('entregas'),
-                ],
-            ];
+            return $this->mapa->agregar(
+                $linhas,
+                $semCodigo,
+                $ultimaCompraPorCliente,
+                $limiteAtivo,
+                $limiteInativando,
+                (string) $request->string('status'),
+            );
         });
     }
 

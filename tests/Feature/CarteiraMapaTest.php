@@ -248,6 +248,39 @@ class CarteiraMapaTest extends TestCase
         }
     }
 
+    public function test_selo_do_estado_conta_o_cliente_uma_vez_e_inclui_quem_nao_tem_municipio(): void
+    {
+        $estados = collect($this->mapa($this->vendedor)['estados'])->keyBy('uf');
+
+        /*
+         * SP: 100 (capital + Campinas + entrega), 200, 800 e o 400 — que não tem
+         * município resolvido e por isso não está em bolha nenhuma, mas É de SP e aparece
+         * na lista de `?estado=SP`. O 100 tem duas cidades no estado e conta UMA vez.
+         */
+        $this->assertSame(
+            ['uf' => 'SP', 'comerciais' => 5, 'entregas' => 1, 'clientes' => 4, 'ativos' => 2, 'inativando' => 0, 'inativos' => 2],
+            $estados['SP'],
+        );
+        $this->assertSame(
+            ['uf' => 'RJ', 'comerciais' => 2, 'entregas' => 0, 'clientes' => 1, 'ativos' => 0, 'inativando' => 1, 'inativos' => 0],
+            $estados['RJ'],
+        );
+        $this->assertSame(['PI', 'RJ', 'RS', 'SP'], $estados->keys()->all());
+    }
+
+    public function test_o_numero_de_todo_selo_de_estado_bate_com_a_lista_que_ele_abre(): void
+    {
+        foreach ([[], ['status' => 'ativo'], ['status' => 'inativo'], ['busca' => 'CLIENTE 1']] as $filtros) {
+            foreach ($this->mapa($this->vendedor, $filtros)['estados'] as $selo) {
+                $this->assertSame(
+                    $this->props($this->vendedor, $filtros + ['estado' => $selo['uf']])['clientes']['total'],
+                    $selo['clientes'],
+                    "selo {$selo['uf']} ≠ lista em ".json_encode($filtros),
+                );
+            }
+        }
+    }
+
     public function test_filtro_de_status_no_mapa_e_por_cliente_mesmo_pedindo_a_lista_por_filial(): void
     {
         /*
