@@ -29,13 +29,21 @@ const url = computed(() => urlDoMapa(props));
         target="_blank"
         rel="noopener noreferrer"
         title="Abrir no Google Maps"
-        class="group inline-flex items-start gap-1 text-left hover:text-teal"
+        class="group inline-flex items-start gap-1 text-left font-medium text-teal"
     >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal">
+        <!--
+            O link PARECE link o tempo todo: cor, sublinhado e a seta de "abre fora".
+            A primeira versão só mudava no hover e o Tony não percebeu que dava para
+            clicar (2026-09-30) — e no celular hover nem existe.
+        -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="mt-0.5 h-3.5 w-3.5 shrink-0">
             <path d="M12 21s-6.5-5.6-6.5-10.5a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21Z" stroke-linejoin="round" />
             <circle cx="12" cy="10.5" r="2.25" />
         </svg>
-        <span class="group-hover:underline"><slot /></span>
+        <span class="underline decoration-teal/40 underline-offset-2 group-hover:decoration-teal"><slot /></span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-1 h-3 w-3 shrink-0 opacity-70 group-hover:opacity-100">
+            <path d="M14 5h5v5M19 5l-8 8M11 7H6v11h11v-5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
     </a>
     <span v-else><slot /></span>
 </template>
