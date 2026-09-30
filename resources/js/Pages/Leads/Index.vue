@@ -18,7 +18,6 @@ import CartaoCnpjModal from '@/Components/Receita/CartaoCnpjModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import WordpressCapturaBar from '@/Components/Leads/WordpressCapturaBar.vue';
 import ModalPadrao from '@/Components/ModalPadrao.vue';
-import AvisoBuscaCruzada from '@/Components/Busca/AvisoBuscaCruzada.vue';
 import { contarFiltrosAtivos } from '@/utils/filtros';
 import { ETAPAS_LEAD, ROTULOS_ETAPA_LEAD } from '@/constants/leads.js';
 
@@ -295,13 +294,6 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
                 </div>
 
                 <template v-if="aba === 'leads'">
-                    <AvisoBuscaCruzada
-                        alvo="clientes"
-                        :busca="props.filtros.busca"
-                        :visao-supervisor="props.visao.visaoSupervisor || ''"
-                        :visao-vendedor="props.visao.visaoVendedor || ''"
-                    />
-
                     <DarkCard title="Prospects" :subtitle="`${leads.total} lead${leads.total !== 1 ? 's' : ''}`">
                         <template #icon>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">

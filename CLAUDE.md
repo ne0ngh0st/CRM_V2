@@ -2706,36 +2706,6 @@ sem enviar; `--para=EMAIL` envia só para ele (funciona com o agendamento deslig
 Testes: `tests/Feature/ResumoEquipeTest.php` (20, incluindo "consolidado bate com a empresa" e "código do diretor entra na equipe"). No formato diário, duas mutações
 aplicadas e mordidas: segunda deixar de cair na sexta, e a venda do dia virar a do mês.
 
-### Aviso cruzado Carteira ↔ Leads — 2026-09-29
-
-Pedido da equipe: "procurar o nome X e achar, seja lead ou cliente". Pediram para
-**juntar as duas páginas**; a decisão do Tony foi um **aviso cruzado** em vez da fusão
-(resolve o problema real — "busquei na página errada e desisti" — sem mexer na tela mais
-usada). Se ainda quiserem a fusão depois, o endpoint é exatamente o contador de aba que
-ela precisaria.
-
-Com busca de 3+ letras, a Carteira mostra "N leads também correspondem a 'x' → Ver nos
-Leads", e os Leads o inverso. Só aparece se a outra página tiver resultado.
-
-| O que se repete | Onde mora |
-|---|---|
-| O que a busca casa | `Cliente::scopeBusca()` / `Lead::scopeBusca()` (as telas também usam) |
-| A contagem cruzada | `App\Services\Busca\BuscaCruzada` |
-| O aviso | `Components/Busca/AvisoBuscaCruzada.vue` |
-
-- 🚨 **Número do aviso == total da página que o clique abre.** Clientes contam por
-  `cod_cliente` (a Carteira abre agrupada), leads passam por `visivel()`, e o link leva SÓ
-  busca + visão. Filtro que uma tela passe a aplicar por PADRÃO tem que entrar no
-  `BuscaCruzada` também. Travado por teste comparando com a própria tela.
-- ⚠️ O componente recebe a busca **aplicada** (`props.filtros.busca`), não a digitada: a
-  consulta sai depois que a lista voltou, fora da primeira pintura, e uma vez por termo.
-- **Sem cache**, de propósito. Medido no dev: clientes 31 ms (vendedor) / 120–180 ms
-  (empresa); leads 2 ms / 84 ms.
-- ⚠️ **FULLTEXT foi medido e descartado** (0,6 ms contra ~200 ms): casa só início de
-  palavra, e "mercado" deixaria de achar "SUPERMERCADO" (7.062 → 1.177). Misturado com
-  `OR cnpj LIKE` na mesma consulta volta a 175 ms. Reabrir só se a busca do admin incomodar.
-- Testes: `BuscaCruzadaTest` (6). **5 mutações, 5 mordidas.**
-
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão

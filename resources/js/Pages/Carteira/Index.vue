@@ -17,7 +17,6 @@ import AgendarLigacaoModal from '@/Components/Carteira/AgendarLigacaoModal.vue';
 import CartaoCnpjModal from '@/Components/Receita/CartaoCnpjModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import OrdenarMobile from '@/Components/Tabela/OrdenarMobile.vue';
-import AvisoBuscaCruzada from '@/Components/Busca/AvisoBuscaCruzada.vue';
 import { ROTULOS_STATUS_CARTEIRA, ORDENACOES_CARTEIRA } from '@/constants/carteira';
 import { contarFiltrosAtivos } from '@/utils/filtros';
 
@@ -438,13 +437,6 @@ function limparContaAlvo() {
                 </div>
 
                 <template v-if="aba === 'clientes'">
-                    <AvisoBuscaCruzada
-                        alvo="leads"
-                        :busca="props.filtros.busca"
-                        :visao-supervisor="props.visao.visaoSupervisor || ''"
-                        :visao-vendedor="props.visao.visaoVendedor || ''"
-                    />
-
                     <!--
                         Recorte vindo do card de Potencial da Carteira do Painel. Precisa ser
                         anunciado: sem isso a pessoa chega numa lista bem menor que a carteira
