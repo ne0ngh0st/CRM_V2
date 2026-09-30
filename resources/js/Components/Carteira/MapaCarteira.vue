@@ -27,17 +27,21 @@ function carregarUfs() {
     return malhaUfs;
 }
 
-// Maior que a das UFs: só é baixada quando alguém entra num estado.
-let malhaMesos = null;
+/*
+ * Um arquivo de mesorregiões POR ESTADO, baixado só quando alguém entra nele. Na
+ * qualidade "intermediária" do IBGE (bordas precisas, pedido do Tony) o Brasil inteiro
+ * dava 2,4 MB; por estado o maior é MG, com 75 KB comprimido, e SP tem 49 KB.
+ */
+const malhasMesos = {};
 
-function carregarMesorregioes() {
-    malhaMesos ??= buscarJson('/geo/mesorregioes.json').catch((e) => {
-        malhaMesos = null;
+function carregarMesorregioes(uf) {
+    malhasMesos[uf] ??= buscarJson(`/geo/mesorregioes/${uf}.json`).catch((e) => {
+        delete malhasMesos[uf];
 
         throw e;
     });
 
-    return malhaMesos;
+    return malhasMesos[uf];
 }
 
 // `codarea` do GeoJSON do IBGE (= os dois primeiros dígitos do código do município).
@@ -46,7 +50,6 @@ const UF_POR_CODIGO = {
     23: 'CE', 24: 'RN', 25: 'PB', 26: 'PE', 27: 'AL', 28: 'SE', 29: 'BA', 31: 'MG', 32: 'ES',
     33: 'RJ', 35: 'SP', 41: 'PR', 42: 'SC', 43: 'RS', 50: 'MS', 51: 'MT', 52: 'GO', 53: 'DF',
 };
-const CODIGO_POR_UF = Object.fromEntries(Object.entries(UF_POR_CODIGO).map(([c, uf]) => [uf, Number(c)]));
 
 /*
  * Nome e posição do SELO de cada estado. A posição é escrita à mão, e não o centro do
@@ -123,7 +126,6 @@ const ufAtiva = ref(null);
 // Objetos do Leaflet fora da reatividade profunda: o Vue não precisa observar o mapa.
 const leaflet = shallowRef(null);
 const instancia = shallowRef(null);
-const mesosGeo = shallowRef(null);
 let camadaUfs = null;
 let camadaMesos = null;
 let camadaSelos = null;
@@ -343,21 +345,22 @@ async function desenharEstado() {
     });
     if (limites) mapa.fitBounds(limites, { padding: [20, 20], animate: false });
 
-    if (! mesosGeo.value) {
-        carregandoRegioes.value = true;
-        try {
-            mesosGeo.value = await carregarMesorregioes();
-        } finally {
-            carregandoRegioes.value = false;
-        }
-        // A pessoa pode ter voltado ao Brasil enquanto a malha chegava.
-        if (! ufAtiva.value) return;
+    const uf = ufAtiva.value;
+    let malha;
+
+    carregandoRegioes.value = true;
+    try {
+        malha = await carregarMesorregioes(uf);
+    } finally {
+        carregandoRegioes.value = false;
     }
 
-    const codUf = CODIGO_POR_UF[ufAtiva.value];
+    // A pessoa pode ter trocado de nível enquanto a malha chegava.
+    if (ufAtiva.value !== uf) return;
 
+    camadaMesos = limparCamada(camadaMesos);
     camadaMesos = L.geoJSON(
-        { type: 'FeatureCollection', features: mesosGeo.value.features.filter((f) => Math.floor(Number(f.properties.codarea) / 100) === codUf) },
+        malha,
         {
             style: (f) => estiloDaRegiao(f),
             onEachFeature: (feicao, camada) => {
