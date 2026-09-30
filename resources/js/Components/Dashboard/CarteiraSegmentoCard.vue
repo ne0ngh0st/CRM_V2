@@ -122,28 +122,12 @@ const linhas = computed(() => STATUS.map((s) => ({
     dentro: celula(s.chave, 'dentro', props.carteiraSegmento.dentroSegmento[s.campo], props.carteiraSegmento.dentroSegmento[s.pct]),
     fora: celula(s.chave, 'fora', props.carteiraSegmento.foraSegmento[s.campo], props.carteiraSegmento.foraSegmento[s.pct]),
 })));
-
-/**
- * Há aderência mensurável? (algum cliente DENTRO ou FORA de segmento).
- *
- * ⚠️ Quando quem está olhando não tem segmento cadastrado — é o caso do ASSISTENTE, que
- * opera pelo código do supervisor mas não herda os segmentos dele —, toda a carteira cai
- * em `semSegmentoDefinido`: `dentro`/`fora` zeram, `pctDentro` é 0 e a barra + a matriz de
- * status renderizavam tudo "0 (0%)", um buraco no card. Sem número mensurável, o bloco de
- * aderência some e ficam só os tiles de status (que somam a carteira inteira). O "% no
- * segmento" também sai do subtítulo, senão ele afirmaria "0% no segmento" — leitura de
- * indisciplina, quando na verdade a aderência é INAPLICÁVEL a esse escopo.
- */
-const temAderencia = computed(() =>
-    props.carteiraSegmento.dentroSegmento.total + props.carteiraSegmento.foraSegmento.total > 0);
 </script>
 
 <template>
     <DarkCard
         title="Carteira por Segmento"
-        :subtitle="temAderencia
-            ? `${carteiraSegmento.total} clientes · ${carteiraSegmento.pctDentro}% no segmento`
-            : `${carteiraSegmento.total} clientes`"
+        :subtitle="`${carteiraSegmento.total} clientes · ${carteiraSegmento.pctDentro}% no segmento`"
     >
         <template v-if="segmentos.length" #actions>
             <SegmentoChips :segmentos="segmentos" surface="dark" />
@@ -191,7 +175,7 @@ const temAderencia = computed(() =>
                 <KpiTile :value="totalInativos" :label="ROTULO.inativo" tone="danger" :href="hrefStatus('inativo')" :ativo="statusAtivo === 'inativo'" />
             </div>
 
-            <div v-if="temAderencia" class="space-y-2">
+            <div class="space-y-2">
                 <!--
                     ⚠️ No celular a BARRA desce para uma linha própria (`order-last w-full`),
                     e os dois números dividem a linha de cima. Até 2026-09-15 os três eram
@@ -247,7 +231,7 @@ const temAderencia = computed(() =>
                 inteira clicável). Já está registrado no CLAUDE.md que padronizá-la pioraria
                 — não "arrumar" isso depois achando que ficou para trás.
             -->
-            <table v-if="temAderencia" class="w-full text-sm">
+            <table class="w-full text-sm">
                 <thead>
                     <tr class="text-[0.65rem] uppercase tracking-wide text-gray-400">
                         <th class="pb-1 text-left font-semibold" title="Só os clientes com aderência mensurável — quem não tem segmento cadastrado fica no tile ao lado">Status</th>

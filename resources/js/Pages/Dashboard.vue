@@ -246,9 +246,18 @@ const podeVerEquipe = computed(() => {
                     :visao-vendedor="visao.visaoVendedor"
                 />
 
+                <!--
+                    ⚠️ `lg:col-span-2` no card quando o VIZINHO não existe: sem meta (o
+                    assistente não tem gauge — `$mostraDesempenho` no DashboardController) o
+                    grid de 2 colunas deixava a coluna 2 vazia, um vão branco do lado direito
+                    do card. Ocupando as duas colunas, o card enche a faixa e as linhas de
+                    aderência abaixo ganham a largura que já usam no hero da /carteira. Mesma
+                    regra espelhada para o gauge, caso um dia apareça sem a carteira.
+                -->
                 <div v-if="carteiraSegmento || metaGauge" class="grid gap-4 lg:grid-cols-2 lg:items-stretch">
                     <CarteiraSegmentoCard
                         v-if="carteiraSegmento"
+                        :class="metaGauge ? '' : 'lg:col-span-2'"
                         :carteira-segmento="carteiraSegmento"
                         :segmentos="segmentosVendedor"
                         :visao-supervisor="visao.visaoSupervisor"
@@ -256,6 +265,7 @@ const podeVerEquipe = computed(() => {
                     />
                     <MetaGaugeCard
                         v-if="metaGauge"
+                        :class="carteiraSegmento ? '' : 'lg:col-span-2'"
                         :meta-gauge="metaGauge"
                         :role="role"
                         :visao-supervisor="visao.visaoSupervisor"
