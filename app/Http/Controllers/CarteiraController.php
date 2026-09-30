@@ -16,6 +16,7 @@ use App\Services\Cache\ChaveEscopo;
 use App\Services\Carteira\CarteiraAderenciaResolver;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Carteira\MapaDaCarteira;
+use App\Services\Geografia\Mesorregioes;
 use App\Services\Pedidos\StatusPedidoResolver;
 use App\Services\Receita\CartaoCnpjService;
 use App\Services\Dashboard\DashboardBlocos;
@@ -51,6 +52,7 @@ class CarteiraController extends Controller
         private readonly NomeVendedorResolver $nomeVendedor,
         private readonly ClientesDaConta $clientesDaConta,
         private readonly MapaDaCarteira $mapa,
+        private readonly Mesorregioes $mesorregioes,
     ) {
     }
 
@@ -1333,7 +1335,11 @@ class CarteiraController extends Controller
     protected function mapaDoEscopo(Request $request, ?array $codVendedores): array
     {
         $chave = ChaveEscopo::deCodVendedores($codVendedores)
-            ->paraDoDia('carteira-mapa', ['f' => $this->assinaturaDosFiltros($request, ['municipio'])]);
+            // `-v2`: o formato ganhou `estados` e `mesorregioes` (2026-09-30). Com a chave
+            // antiga, o payload v1 ainda em cache seria entregue ao front novo por até
+            // 10 min depois do deploy — mapa sem selos, e nada em vermelho para acusar.
+            // Renomear o bloco basta; bumpar `ChaveEscopo::VERSAO` esfriaria o Painel todo.
+            ->paraDoDia('carteira-mapa-v2', ['f' => $this->assinaturaDosFiltros($request, ['municipio'])]);
 
         return $this->cache->lembrarPorMinutos($chave, 10, function () use ($request, $codVendedores) {
             $entrega = self::sqlEhEntrega();
@@ -1394,6 +1400,7 @@ class CarteiraController extends Controller
                 $limiteAtivo,
                 $limiteInativando,
                 (string) $request->string('status'),
+                $this->mesorregioes->porMunicipio(),
             );
         });
     }

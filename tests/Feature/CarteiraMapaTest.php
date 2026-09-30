@@ -281,6 +281,25 @@ class CarteiraMapaTest extends TestCase
         }
     }
 
+    public function test_mesorregiao_conta_o_cliente_uma_vez_mesmo_com_lojas_em_duas_cidades_dela(): void
+    {
+        // Campinas e Americana são a MESMA mesorregião (3507, "Campinas") no IBGE.
+        $this->cliente('960', '0001', '001', null, 'SP', 'CAMPINAS', self::CAMPINAS);
+        $this->cliente('960', '0002', '001', null, 'SP', 'AMERICANA', 3501608);
+
+        $mesos = collect($this->mapa($this->vendedor)['mesorregioes'])->keyBy('cod');
+
+        // 100, 200, 800 e o 960 — que tem duas cidades na região e conta uma vez.
+        $this->assertSame(4, $mesos[3507]['clientes']);
+        $this->assertSame(5, $mesos[3507]['comerciais']);
+        $this->assertSame(1, $mesos[3507]['entregas']);
+
+        // A capital é outra mesorregião (3515, Metropolitana de São Paulo): o 100 está
+        // nas duas, como está nas duas bolhas.
+        $this->assertSame(1, $mesos[3515]['clientes']);
+        $this->assertSame(1, $mesos[3515]['ativos'], 'status do cliente, não da loja parada da capital');
+    }
+
     public function test_filtro_de_status_no_mapa_e_por_cliente_mesmo_pedindo_a_lista_por_filial(): void
     {
         /*

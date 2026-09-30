@@ -42,7 +42,7 @@ class MapaDaCarteira
      *         ESTADO delas é conhecido e entra no selo (senão o selo divergiria da lista)
      * @return array{municipios: list<array<string, int>>, estados: list<array<string, int|string>>, semLocalizacao: array<string, int>, totais: array<string, int>}
      */
-    public function agregar(iterable $porClienteMunicipio, iterable $filiaisSemCodigo, array $ultimaCompraPorCliente, string $limiteAtivo, string $limiteInativando, string $soStatus = ''): array
+    public function agregar(iterable $porClienteMunicipio, iterable $filiaisSemCodigo, array $ultimaCompraPorCliente, string $limiteAtivo, string $limiteInativando, string $soStatus = '', array $mesoPorMunicipio = []): array
     {
         /*
          * `$soStatus` é o `?status=` da tela. O filtro acontece AQUI, e não na consulta:
@@ -71,6 +71,8 @@ class MapaDaCarteira
         $semLocal = self::ZERO;
         $clientes = [];
         $clientesPorUf = [];
+        $mesos = [];
+        $clientesPorMeso = [];
         $comerciais = 0;
         $entregas = 0;
 
@@ -125,6 +127,24 @@ class MapaDaCarteira
             }
 
             $noEstado($uf, (string) $l->cod_cliente, $status);
+
+            /*
+             * Mesorregião: mesma regra do estado — filiais somam, cliente conta UMA vez
+             * mesmo com lojas em várias cidades da região (Campinas e Americana são a
+             * mesma mesorregião). Filial sem município resolvido não tem região; ela está
+             * no selo do estado e fora de todas as mesorregiões.
+             */
+            if (($meso = $mesoPorMunicipio[$cod] ?? null) !== null) {
+                $mesos[$meso] ??= self::ZERO;
+                $mesos[$meso]['comerciais'] += (int) $l->comerciais;
+                $mesos[$meso]['entregas'] += (int) $l->entregas;
+
+                if (! isset($clientesPorMeso[$meso][$l->cod_cliente])) {
+                    $clientesPorMeso[$meso][$l->cod_cliente] = true;
+                    $mesos[$meso]['clientes']++;
+                    $mesos[$meso][$status]++;
+                }
+            }
         }
 
         $siglas = array_flip(self::UF_POR_CODIGO);
@@ -150,10 +170,12 @@ class MapaDaCarteira
 
         ksort($municipios);
         ksort($estados);
+        ksort($mesos);
 
         return [
             'municipios' => array_map(fn ($cod) => ['cod' => $cod] + $municipios[$cod], array_keys($municipios)),
             'estados' => array_map(fn ($uf) => ['uf' => $uf] + $estados[$uf], array_keys($estados)),
+            'mesorregioes' => array_map(fn ($cod) => ['cod' => $cod] + $mesos[$cod], array_keys($mesos)),
             'semLocalizacao' => $semLocal,
             'totais' => ['clientes' => count($clientes), 'comerciais' => $comerciais, 'entregas' => $entregas],
         ];
