@@ -86,6 +86,9 @@ class OrcamentoCopiaLegadoTest extends TestCase
             'cliente_cnpj' => $fonte['clienteCnpj'] ?? '',
             'forma_pagamento' => $fonte['formaPagamento'] ?? '',
             'tipo_frete' => $fonte['tipoFrete'] ?? 'CIF',
+            // Orçamento do legado chega sem tipo de venda e o formulário não pré-marca
+            // nenhum: o vendedor escolhe antes de salvar.
+            'tipo_venda' => $fonte['tipoVenda'] ?? 'consumo',
             'tipo_produto_servico' => $fonte['tipoProdutoServico'] ?? 'produto',
             'data_validade' => $fonte['dataValidade'],
             'itens' => array_map(fn (array $i) => [

@@ -71,8 +71,10 @@ class PortalPedidoPayload
             );
         }
 
+        $invoiceType = $this->invoiceType($orcamento);
+
         $products = $itens
-            ->map(fn (OrcamentoItem $item) => $this->montarItem($item, $orcamento))
+            ->map(fn (OrcamentoItem $item) => $this->montarItem($item, $orcamento, $invoiceType))
             ->values()
             ->all();
 
@@ -137,7 +139,7 @@ class PortalPedidoPayload
     /**
      * @return array<string, mixed>
      */
-    private function montarItem(OrcamentoItem $item, Orcamento $orcamento): array
+    private function montarItem(OrcamentoItem $item, Orcamento $orcamento, string $invoiceType): array
     {
         $codigo = trim((string) $item->cod_produto);
 
@@ -157,9 +159,36 @@ class PortalPedidoPayload
             'productCode' => $codigo,
             'quantity' => $this->quantidadeInteira($item),
             'unitPrice' => $this->precoEmCentavos($item, $orcamento),
-            'invoiceType' => (string) config('portal.tipo_nota_padrao'),
+            // Um tipo para o pedido inteiro: o Portal não aceita consumo e revenda juntos.
+            'invoiceType' => $invoiceType,
             'orderLine' => (string) $item->id,
         ];
+    }
+
+    /**
+     * O tipo de venda escolhido no orçamento → enum do Portal. No Protheus ele decide a
+     * TES: consumo e revenda têm tributação diferente na NF-e, então não existe default
+     * seguro — orçamento sem tipo é recusado (o modal pede antes de chegar aqui).
+     *
+     * ⚠️ Até 2026-10-01 isto era `config('portal.tipo_nota_padrao')` = SALE para TODO
+     * pedido; o pedido 1133 do homolog entrou como consumo por isso.
+     */
+    private function invoiceType(Orcamento $orcamento): string
+    {
+        $chave = match ($orcamento->tipo_venda) {
+            'consumo' => 'venda_consumo',
+            'revenda' => 'venda_revenda',
+            'servico' => 'servico',
+            default => null,
+        };
+
+        if ($chave === null) {
+            throw new PortalPedidoInvalidoException(
+                'O orçamento não tem o tipo de venda (consumo, revenda ou serviço) definido.'
+            );
+        }
+
+        return (string) config("portal.tipos_nota.{$chave}");
     }
 
     /**

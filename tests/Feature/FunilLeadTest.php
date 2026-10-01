@@ -232,6 +232,7 @@ class FunilLeadTest extends TestCase
             'cliente_nome' => 'Mercado Teste LTDA',
             'lead_id' => $lead->id,
             'tipo_frete' => 'CIF',
+            'tipo_venda' => 'consumo',
             'tipo_produto_servico' => 'servico',
             'itens' => [[
                 'tipo_item' => 'etiqueta',

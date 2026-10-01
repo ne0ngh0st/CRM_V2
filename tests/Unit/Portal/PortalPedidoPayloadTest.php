@@ -11,6 +11,7 @@ use App\Services\Orcamento\OrcamentoCalculoService;
 use App\Services\Portal\PortalPedidoInvalidoException;
 use App\Services\Portal\PortalPedidoPayload;
 use Illuminate\Support\Collection;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -50,6 +51,7 @@ class PortalPedidoPayloadTest extends TestCase
             'id' => 77,
             'tipo_produto_servico' => 'produto',
             'tipo_frete' => 'CIF',
+            'tipo_venda' => 'consumo',
             'observacoes' => null,
         ], $atributos));
 
@@ -165,12 +167,37 @@ class PortalPedidoPayloadTest extends TestCase
         $this->assertArrayNotHasKey('productId', $corpo['products'][0]);
     }
 
-    public function test_tipo_de_nota_vai_como_string_do_enum(): void
+    /**
+     * O tipo de venda do orçamento decide o `invoiceType` — e, no Protheus, a TES.
+     * Até 2026-10-01 era SALE chumbado para todo pedido.
+     *
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function tiposDeVenda(): array
     {
-        $corpo = $this->montar($this->orcamento([[]]));
+        return [
+            'consumo' => ['consumo', 'SALE'],
+            'revenda' => ['revenda', 'RESALE'],
+            'serviço' => ['servico', 'SERVICE'],
+        ];
+    }
 
-        // Default do config: SALE (Venda Consumo). Nunca o inteiro 2 antigo.
-        $this->assertSame('SALE', $corpo['products'][0]['invoiceType']);
+    #[DataProvider('tiposDeVenda')]
+    public function test_tipo_de_venda_vira_o_invoice_type(string $tipoVenda, string $esperado): void
+    {
+        $corpo = $this->montar($this->orcamento([[], ['cod_produto' => 'P2']], ['tipo_venda' => $tipoVenda]));
+
+        // Todos os itens com o mesmo tipo: o Portal não aceita consumo e revenda juntos.
+        $this->assertSame([$esperado, $esperado], array_column($corpo['products'], 'invoiceType'));
+    }
+
+    /** Sem default: um chute de "consumo" faria pedido de revenda sair com a TES errada. */
+    public function test_orcamento_sem_tipo_de_venda_e_recusado(): void
+    {
+        $this->expectException(PortalPedidoInvalidoException::class);
+        $this->expectExceptionMessageMatches('/tipo de venda/');
+
+        $this->montar($this->orcamento([[]], ['tipo_venda' => null]));
     }
 
     public function test_chaves_de_negocio_vao_como_estao_no_orcamento(): void

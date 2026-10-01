@@ -9,6 +9,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Orcamento extends Model
 {
+    /**
+     * Tipos de venda aceitos (viram o `invoiceType` do Portal e, no Protheus, a TES).
+     * Rótulos de tela em `resources/js/constants/orcamentos.js` (ROTULOS_TIPO_VENDA);
+     * o de-para para o Portal em PortalPedidoPayload::invoiceType().
+     */
+    public const TIPOS_VENDA = ['consumo', 'revenda', 'servico'];
+
     protected $fillable = [
         'user_id',
         'lead_id',
@@ -30,6 +37,7 @@ class Orcamento extends Model
         'cliente_contato',
         'forma_pagamento',
         'tipo_frete',
+        'tipo_venda',
         'tipo_produto_servico',
         'valor_total',
         'data_validade',

@@ -912,6 +912,44 @@ estourou o `varchar(255)` de `notificacoes.mensagem`. O vendedor ficava SEM avis
 job retentava até falhar por outro motivo. Corrigido no `NotificacaoService` (corta em
 255; o texto inteiro fica em `portal_erro`), com teste de regressão verificado por mutação.
 
+## 4.11 Tipo de venda (consumo / revenda / serviço) e condição de pagamento — 2026-10-01
+
+Conferindo o pedido 1133, a Laís (SIC) apontou dois buracos.
+
+### Tipo de venda — feito
+
+O `invoiceType` era `SALE` chumbado no config para TODO pedido. No Protheus ele decide a
+TES, e consumo e revenda têm tributação diferente na NF-e. O Philipe recusou receber a TES
+no lugar: o Portal quer o enum fixo dele.
+
+- **`orcamentos.tipo_venda`** (`consumo` | `revenda` | `servico`, migration
+  `2026_10_01_100000`), **obrigatório no formulário e SEM valor pré-marcado** — decisão do
+  Tony, para o vendedor escolher de fato. Os orçamentos existentes ficam nulos (chutar
+  "consumo" no banco seria repetir o chumbado).
+- Orçamento antigo escolhe o tipo no modal "Transformar em pedido", e o valor fica
+  **gravado no orçamento** — o payload o lê de lá. O modal nunca sobrescreve um tipo que
+  já veio do formulário.
+- Um tipo para o pedido inteiro, não por item: o Portal não aceita consumo e revenda
+  juntos. O de-para para o enum mora em `PortalPedidoPayload::invoiceType()`; sem tipo, o
+  envio é recusado (não existe default seguro).
+- ⚠️ Não confundir com o "Faturamento: Produto (IPI 3,25%) / Serviço (sem IPI)" do
+  formulário (`tipo_produto_servico`): aquele só decide se o preço embute IPI.
+- ⚠️ "Serviço" só é aceito pelo Portal para produto do grupo 3 — a recusa vem deles.
+
+### Condição de pagamento — pendente do lado deles
+
+O Portal assume o prazo do cadastro do cliente no Protheus (o 1133 entrou com 28 DDL sem
+mandarmos nada). O Philipe vai acrescentar o campo; a Laís avisou que **só aceitam
+condições ativas no Protheus**.
+
+⚠️ **O CRM não está pronto para isso**, e não por detalhe: `orcamentos.forma_pagamento` é
+TEXTO ("28/35/42DDL", "A VISTA"), não o código da condição no Protheus, e ~30% dos
+orçamentos de produção desde agosto usam "Outros" com texto livre ("30", "35 Dias",
+"COMBINAR", "30/60 Dias após análise de crédito"), além de variações do mesmo prazo
+("28DDL" × "28 DDL"). Caminho: trocar o select por uma lista das condições do Protheus
+(código + descrição), sem "Outros". Depende de eles dizerem se o campo recebe código ou
+descrição e mandarem a lista.
+
 ## 5. Lacunas de schema — medidas, não estimadas
 
 Números tirados do `palma_v2` de desenvolvimento em 2026-09-09 (1.864 orçamentos,

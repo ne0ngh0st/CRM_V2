@@ -76,9 +76,10 @@ return [
     ],
 
     /*
-    | Tipo de nota usado quando o item não diz outra coisa. O CRM-V2 não tem
-    | campo de tipo de nota por item hoje; quando tiver, ele manda aqui.
+    | ⚠️ Não existe mais "tipo de nota padrão" (era SALE para todo pedido até
+    | 2026-10-01). O tipo vem de `orcamentos.tipo_venda`, escolhido pelo vendedor:
+    | consumo e revenda têm TES diferente no Protheus, e default aqui faria um
+    | pedido de revenda sair tributado como consumo sem erro nenhum.
     */
-    'tipo_nota_padrao' => (string) env('PORTAL_PEDIDOS_TIPO_NOTA_PADRAO', 'SALE'),
 
 ];

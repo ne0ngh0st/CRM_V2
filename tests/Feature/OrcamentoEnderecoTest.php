@@ -69,6 +69,7 @@ class OrcamentoEnderecoTest extends TestCase
             'cliente_nome' => 'KNTT COMERCIO E SUPERMERCADO LTDA',
             'cliente_cnpj' => '16729628000162',
             'tipo_frete' => 'CIF',
+            'tipo_venda' => 'consumo',
             'tipo_produto_servico' => 'produto',
             'itens' => [[
                 'tipo_item' => 'outro',
@@ -352,6 +353,7 @@ class OrcamentoEnderecoTest extends TestCase
             'nivel_aprovacao' => 'nenhum',
             'status_gestor' => 'pendente',
             'tipo_frete' => 'CIF',
+            'tipo_venda' => 'consumo',
             'tipo_produto_servico' => 'produto',
         ];
     }

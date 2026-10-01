@@ -2623,6 +2623,17 @@ rascunho, resolvendo frete, transportadora e datas na criação. Detalhe em
 - ✅ **Homologado em 2026-10-01: pedido 1133** (AWAITING_APPROVAL, entrega 15/10). ⚠️ O
   homolog usa um MOCK do Protheus — ajuste/recusa de data pelo ERP real só em produção.
 
+### Tipo de venda no orçamento (vira o invoiceType do Portal) — 2026-10-01
+
+`orcamentos.tipo_venda` (`consumo` | `revenda` | `servico`): **obrigatório no formulário,
+sem valor pré-marcado** (decisão do Tony — consumo e revenda têm TES e tributação
+diferentes, e default faz o vendedor passar reto). Até aqui todo pedido ia como consumo,
+chumbado no config. Orçamento antigo (nulo) escolhe no modal "Transformar em pedido", e o
+valor fica gravado no orçamento. ⚠️ Não é o "Faturamento: Produto/Serviço" do formulário
+(`tipo_produto_servico`), que só decide o IPI. Detalhe e a pendência da **condição de
+pagamento** (o CRM guarda texto, não o código do Protheus; ~30% "Outros" livre) em
+`docs/integracao-portal-pedidos.md` §4.11.
+
 ### O 232 virou a fonte da venda; o 200 só dá a etapa — 2026-09-25
 
 Setembro/2026 saía **R$ 61,5 mi no CRM e no BI contra R$ 58,4 mi no Excel do 232**. O

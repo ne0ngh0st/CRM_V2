@@ -18,6 +18,7 @@ import {
     TONS_STATUS_ORCAMENTO,
     ROTULOS_TIPO_PRODUTO_SERVICO,
     ROTULOS_TIPO_FRETE,
+    ROTULOS_TIPO_VENDA,
 } from '@/constants/orcamentos.js';
 
 const props = defineProps({
@@ -74,6 +75,9 @@ const form = useForm({
     cliente_contato: fonte?.clienteContato ?? props.prefillCliente?.contato ?? '',
     forma_pagamento: fonte?.formaPagamento ?? '',
     tipo_frete: fonte?.tipoFrete ?? 'CIF',
+    // Sem default, de propósito: consumo e revenda têm tributação diferente, e um valor
+    // pré-marcado faria o vendedor passar reto. Orçamento antigo reabre em branco.
+    tipo_venda: fonte?.tipoVenda ?? '',
     tipo_produto_servico: fonte?.tipoProdutoServico ?? 'produto',
     data_validade: fonte?.dataValidade ?? new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
     observacoes: fonte?.observacoes ?? '',
@@ -289,6 +293,15 @@ function salvar() {
                                         </label>
                                     </div>
                                     <InputError :message="form.errors.tipo_frete" />
+                                </DocLinha>
+                                <DocLinha rotulo="Tipo de venda">
+                                    <div class="flex flex-col gap-1">
+                                        <label v-for="(rotulo, valor) in ROTULOS_TIPO_VENDA" :key="valor" class="flex items-center gap-1.5 text-[0.8rem]">
+                                            <input v-model="form.tipo_venda" type="radio" :value="valor" class="border-gray-300 text-cyan focus:ring-cyan" />
+                                            {{ rotulo }}
+                                        </label>
+                                    </div>
+                                    <InputError :message="form.errors.tipo_venda" />
                                 </DocLinha>
                                 <DocLinha rotulo="Faturamento">
                                     <div class="flex flex-col gap-1">

@@ -84,6 +84,7 @@ class PortalPedidoTest extends TestCase
             'cliente_cnpj' => '08019075000207',
             'tipo_produto_servico' => 'servico',
             'tipo_frete' => $sobrescreve['frete'] ?? 'CIF',
+            'tipo_venda' => array_key_exists('tipoVenda', $sobrescreve) ? $sobrescreve['tipoVenda'] : 'consumo',
             'valor_total' => 2700,
             'nivel_aprovacao' => 'nenhum',
             'status_gestor' => $sobrescreve['status'] ?? 'aprovado',
@@ -123,6 +124,7 @@ class PortalPedidoTest extends TestCase
             'cliente_id' => $cliente->id,
             'cliente_nome' => 'CENTRAL SUPERMERCADOS',
             'tipo_frete' => 'CIF',
+            'tipo_venda' => 'consumo',
             'tipo_produto_servico' => 'servico',
             'itens' => [[
                 'tipo_item' => 'bobina',
@@ -545,5 +547,59 @@ class PortalPedidoTest extends TestCase
         $this->assertNotNull($aviso);
         $this->assertLessThanOrEqual(255, mb_strlen($aviso));
         $this->assertStringStartsWith('Erro na comunicação com o protheus', $aviso);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Tipo de venda (consumo / revenda / serviço) — 2026-10-01
+    |--------------------------------------------------------------------------
+    */
+
+    public function test_formulario_exige_o_tipo_de_venda(): void
+    {
+        $vendedor = $this->vendedor();
+
+        $this->actingAs($vendedor)->post(route('orcamentos.store'), [
+            'cliente_nome' => 'CENTRAL SUPERMERCADOS',
+            'tipo_frete' => 'CIF',
+            'tipo_produto_servico' => 'produto',
+            'itens' => [['tipo_item' => 'bobina', 'descricao' => 'BOBINA', 'quantidade' => 10, 'valor_unitario' => 3]],
+        ])->assertSessionHasErrors('tipo_venda');
+
+        $this->assertSame(0, Orcamento::count());
+    }
+
+    /** Orçamento anterior ao campo: o modal pede o tipo, e ele fica gravado no orçamento. */
+    public function test_orcamento_antigo_escolhe_o_tipo_no_envio_e_ele_fica_gravado(): void
+    {
+        Bus::fake();
+        [, $orcamento] = $this->cenario(['tipoVenda' => null]);
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio())
+            ->assertSessionHasErrors('tipo_venda');
+        Bus::assertNotDispatched(EnviarPedidoAoPortalJob::class);
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio(['tipo_venda' => 'revenda']))
+            ->assertSessionHasNoErrors();
+
+        $orcamento->refresh();
+        $this->assertSame('revenda', $orcamento->tipo_venda);
+        $this->assertSame('RESALE', $orcamento->portal_payload['products'][0]['invoiceType']);
+    }
+
+    /** O tipo escolhido no formulário não é trocado por um campo que o modal nem mostra. */
+    public function test_envio_nao_sobrescreve_o_tipo_que_veio_do_formulario(): void
+    {
+        Bus::fake();
+        [, $orcamento] = $this->cenario(['tipoVenda' => 'consumo']);
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio(['tipo_venda' => 'revenda']));
+
+        $orcamento->refresh();
+        $this->assertSame('consumo', $orcamento->tipo_venda);
+        $this->assertSame('SALE', $orcamento->portal_payload['products'][0]['invoiceType']);
     }
 }

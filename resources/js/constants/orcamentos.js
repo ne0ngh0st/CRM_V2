@@ -47,6 +47,14 @@ export const ROTULOS_TIPO_PRODUTO_SERVICO = {
     servico: 'Serviço (sem IPI)',
 };
 
+// Tipo de venda → `invoiceType` do Portal e, no Protheus, a TES (tributação da NF-e).
+// As chaves são as de Orcamento::TIPOS_VENDA; mudou lá, muda aqui.
+export const ROTULOS_TIPO_VENDA = {
+    consumo: 'Venda (consumo)',
+    revenda: 'Venda (revenda)',
+    servico: 'Serviço',
+};
+
 export const ROTULOS_TIPO_FRETE = {
     CIF: 'CIF (frete por conta da Autopel)',
     FOB: 'FOB (frete por conta do cliente)',
