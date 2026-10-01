@@ -183,7 +183,11 @@ const numero = (n) => (n ?? 0).toLocaleString('pt-BR');
 
             <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <!-- Frescor -->
-                <div class="lg:col-span-1">
+                <!-- ⚠️ Cada card num <div> próprio: o DarkCard é `h-full`, e solto aqui o primeiro
+                     esticava até a altura da tabela de rodadas ao lado, empurrando o "Base da
+                     Receita" para baixo da dobra — o Tony abriu a página e não o achou. -->
+                <div class="space-y-4 lg:col-span-1">
+                    <div>
                     <DarkCard title="Idade do dado" subtitle="Data mais recente em cada tabela">
                         <template #icon>
                             <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -213,9 +217,11 @@ const numero = (n) => (n ?? 0).toLocaleString('pt-BR');
                             </p>
                         </div>
                     </DarkCard>
+                    </div>
 
                     <!-- Base da Receita: mensal, por isso fora do "Idade do dado" (ver o controller). -->
-                    <DarkCard v-if="receita" class="mt-4" title="Base da Receita" subtitle="Situação cadastral dos CNPJs — carga mensal">
+                    <div v-if="receita">
+                    <DarkCard title="Base da Receita" subtitle="Situação cadastral dos CNPJs — carga mensal">
                         <template #icon>
                             <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                                 <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -244,6 +250,7 @@ const numero = (n) => (n ?? 0).toLocaleString('pt-BR');
                             </p>
                         </div>
                     </DarkCard>
+                    </div>
                 </div>
 
                 <!-- Ação + histórico -->
