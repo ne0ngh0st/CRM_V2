@@ -20,7 +20,7 @@
 > a URL/token de produção para ligar.
 >
 > 🟡 **API NOVA em 2026-09-30** — o pedido nasce em AWAITING_APPROVAL e passa a exigir
-> data de entrega, frete e (no FOB) transportadora. CRM adaptado; falta testar no homolog.
+> data de entrega, frete e (no FOB) transportadora. CRM adaptado e homologado (pedido 1133).
 > **Ver §4.10.**
 >
 > ✅ **A pergunta que era pré-requisito foi respondida em 2026-09-14: o
@@ -892,8 +892,25 @@ com a data ajustada no aviso, recusa liberando chave nova, reenvio incerto mante
 e chave, job esgotado). **Três mutações aplicadas, as três mordidas**: recusa sem apagar
 a chave, reenvio sem reaproveitar o corpo, CIF mandando transportadora.
 
-⚠️ **Ainda não testado contra o homolog** — falta a Laís/time confirmar que a versão nova
-está no ar lá.
+### ✅ Homologado em 2026-10-01 — pedido 1133
+
+Orçamento #2376 do dev (Alan Dayan 010244 → IGUASPORT/Decathlon 000646/0004, 10 × V13354,
+CIF, entrega pedida 15/10), enviado pela tela, pelo caminho de produção. Resposta:
+`AWAITING_APPROVAL`, transportadora `000009` escolhida pelo ERP, frete R$ 49,90
+(`shippingCost` 4990), entrega 15/10, faturamento previsto 13/10. Gravada em
+`portal_resposta`; o sino avisou com as datas.
+
+Antes disso, duas recusas DELES no homolog, ambas resolvidas pelo time do Portal:
+`Field cidade is required` (bug do cálculo de frete — reproduzido também com o corpo
+exato do exemplo deles) e `SOAP-ERROR: Parsing WSDL` (o homolog não alcança o Protheus).
+⚠️ **O homolog responde com um MOCK no lugar do Protheus**; a integração real com o ERP
+só existe em produção. Por isso o ajuste de data pelo ERP e a recusa de data (400) só
+estão provados por teste automatizado, não contra o ERP de verdade.
+
+🔴 **O segundo erro revelou um defeito nosso**: a mensagem do Portal (400+ caracteres)
+estourou o `varchar(255)` de `notificacoes.mensagem`. O vendedor ficava SEM aviso e o
+job retentava até falhar por outro motivo. Corrigido no `NotificacaoService` (corta em
+255; o texto inteiro fica em `portal_erro`), com teste de regressão verificado por mutação.
 
 ## 5. Lacunas de schema — medidas, não estimadas
 

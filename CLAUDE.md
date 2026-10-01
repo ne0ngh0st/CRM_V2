@@ -2619,7 +2619,9 @@ rascunho, resolvendo frete, transportadora e datas na criação. Detalhe em
   `Orcamento::temEnvioIncertoAoPortal()`. Não "simplificar" para uma regra só: uma das
   duas direções duplica pedido.
 - FOB é texto livre de propósito (o CRM não tem cadastro de transportadoras; o Portal
-  valida o código). 44 testes, 3 mutações mordidas. **Não testado no homolog ainda.**
+  valida o código). 45 testes, 4 mutações mordidas.
+- ✅ **Homologado em 2026-10-01: pedido 1133** (AWAITING_APPROVAL, entrega 15/10). ⚠️ O
+  homolog usa um MOCK do Protheus — ajuste/recusa de data pelo ERP real só em produção.
 
 ### O 232 virou a fonte da venda; o 200 só dá a etapa — 2026-09-25
 
@@ -2801,7 +2803,7 @@ decisão foi **"nem entram"**, não "esconder": o `totvs:import-leads` não cria
   valendo nas duas versões.
 - 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA (2026-09-10),
   HOMOLOGADA (2026-09-14), DE-PARA ELIMINADO (2026-09-25), ADAPTADA À API NOVA (2026-09-30:
-  data de entrega/frete/transportadora, §4.10). Falta testar a versão nova no homolog e
+  data de entrega/frete/transportadora, §4.10; homologado com o pedido 1133). Falta
   URL/token de PRODUÇÃO para ligar.** **Análise, payload atual e armadilhas em `docs/integracao-portal-pedidos.md`**
   (§4.9 e §4.10 são o estado de hoje; ler de lá antes de encostar). O PDF original está em
   `docs/API-Pedidos-Autopel.pdf`.
