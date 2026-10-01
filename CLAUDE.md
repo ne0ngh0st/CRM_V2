@@ -2684,7 +2684,7 @@ do DIA da equipe. **Ligado em produção em 2026-09-28.**
 vendedor, carteira) foi recusada por "clutter". O que ficou, e o que não voltar a pôr:
 1. **O dia em UMA linha**: Contatos · Pedidos · Venda · Faturamento, com o dia da semana
    escrito embaixo de cada número.
-2. **A mesma linha por vendedor** (maior venda do dia primeiro; zero vira "–"; valor
+2. **A mesma linha por vendedor** (maior venda do dia primeiro; tabela em grade, zero sai "0" em vermelho; valor
    cheio, `reaisCheio()`, porque coluna com "R$ 77 mil" ao lado de "R$ 4.491" engana a
    comparação). No consolidado, uma linha de subtotal por equipe.
 3. **Resumão do mês** no rodapé: venda e faturamento contra a meta, só total.
@@ -2723,8 +2723,9 @@ editado na tela Equipe (select no editar usuário, só admin/diretor). Fora do `
     Quem vende fora das equipes (Natany, Paulo de Tarso, almoxarifado virtual…) vai na seção
     **"Fora das equipes"**, e a diferença que sobra (nota sem vendedor) fecha na linha
     **"Sem vendedor"** — por construção, o total é sempre o do BI.
-- **Consolidado** = uma seção por gestor marcado como `equipe` (maior venda do dia
-  primeiro) + "Fora das equipes". Gestor novo marcado entra sozinho. ⚠️ As seções se
+- **Consolidado** = uma seção por gestor marcado como `equipe` — Américo, Sandra, Cleber
+  e Wellington nessa ordem fixa (`resumo_equipe.ordem_equipes`, por cod_vendedor; pedido
+  do Tony em 2026-10-01), o resto pela venda do dia — + "Fora das equipes". Gestor novo marcado entra sozinho. ⚠️ As seções se
   sobrepõem (o `cod_super` de supervisor aponta para diretor, então a Sandra está na equipe
   dela e na do Beto) — o total é a empresa, nunca a soma das seções.
 - **Nenhum número novo** (Regra nº 8): venda/faturamento/meta pelo `MetaRankingResolver`

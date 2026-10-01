@@ -226,6 +226,22 @@ class ResumoEquipeTest extends TestCase
         $this->assertEqualsWithDelta(60555.0, $resumo['resumao']['mes']['venda']['realizado'], 0.001);
     }
 
+    public function test_consolidado_segue_a_ordem_fixa_de_equipes_antes_da_venda(): void
+    {
+        // A equipe do Beto vende mais no dia — pela venda, viria primeiro.
+        $this->pedido('000201', '2026-06-16', 50000.0);
+        $this->pedido('000101', '2026-06-16', 100.0);
+
+        $ordem = fn () => collect(app(ResumoEquipeBuilder::class)->consolidado()['secoes'])
+            ->pluck('nome')->reject(fn ($n) => $n === 'Fora das equipes')->values()->all();
+
+        config(['resumo_equipe.ordem_equipes' => []]);
+        $this->assertSame(['Equipe Roberto Alves', 'Equipe Sandra Lima'], $ordem(), 'sem ordem fixa, vale a venda');
+
+        config(['resumo_equipe.ordem_equipes' => [self::SANDRA]]);
+        $this->assertSame(['Equipe Sandra Lima', 'Equipe Roberto Alves'], $ordem(), 'a ordem fixa vence a venda');
+    }
+
     /**
      * 🚨 O consolidado é a EMPRESA INTEIRA — o total do Power BI —, não a soma das equipes.
      * Quem vende fora delas ganha seção própria, e o que não tem vendedor fecha a conta.

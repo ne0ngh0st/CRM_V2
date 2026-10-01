@@ -119,13 +119,18 @@ class ResumoEquipeBuilder
                 continue;
             }
 
-            $secoes[] = $this->secao('Equipe '.$this->nomeTitulo($gestor), $codigos);
+            $secoes[] = $this->secao('Equipe '.$this->nomeTitulo($gestor), $codigos)
+                + ['codigoGestor' => $gestor->vendedorPerfil?->cod_vendedor];
             $uniao = [...$uniao, ...$codigos];
         }
         $uniao = array_values(array_unique($uniao));
 
-        // Equipes pela venda do dia, maior primeiro.
-        usort($secoes, fn (array $a, array $b) => $b['totais']['venda'] <=> $a['totais']['venda']
+        // Ordem fixa da diretoria primeiro (config 'ordem_equipes'); o resto pela venda do
+        // dia, maior primeiro. Fixa porque quem lê procura a mesma equipe no mesmo lugar.
+        $ordem = array_flip(config('resumo_equipe.ordem_equipes', []));
+        $posicao = fn (array $s) => $ordem[$s['codigoGestor'] ?? ''] ?? PHP_INT_MAX;
+        usort($secoes, fn (array $a, array $b) => $posicao($a) <=> $posicao($b)
+            ?: $b['totais']['venda'] <=> $a['totais']['venda']
             ?: strcmp($a['nome'], $b['nome']));
 
         $dia = $this->dia();

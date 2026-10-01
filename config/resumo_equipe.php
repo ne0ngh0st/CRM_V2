@@ -29,4 +29,19 @@ return [
 
     'redirecionar_para' => env('RESUMO_EQUIPE_REDIRECIONAR_PARA'),
 
+    /*
+    |
+    | Ordem das equipes no consolidado, pelo cod_vendedor do gestor (o e-mail o
+    | usuário pode trocar no perfil; o código não). Pedido do Tony, 2026-10-01:
+    | Américo, Sandra, Cleber, Wellington — as demais vêm depois, pela venda do dia.
+    |
+    */
+
+    'ordem_equipes' => [
+        '010389', // Américo
+        '000115', // Sandra
+        '000006', // Cleber
+        '010650', // Wellington
+    ],
+
 ];
