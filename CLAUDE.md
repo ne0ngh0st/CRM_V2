@@ -2785,7 +2785,7 @@ decisão foi **"nem entram"**, não "esconder": o `totvs:import-leads` não cria
   carimbo `leads.excluido_pela_receita_em`: só volta quem tem. Excluído à mão nunca volta.
   Os dois sentidos moram em `SituacaoCadastral::sincronizarLeads()`, chamado pela carga e
   pelos dois imports de leads. ⚠️ Os 3.072 da primeira exclusão em massa foram carimbados
-  pela migration `130000` pela janela de 01/10 11:40–11:59 — conferido no RDS que caíram
+  pela migration `150000` pela janela de 01/10 11:40–11:59 — conferido no RDS que caíram
   todos no minuto 11:46.
 - **Manual e site nunca são tocados** — são decisão de quem cadastrou.
 - O botão do cartão CNPJ também grava em `cnpj_situacoes` (última escrita vence; o
