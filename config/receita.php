@@ -20,4 +20,18 @@ return [
 
     // A Receita publica uma vez por mês: reconsultar antes disso não traz nada novo.
     'validade_dias' => (int) env('RECEITA_CNPJ_VALIDADE_DIAS', 30),
+
+    /*
+     * Base aberta de CNPJ da Receita (carga mensal, `receita:importar-situacoes`).
+     * Publicada num compartilhamento público do Nextcloud do SERPRO; o "token" é o id
+     * do link público, não uma credencial. Mudou de endereço em 2025 — se a carga
+     * começar a dar 404, conferir em https://arquivos.receitafederal.gov.br.
+     */
+    'base' => [
+        'webdav' => env('RECEITA_BASE_WEBDAV', 'https://arquivos.receitafederal.gov.br/public.php/webdav'),
+        'token' => env('RECEITA_BASE_TOKEN', 'YggdBLfdninEJX9'),
+        'arquivos' => 10, // Estabelecimentos0.zip … Estabelecimentos9.zip
+        // Um zip por vez (~2,3 GB no maior), apagado depois de varrido.
+        'diretorio' => env('RECEITA_BASE_DIRETORIO', storage_path('app/receita')),
+    ],
 ];

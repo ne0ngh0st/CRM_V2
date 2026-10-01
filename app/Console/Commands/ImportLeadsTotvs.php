@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\Normalizador;
 use App\Services\Totvs\Relatorios;
 use Illuminate\Console\Command;
@@ -36,6 +37,14 @@ use Illuminate\Support\Facades\DB;
  * ⚠️ Lead que SUMIU da base não é apagado, de propósito. Apagar anularia as observações
  * que apontam para ele (SET NULL) e o histórico do vendedor sumiria sem deixar rastro.
  * O comando conta e informa quantos são; o que fazer com eles é decisão de negócio.
+ *
+ * ⚠️ CNPJ QUE NÃO ESTÁ ATIVO NA RECEITA NÃO ENTRA (decisão do Tony, 2026-10-01): inapta,
+ * suspensa, baixada, nula ou inexistente. A situação vem de `cnpj_situacoes`, carregada
+ * por `receita:importar-situacoes`. Lead NOVO com situação desconhecida também fica de
+ * fora — "não pode ter nenhuma" não combina com deixar entrar quem nunca foi conferido —
+ * e entra sozinho no import seguinte à carga da Receita. Lead que JÁ ESTÁ no CRM e é
+ * conhecido como não ativo vira `excluido` (não é apagado; ver
+ * `SituacaoCadastral::excluirLeadsNaoAtivos`).
  *
  * ⚠️ `origem = manual` e `origem = wordpress` nunca são tocados: um é cadastro do
  * vendedor pela tela, o outro vem do formulário do site.
@@ -84,12 +93,28 @@ class ImportLeadsTotvs extends Command
                 return $mapa;
             }, []);
 
+        $situacao = app(SituacaoCadastral::class);
+
         $novos = array_diff_key($porCnpj, $existentes);
         $adotados = array_intersect_key($porCnpj, $existentes);
         $sumiram = count(array_diff_key($existentes, $porCnpj));
 
+        [$novos, $barrados, $semSituacao] = $this->filtrarPelaReceita(
+            $novos, $situacao->situacoes(array_map('strval', array_keys($novos)))
+        );
+
         $this->line('  já no CRM (atualiza, mantendo o id): '.number_format(count($adotados), 0, ',', '.'));
         $this->line('  cadastros novos: '.number_format(count($novos), 0, ',', '.'));
+
+        if ($barrados !== []) {
+            $this->line('  barrados (CNPJ não ativo na Receita): '.number_format(array_sum($barrados), 0, ',', '.')
+                .' — '.collect($barrados)->map(fn ($n, $s) => "{$s} {$n}")->implode(', '));
+        }
+
+        if ($semSituacao > 0) {
+            $this->warn('  segurados (situação na Receita desconhecida): '.number_format($semSituacao, 0, ',', '.'));
+            $this->line('    → rode `php artisan receita:importar-situacoes --forcar` e importe de novo.');
+        }
 
         if ($sumiram > 0) {
             $this->warn('  sumiram da base e NÃO serão apagados: '.number_format($sumiram, 0, ',', '.'));
@@ -104,7 +129,12 @@ class ImportLeadsTotvs extends Command
                 $this->atualizar($adotados, $existentes);
             });
 
-            $this->info('Leads gravados: '.number_format(count($porCnpj), 0, ',', '.'));
+            $this->info('Leads gravados: '.number_format(count($novos) + count($adotados), 0, ',', '.'));
+
+            $excluidos = $situacao->excluirLeadsNaoAtivos();
+            if ($excluidos !== []) {
+                $this->warn('  já no CRM e tirados agora (CNPJ não ativo): '.number_format(array_sum($excluidos), 0, ',', '.'));
+            }
         }
 
         if ($semCnpj > 0) {
@@ -180,6 +210,36 @@ class ImportLeadsTotvs extends Command
         }
 
         return [$porCnpj, $lidas, $foraDoFiltro, $semCnpj, $semNome];
+    }
+
+    /**
+     * Separa os leads novos que podem entrar dos barrados pela situação na Receita.
+     *
+     * @param  array<string, array<string, mixed>>  $novos
+     * @param  array<string, string>  $conhecidas  cnpj => situação
+     * @return array{0: array<string, array<string, mixed>>, 1: array<string, int>, 2: int}
+     */
+    private function filtrarPelaReceita(array $novos, array $conhecidas): array
+    {
+        $liberados = [];
+        $barrados = [];
+        $semSituacao = 0;
+
+        foreach ($novos as $cnpj => $registro) {
+            $situacao = $conhecidas[(string) $cnpj] ?? null;
+
+            if ($situacao === null) {
+                $semSituacao++;
+            } elseif (SituacaoCadastral::permiteLead($situacao)) {
+                $liberados[$cnpj] = $registro;
+            } else {
+                $barrados[$situacao] = ($barrados[$situacao] ?? 0) + 1;
+            }
+        }
+
+        ksort($barrados);
+
+        return [$liberados, $barrados, $semSituacao];
     }
 
     /**

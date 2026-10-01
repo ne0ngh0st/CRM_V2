@@ -2725,6 +2725,50 @@ sem enviar; `--para=EMAIL` envia só para ele (funciona com o agendamento deslig
 Testes: `tests/Feature/ResumoEquipeTest.php` (20, incluindo "consolidado bate com a empresa" e "código do diretor entra na equipe"). No formato diário, duas mutações
 aplicadas e mordidas: segunda deixar de cair na sexta, e a venda do dia virar a do mês.
 
+### Lead com CNPJ não ativo na Receita não entra no CRM — 2026-10-01
+
+Decisão do Tony: lead da base de prospecção (`origem = sistema`) só existe no CRM se o
+CNPJ estiver **ATIVA** na Receita. Fica de fora tudo o mais — SUSPENSA, INAPTA, BAIXADA,
+NULA e **INEXISTENTE** (CNPJ que não está na base, quase sempre dígito errado). E a
+decisão foi **"nem entram"**, não "esconder": o `totvs:import-leads` não cria o lead.
+
+| O que se repete | Onde mora |
+|---|---|
+| "Este CNPJ está ativo?" | `App\Services\Receita\SituacaoCadastral` |
+| A situação de cada CNPJ | tabela `cnpj_situacoes` (uma linha por CNPJ de 14 dígitos) |
+| Endereço da base aberta e pasta temporária | `config('receita.base')` |
+
+- **Fonte: a base aberta mensal da Receita**, não as APIs do cartão (que não servem para
+  massa). `receita:importar-situacoes` baixa os 10 zips de Estabelecimentos (~5 GB, um
+  por vez, apagado depois), varre em streaming e grava **só** os CNPJs que interessam ao
+  CRM: clientes, leads e a base de prospecção que ainda vai ser importada. Agendado
+  semanal (domingo 04:00, app-2); não faz nada se o mês mais recente já foi carregado.
+- ⚠️ A base mudou de endereço em 2025: hoje é um compartilhamento público do Nextcloud do
+  SERPRO, lido por WebDAV (`public.php/webdav`, o id do link é o usuário). Se a carga
+  começar a dar 404, é aí que olhar.
+- ⚠️ **INEXISTENTE só é marcado com a varredura inteira.** Uma carga que cai no arquivo 7
+  não pode concluir que o que estava nos 8 e 9 não existe — por isso o comando grava tudo
+  no fim, e não arquivo a arquivo.
+- ⚠️ **Lead NOVO de situação desconhecida é SEGURADO**, não liberado ("não pode ter
+  nenhuma"). Entra sozinho no import seguinte à carga. O import avisa quantos segurou.
+- **Lead que JÁ ESTÁ no CRM** e passa a ser conhecido como não ativo vira
+  `status = excluido` — no import e no fim da carga mensal. ⚠️ Não é apagado:
+  `observacoes.lead_id` é ON DELETE SET NULL e apagar soltaria o histórico do vendedor.
+  Lead excluído que volta a ficar ATIVA **não volta sozinho**.
+- **Manual e site nunca são tocados** — são decisão de quem cadastrou.
+- O botão do cartão CNPJ também grava em `cnpj_situacoes` (última escrita vence; o
+  cartão costuma ser mais recente que a base). ⚠️ Mas o lead não sai na hora do clique,
+  só no próximo import ou carga.
+- `legado:import-leads` (obsoleto) só tira os conhecidos como não ativos; ele não segura
+  os desconhecidos.
+- **Medido (Regra nº 6)** no `Estabelecimentos0` de 2026-09 — o maior: 2,2 GB zipado,
+  7,1 GB e **30,6 milhões de linhas** (metade da base): **273 s** de varredura em dev
+  (Docker/WSL2), memória folgada. Os outros nove têm ~3,5 M cada. O download levou ~7 min
+  por 2,2 GB daqui do escritório. Nesse arquivo, dos CNPJs do dev achados, 18% não estavam
+  ativos (BAIXADA 4.026, INAPTA 1.784, SUSPENSA 120, NULA 19).
+- Testes: `LeadsSituacaoReceitaTest` (7) + asserção nova no `CartaoCnpjTest`. **5 mutações
+  aplicadas, 5 mordidas.** Suíte inteira: **953 testes**.
+
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão

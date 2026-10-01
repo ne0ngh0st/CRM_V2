@@ -189,6 +189,8 @@ class CartaoCnpjTest extends TestCase
 
         Http::assertSentCount(2);
         $this->assertSame('BAIXADA', CnpjConsulta::sole()->situacao);
+        // O filtro de leads lê a situação de `cnpj_situacoes`, não do cartão.
+        $this->assertSame('BAIXADA', \Illuminate\Support\Facades\DB::table('cnpj_situacoes')->value('situacao'));
     }
 
     public function test_consulta_vencida_vai_de_novo_a_receita(): void

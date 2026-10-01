@@ -109,6 +109,23 @@ Schedule::job(new PromoverCapturasWpPendentesJob)
 Schedule::job(new ExpurgarCapturasWpJob)->dailyAt('03:40')->onOneServer();
 
 /*
+ * Situação cadastral na Receita (base aberta mensal) dos CNPJs de leads e clientes.
+ * Roda toda semana e não faz nada se o mês publicado mais recente já foi carregado: a
+ * Receita não tem data fixa de publicação, então semanal pega a base nova em até 7 dias.
+ * Baixa ~5 GB (um zip por vez, apagado depois) e leva da ordem de meia hora — daí o
+ * `runInBackground`, para não segurar o resto do scheduler daquele minuto.
+ *
+ * ⚠️ É o que mantém "lead com CNPJ não ativo não entra no CRM" valendo: sem esta carga
+ * o `totvs:import-leads` segura todo lead novo por situação desconhecida.
+ */
+Schedule::command(\App\Console\Commands\ImportarSituacoesReceita::class)
+    ->weeklyOn(0, '04:00')
+    ->onOneServer()
+    ->withoutOverlapping(240)
+    ->runInBackground()
+    ->name('receita-situacoes');
+
+/*
  * Atualização dos dados do TOTVS (clientes, faturamento, pedidos).
  *
  * O Tony gera os relatórios no TOTVS e sobe com `infra/enviar-relatorios-totvs.sh`;
