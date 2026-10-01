@@ -93,7 +93,6 @@ class AcessoAssistenteTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Leads/Index')
                 ->missing('somenteWordpress')
-                ->where('kpis.total', 2)
                 ->has('leads.data', 2)
             );
     }

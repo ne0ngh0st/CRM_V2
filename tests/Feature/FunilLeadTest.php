@@ -433,33 +433,6 @@ class FunilLeadTest extends TestCase
     }
 
     /**
-     * ⚠️ "Em jogo" conta a ESTEIRA, não as colunas. Somar "Outros" ali devolveria ao KPI
-     * exatamente o que a coluna existe para tirar da conta — SAC e licitação inflando o
-     * número de negócios em aberto, sem ninguém desconfiar.
-     *
-     * Os números do fixture são todos diferentes de propósito: com 1 e 1, contar a
-     * esteira ou contar as colunas daria o mesmo e o teste não morderia.
-     */
-    #[Test]
-    public function test_lead_fora_do_funil_nao_conta_como_negocio_em_jogo(): void
-    {
-        $vendedor = $this->vendedor();
-        $this->lead(Lead::ETAPA_NOVO);
-        $this->lead(Lead::ETAPA_NEGOCIACAO);
-        $this->lead(Lead::ETAPA_OUTROS);
-        $this->lead(Lead::ETAPA_OUTROS);
-        $this->lead(Lead::ETAPA_OUTROS);
-        $this->lead(Lead::ETAPA_GANHO);
-
-        $kpis = $this->actingAs($vendedor)
-            ->get(route('leads.index'))
-            ->viewData('page')['props']['kpis'];
-
-        $this->assertSame(6, $kpis['total']);
-        $this->assertSame(2, $kpis['ativos'], '"em jogo" são os 2 da esteira — nem os 3 triados nem o ganho');
-    }
-
-    /**
      * O filtro da tela precisa alcançar "Outros", senão a triagem entra e some: o quadro
      * mostra 20 cards por coluna e não há outro caminho para ver a lista inteira.
      *

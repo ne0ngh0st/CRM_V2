@@ -8,7 +8,6 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
 import FilterField from '@/Components/FilterField.vue';
-import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import CalendarioAgendamentos from '@/Components/Carteira/CalendarioAgendamentos.vue';
 import LeadsTabela from '@/Components/Leads/LeadsTabela.vue';
@@ -26,7 +25,6 @@ const props = defineProps({
     aba: { type: String, default: 'leads' },
     funil: { type: Object, default: null },
     leads: Object,
-    kpis: Object,
     agendamentos: { type: Array, default: () => [] },
     filtros: Object,
     opcoes: Object,
@@ -56,7 +54,7 @@ function aplicarFiltros() {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['leads', 'kpis', 'filtros', 'visao', 'aba'],
+        only: ['leads', 'filtros', 'visao', 'aba'],
     });
 }
 
@@ -70,9 +68,9 @@ function trocarAba(aba) {
         // Cada aba pede só a prop opcional que vai usar — pedir as duas faria a aba
         // Leads pagar por duas consultas que iriam pro lixo.
         only: {
-            calendario: ['leads', 'kpis', 'filtros', 'visao', 'aba', 'agendamentos'],
-            funil: ['leads', 'kpis', 'filtros', 'visao', 'aba', 'funil'],
-        }[aba] ?? ['leads', 'kpis', 'filtros', 'visao', 'aba'],
+            calendario: ['leads', 'filtros', 'visao', 'aba', 'agendamentos'],
+            funil: ['leads', 'filtros', 'visao', 'aba', 'funil'],
+        }[aba] ?? ['leads', 'filtros', 'visao', 'aba'],
     });
 }
 
@@ -178,13 +176,6 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
                     </template>
                     <template #subtitle>
                         Carteira de prospects — base do sistema, leads manuais e leads do site (WordPress). Sem transferência (TOTVS/import cuida da atribuição).
-                    </template>
-                    <template #meta>
-                        <KpiTile :value="kpis.total" label="Total" />
-                        <KpiTile :value="kpis.sistema" label="Sistema" tone="info" :href="route('leads.index', { ...filtros, origem: 'sistema', aba: 'leads' })" />
-                        <KpiTile :value="kpis.manual" label="Manuais" tone="warn" :href="route('leads.index', { ...filtros, origem: 'manual', aba: 'leads' })" />
-                        <KpiTile :value="kpis.wordpress ?? 0" label="WordPress" tone="ok" :href="route('leads.index', { ...filtros, origem: 'wordpress', aba: 'leads' })" />
-                        <KpiTile :value="kpis.ativos" label="Ativos" tone="ok" />
                     </template>
                     <!-- Busca e ordenação não colapsam no celular: abaixo de 640px a tabela
                          vira cartão e o `<thead>` não está lá, então este select é o único

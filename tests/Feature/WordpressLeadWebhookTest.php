@@ -201,8 +201,6 @@ class WordpressLeadWebhookTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Leads/Index')
-                ->where('kpis.wordpress', 1)
-                ->where('kpis.manual', 0)
                 ->has('leads.data', 1)
                 ->where('leads.data.0.origem', 'wordpress')
                 ->where('wordpressCaptura.ligado', false)

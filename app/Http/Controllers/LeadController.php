@@ -89,56 +89,14 @@ class LeadController extends Controller
             $aba = 'leads';
         }
 
-        /*
-         * Uma linha agregada em vez de quatro varreduras.
-         *
-         * Cada `count()` reexecutava `baseQuery()` do zero — quatro passagens pelos 17 mil
-         * leads para responder quatro perguntas sobre o mesmo conjunto. Medido: 18,9 ms
-         * nos quatro separados contra 14,0 ms na consolidada.
-         *
-         * ⚠️ O ganho é menor do que parece à primeira vista, e vale saber por quê: os
-         * counts separados usam índice (`origem`, `status`), enquanto os SUM() com
-         * expressão varrem tudo. O que a consolidação realmente economiza são as idas ao
-         * banco — irrelevante com o MySQL na mesma máquina, mas em produção, com o RDS
-         * separado por rede, cada round-trip custa cerca de 1 ms.
-         */
-        $contagem = $this->baseQuery($request)
-            ->selectRaw('COUNT(*) as total')
-            ->selectRaw("SUM(origem = 'sistema') as sistema")
-            ->selectRaw("SUM(origem = 'manual') as manual")
-            ->selectRaw("SUM(origem = 'wordpress') as wordpress")
-            /*
-             * "Em jogo" = etapa da ESTEIRA. Antes era `status = 'ativo'`, que depois da
-             * separação dos eixos passaria a contar TODO lead não-excluído — inclusive os
-             * ganhos e perdidos — e o KPI viraria uma cópia do total.
-             *
-             * ⚠️ Sai da constante, não de uma lista literal: "Outros" é coluna do quadro
-             * mas NÃO é negócio em jogo (é SAC, licitação, currículo), e uma lista
-             * chumbada aqui viraria a segunda definição de "em jogo" — certa hoje por
-             * coincidência, errada na próxima etapa que entrar. Regra de ouro nº 8.
-             */
-            ->selectRaw(
-                'SUM(etapa IN ('.implode(',', array_fill(0, count(Lead::ETAPAS_ESTEIRA), '?')).')) as ativos',
-                Lead::ETAPAS_ESTEIRA,
-            )
-            ->first();
+        $leads = $this->listaQuery($request)->paginate(30)->withQueryString();
 
-        $kpis = [
-            'total' => (int) ($contagem->total ?? 0),
-            'sistema' => (int) ($contagem->sistema ?? 0),
-            'manual' => (int) ($contagem->manual ?? 0),
-            'wordpress' => (int) ($contagem->wordpress ?? 0),
-            'ativos' => (int) ($contagem->ativos ?? 0),
-        ];
-
-        // Só paga as 2 queries do eager load se existir lead do site no escopo.
-        // A maioria das carteiras não tem nenhum, e esta página é das mais abertas.
-        $leadsQuery = $this->listaQuery($request);
-        if ($kpis['wordpress'] > 0) {
-            $leadsQuery->with(['stagingWordpress.formulario:id,nome,identificador']);
+        // Só paga o eager load da captura do site se a PÁGINA tiver lead do site — a
+        // maioria das carteiras não tem nenhum, e esta tela é das mais abertas.
+        $doSite = $leads->getCollection()->where('origem', Lead::ORIGEM_WORDPRESS);
+        if ($doSite->isNotEmpty()) {
+            $doSite->load(['stagingWordpress.formulario:id,nome,identificador']);
         }
-
-        $leads = $leadsQuery->paginate(30)->withQueryString();
 
         $nomesPorCod = $this->nomeVendedor->porCodigo($leads->getCollection()->pluck('cod_vendedor'));
 
@@ -171,7 +129,6 @@ class LeadController extends Controller
             'role' => $role,
             'aba' => $aba,
             'leads' => $leads,
-            'kpis' => $kpis,
             /*
              * Prop opcional, mesmo tratamento da Carteira: a aba Leads, onde a maioria
              * das visitas para, deixou de pagar por uma consulta que ia pro lixo.
