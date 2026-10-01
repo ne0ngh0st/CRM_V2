@@ -35,11 +35,18 @@ class NotificacaoService
             }
         }
 
+        /*
+         * ⚠️ `titulo` e `mensagem` são varchar(255), e parte das mensagens vem de FORA —
+         * o erro do Portal chegou com 400+ caracteres (um SOAP-ERROR do Protheus) e o
+         * INSERT estourou: o vendedor ficou sem aviso e o job, ao retentar, falhou de
+         * novo por outro motivo. O sino é um aviso; o texto inteiro mora na origem
+         * (ex.: `orcamentos.portal_erro`).
+         */
         $notificacao = Notificacao::create([
             'user_id' => $destinatario->id,
             'tipo' => $tipo,
-            'titulo' => $titulo,
-            'mensagem' => $mensagem,
+            'titulo' => mb_strimwidth($titulo, 0, 255, '…'),
+            'mensagem' => $mensagem === null ? null : mb_strimwidth($mensagem, 0, 255, '…'),
             'link' => $link,
             'referencia_tipo' => $referenciaTipo,
             'referencia_id' => $referenciaId,

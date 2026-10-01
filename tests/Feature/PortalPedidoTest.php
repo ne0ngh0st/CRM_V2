@@ -519,4 +519,31 @@ class PortalPedidoTest extends TestCase
         $this->assertTrue($orcamento->temEnvioIncertoAoPortal());
         $this->assertDatabaseHas('notificacoes', ['user_id' => $vendedor->id, 'tipo' => 'portal_pedido_erro']);
     }
+
+    /**
+     * Regressão de 2026-10-01, no homolog: o Portal devolveu um SOAP-ERROR do Protheus
+     * com 400+ caracteres, o INSERT da notificação estourou o varchar(255), o vendedor
+     * ficou sem aviso e o job retentou até falhar por outro motivo.
+     */
+    public function test_erro_longo_do_portal_ainda_avisa_e_guarda_o_texto_inteiro(): void
+    {
+        $longo = 'Erro na comunicação com o protheus: SOAP-ERROR: Parsing WSDL: '.str_repeat('x', 400);
+
+        Http::fake([
+            '*/v1/api/orders' => Http::response(['message' => $longo], 400),
+        ]);
+
+        [$vendedor, $orcamento] = $this->cenario();
+        $gerador = app(GeradorDePedidoNoPortal::class);
+
+        $gerador->preparar($orcamento, '2026-10-15');
+        $gerador->enviar($orcamento->fresh());
+
+        $this->assertSame($longo, $orcamento->fresh()->portal_erro);
+
+        $aviso = Notificacao::where('user_id', $vendedor->id)->where('tipo', 'portal_pedido_erro')->value('mensagem');
+        $this->assertNotNull($aviso);
+        $this->assertLessThanOrEqual(255, mb_strlen($aviso));
+        $this->assertStringStartsWith('Erro na comunicação com o protheus', $aviso);
+    }
 }
