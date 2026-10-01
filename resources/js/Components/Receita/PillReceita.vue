@@ -35,7 +35,8 @@ const texto = computed(() => {
         const n = props.receita.irregulares;
         return n === 1 ? '1 filial irregular' : `${n} filiais irregulares`;
     }
-    return `CNPJ ${(ROTULOS_SITUACAO_RECEITA[props.receita.situacao] ?? props.receita.situacao).toLowerCase()}`;
+    // "Baixada na Receita", não "CNPJ baixada": a situação é feminina, o CNPJ não.
+    return `${ROTULOS_SITUACAO_RECEITA[props.receita.situacao] ?? props.receita.situacao} na Receita`;
 });
 
 const titulo = computed(() => {
