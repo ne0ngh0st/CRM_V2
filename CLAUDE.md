@@ -2484,7 +2484,9 @@ mesma linha de `cnpj_consultas`.
   o arquivo mensal da Receita) → CNPJá (independente, 5 consultas/min). A primeira que
   devolver cartão válido vence. **Nenhuma serve para consulta em massa** — enriquecer a
   carteira inteira é o download da base da Receita (item 2 da conversa de 24/09, a fazer).
-- **Validade de 30 dias**: a Receita publica uma vez por mês. "Atualizar da Receita" força.
+- **Validade de 30 dias**: a Receita publica uma vez por mês. ⚠️ O botão "Atualizar da
+  Receita" SAIU em 2026-10-01 (decisão do Tony): o lugar dele no rodapé é do "Solicitar
+  inativação". O `?atualizar=1` continua aceito pelo servidor, só não tem mais botão.
   Medido no dev com clientes reais: **480-730 ms** na primeira consulta, **2 ms** depois.
 - ⚠️ **`dados` guarda o NOSSO formato, nunca o payload cru** — trocar de provedor não
   invalida o que está gravado nem obriga a tela a conhecer três formatos.
@@ -2816,10 +2818,9 @@ setembro.
 
 ### Situação na Receita evidenciada na Carteira — 2026-10-01
 
-**Decisão do Tony: só evidenciar.** Nada de pedir inativação ao Cadastro nem e-mail, por
-enquanto — a Carteira continua só leitura (Regra nº 4). Retrato de produção no dia:
-**14.659 filiais não ativas** (16% do cadastro), **68 delas compraram nos últimos 290
-dias** — esses são o primeiro alvo se o fluxo de inativação um dia entrar.
+A Carteira continua só leitura (Regra nº 4): o CRM evidencia e PEDE; quem inativa é o
+Cadastro, no TOTVS. Retrato de produção no dia: **14.659 filiais não ativas** (16% do
+cadastro), **68 delas compraram nos últimos 290 dias**.
 
 - **O próprio CNPJ fica vermelho, com um ícone de alerta pequeno**, e o detalhe
   (situação, desde quando, mês da base) vai no tooltip. Com várias filiais, a linha
@@ -2848,6 +2849,35 @@ dias** — esses são o primeiro alvo se o fluxo de inativação um dia entrar.
 - Testes: `CarteiraSituacaoReceitaTest` (7). Mutações aplicadas e mordidas: regra
   irregular invertida, filtro por filial no modo agrupado (pego pelos KPIs), consolidar
   sem escopo (pego pelo cliente dividido entre vendedores), pill sem contagem.
+
+**"Solicitar inativação" (mesmo dia, pedido do Tony).** Mora DENTRO do Cartão CNPJ, no
+lugar do antigo "Atualizar da Receita": o CNPJ vermelho é clicável e abre o cartão
+daquela filial. ⚠️ **Nada de botão na linha ou na ficha** — a primeira versão tinha, e o
+Tony recusou por poluir a Carteira. Só aparece quando a CARTEIRA abre o cartão e o
+servidor diz que cabe (`inativacao.permitida` na resposta de `cartaoCnpj`); Leads e
+"Quem cuida do cliente?" não têm. O pedido é um e-mail ao Cadastro de clientes
+(`cadastro.geral@autopel.com`) pedindo para inativar a filial no TOTVS, com **quem clicou
+em cópia**. Regra em `App\Services\Receita\PedidoDeInativacao`; botão em
+`Components/Receita/BotaoInativacao.vue`; registro em `solicitacoes_inativacao`.
+- **Por FILIAL** (cliente + loja): cada filial tem o próprio CNPJ e a própria situação.
+- ⚠️ **O servidor confere a situação** antes de enviar — CNPJ ativo ou nunca verificado
+  devolve 422 sem e-mail. Pedir ao Cadastro que inative cliente ativo é o erro que não
+  pode acontecer, e a requisição pode chegar de fora do botão.
+- **Não repete em 30 dias** (`DIAS_SEM_REPETIR`): o botão vira "Inativação solicitada em
+  dd/mm por Fulano". Mesmo escopo das outras ações (`autorizarCliente`).
+- ⚠️ **O envio saiu do `CadastroController` para `App\Services\Cadastros\EnvioParaCadastro`**
+  (endereços, cópia do solicitante, `CADASTROS_REDIRECIONAR_PARA`, formato do corpo).
+  Com dois remetentes, uma cópia da lógica deixaria um deles fora do modo teste.
+- `fetch` e não `router.post`: o botão vive dentro de um modal aberto sobre a lista, e
+  uma visita do Inertia recarregaria a lista e fecharia a filial expandida. CSRF em `resources/js/utils/csrf.js`.
+- 🚨 **Incidente no teste (2026-10-01):** um clique no container de visualização mandou
+  e-mail REAL ao Cadastro (FEDEX 000129/0006). O container tinha `-e MAIL_MAILER=log`, mas
+  `php artisan serve` não repassa variável de ambiente ao processo que atende a
+  requisição — vale o `.env`, e o `.env` de dev usa o SMTP de verdade sem
+  redirecionamento. **Ambiente local que vai clicar em algo que manda e-mail: mudar o
+  ARQUIVO `.env`**, e conferir pela tabela `emails_enviados`, não pelo `tinker`.
+- Testes: `CarteiraPedidoInativacaoTest` (7) com `Mail::fake()`. Mutações mordidas: sem
+  conferir a situação, sem bloquear repetição, sem a cópia, sem o escopo.
 
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado

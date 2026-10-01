@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import ModalPadrao from '@/Components/ModalPadrao.vue';
 import StatusPill from '@/Components/StatusPill.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
+import BotaoInativacao from '@/Components/Receita/BotaoInativacao.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
 
@@ -46,14 +46,14 @@ const tituloDivergencias = computed(() => (dados.value?.origemCadastro === 'Lead
     ? 'Dados do lead diferentes da Receita'
     : 'Cadastro do TOTVS diferente da Receita'));
 
-async function carregar(atualizar = false) {
+async function carregar() {
     if (! props.url) return;
 
     carregando.value = true;
     erro.value = '';
 
     try {
-        const resposta = await fetch(props.url + (atualizar ? '?atualizar=1' : ''), {
+        const resposta = await fetch(props.url, {
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin',
         });
@@ -241,11 +241,23 @@ const consultadoTexto = computed(() => {
             </p>
         </div>
 
+        <!--
+            ⚠️ Não existe mais "Atualizar da Receita" (decisão do Tony, 2026-10-01): o lugar
+            dele é do "Solicitar inativação". O cartão é reconsultado sozinho depois de
+            `receita.validade_dias`, e a base inteira é recarregada todo mês.
+
+            O pedido de inativação só aparece quando a CARTEIRA abre o modal e o servidor
+            diz que cabe (`dados.inativacao.permitida`). Leads e "Quem cuida do cliente?"
+            não mandam esse bloco, e lá o rodapé fica só com "Fechar".
+        -->
         <template #footer>
             <SecondaryButton type="button" @click="emit('close')">Fechar</SecondaryButton>
-            <PrimaryButton v-if="cartao" type="button" :disabled="carregando" @click="carregar(true)">
-                {{ carregando ? 'Consultando…' : 'Atualizar da Receita' }}
-            </PrimaryButton>
+            <BotaoInativacao
+                v-if="dados?.inativacao?.permitida && cliente"
+                :cliente="cliente"
+                :situacao="dados.inativacao.situacao"
+                :solicitada="dados.inativacao.solicitada"
+            />
         </template>
     </ModalPadrao>
 </template>

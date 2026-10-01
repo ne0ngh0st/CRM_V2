@@ -120,7 +120,7 @@ const campos = [
                         </svg>
                     </template>
                     <template #subtitle>
-                        <CnpjReceita v-if="cliente.cnpj" :cnpj="cliente.cnpj" :receita="cliente.receita" surface="dark" /><template v-else>CNPJ não cadastrado</template> · {{ cliente.codCliente }}/{{ cliente.loja }}
+                        <CnpjReceita v-if="cliente.cnpj" :cnpj="cliente.cnpj" :receita="cliente.receita" :inativacao="cliente.receita?.inativacao" surface="dark" @abrir="modalCartaoCnpj = true" /><template v-else>CNPJ não cadastrado</template> · {{ cliente.codCliente }}/{{ cliente.loja }}
                     </template>
                     <template #meta>
                         <StatusPill :tone="TONS_STATUS_CARTEIRA[cliente.status]" surface="dark">{{ ROTULOS_STATUS_CARTEIRA[cliente.status] }}</StatusPill>

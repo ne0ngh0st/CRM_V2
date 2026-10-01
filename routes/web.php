@@ -82,6 +82,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/carteira/{cliente}/cartao-cnpj', [CarteiraController::class, 'cartaoCnpj'])
         ->middleware('throttle:30,1')
         ->name('carteira.cartaoCnpj');
+    // E-mail ao Cadastro pedindo para inativar cliente com CNPJ irregular na Receita.
+    // Throttle: cada clique manda e-mail para o setor de verdade.
+    Route::post('/carteira/{cliente}/solicitar-inativacao', [CarteiraController::class, 'solicitarInativacao'])
+        ->middleware('throttle:20,1')
+        ->name('carteira.solicitarInativacao');
     Route::post('/carteira/{cliente}/motivo-inatividade', [CarteiraController::class, 'registrarMotivoInatividade'])->name('carteira.motivoInatividade');
     Route::post('/carteira/{cliente}/ligacao', [CarteiraController::class, 'registrarLigacao'])->name('carteira.ligacao');
     Route::post('/carteira/{cliente}/agendamento', [CarteiraController::class, 'registrarAgendamento'])->name('carteira.agendamento');

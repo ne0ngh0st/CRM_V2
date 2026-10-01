@@ -18,6 +18,7 @@ import FunilCard from '@/Components/Leads/FunilCard.vue';
 import ModalPadrao from '@/Components/ModalPadrao.vue';
 import { ETAPA_OUTROS, ETAPAS_ESTEIRA, ROTULOS_ETAPA_LEAD, proximaDaEsteira } from '@/constants/leads.js';
 import { computed, reactive, ref } from 'vue';
+import { tokenCsrf } from '@/utils/csrf.js';
 
 const props = defineProps({
     funil: { type: Object, required: true },
@@ -113,12 +114,6 @@ async function patchEtapa(card, etapa, motivo) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
-/** O Laravel aceita o valor do cookie XSRF-TOKEN (decodificado) neste header. */
-function tokenCsrf() {
-    const bruto = document.cookie.split('; ').find((c) => c.startsWith('XSRF-TOKEN='));
-
-    return bruto ? decodeURIComponent(bruto.split('=')[1]) : '';
-}
 
 function desfazer(card, origem, etapaTentada) {
     const destino = colunaDe(etapaTentada);

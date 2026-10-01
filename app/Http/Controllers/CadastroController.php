@@ -3,13 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ExportaPlanilha;
-use App\Mail\CadastroSolicitacaoMail;
 use App\Models\ClienteParaCadastro;
 use App\Models\Lead;
 use App\Models\SolicitacaoBobina;
 use App\Models\SolicitacaoEtiqueta;
 use App\Models\User;
 use App\Services\Cadastros\BuscaTitularidade;
+use App\Services\Cadastros\EnvioParaCadastro;
 use App\Services\Cadastros\SolicitacaoTituloResolver;
 use App\Services\Receita\CartaoCnpjService;
 use App\Services\Solicitacoes\BobinaPdfPresenter;
@@ -21,7 +21,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -80,16 +79,8 @@ class CadastroController extends Controller
         'Automotivo', 'Industrial', 'Comercial', 'Logística', 'Residencial', 'Agrícola', 'Outros',
     ];
 
-    /**
-     * Destravado em 2026-08-28 depois do Tony confirmar o SMTP validado.
-     * `cadastroCliente` é `cadastro.geral@autopel.com` — mudou recentemente,
-     * não é mais `cadastro.cliente@autopel.com`.
-     */
-    private const EMAILS = [
-        'pcp' => 'pcp.sp@autopel.com',
-        'cadastro' => 'cadastro@autopel.com',
-        'cadastroCliente' => 'cadastro.geral@autopel.com',
-    ];
+    /** Endereços dos setores — moram em `EnvioParaCadastro` (único dono). */
+    private const EMAILS = EnvioParaCadastro::EMAILS;
 
     public function __construct(
         private readonly SolicitacaoTituloResolver $tituloResolver,
@@ -722,48 +713,10 @@ class CadastroController extends Controller
         ];
     }
 
-    /**
-     * Envia (enfileirado) o e-mail de notificação pro setor responsável.
-     * O solicitante SEMPRE vai em cópia (pedido do Tony, 2026-08-28) — além
-     * do `cc` fixo do setor (quando houver), nunca no lugar dele.
-     */
+    /** Envio, cópias e modo teste moram em `EnvioParaCadastro` — ver lá. */
     private function enviarEmail(array $dados, ?string $anexoConteudo = null, ?string $anexoNome = null): void
     {
-        $ccs = array_values(array_unique(array_filter([
-            $dados['cc'] ?? null,
-            $dados['solicitanteEmail'] ?? null,
-        ])));
-
-        $assunto = $dados['subject'];
-        $destino = $dados['to'];
-
-        /*
-         * Modo teste: manda tudo para um endereço só, sem cc.
-         *
-         * ⚠️ `config()`, nunca `env()`: em produção o config é cacheado e o .env sequer
-         * é lido, então `env()` devolveria null e o redirecionamento sumiria justamente
-         * onde ele protege (armadilha 9.2 do docs/deploy-aws.md).
-         *
-         * O prefixo no assunto carrega o destino real porque o objetivo do teste é
-         * conferir o ROTEAMENTO; sem ele você vê o conteúdo e continua sem saber se
-         * teria ido pro PCP ou pro Cadastro.
-         */
-        if ($redirecionar = config('cadastros.redirecionar_emails_para')) {
-            $reais = implode(', ', array_values(array_unique(array_filter(
-                array_merge([$destino], $ccs)
-            ))));
-
-            $assunto = "[TESTE → {$reais}] {$assunto}";
-            $destino = $redirecionar;
-            $ccs = [];
-        }
-
-        $mail = Mail::to($destino);
-        if ($ccs !== []) {
-            $mail = $mail->cc($ccs);
-        }
-
-        $mail->queue(new CadastroSolicitacaoMail($assunto, $dados['body'], $anexoConteudo, $anexoNome));
+        app(EnvioParaCadastro::class)->enviar($dados, $anexoConteudo, $anexoNome);
     }
 
     /** Bobina tem ficha em PDF (mesma usada em `pdfBobina`) — vai anexada no e-mail. */
@@ -787,50 +740,37 @@ class CadastroController extends Controller
     /** @param array{to: string, cc: ?string, solicitanteEmail?: ?string, subject: string, body: string} $dados */
     private function flashEnvio(array $dados): array
     {
-        $ccs = array_values(array_unique(array_filter([$dados['cc'] ?? null, $dados['solicitanteEmail'] ?? null])));
-        $destino = $dados['to'].($ccs !== [] ? ' (cc: '.implode(', ', $ccs).')' : '');
-
         return [
-            'mensagem' => "E-mail enviado para {$destino}.",
+            'mensagem' => 'E-mail enviado para '.EnvioParaCadastro::destinoDescrito($dados).'.',
         ];
     }
 
-    /**
-     * Cabeçalho de seção no padrão "TÍTULO\n======\n\n" — formato do legado
-     * (`pages/SISTEMA/cadastro.php::montarCorpoEmailCadastro`), unificado aqui
-     * pros 3 tipos de e-mail em vez das duas convenções que coexistiam lá
-     * (cabeçalho sublinhado pro cliente, "— TÍTULO —" pra bobina/etiqueta).
-     */
+    // Formato do corpo: mora em `EnvioParaCadastro`, compartilhado com a Carteira.
     private function cabecalhoSecao(string $titulo): string
     {
-        return $titulo."\n".str_repeat('=', mb_strlen($titulo))."\n\n";
+        return EnvioParaCadastro::cabecalhoSecao($titulo);
     }
 
-    /** @param array<string, mixed> $pares rótulo => valor (null/vazio vira "-") */
+    /** @param array<string, mixed> $pares */
     private function linhas(array $pares): string
     {
-        $corpo = '';
-        foreach ($pares as $rotulo => $valor) {
-            $corpo .= $rotulo.': '.($valor === null || $valor === '' ? '-' : $valor)."\n";
-        }
-
-        return $corpo;
+        return EnvioParaCadastro::linhas($pares);
     }
 
     /** @param array<string, mixed> $pares */
     private function secao(string $titulo, array $pares): string
     {
-        return $this->cabecalhoSecao($titulo).$this->linhas($pares)."\n";
+        return EnvioParaCadastro::secao($titulo, $pares);
     }
 
     private function blocoTexto(string $titulo, string $texto): string
     {
-        return $this->cabecalhoSecao($titulo).$texto."\n\n";
+        return EnvioParaCadastro::blocoTexto($titulo, $texto);
     }
 
     private function assinaturaEmail(): string
     {
-        return "Atenciosamente,\nSistema de Gestão Comercial Autopel\n© ".now()->year.' Autopel - Todos os direitos reservados';
+        return EnvioParaCadastro::assinatura();
     }
 
     private function simNao(?string $valor): string

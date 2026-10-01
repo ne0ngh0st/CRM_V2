@@ -158,7 +158,7 @@ function criarOrcamento(cliente) {
                         <!-- CNPJ irregular na Receita: o próprio número fica vermelho, com ícone
                              e tooltip. Nenhuma linha a mais — a pill abaixo do status foi recusada
                              por poluir a tela. Com várias filiais, a contagem vai na linha delas. -->
-                        <span class="tbl-sub"><CnpjReceita :cnpj="cliente.cnpj" :receita="cliente.receita" /></span>
+                        <span class="tbl-sub"><CnpjReceita :cnpj="cliente.cnpj" :receita="cliente.receita" :inativacao="cliente.inativacao" @abrir="emit('cartao-cnpj', cliente)" /></span>
                         <!-- Filial e entrega contadas separadamente: dizer que a AUTOPASS
                              tem 220 filiais seria falso — são 2 filiais e 218 pontos de
                              entrega (confirmado com o TOTVS). -->
@@ -359,7 +359,7 @@ function criarOrcamento(cliente) {
                                             <span v-if="filial.ehEntrega" class="tbl-sub">entrega</span>
                                         </td>
                                         <td class="tbl-itens-td">{{ filial.razaoSocial }}</td>
-                                        <td class="tbl-itens-td"><CnpjReceita :cnpj="filial.cnpj" :receita="filial.receita" /></td>
+                                        <td class="tbl-itens-td"><CnpjReceita :cnpj="filial.cnpj" :receita="filial.receita" :inativacao="filial.inativacao" @abrir="emit('cartao-cnpj', { ...filial, codCliente: cliente.codCliente })" /></td>
                                         <td class="tbl-itens-td">
                                             <EnderecoLink
                                                 :logradouro="filial.endereco ?? ''"
@@ -398,7 +398,7 @@ function criarOrcamento(cliente) {
                                                     :title="temCnpj(filial) ? 'Verificar cartão CNPJ' : 'Sem CNPJ (cliente pessoa física)'"
                                                     class="tbl-acao tbl-acao-navy"
                                                     :disabled="! temCnpj(filial)"
-                                                    @click="emit('cartao-cnpj', filial)"
+                                                    @click="emit('cartao-cnpj', { ...filial, codCliente: cliente.codCliente })"
                                                 >
                                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                                         <rect x="3" y="5" width="18" height="14" rx="1.5" />

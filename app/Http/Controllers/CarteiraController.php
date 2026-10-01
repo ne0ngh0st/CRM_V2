@@ -19,6 +19,7 @@ use App\Services\Carteira\MapaDaCarteira;
 use App\Services\Geografia\Mesorregioes;
 use App\Services\Pedidos\StatusPedidoResolver;
 use App\Services\Receita\CartaoCnpjService;
+use App\Services\Receita\PedidoDeInativacao;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
@@ -55,6 +56,7 @@ class CarteiraController extends Controller
         private readonly MapaDaCarteira $mapa,
         private readonly Mesorregioes $mesorregioes,
         private readonly SituacaoCadastral $situacaoReceita,
+        private readonly PedidoDeInativacao $pedidoDeInativacao,
     ) {
     }
 
@@ -254,13 +256,14 @@ class CarteiraController extends Controller
         // Situação na Receita do CNPJ de cada linha da página (a âncora, no agrupado):
         // uma consulta por página, mesmo padrão dos motivos de inatividade.
         $receitaPorCnpj = $this->situacaoReceita->detalhes($clientes->getCollection()->pluck('cnpj_digitos'));
+        $inativacoes = $this->pedidoDeInativacao->recentes($clientes->getCollection()->pluck('id'));
 
         // Só os grupos que aparecem nesta página — são 2.4k no total, não vale carregar tudo.
         $nomePorGrupo = GrupoCliente::query()
             ->whereIn('codigo', $clientes->getCollection()->pluck('cod_grupo')->filter()->unique())
             ->pluck('nome', 'codigo');
 
-        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $nomePorCodigo, $nomePorGrupo, $hoje, $receitaPorCnpj) {
+        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $nomePorCodigo, $nomePorGrupo, $hoje, $receitaPorCnpj, $inativacoes) {
             $motivo = $motivosPorCliente->get($cliente->id);
 
             /*
@@ -327,6 +330,8 @@ class CarteiraController extends Controller
                     'irregular' => SituacaoCadastral::irregular($receitaPorCnpj[$cliente->cnpj_digitos]['situacao'] ?? null),
                     'irregulares' => isset($cliente->filiais_irregulares) ? (int) $cliente->filiais_irregulares : null,
                 ],
+                // Pedido de inativação já enviado ao Cadastro (`{em, por}`), ou null.
+                'inativacao' => $inativacoes[$cliente->id] ?? null,
             ];
         });
 
@@ -1160,9 +1165,11 @@ class CarteiraController extends Controller
             ->get();
 
         $receitaPorCnpj = $this->situacaoReceita->detalhes($filiais->pluck('cnpj_digitos'));
+        $inativacoes = $this->pedidoDeInativacao->recentes($filiais->pluck('id'));
 
         $filiais = $filiais
             ->map(fn (Cliente $filial) => [
+                'inativacao' => $inativacoes[$filial->id] ?? null,
                 'id' => $filial->id,
                 'loja' => $filial->loja,
                 'razaoSocial' => $filial->razao_social,
@@ -1200,7 +1207,30 @@ class CarteiraController extends Controller
     {
         $this->autorizarCliente($request, $cliente);
 
-        return $servico->resposta($cliente->cnpj, $request->boolean('atualizar'), CartaoCnpjService::cadastroDoCliente($cliente));
+        $resposta = $servico->resposta($cliente->cnpj, $request->boolean('atualizar'), CartaoCnpjService::cadastroDoCliente($cliente));
+
+        if ($resposta->getStatusCode() !== 200) {
+            return $resposta;
+        }
+
+        /*
+         * "Solicitar inativação" mora DENTRO deste modal (pedido do Tony: nada de botão a
+         * mais na Carteira). O modal só desenha; quem diz se o pedido cabe é o servidor,
+         * pela mesma regra que `PedidoDeInativacao` confere ao enviar. A consulta acima já
+         * gravou a situação do cartão em `cnpj_situacoes`, então os dois concordam.
+         */
+        $situacao = $cliente->cnpj_digitos
+            ? DB::table('cnpj_situacoes')->where('cnpj', $cliente->cnpj_digitos)->value('situacao')
+            : null;
+
+        return response()->json([
+            ...$resposta->getData(true),
+            'inativacao' => [
+                'permitida' => SituacaoCadastral::irregular($situacao),
+                'situacao' => $situacao,
+                'solicitada' => $this->pedidoDeInativacao->recentes([$cliente->id])[$cliente->id] ?? null,
+            ],
+        ]);
     }
 
     /**
@@ -1840,6 +1870,7 @@ class CarteiraController extends Controller
                 'receita' => [
                     ...$receitaDoCliente,
                     'irregular' => SituacaoCadastral::irregular($receitaDoCliente['situacao']),
+                    'inativacao' => $this->pedidoDeInativacao->recentes([$cliente->id])[$cliente->id] ?? null,
                     // Mês da base que respondeu — a pill diz "Baixada", o tooltip diz de quando.
                     'referencia' => $this->situacaoReceita->idadeDaBase()['referencia'],
                 ],
@@ -1852,6 +1883,36 @@ class CarteiraController extends Controller
             ],
             'pedidos' => $pedidos,
         ]);
+    }
+
+    /**
+     * "Solicitar inativação": e-mail ao Cadastro pedindo para inativar no TOTVS esta
+     * filial, cujo CNPJ está irregular na Receita. Quem clicou vai em cópia. JSON porque
+     * o botão vive na linha da tabela e na filial expandida — uma visita do Inertia
+     * recarregaria a lista e fecharia a filial aberta.
+     *
+     * Mesmo escopo das outras ações da linha (`autorizarCliente`). A regra (só CNPJ
+     * irregular, sem repetir em 30 dias) mora em `PedidoDeInativacao`.
+     */
+    public function solicitarInativacao(Request $request, Cliente $cliente): JsonResponse
+    {
+        $this->autorizarCliente($request, $cliente);
+
+        $resultado = $this->pedidoDeInativacao->solicitar($cliente, $request->user());
+
+        return match ($resultado['status']) {
+            'nao_irregular' => response()->json([
+                'mensagem' => 'O CNPJ deste cliente não está irregular na Receita — nada foi enviado.',
+            ], 422),
+            'ja_solicitado' => response()->json([
+                'mensagem' => 'A inativação deste cliente já foi solicitada.',
+                'inativacao' => PedidoDeInativacao::paraTela($resultado['solicitacao']),
+            ], 409),
+            'enviado' => response()->json([
+                'mensagem' => 'Pedido enviado para '.$resultado['destino'].'.',
+                'inativacao' => PedidoDeInativacao::paraTela($resultado['solicitacao']),
+            ]),
+        };
     }
 
     public function registrarMotivoInatividade(Request $request, Cliente $cliente): RedirectResponse
