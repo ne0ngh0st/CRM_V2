@@ -84,8 +84,8 @@ class ImportLeadsLegado extends Command
 
         // CNPJ não ativo na Receita não fica no CRM (ver `totvs:import-leads`). Aqui só o
         // que já é conhecido sai: este comando não segura o lead de situação desconhecida.
-        $excluidos = app(SituacaoCadastral::class)->excluirLeadsNaoAtivos();
-        $this->info('Excluídos por CNPJ não ativo na Receita: '.array_sum($excluidos));
+        $sincronia = app(SituacaoCadastral::class)->sincronizarLeads();
+        $this->info('Excluídos por CNPJ não ativo na Receita: '.array_sum($sincronia['excluidos']));
 
         return self::SUCCESS;
     }

@@ -27,7 +27,7 @@ use ZipArchive;
  * por isso a marcação só acontece se a varredura terminou inteira. Uma carga que caiu
  * no meio do arquivo 7 não pode concluir que tudo que estava nos 8, 9 e 10 não existe.
  *
- * Termina chamando `excluirLeadsNaoAtivos()`: lead que já estava no CRM e cuja situação
+ * Termina chamando `sincronizarLeads()`: lead que já estava no CRM e cuja situação
  * passou a ser conhecida como não ativa sai na hora, sem esperar o próximo import.
  */
 class ImportarSituacoesReceita extends Command
@@ -92,11 +92,12 @@ class ImportarSituacoesReceita extends Command
 
         $this->gravar($achados, $inexistentes, $referencia);
 
-        $excluidos = $situacoes->excluirLeadsNaoAtivos();
-        $this->info('Leads da base de prospecção tirados do CRM (CNPJ não ativo): '.array_sum($excluidos));
-        foreach ($excluidos as $situacao => $total) {
+        $leads = $situacoes->sincronizarLeads();
+        $this->info('Leads da base de prospecção tirados do CRM (CNPJ não ativo): '.array_sum($leads['excluidos']));
+        foreach ($leads['excluidos'] as $situacao => $total) {
             $this->line("  {$situacao}: {$total}");
         }
+        $this->info('Leads que voltaram (CNPJ regularizado na Receita): '.$leads['reativados']);
 
         return self::SUCCESS;
     }

@@ -49,12 +49,19 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
 
     public function query(): Builder
     {
-        return $this->query;
+        /*
+         * Situação na Receita de cada filial, pelo join (1:1, indexado por
+         * `clientes.cnpj_digitos`) e não uma consulta por linha. Alias próprio porque o
+         * filtro `?receita=` da tela pode já ter juntado `cnpj_situacoes as rf`.
+         */
+        return (clone $this->query)
+            ->leftJoin('cnpj_situacoes as rf_export', 'rf_export.cnpj', '=', 'clientes.cnpj_digitos')
+            ->addSelect('rf_export.situacao as situacao_receita');
     }
 
     public function headings(): array
     {
-        return ['Cliente', 'CNPJ', 'Telefone', 'E-mail', 'Grupo', 'Vendedor', 'Estado', 'Segmento', 'Status', 'Aderência', 'Última Compra'];
+        return ['Cliente', 'CNPJ', 'Telefone', 'E-mail', 'Grupo', 'Vendedor', 'Estado', 'Segmento', 'Status', 'Aderência', 'Última Compra', 'Situação Receita'];
     }
 
     /** @param  Cliente  $cliente */
@@ -86,6 +93,8 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
             },
             $aderencia,
             optional($cliente->data_ultima_compra)->format('d/m/Y'),
+            // Vazio = CNPJ nunca verificado (ou CPF). Mesmos nomes da Receita.
+            $cliente->situacao_receita,
         ];
     }
 

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Jobs\AquecerCacheDashboardJob;
+use App\Services\Receita\SituacaoCadastral;
 use Aws\CloudWatch\CloudWatchClient;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
@@ -86,6 +87,16 @@ class PublicarMetricas extends Command
             'FilaProfundidade' => $fila,
             'AquecimentoIdadeMinutos' => $idadeMinutos,
             'JobsFalhados' => DB::table('failed_jobs')->count(),
+            /*
+             * Dias desde a última carga da base aberta da Receita (`receita:importar-
+             * situacoes`, semanal). A base sai uma vez por mês, então até ~45 dias é
+             * normal; o alarme é em 60. Se a Receita mudar o endereço da base, a carga
+             * passa a falhar todo domingo em silêncio — é isto que acusa.
+             *
+             * 999 sem carga nenhuma, pelo mesmo motivo do aquecimento: ausência de dado
+             * não pode parecer normalidade.
+             */
+            'ReceitaBaseIdadeDias' => app(SituacaoCadastral::class)->idadeDaBase()['dias'] ?? 999,
         ];
     }
 

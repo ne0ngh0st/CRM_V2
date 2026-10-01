@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\AtualizarDadosTotvsJob;
 use App\Models\TotvsImportacao;
+use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\AtualizadorTotvs;
 use App\Services\Totvs\FrescorDoDado;
 use Illuminate\Http\RedirectResponse;
@@ -50,6 +51,7 @@ class AtualizacaoDadosController extends Controller
 
         return Inertia::render('Atualizacoes/Index', [
             'frescor' => $this->frescor(),
+            'receita' => $this->baseDaReceita(),
             'relatorios' => $this->relatoriosNoS3(),
             'rodadas' => $this->rodadas(),
             'emAndamento' => $this->rodadaEmAndamento() !== null,
@@ -63,6 +65,31 @@ class AtualizacaoDadosController extends Controller
                 'erro' => $request->session()->get('erro'),
             ],
         ]);
+    }
+
+    /**
+     * A carga mensal da base aberta da Receita (situação dos CNPJs de leads e clientes).
+     *
+     * ⚠️ Fica FORA de `FrescorDoDado::porDominio()` de propósito: lá ela entraria no
+     * `pior()` e a pill do Painel acusaria "desatualizado" a cada 3 dias úteis numa base
+     * que só muda uma vez por mês. A regra de idade é a de `SituacaoCadastral`.
+     *
+     * @return array<string, mixed>
+     */
+    private function baseDaReceita(): array
+    {
+        $idade = app(SituacaoCadastral::class)->idadeDaBase();
+
+        return [
+            'referencia' => $idade['referencia'],
+            'carregadaEm' => $idade['carregadaEm']?->toIso8601String(),
+            'dias' => $idade['dias'],
+            'tom' => $idade['tom'],
+            'porSituacao' => DB::table('cnpj_situacoes')
+                ->selectRaw('situacao, COUNT(*) as total')
+                ->groupBy('situacao')->orderByDesc('total')
+                ->pluck('total', 'situacao'),
+        ];
     }
 
     public function disparar(Request $request): RedirectResponse

@@ -2780,7 +2780,13 @@ decisão foi **"nem entram"**, não "esconder": o `totvs:import-leads` não cria
 - **Lead que JÁ ESTÁ no CRM** e passa a ser conhecido como não ativo vira
   `status = excluido` — no import e no fim da carga mensal. ⚠️ Não é apagado:
   `observacoes.lead_id` é ON DELETE SET NULL e apagar soltaria o histórico do vendedor.
-  Lead excluído que volta a ficar ATIVA **não volta sozinho**.
+- **Lead excluído pela Receita VOLTA sozinho** quando o CNPJ volta a ATIVA (decisão do
+  Tony, 2026-10-01, mesmo dia). O que separa "a Receita tirou" de "alguém tirou" é o
+  carimbo `leads.excluido_pela_receita_em`: só volta quem tem. Excluído à mão nunca volta.
+  Os dois sentidos moram em `SituacaoCadastral::sincronizarLeads()`, chamado pela carga e
+  pelos dois imports de leads. ⚠️ Os 3.072 da primeira exclusão em massa foram carimbados
+  pela migration `130000` pela janela de 01/10 11:40–11:59 — conferido no RDS que caíram
+  todos no minuto 11:46.
 - **Manual e site nunca são tocados** — são decisão de quem cadastrou.
 - O botão do cartão CNPJ também grava em `cnpj_situacoes` (última escrita vence; o
   cartão costuma ser mais recente que a base). ⚠️ Mas o lead não sai na hora do clique,
@@ -2794,6 +2800,48 @@ decisão foi **"nem entram"**, não "esconder": o `totvs:import-leads` não cria
   ativos (BAIXADA 4.026, INAPTA 1.784, SUSPENSA 120, NULA 19).
 - Testes: `LeadsSituacaoReceitaTest` (7) + asserção nova no `CartaoCnpjTest`. **5 mutações
   aplicadas, 5 mordidas.** Suíte inteira: **953 testes**.
+
+**A carga não pode morrer calada.** Se a Receita mudar o endereço da base (já mudou em
+2025), a carga falha todo domingo e nada acusa — o mesmo padrão do import parado de
+setembro.
+- `/atualizacoes` mostra o bloco **"Base da Receita"** (mês da base, há quantos dias foi
+  carregada, contagem por situação). ⚠️ Fica FORA de `FrescorDoDado::porDominio()`: lá
+  entraria no `pior()` e a pill do Painel acusaria "desatualizado" numa base mensal.
+- Métrica **`ReceitaBaseIdadeDias`** no `metricas:publicar` (999 sem carga) e alarme
+  **`crm-v2-receita-desatualizada`** (> 60 dias, `breaching`) em
+  `infra/monitoramento/criar-alarmes-aplicacao.sh`.
+- A regra de idade mora em `SituacaoCadastral::idadeDaBase()` (`DIAS_ATENCAO` 45,
+  `DIAS_ALARME` 60). ⚠️ O 60 está escrito também no script do alarme — mudar os dois.
+
+### Situação na Receita evidenciada na Carteira — 2026-10-01
+
+**Decisão do Tony: só evidenciar.** Nada de pedir inativação ao Cadastro nem e-mail, por
+enquanto — a Carteira continua só leitura (Regra nº 4). Retrato de produção no dia:
+**14.659 filiais não ativas** (16% do cadastro), **68 delas compraram nos últimos 290
+dias** — esses são o primeiro alvo se o fluxo de inativação um dia entrar.
+
+- Pill vermelha abaixo do status: na linha agrupada, **"N filiais irregulares"** (ou a
+  situação, se o cliente tem uma filial só); na sub-linha da filial e na ficha, a
+  situação da própria filial. Só aparece quando é irregular — CNPJ nunca verificado não
+  é acusado. Componente único: `Components/Receita/PillReceita.vue`.
+- Filtro **"Receita: CNPJ irregular"** e coluna **"Situação Receita"** no Excel.
+- **"Irregular" = situação conhecida e diferente de ATIVA**, e mora em
+  `SituacaoCadastral::irregular()` / `sqlIrregular()`. O front não tem cópia: o servidor
+  manda `receita.irregular` e `receita.irregulares` prontos.
+- ⚠️ **Grão (lição de 15/09):** agrupado, o filtro traz o cliente com **ao menos uma**
+  filial irregular, a mesma conta da pill — pill aparece ⟺ cliente está no filtro. Os
+  KPIs do topo continuam classificando o cliente por TODAS as filiais dele.
+- ⚠️ **Só "irregular", por latência.** "CNPJ ativo" e "não verificado" chegaram a ser
+  feitos e foram medidos em 4,4 s a frio no escopo admin (precisam olhar todas as filiais
+  de todos os clientes). "Irregular" parte das ~15 mil situações irregulares e ficou no
+  custo da Carteira sem filtro (1,9 s a frio contra 2,1 s; vendedor 282 ms).
+- **`clientes.cnpj_digitos`** — coluna GERADA (STORED, indexada) com os 14 dígitos do
+  `cnpj` mascarado. É o que deixa o cruzamento com `cnpj_situacoes` usar índice. Nenhum
+  import precisa saber dela. ⚠️ O ALTER reconstrói a tabela: 21 s em dev — rodar fora da
+  hora cheia do `totvs:atualizar`.
+- Testes: `CarteiraSituacaoReceitaTest` (7). Mutações aplicadas e mordidas: regra
+  irregular invertida, filtro por filial no modo agrupado (pego pelos KPIs), consolidar
+  sem escopo (pego pelo cliente dividido entre vendedores), pill sem contagem.
 
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { router, Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
+import PillReceita from '@/Components/Receita/PillReceita.vue';
 import SortableTh from '@/Components/Tabela/SortableTh.vue';
 import BotoesContato from '@/Components/Contato/BotoesContato.vue';
 import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
@@ -202,6 +203,8 @@ function criarOrcamento(cliente) {
                             </StatusPill>
                         </button>
                         <StatusPill v-else :tone="TONS_STATUS_CARTEIRA[cliente.status]" size="sm">{{ ROTULOS_STATUS_CARTEIRA[cliente.status] }}</StatusPill>
+                        <!-- Situação na Receita logo abaixo do status: só aparece quando é irregular. -->
+                        <PillReceita :receita="cliente.receita" :lojas="cliente.lojas" class="mt-1 block" />
                     </td>
                     <td class="tbl-td" data-rotulo="Última compra">{{ cliente.dataUltimaCompra ?? 'Nunca' }}</td>
                     <td class="tbl-td" data-rotulo="Último contato">
@@ -371,6 +374,7 @@ function criarOrcamento(cliente) {
                                             <StatusPill :tone="TONS_STATUS_CARTEIRA[filial.status]" size="sm">
                                                 {{ ROTULOS_STATUS_CARTEIRA[filial.status] }}
                                             </StatusPill>
+                                            <PillReceita :receita="filial.receita" class="mt-1 block" />
                                         </td>
                                         <td class="tbl-itens-td">{{ filial.dataUltimaCompra ?? 'Nunca' }}</td>
                                         <td class="tbl-itens-td">

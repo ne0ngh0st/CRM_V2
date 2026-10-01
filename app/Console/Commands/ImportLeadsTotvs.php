@@ -44,7 +44,7 @@ use Illuminate\Support\Facades\DB;
  * fora — "não pode ter nenhuma" não combina com deixar entrar quem nunca foi conferido —
  * e entra sozinho no import seguinte à carga da Receita. Lead que JÁ ESTÁ no CRM e é
  * conhecido como não ativo vira `excluido` (não é apagado; ver
- * `SituacaoCadastral::excluirLeadsNaoAtivos`).
+ * `SituacaoCadastral::sincronizarLeads`), e volta sozinho se o CNPJ for regularizado.
  *
  * ⚠️ `origem = manual` e `origem = wordpress` nunca são tocados: um é cadastro do
  * vendedor pela tela, o outro vem do formulário do site.
@@ -131,9 +131,12 @@ class ImportLeadsTotvs extends Command
 
             $this->info('Leads gravados: '.number_format(count($novos) + count($adotados), 0, ',', '.'));
 
-            $excluidos = $situacao->excluirLeadsNaoAtivos();
-            if ($excluidos !== []) {
-                $this->warn('  já no CRM e tirados agora (CNPJ não ativo): '.number_format(array_sum($excluidos), 0, ',', '.'));
+            $sincronia = $situacao->sincronizarLeads();
+            if ($sincronia['excluidos'] !== []) {
+                $this->warn('  já no CRM e tirados agora (CNPJ não ativo): '.number_format(array_sum($sincronia['excluidos']), 0, ',', '.'));
+            }
+            if ($sincronia['reativados'] > 0) {
+                $this->line('  voltaram (CNPJ regularizado na Receita): '.number_format($sincronia['reativados'], 0, ',', '.'));
             }
         }
 

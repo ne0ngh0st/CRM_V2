@@ -19,6 +19,7 @@ use App\Services\Carteira\MapaDaCarteira;
 use App\Services\Geografia\Mesorregioes;
 use App\Services\Pedidos\StatusPedidoResolver;
 use App\Services\Receita\CartaoCnpjService;
+use App\Services\Receita\SituacaoCadastral;
 use App\Services\Dashboard\DashboardBlocos;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Potencial\FamiliaProduto;
@@ -53,6 +54,7 @@ class CarteiraController extends Controller
         private readonly ClientesDaConta $clientesDaConta,
         private readonly MapaDaCarteira $mapa,
         private readonly Mesorregioes $mesorregioes,
+        private readonly SituacaoCadastral $situacaoReceita,
     ) {
     }
 
@@ -173,6 +175,8 @@ class CarteiraController extends Controller
             'status' => (string) $request->string('status'),
             'aderencia' => (string) $request->string('aderencia'),
             'sem_familia' => (string) $request->string('sem_familia'),
+            // Já normalizado pela whitelist: valor inválido não filtra e não muda a chave.
+            'receita' => $this->filtroReceita($request) ?? '',
             // Já normalizado: `?municipio=abc` não filtra nada e por isso não pode mudar a chave.
             'municipio' => (string) ($this->municipioFiltrado($request) ?? ''),
             'mesorregiao' => (string) ($this->regiaoFiltrada($request) ?? ''),
@@ -247,12 +251,16 @@ class CarteiraController extends Controller
 
         $nomePorCodigo = Segmento::pluck('nome', 'codigo');
 
+        // Situação na Receita do CNPJ de cada linha da página (a âncora, no agrupado):
+        // uma consulta por página, mesmo padrão dos motivos de inatividade.
+        $receitaPorCnpj = $this->situacaoReceita->detalhes($clientes->getCollection()->pluck('cnpj_digitos'));
+
         // Só os grupos que aparecem nesta página — são 2.4k no total, não vale carregar tudo.
         $nomePorGrupo = GrupoCliente::query()
             ->whereIn('codigo', $clientes->getCollection()->pluck('cod_grupo')->filter()->unique())
             ->pluck('nome', 'codigo');
 
-        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $nomePorCodigo, $nomePorGrupo, $hoje) {
+        $clientes->through(function (Cliente $cliente) use ($nomesPorCodVendedor, $motivosPorCliente, $nomePorCodigo, $nomePorGrupo, $hoje, $receitaPorCnpj) {
             $motivo = $motivosPorCliente->get($cliente->id);
 
             /*
@@ -308,6 +316,17 @@ class CarteiraController extends Controller
                     'observacao' => $motivo->observacao,
                     'criadoEm' => $motivo->created_at->format('d/m/Y'),
                 ] : null,
+                /*
+                 * `situacao`: a do CNPJ desta linha (âncora, no agrupado), ou null se nunca
+                 * verificado. `irregulares`: só no agrupado, quantas filiais do cliente
+                 * estão irregulares — é o número que casa com o filtro `?receita=`.
+                 */
+                'receita' => [
+                    'situacao' => $receitaPorCnpj[$cliente->cnpj_digitos]['situacao'] ?? null,
+                    'data' => $receitaPorCnpj[$cliente->cnpj_digitos]['data'] ?? null,
+                    'irregular' => SituacaoCadastral::irregular($receitaPorCnpj[$cliente->cnpj_digitos]['situacao'] ?? null),
+                    'irregulares' => isset($cliente->filiais_irregulares) ? (int) $cliente->filiais_irregulares : null,
+                ],
             ];
         });
 
@@ -333,6 +352,7 @@ class CarteiraController extends Controller
                 'segmento' => $segmento,
                 'status' => $status,
                 'aderencia' => $aderencia,
+                'receita' => $this->filtroReceita($request) ?? '',
                 'ordenar' => $ordenar,
                 /*
                  * Uma linha por cliente (com as filiais contadas) ou uma por filial.
@@ -502,6 +522,12 @@ class CarteiraController extends Controller
             $this->clientesDaConta->aplicar($query, $contaAlvo);
         }
 
+        /*
+         * Situação na Receita. NÃO é faceta do card (o card não desenha situação), então
+         * vale também para os KPIs do topo — mesmo tratamento de busca/estado/segmento.
+         */
+        $this->aplicarFiltroDeReceita($request, $query, $escopada, $paraMapa || $this->agrupar($request));
+
         if ($comFacetas) {
             $porCliente = $paraMapa || $this->agrupar($request);
 
@@ -605,6 +631,70 @@ class CarteiraController extends Controller
     private static function sqlEhEntrega(): string
     {
         return "LEFT(clientes.loja, 1) IN ('".implode("','", self::PREFIXOS_ENTREGA)."')";
+    }
+
+    /**
+     * Valores aceitos em `?receita=` — espelho em `resources/js/constants/receita.js`.
+     *
+     * ⚠️ Só "irregular", e foi decisão de latência (Regra de ouro nº 9), não esquecimento.
+     * "CNPJ ativo" e "não verificado" chegaram a existir e foram medidos em dev a frio,
+     * escopo admin: 4,4 s, contra 1,9 s do "irregular" — precisam olhar todas as filiais
+     * de todos os clientes, enquanto "irregular" parte das ~15 mil situações irregulares.
+     * E diziam pouco: "ativo" é quase a carteira inteira; "não verificado" é CPF e
+     * cadastro sem documento.
+     */
+    private const FILTROS_RECEITA = ['irregular'];
+
+    /** O `?receita=` pela whitelist, ou null. Valor inválido não filtra nada. */
+    private function filtroReceita(Request $request): ?string
+    {
+        $valor = (string) $request->string('receita');
+
+        return in_array($valor, self::FILTROS_RECEITA, true) ? $valor : null;
+    }
+
+    /**
+     * Filtro "CNPJ irregular na Receita", no MESMO grão que a tela exibe — a lição do
+     * filtro de status de 2026-09-15 vale aqui igual.
+     *
+     *   - por CLIENTE (modo agrupado, o padrão): ao menos UMA filial com situação conhecida
+     *     e não ATIVA. É a mesma conta da pill "N filiais irregulares"
+     *     (`resumoDosCodigos()`): pill aparece ⟺ cliente está no filtro;
+     *   - por FILIAL (`agrupar=0`): a situação da própria linha.
+     *
+     * Parte do lado PEQUENO: as situações irregulares, cruzadas com os clientes pelo índice
+     * de `cnpj_digitos`. Equivale a `GROUP BY cod_cliente HAVING SUM(irregular) > 0`, mas
+     * não agrupa as 92 mil filiais — e roda TRÊS vezes por página (KPIs, total, página).
+     * Medido em dev (92k filiais, 81k situações): 598 ms → 188 ms por execução.
+     *
+     * ⚠️ A consolidação usa o ESCOPO, nunca a query já filtrada — mesmo motivo do filtro
+     * de status: tem que ser o conjunto que `resumoDosCodigos()` conta.
+     * ⚠️ `joinSub`, JAMAIS `whereIn(subconsulta)` (ver `aplicarFiltroDeStatus()`).
+     * ⚠️ O cruzamento é por `clientes.cnpj_digitos` (coluna gerada, indexada); um
+     * `REPLACE` no `ON` varreria a tabela inteira.
+     */
+    private function aplicarFiltroDeReceita(Request $request, Builder $query, Builder $escopada, bool $porCliente): void
+    {
+        if ($this->filtroReceita($request) === null) {
+            return;
+        }
+
+        $irregular = SituacaoCadastral::sqlIrregular('rf.situacao');
+
+        if (! $porCliente) {
+            $query->join('cnpj_situacoes as rf', 'rf.cnpj', '=', 'clientes.cnpj_digitos')->whereRaw($irregular);
+
+            return;
+        }
+
+        $consolidado = (clone $escopada)
+            ->select([])
+            ->join('cnpj_situacoes as rf', 'rf.cnpj', '=', 'clientes.cnpj_digitos')
+            ->whereRaw($irregular)
+            ->distinct()
+            ->select('clientes.cod_cliente');
+
+        $query->joinSub($consolidado, 'receita_consolidada', 'receita_consolidada.cod_cliente', '=', 'clientes.cod_cliente');
     }
 
     /**
@@ -1067,7 +1157,11 @@ class CarteiraController extends Controller
             ->orderByRaw("IF({$entrega}, 1, 0)")
             ->orderBy('clientes.loja')
             ->limit(self::LIMITE_FILIAIS)
-            ->get()
+            ->get();
+
+        $receitaPorCnpj = $this->situacaoReceita->detalhes($filiais->pluck('cnpj_digitos'));
+
+        $filiais = $filiais
             ->map(fn (Cliente $filial) => [
                 'id' => $filial->id,
                 'loja' => $filial->loja,
@@ -1082,6 +1176,11 @@ class CarteiraController extends Controller
                 'ehEntrega' => in_array(mb_substr((string) $filial->loja, 0, 1), self::PREFIXOS_ENTREGA, true),
                 'status' => $this->statusResolver->statusPara($filial->data_ultima_compra, $hoje),
                 'dataUltimaCompra' => optional($filial->data_ultima_compra)->format('d/m/Y'),
+                'receita' => [
+                    'situacao' => $receitaPorCnpj[$filial->cnpj_digitos]['situacao'] ?? null,
+                    'data' => $receitaPorCnpj[$filial->cnpj_digitos]['data'] ?? null,
+                    'irregular' => SituacaoCadastral::irregular($receitaPorCnpj[$filial->cnpj_digitos]['situacao'] ?? null),
+                ],
             ]);
 
         return response()->json([
@@ -1198,6 +1297,7 @@ class CarteiraController extends Controller
                 $cliente->lojas = (int) $dados->total_lojas;
                 $cliente->entregas = (int) $dados->entregas;
                 $cliente->cidades = (int) $dados->cidades;
+                $cliente->filiais_irregulares = (int) $dados->irregulares;
 
                 /*
                  * Sob filtro de lugar, o local EXIBIDO é o da filial que casou com o
@@ -1332,6 +1432,14 @@ class CarteiraController extends Controller
             ))
             ->selectRaw('MAX(clientes.data_ultima_compra) as uc')
             ->selectRaw('MAX(clientes.data_ultimo_contato) as uct')
+            /*
+             * Filiais com CNPJ irregular na Receita — a mesma regra do filtro
+             * `?receita=irregular` (`aplicarFiltroDeReceita()`), por isso a pill da linha e
+             * a lista filtrada não têm como divergir. O join é 1:1 (`cnpj` é a chave de
+             * `cnpj_situacoes`), então não mexe nas contagens acima.
+             */
+            ->leftJoin('cnpj_situacoes as rf', 'rf.cnpj', '=', 'clientes.cnpj_digitos')
+            ->selectRaw('SUM('.SituacaoCadastral::sqlIrregular('rf.situacao').') as irregulares')
             /*
              * O ID da âncora, não a loja: o passo 3 busca por chave primária, e isso
              * importa muito mais do que parece (ver o docblock de `ancorasDoResumo()`).
@@ -1707,6 +1815,9 @@ class CarteiraController extends Controller
                 ])->all(),
             ]);
 
+        $receitaDoCliente = $this->situacaoReceita->detalhes([$cliente->cnpj_digitos])[$cliente->cnpj_digitos ?? '']
+            ?? ['situacao' => null, 'data' => null];
+
         return Inertia::render('Carteira/Detalhes', [
             'cliente' => [
                 'id' => $cliente->id,
@@ -1726,6 +1837,12 @@ class CarteiraController extends Controller
                 'vendedorNome' => $this->nomeVendedor->para($cliente->cod_vendedor),
                 'status' => $this->statusResolver->statusPara($cliente->data_ultima_compra, now()),
                 'dataUltimaCompra' => $ultimaCompraFormatada,
+                'receita' => [
+                    ...$receitaDoCliente,
+                    'irregular' => SituacaoCadastral::irregular($receitaDoCliente['situacao']),
+                    // Mês da base que respondeu — a pill diz "Baixada", o tooltip diz de quando.
+                    'referencia' => $this->situacaoReceita->idadeDaBase()['referencia'],
+                ],
             ],
             'kpis' => [
                 'pedidos' => $qtdPedidos,

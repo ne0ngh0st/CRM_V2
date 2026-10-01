@@ -19,6 +19,7 @@ import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import OrdenarMobile from '@/Components/Tabela/OrdenarMobile.vue';
 import { ROTULOS_STATUS_CARTEIRA, ORDENACOES_CARTEIRA } from '@/constants/carteira';
 import { contarFiltrosAtivos } from '@/utils/filtros';
+import { FILTROS_RECEITA } from '@/constants/receita.js';
 
 // Carregado só quando a aba Mapa abre: o componente puxa o Leaflet, e quem fica na lista
 // (a maioria das visitas) não deve baixar nem um byte dele.
@@ -64,6 +65,7 @@ const filtros = reactive({
     segmento: props.filtros.segmento || '',
     status: props.filtros.status || '',
     aderencia: props.filtros.aderencia || '',
+    receita: props.filtros.receita || '',
     // Vem do card de Potencial da Carteira do Painel; não tem campo próprio na barra de
     // filtros — é anunciado por uma faixa acima da tabela, com "limpar".
     sem_familia: props.filtros.semFamilia || '',
@@ -238,7 +240,7 @@ function onBuscaInput() {
 
 function limparFiltros() {
     Object.assign(filtros, {
-        busca: '', estado: '', segmento: '', status: '', aderencia: '', mesorregiao: '',
+        busca: '', estado: '', segmento: '', status: '', aderencia: '', receita: '', mesorregiao: '',
         ordenar: 'nome_asc', visao_supervisor: '', visao_vendedor: '',
     });
     aplicarFiltros();
@@ -281,7 +283,7 @@ function abrirCartaoCnpj(cliente) {
  * — e aí a busca conta.
  */
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
-    'estado', 'segmento', 'status', 'aderencia', 'sem_familia', 'conta_alvo', 'mesorregiao',
+    'estado', 'segmento', 'status', 'aderencia', 'receita', 'sem_familia', 'conta_alvo', 'mesorregiao',
     'visao_supervisor', 'visao_vendedor',
 ]));
 
@@ -376,6 +378,14 @@ function limparContaAlvo() {
                             <option value="dentro">No segmento</option>
                             <option value="fora">Fora do segmento</option>
                             <option value="sem_segmento">Sem segmento definido</option>
+                        </FilterField>
+
+                        <!-- Situação do CNPJ na Receita (carga mensal da base aberta). "Irregular"
+                             = ao menos uma filial baixada/inapta/suspensa/nula/inexistente, a mesma
+                             conta da pill da linha. -->
+                        <FilterField label="Receita" :model-value="filtros.receita" @update:model-value="(v) => { filtros.receita = v; aplicarFiltros(); }">
+                            <option value="">Todas</option>
+                            <option v-for="(rotulo, valor) in FILTROS_RECEITA" :key="valor" :value="valor">{{ rotulo }}</option>
                         </FilterField>
 
                         <FilterField v-if="visao.supervisores.length" label="Supervisão" :model-value="filtros.visao_supervisor" @update:model-value="(v) => { filtros.visao_supervisor = v; filtros.visao_vendedor = ''; aplicarFiltros(); }">

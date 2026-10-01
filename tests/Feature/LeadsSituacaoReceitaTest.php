@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use App\Services\Receita\SituacaoCadastral;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -93,7 +95,7 @@ class LeadsSituacaoReceitaTest extends TestCase
         $this->situacao(self::INAPTA, 'INAPTA');
         $this->situacao(self::BAIXADA, 'BAIXADA');
 
-        app(SituacaoCadastral::class)->excluirLeadsNaoAtivos();
+        app(SituacaoCadastral::class)->sincronizarLeads();
 
         $this->assertSame('ativo', DB::table('leads')->where('id', $site)->value('status'));
         $this->assertSame('ativo', DB::table('leads')->where('id', $manual)->value('status'));
@@ -154,6 +156,92 @@ class LeadsSituacaoReceitaTest extends TestCase
         $this->assertSame('ativo', DB::table('leads')->value('status'));
     }
 
+    public function test_exclusao_pela_receita_grava_o_carimbo(): void
+    {
+        $id = $this->lead(self::BAIXADA);
+        $this->situacao(self::BAIXADA, 'BAIXADA');
+
+        app(SituacaoCadastral::class)->sincronizarLeads();
+
+        $this->assertNotNull(DB::table('leads')->where('id', $id)->value('excluido_pela_receita_em'));
+    }
+
+    public function test_lead_excluido_pela_receita_volta_quando_o_cnpj_regulariza(): void
+    {
+        $id = $this->lead(self::INAPTA);
+        $this->situacao(self::INAPTA, 'INAPTA');
+        app(SituacaoCadastral::class)->sincronizarLeads();
+        $this->assertSame('excluido', DB::table('leads')->where('id', $id)->value('status'));
+
+        DB::table('cnpj_situacoes')->where('cnpj', self::INAPTA)->update(['situacao' => 'ATIVA']);
+        $resultado = app(SituacaoCadastral::class)->sincronizarLeads();
+
+        $this->assertSame(1, $resultado['reativados']);
+        $this->assertSame('ativo', DB::table('leads')->where('id', $id)->value('status'));
+        $this->assertNull(DB::table('leads')->where('id', $id)->value('excluido_pela_receita_em'));
+    }
+
+    public function test_lead_excluido_a_mao_nao_volta(): void
+    {
+        $id = $this->lead(self::ATIVA, 'sistema', 'excluido');
+        $this->situacao(self::ATIVA, 'ATIVA');
+
+        app(SituacaoCadastral::class)->sincronizarLeads();
+
+        $this->assertSame('excluido', DB::table('leads')->where('id', $id)->value('status'));
+    }
+
+    public function test_lead_da_receita_com_situacao_desconhecida_continua_fora(): void
+    {
+        $id = $this->lead(self::DESCONHECIDA, 'sistema', 'excluido', carimbado: true);
+
+        app(SituacaoCadastral::class)->sincronizarLeads();
+
+        $this->assertSame('excluido', DB::table('leads')->where('id', $id)->value('status'));
+    }
+
+    public function test_metrica_sem_carga_da_999(): void
+    {
+        $this->artisan('metricas:publicar', ['--mostrar' => true])
+            ->expectsOutputToContain(sprintf('  %-26s %s', 'ReceitaBaseIdadeDias', 999))
+            ->assertSuccessful();
+    }
+
+    public function test_idade_da_base_conta_dias_desde_a_carga(): void
+    {
+        DB::table('cnpj_situacoes')->insert([
+            'cnpj' => self::ATIVA, 'situacao' => 'ATIVA', 'fonte' => SituacaoCadastral::FONTE_BASE,
+            'referencia' => '2026-08', 'atualizado_em' => now()->subDays(50),
+        ]);
+        // Cartão consultado ontem NÃO conta como carga da base.
+        DB::table('cnpj_situacoes')->insert([
+            'cnpj' => self::INAPTA, 'situacao' => 'INAPTA', 'fonte' => 'brasilapi',
+            'referencia' => null, 'atualizado_em' => now()->subDay(),
+        ]);
+
+        $idade = app(SituacaoCadastral::class)->idadeDaBase();
+
+        $this->assertSame('2026-08', $idade['referencia']);
+        $this->assertSame(50, $idade['dias']);
+        $this->assertSame('warn', $idade['tom']);
+    }
+
+    public function test_atualizacoes_mostra_a_base_da_receita(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $admin = User::factory()->create(['is_active' => true]);
+        $admin->assignRole('admin');
+        $this->situacao(self::ATIVA, 'ATIVA');
+        $this->situacao(self::BAIXADA, 'BAIXADA');
+
+        $receita = $this->actingAs($admin)->get(route('atualizacoes.index'))
+            ->assertOk()->viewData('page')['props']['receita'];
+
+        $this->assertSame('2026-09', $receita['referencia']);
+        $this->assertSame('ok', $receita['tom']);
+        $this->assertEquals(['ATIVA' => 1, 'BAIXADA' => 1], $receita['porSituacao']);
+    }
+
     // ---------------------------------------------------------------------------------
 
     private function situacao(string $cnpj, string $situacao): void
@@ -164,11 +252,12 @@ class LeadsSituacaoReceitaTest extends TestCase
         ]);
     }
 
-    private function lead(string $cnpj, string $origem = 'sistema'): int
+    private function lead(string $cnpj, string $origem = 'sistema', string $status = 'ativo', bool $carimbado = false): int
     {
         return DB::table('leads')->insertGetId([
             'origem' => $origem, 'nome' => 'EMPRESA '.$cnpj, 'razao_social' => 'EMPRESA '.$cnpj,
-            'cnpj' => $this->mascara($cnpj), 'status' => 'ativo', 'created_at' => now(), 'updated_at' => now(),
+            'cnpj' => $this->mascara($cnpj), 'status' => $status, 'created_at' => now(), 'updated_at' => now(),
+            'excluido_pela_receita_em' => $carimbado ? now() : null,
         ]);
     }
 

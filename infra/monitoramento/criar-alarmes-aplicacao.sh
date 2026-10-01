@@ -63,6 +63,21 @@ aws cloudwatch put-metric-alarm --region "$REGIAO" \
   --alarm-actions "$ARN_TOPICO" --ok-actions "$ARN_TOPICO"
 echo "    crm-v2-jobs-falhando"
 
+echo "==> Alarme: base da Receita desatualizada"
+# A carga `receita:importar-situacoes` roda todo domingo e so faz algo quando a Receita
+# publica um mes novo — ate ~45 dias sem carga e normal. Passou de 60, a carga esta
+# falhando (endereco da base mudou, disco, rede) e a situacao dos CNPJs vai envelhecendo
+# sem ninguem ver. 999 = nunca houve carga. `breaching`: sem metrica, o publicador morreu.
+aws cloudwatch put-metric-alarm --region "$REGIAO" \
+  --alarm-name "crm-v2-receita-desatualizada" \
+  --alarm-description "Base da Receita (situacao dos CNPJs) sem carga ha mais de 60 dias. Ver storage/logs e php artisan receita:importar-situacoes na app-2." \
+  --namespace CRM-V2 --metric-name ReceitaBaseIdadeDias --statistic Maximum \
+  --comparison-operator GreaterThanThreshold --threshold 60 \
+  --evaluation-periods 1 --period 3600 \
+  --treat-missing-data breaching \
+  --alarm-actions "$ARN_TOPICO" --ok-actions "$ARN_TOPICO"
+echo "    crm-v2-receita-desatualizada"
+
 echo ""
 aws cloudwatch describe-alarms --region "$REGIAO" --alarm-name-prefix crm-v2 \
   --query 'MetricAlarms[].{Alarme:AlarmName,Estado:StateValue}' --output table

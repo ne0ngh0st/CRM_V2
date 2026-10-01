@@ -8,9 +8,11 @@ import KpiTile from '@/Components/KpiTile.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao.js';
+import { ROTULOS_SITUACAO_RECEITA, mesDaBase } from '@/constants/receita.js';
 
 const props = defineProps({
     frescor: { type: Array, default: () => [] },
+    receita: { type: Object, default: null },
     relatorios: { type: Object, default: () => ({ itens: [], erro: null }) },
     rodadas: { type: Array, default: () => [] },
     emAndamento: { type: Boolean, default: false },
@@ -208,6 +210,37 @@ const numero = (n) => (n ?? 0).toLocaleString('pt-BR');
                             <p class="border-t border-gray-200 pt-3 text-xs leading-relaxed text-gray-500">
                                 O sistema não fala com o TOTVS: ele só lê o que você exporta. Se a data
                                 acima não avança, o relatório correspondente não foi regerado.
+                            </p>
+                        </div>
+                    </DarkCard>
+
+                    <!-- Base da Receita: mensal, por isso fora do "Idade do dado" (ver o controller). -->
+                    <DarkCard v-if="receita" class="mt-4" title="Base da Receita" subtitle="Situação cadastral dos CNPJs — carga mensal">
+                        <template #icon>
+                            <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                <rect x="3" y="5" width="18" height="14" rx="2" />
+                                <path stroke-linecap="round" d="M7 10h4M7 14h7M15 10h2" />
+                            </svg>
+                        </template>
+
+                        <div class="space-y-3">
+                            <div class="flex flex-wrap gap-2">
+                                <KpiTile :value="mesDaBase(receita.referencia)" label="Base de" :tone="receita.tom" />
+                                <KpiTile :value="textoDias(receita.dias)" label="Carregada" :tone="receita.tom" />
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <KpiTile
+                                    v-for="(total, situacao) in receita.porSituacao"
+                                    :key="situacao"
+                                    :value="numero(total)"
+                                    :label="ROTULOS_SITUACAO_RECEITA[situacao] ?? situacao"
+                                    :tone="situacao === 'ATIVA' ? 'ok' : 'danger'"
+                                    compact
+                                />
+                            </div>
+                            <p class="border-t border-gray-200 pt-3 text-xs leading-relaxed text-gray-500">
+                                Carregada todo domingo, quando a Receita publica um mês novo. Passou de
+                                60 dias sem carga, o alarme dispara: o endereço da base pode ter mudado.
                             </p>
                         </div>
                     </DarkCard>

@@ -50,7 +50,7 @@ class CarteiraExportContatoTest extends TestCase
         $export = $this->planilha($this->admin());
 
         $this->assertSame(
-            ['Cliente', 'CNPJ', 'Telefone', 'E-mail', 'Grupo', 'Vendedor', 'Estado', 'Segmento', 'Status', 'Aderência', 'Última Compra'],
+            ['Cliente', 'CNPJ', 'Telefone', 'E-mail', 'Grupo', 'Vendedor', 'Estado', 'Segmento', 'Status', 'Aderência', 'Última Compra', 'Situação Receita'],
             $export->headings(),
         );
     }

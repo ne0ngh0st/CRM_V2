@@ -7,6 +7,7 @@ import DarkCard from '@/Components/DarkCard.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import CartaoCnpjModal from '@/Components/Receita/CartaoCnpjModal.vue';
+import PillReceita from '@/Components/Receita/PillReceita.vue';
 import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
 import Pagination from '@/Components/Pagination.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira.js';
@@ -123,6 +124,7 @@ const campos = [
                     </template>
                     <template #meta>
                         <StatusPill :tone="TONS_STATUS_CARTEIRA[cliente.status]" surface="dark">{{ ROTULOS_STATUS_CARTEIRA[cliente.status] }}</StatusPill>
+                        <PillReceita :receita="cliente.receita" size="md" surface="dark" />
                         <KpiTile :value="kpis.pedidos" label="Pedidos" />
                         <KpiTile :value="formatBRL(kpis.volumeTotal)" label="Volume total" compact />
                         <KpiTile :value="formatBRL(kpis.ticketMedio)" label="Ticket médio" compact />
