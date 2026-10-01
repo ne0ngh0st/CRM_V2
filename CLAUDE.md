@@ -2602,6 +2602,25 @@ loja com zeros (`0004`) passou, pedido multi-item ok. Nada a ajustar no código.
 e o `PORTAL_PEDIDOS_HABILITADO` no `.env` de lá. O botão segue restrito a admin (`=== 'admin'`
 em `podeEnviarAoPortal`).
 
+### O pedido do Portal nasce na fila de aprovação: data, frete e transportadora — 2026-09-30
+
+A pedido da Laís (SIC), a API passou a criar o pedido em `AWAITING_APPROVAL` em vez de
+rascunho, resolvendo frete, transportadora e datas na criação. Detalhe em
+`docs/integracao-portal-pedidos.md` §4.10 (PDF em `DOCS\CRM\Mudancas-API-Pedidos.pdf`).
+
+- **O modal "Transformar em pedido" pede a data de entrega** e, no FOB, o código Protheus
+  da transportadora (`TransformarEmPedidoModal.vue`). Frete vem do orçamento e agora é
+  obrigatório; orçamento antigo sem frete é mandado para a edição.
+- ⚠️ **A data que vale é a da resposta**, não a digitada: o ERP ajusta com 201 e sem aviso.
+  A resposta inteira fica em `orcamentos.portal_resposta` — não existe endpoint de consulta.
+- 🚨 **Recusa APAGA a chave de idempotência; resultado incerto a MANTÉM** (e reenvia o corpo
+  congelado, sem data nova). Erro do Portal = nada gravado, e a correção mais comum agora é
+  mandar outra data, ou seja, outro corpo. A regra mora em
+  `Orcamento::temEnvioIncertoAoPortal()`. Não "simplificar" para uma regra só: uma das
+  duas direções duplica pedido.
+- FOB é texto livre de propósito (o CRM não tem cadastro de transportadoras; o Portal
+  valida o código). 44 testes, 3 mutações mordidas. **Não testado no homolog ainda.**
+
 ### O 232 virou a fonte da venda; o 200 só dá a etapa — 2026-09-25
 
 Setembro/2026 saía **R$ 61,5 mi no CRM e no BI contra R$ 58,4 mi no Excel do 232**. O
@@ -2737,9 +2756,10 @@ aplicadas e mordidas: segunda deixar de cair na sexta, e a venda do dia virar a 
   `MetaRankingResolver::somarLinhas()`, e a invariante "soma dos subtotais = total" continua
   valendo nas duas versões.
 - 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA (2026-09-10),
-  HOMOLOGADA (2026-09-14), DE-PARA ELIMINADO (2026-09-25). Falta só URL/token de PRODUÇÃO
-  para ligar.** **Análise, payload atual e armadilhas em `docs/integracao-portal-pedidos.md`**
-  (a §4.9 é o estado de hoje; ler de lá antes de encostar). O PDF original está em
+  HOMOLOGADA (2026-09-14), DE-PARA ELIMINADO (2026-09-25), ADAPTADA À API NOVA (2026-09-30:
+  data de entrega/frete/transportadora, §4.10). Falta testar a versão nova no homolog e
+  URL/token de PRODUÇÃO para ligar.** **Análise, payload atual e armadilhas em `docs/integracao-portal-pedidos.md`**
+  (§4.9 e §4.10 são o estado de hoje; ler de lá antes de encostar). O PDF original está em
   `docs/API-Pedidos-Autopel.pdf`.
   - 🟢 **2026-09-25: a API passou a aceitar chave de negócio** (`sellerCode`/`clientCode`+
     `clientStore`/`productCode`/`invoiceType` string) e resolve os ids dela do lado deles.

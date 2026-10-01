@@ -35,6 +35,12 @@ class PortalPedidoPayloadTest extends TestCase
         return new PortalPedidoPayload(new OrcamentoCalculoService());
     }
 
+    /** Data fixa de propósito: o teste confere que ela vai LITERAL no corpo. */
+    private function montar(Orcamento $orcamento, ?string $transportadora = null): array
+    {
+        return $this->payload()->montar($orcamento, '2026-10-15', $transportadora);
+    }
+
     /**
      * @param  array<int, array<string, mixed>>  $itens
      */
@@ -85,7 +91,7 @@ class PortalPedidoPayloadTest extends TestCase
 
     public function test_preco_vai_em_centavos_e_nao_em_reais(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([[]]));
+        $corpo = $this->montar($this->orcamento([[]]));
 
         // R$ 12,50 → 1250. Se algum dia sair 12 ou 12.5, o pedido nasce com doze
         // centavos e meio e o Portal aceita sem reclamar.
@@ -102,7 +108,7 @@ class PortalPedidoPayloadTest extends TestCase
     {
         config()->set('portal.preco_com_ipi', false);
 
-        $corpo = $this->payload()->montar(
+        $corpo = $this->montar(
             $this->orcamento([['valor_unitario' => 10.325, 'calcula_ipi' => true]])
         );
 
@@ -114,7 +120,7 @@ class PortalPedidoPayloadTest extends TestCase
     {
         config()->set('portal.preco_com_ipi', true);
 
-        $corpo = $this->payload()->montar(
+        $corpo = $this->montar(
             $this->orcamento([['valor_unitario' => 10.325, 'calcula_ipi' => true]])
         );
 
@@ -125,7 +131,7 @@ class PortalPedidoPayloadTest extends TestCase
     {
         config()->set('portal.preco_com_ipi', false);
 
-        $corpo = $this->payload()->montar(
+        $corpo = $this->montar(
             $this->orcamento([[
                 'tipo_item' => 'etiqueta',
                 'cod_produto' => 'E9',
@@ -141,7 +147,7 @@ class PortalPedidoPayloadTest extends TestCase
     {
         config()->set('portal.preco_com_ipi', false);
 
-        $corpo = $this->payload()->montar(
+        $corpo = $this->montar(
             $this->orcamento(
                 [['valor_unitario' => 10.325, 'calcula_ipi' => true]],
                 ['tipo_produto_servico' => 'servico']
@@ -153,7 +159,7 @@ class PortalPedidoPayloadTest extends TestCase
 
     public function test_produto_vai_pelo_codigo_do_totvs_nao_por_id(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([['cod_produto' => 'PA0001']]));
+        $corpo = $this->montar($this->orcamento([['cod_produto' => 'PA0001']]));
 
         $this->assertSame('PA0001', $corpo['products'][0]['productCode']);
         $this->assertArrayNotHasKey('productId', $corpo['products'][0]);
@@ -161,7 +167,7 @@ class PortalPedidoPayloadTest extends TestCase
 
     public function test_tipo_de_nota_vai_como_string_do_enum(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([[]]));
+        $corpo = $this->montar($this->orcamento([[]]));
 
         // Default do config: SALE (Venda Consumo). Nunca o inteiro 2 antigo.
         $this->assertSame('SALE', $corpo['products'][0]['invoiceType']);
@@ -169,7 +175,7 @@ class PortalPedidoPayloadTest extends TestCase
 
     public function test_chaves_de_negocio_vao_como_estao_no_orcamento(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([[]], [], [
+        $corpo = $this->montar($this->orcamento([[]], [], [
             'cod_cliente' => '041626',
             'loja' => '0002',
             'cod_vendedor' => '010150',
@@ -187,7 +193,7 @@ class PortalPedidoPayloadTest extends TestCase
         $this->expectException(PortalPedidoInvalidoException::class);
         $this->expectExceptionMessageMatches('/cliente do TOTVS/');
 
-        $this->payload()->montar($this->orcamento([[]], [], ['semCliente' => true]));
+        $this->montar($this->orcamento([[]], [], ['semCliente' => true]));
     }
 
     public function test_usuario_sem_codigo_de_vendedor_e_recusado(): void
@@ -195,7 +201,7 @@ class PortalPedidoPayloadTest extends TestCase
         $this->expectException(PortalPedidoInvalidoException::class);
         $this->expectExceptionMessageMatches('/código de vendedor/');
 
-        $this->payload()->montar($this->orcamento([[]], [], ['semVendedor' => true]));
+        $this->montar($this->orcamento([[]], [], ['semVendedor' => true]));
     }
 
     public function test_quantidade_fracionada_e_recusada_antes_de_chamar_a_api(): void
@@ -203,14 +209,14 @@ class PortalPedidoPayloadTest extends TestCase
         $this->expectException(PortalPedidoInvalidoException::class);
         $this->expectExceptionMessageMatches('/quantidade inteira/');
 
-        $this->payload()->montar($this->orcamento([['quantidade' => 2.5]]));
+        $this->montar($this->orcamento([['quantidade' => 2.5]]));
     }
 
     public function test_quantidade_menor_que_um_e_recusada(): void
     {
         $this->expectException(PortalPedidoInvalidoException::class);
 
-        $this->payload()->montar($this->orcamento([['quantidade' => 0.5]]));
+        $this->montar($this->orcamento([['quantidade' => 0.5]]));
     }
 
     public function test_item_sem_codigo_de_produto_explica_o_caso_da_etiqueta(): void
@@ -218,7 +224,7 @@ class PortalPedidoPayloadTest extends TestCase
         $this->expectException(PortalPedidoInvalidoException::class);
         $this->expectExceptionMessageMatches('/etiqueta/i');
 
-        $this->payload()->montar(
+        $this->montar(
             $this->orcamento([['cod_produto' => null, 'tipo_item' => 'etiqueta']])
         );
     }
@@ -228,31 +234,66 @@ class PortalPedidoPayloadTest extends TestCase
         $this->expectException(PortalPedidoInvalidoException::class);
         $this->expectExceptionMessageMatches('/some as quantidades/');
 
-        $this->payload()->montar($this->orcamento([[], []]));
+        $this->montar($this->orcamento([[], []]));
     }
 
-    public function test_frete_ausente_e_omitido_e_nao_vai_como_nulo(): void
+    /** Desde 30/09/2026 o frete é obrigatório: o pedido nasce direto na fila de aprovação. */
+    public function test_orcamento_sem_frete_e_recusado(): void
+    {
+        $this->expectException(PortalPedidoInvalidoException::class);
+        $this->expectExceptionMessageMatches('/tipo de frete/');
+
+        $this->montar($this->orcamento([[]], ['tipo_frete' => null]));
+    }
+
+    public function test_opcional_vazio_e_omitido_e_nao_vai_como_nulo(): void
     {
         // O corpo é validado de forma estrita do outro lado: campo desconhecido OU
         // nulo indevido responde 400.
-        $corpo = $this->payload()->montar(
-            $this->orcamento([[]], ['tipo_frete' => null])
-        );
+        $corpo = $this->montar($this->orcamento([[]]));
 
-        $this->assertArrayNotHasKey('shippingType', $corpo);
         $this->assertArrayNotHasKey('orderNote', $corpo);
+        $this->assertArrayNotHasKey('carrierCode', $corpo);
     }
 
-    public function test_frete_preenchido_vai_no_payload(): void
+    public function test_data_de_entrega_e_frete_vao_no_corpo(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([[]], ['tipo_frete' => 'FOB']));
+        $corpo = $this->montar($this->orcamento([[]], ['tipo_frete' => 'CIF']));
+
+        $this->assertSame('CIF', $corpo['shippingType']);
+        $this->assertSame('2026-10-15', $corpo['deliveryTime']);
+    }
+
+    /**
+     * ⚠️ No CIF quem escolhe a transportadora é o ERP, e a API documenta que o campo
+     * NÃO vai. Mesmo que alguém a informe, ela não pode vazar para o corpo.
+     */
+    public function test_cif_nunca_manda_transportadora(): void
+    {
+        $corpo = $this->montar($this->orcamento([[]], ['tipo_frete' => 'CIF']), 'T00042');
+
+        $this->assertArrayNotHasKey('carrierCode', $corpo);
+    }
+
+    public function test_fob_manda_a_transportadora_contratada(): void
+    {
+        $corpo = $this->montar($this->orcamento([[]], ['tipo_frete' => 'FOB']), ' T00042 ');
 
         $this->assertSame('FOB', $corpo['shippingType']);
+        $this->assertSame('T00042', $corpo['carrierCode']);
+    }
+
+    public function test_fob_sem_transportadora_e_recusado(): void
+    {
+        $this->expectException(PortalPedidoInvalidoException::class);
+        $this->expectExceptionMessageMatches('/transportadora/');
+
+        $this->montar($this->orcamento([[]], ['tipo_frete' => 'FOB']));
     }
 
     public function test_referencia_liga_o_pedido_ao_orcamento(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([[]]));
+        $corpo = $this->montar($this->orcamento([[]]));
 
         $this->assertSame('ORC-77', $corpo['orderReference']);
         $this->assertSame('900', $corpo['products'][0]['orderLine']);
@@ -260,7 +301,7 @@ class PortalPedidoPayloadTest extends TestCase
 
     public function test_quantidade_inteira_entra_como_int(): void
     {
-        $corpo = $this->payload()->montar($this->orcamento([['quantidade' => 10]]));
+        $corpo = $this->montar($this->orcamento([['quantidade' => 10]]));
 
         $this->assertSame(10, $corpo['products'][0]['quantity']);
     }

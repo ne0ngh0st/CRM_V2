@@ -54,6 +54,7 @@ class Orcamento extends Model
             'valor_total' => 'decimal:2',
             'desconto_pct_max' => 'decimal:2',
             'portal_payload' => 'array',
+            'portal_resposta' => 'array',
             'portal_enviado_em' => 'datetime',
         ];
     }
@@ -90,6 +91,19 @@ class Orcamento extends Model
     public function foiEnviadoAoPortal(): bool
     {
         return $this->portal_pedido_id !== null;
+    }
+
+    /**
+     * Existe uma tentativa de envio cujo resultado NÃO se sabe (na fila, ou o Portal não
+     * respondeu) — ela pode ter criado o pedido. Enquanto for verdade, o próximo clique
+     * reenvia o corpo congelado com a mesma chave, sem data nova. Recusa do Portal apaga
+     * a chave (erro lá = nada gravado), então não cai aqui.
+     */
+    public function temEnvioIncertoAoPortal(): bool
+    {
+        return ! $this->foiEnviadoAoPortal()
+            && filled($this->portal_idempotency_key)
+            && is_array($this->portal_payload);
     }
 
     public function itens(): HasMany

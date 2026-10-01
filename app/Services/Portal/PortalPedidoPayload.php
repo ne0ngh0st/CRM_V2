@@ -29,9 +29,13 @@ class PortalPedidoPayload
     }
 
     /**
+     * `$dataEntrega` (Y-m-d) e `$transportadora` NÃO moram no orçamento: são decididos
+     * na hora de transformar em pedido, no modal — a data é o que o cliente pediu hoje,
+     * não o que estava no papel semanas atrás.
+     *
      * @return array<string, mixed>
      */
-    public function montar(Orcamento $orcamento): array
+    public function montar(Orcamento $orcamento, string $dataEntrega, ?string $transportadora = null): array
     {
         $itens = $orcamento->itens;
 
@@ -75,12 +79,45 @@ class PortalPedidoPayload
         $this->garantirProdutoUnico($products);
         $this->garantirTiposDeNotaCompativeis($products);
 
+        /*
+         * ⚠️ Desde a versão de 2026-09-30 da API o frete é OBRIGATÓRIO: o pedido nasce
+         * direto na fila de aprovação, e no CIF é o ERP que escolhe a transportadora na
+         * criação. Orçamento antigo pode ter o campo vazio (a coluna é nullable).
+         */
+        $frete = $orcamento->tipo_frete;
+
+        if (! in_array($frete, ['CIF', 'FOB'], true)) {
+            throw new PortalPedidoInvalidoException(
+                'O orçamento não tem o tipo de frete (CIF ou FOB) definido. Edite o orçamento e escolha o frete antes de transformar em pedido.'
+            );
+        }
+
         $corpo = [
             'sellerCode' => $sellerCode,
             'clientCode' => trim((string) $cliente->cod_cliente),
             'clientStore' => trim((string) $cliente->loja),
+            'shippingType' => $frete,
+            // É um PEDIDO de data, não uma definição: quem valida é o ERP, e a data que
+            // vale é a que volta na resposta (ver GeradorDePedidoNoPortal::enviar()).
+            'deliveryTime' => $dataEntrega,
             'products' => $products,
         ];
+
+        /*
+         * ⚠️ `carrierCode` só no FOB, e NUNCA no CIF — ali quem escolhe é o ERP, e a API
+         * documenta que não se envia. Mandar "por via das dúvidas" é pedir um 400.
+         */
+        if ($frete === 'FOB') {
+            $transportadora = trim((string) $transportadora);
+
+            if ($transportadora === '') {
+                throw new PortalPedidoInvalidoException(
+                    'Frete FOB exige o código da transportadora que o cliente contratou.'
+                );
+            }
+
+            $corpo['carrierCode'] = $transportadora;
+        }
 
         /*
          * ⚠️ A API valida o corpo de forma ESTRITA: qualquer campo fora dos documentados
@@ -88,10 +125,6 @@ class PortalPedidoPayload
          * nunca mandado como null. O CRM não modela endereço de entrega alternativo, então
          * `deliveryClient*` fica de fora — o Portal entrega no próprio cliente.
          */
-        if (in_array($orcamento->tipo_frete, ['CIF', 'FOB'], true)) {
-            $corpo['shippingType'] = $orcamento->tipo_frete;
-        }
-
         $corpo['orderReference'] = 'ORC-'.$orcamento->id;
 
         if (filled($orcamento->observacoes)) {

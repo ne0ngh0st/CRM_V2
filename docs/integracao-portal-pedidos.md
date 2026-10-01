@@ -19,6 +19,10 @@
 > é montado a partir do próprio orçamento. **Ver §4.9.** Não falta mais dado nosso; falta só
 > a URL/token de produção para ligar.
 >
+> 🟡 **API NOVA em 2026-09-30** — o pedido nasce em AWAITING_APPROVAL e passa a exigir
+> data de entrega, frete e (no FOB) transportadora. CRM adaptado; falta testar no homolog.
+> **Ver §4.10.**
+>
 > ✅ **A pergunta que era pré-requisito foi respondida em 2026-09-14: o
 > `api-portal.autopel.com` é ambiente de homologação DE VERDADE, com base separada da
 > produção.** Isso libera criar pedido à vontade ali para testar — e é por isso que ela
@@ -823,6 +827,73 @@ ajusto. Decisão do Tony: não travar com pergunta de formato.
 negócio, `invoiceType` string, cliente/vendedor ausente recusados; os fixtures de IPI
 (10,325 → 1000/1033) continuam. `PortalPedidoTest` (feature) perdeu os casos de CNPJ e
 representante (não existem mais) e trava o FORMATO do corpo no caminho feliz. 32 verdes.
+
+## 4.10 O pedido deixou de ser rascunho: data, frete e transportadora na criação — 2026-09-30
+
+Fonte: `DOCS\CRM\Mudancas-API-Pedidos.pdf`, enviado pelo time do Portal depois da conversa
+com a Laís (SIC). Ela pediu que o pedido entrasse como **"Aguardando aprovação"**, e para
+isso a API passou a resolver frete, transportadora e datas **na própria criação**.
+
+### O que mudou no contrato
+
+| Campo | Antes | Agora |
+|---|---|---|
+| `shippingType` | opcional | **obrigatório** (`CIF` \| `FOB`) |
+| `deliveryTime` | — | **obrigatório**, `YYYY-MM-DD`. É um PEDIDO de data: quem valida é o ERP |
+| `carrierCode` | — | **só no FOB** (código Protheus da transportadora que o cliente contratou). No CIF não se envia: o ERP escolhe a mais barata |
+| status inicial | `PENDING` (rascunho completado no portal) | `AWAITING_APPROVAL` (direto na fila de aprovação) |
+| resposta | `id` | `id`, `status`, `clientId`, `clientCompanyName`, `shippingType`, `carrierCode`, `shippingCost` (centavos, só CIF), `deliveryTime`, `expectedBillingDate` |
+
+Erros novos: 400 de data recusada (a mensagem traz a próxima data válida), 400 de FOB sem
+transportadora, 404 de transportadora inexistente/sem vínculo com o Protheus, 404/409 de
+cálculo de frete sem resposta. Erro continua significando **nada gravado**.
+
+### Como o CRM atende
+
+- **O modal "Transformar em pedido" pede a data de entrega** (mínimo amanhã) e, se o frete
+  do orçamento for FOB, o **código da transportadora** (`TransformarEmPedidoModal.vue`).
+  A data não mora no orçamento: é o que o cliente quer HOJE, não o que estava no papel.
+- **Frete vem do orçamento** (`tipo_frete`, obrigatório no formulário desde julho).
+  Orçamento antigo sem frete: o modal explica e manda para a edição; o servidor também
+  recusa (`PortalPedidoPayload`).
+- **FOB por texto livre**, de propósito: o CRM não tem cadastro de transportadoras, e o
+  Portal valida o código (404 se não existir). Se o vendedor passar a enviar, vale trocar
+  por uma lista — decisão em aberto.
+- **A resposta é gravada em `orcamentos.portal_resposta`** (migration `2026_09_30_100000`).
+  Não existe endpoint de consulta: é a única forma de saber o que ficou gravado.
+- ⚠️ **A data que vale é a da RESPOSTA.** O ERP ajusta a data pedida (15/10 → 17/10) com
+  201 e sem aviso. A notificação diz "fila de aprovação", a entrega e o faturamento
+  previstos e, quando houve ajuste, a data que tinha sido pedida. O selo do pedido na
+  tabela mostra a entrega prevista no tooltip.
+
+### 🚨 A chave de idempotência mudou de regra
+
+Antes ela era mantida em toda retentativa. Agora há dois casos, e eles são opostos:
+
+| Situação | Pode ter criado pedido? | O que acontece |
+|---|---|---|
+| **Recusa** (4xx — inclusive a data recusada) | Não (erro = nada gravado) | A chave é **apagada**. O próximo clique monta corpo novo, com a data nova, e chave nova |
+| **Resultado incerto** (na fila, ou o Portal não respondeu nas 3 tentativas) | **Talvez** | Chave e corpo ficam. O próximo clique **reenvia a requisição idêntica** — o modal vira "Reenviar" e não pede data |
+
+Por quê: o caso mais comum de recusa agora é a data, e a correção é mandar OUTRA data — ou
+seja, outro corpo. Com a chave antiga isso seria 409 de chave reutilizada. Já no resultado
+incerto, montar corpo novo com chave nova é exatamente o caminho que duplica pedido.
+A decisão mora em `Orcamento::temEnvioIncertoAoPortal()`, usada pelo controller, pelo
+gerador e pela tela.
+
+Junto: o `EnviarPedidoAoPortalJob` ganhou `failed()`. Antes, se as 3 tentativas falhassem
+por rede, o orçamento ficava sem pedido e sem erro, em silêncio.
+
+### Testes
+
+`PortalPedidoPayloadTest` + `PortalPedidoTest`: **44 verdes**, 8 casos novos (data
+obrigatória e futura, FOB levando a transportadora, CIF nunca levando, resposta gravada
+com a data ajustada no aviso, recusa liberando chave nova, reenvio incerto mantendo corpo
+e chave, job esgotado). **Três mutações aplicadas, as três mordidas**: recusa sem apagar
+a chave, reenvio sem reaproveitar o corpo, CIF mandando transportadora.
+
+⚠️ **Ainda não testado contra o homolog** — falta a Laís/time confirmar que a versão nova
+está no ar lá.
 
 ## 5. Lacunas de schema — medidas, não estimadas
 

@@ -58,4 +58,17 @@ class EnviarPedidoAoPortalJob implements ShouldQueue
 
         $gerador->enviar($orcamento);
     }
+
+    /**
+     * Esgotou as tentativas sem resposta. Sem isto o orçamento ficava calado para
+     * sempre: nem pedido, nem erro, e o vendedor sem saber se clica de novo.
+     */
+    public function failed(?\Throwable $e): void
+    {
+        $orcamento = Orcamento::find($this->orcamentoId);
+
+        if ($orcamento !== null) {
+            app(GeradorDePedidoNoPortal::class)->registrarFalhaDeRede($orcamento);
+        }
+    }
 }

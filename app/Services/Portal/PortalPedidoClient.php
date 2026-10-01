@@ -19,7 +19,7 @@ class PortalPedidoClient
 {
     /**
      * @param  array<string, mixed>  $corpo
-     * @return array{id:int, replay:bool}
+     * @return array{id:int, replay:bool, dados:array<string, mixed>}
      */
     public function criarPedido(array $corpo, string $idempotencyKey): array
     {
@@ -59,6 +59,8 @@ class PortalPedidoClient
                 );
             }
 
+            $dados = $resposta->json('payload');
+
             return [
                 'id' => (int) $id,
                 /*
@@ -66,6 +68,11 @@ class PortalPedidoClient
                  * erro; é a idempotência funcionando depois de uma retentativa.
                  */
                 'replay' => filter_var($resposta->header('Idempotent-Replay'), FILTER_VALIDATE_BOOLEAN),
+                /*
+                 * O que o ERP decidiu (status, frete, transportadora, datas). Não existe
+                 * endpoint de consulta — é a única chance de saber o que ficou gravado.
+                 */
+                'dados' => is_array($dados) ? $dados : [],
             ];
         }
 

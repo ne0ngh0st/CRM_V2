@@ -154,6 +154,10 @@ class OrcamentoController extends Controller
             'portalPedidoId' => $o->portal_pedido_id,
             'portalErro' => $o->portal_erro,
             'portalEnviadoEm' => optional($o->portal_enviado_em)->format('d/m/Y H:i'),
+            // O que o ERP decidiu, não o que foi pedido (ver GeradorDePedidoNoPortal).
+            'portalEntregaPrevista' => $o->portal_resposta['deliveryTime'] ?? null,
+            // Próximo clique reenvia o corpo congelado: o modal não pede data nova.
+            'portalReenvio' => $o->temEnvioIncertoAoPortal(),
             'itens' => $o->itens->map(fn (OrcamentoItem $i) => [
                 'id' => $i->id,
                 'tipoItem' => $i->tipo_item,
@@ -498,8 +502,25 @@ class OrcamentoController extends Controller
             ]);
         }
 
+        /*
+         * A data de entrega e a transportadora são escolhidas no modal, na hora do envio.
+         * Num reenvio de resultado incerto elas não se aplicam: vai o corpo congelado.
+         * `after:today` é só o piso óbvio — quem valida a data de verdade é o ERP, que
+         * recusa com 400 e devolve a próxima data válida.
+         */
+        $reenvio = $orcamento->temEnvioIncertoAoPortal();
+
+        $dados = $request->validate([
+            'data_entrega' => [$reenvio ? 'nullable' : 'required', 'date_format:Y-m-d', 'after:today'],
+            'transportadora' => ['nullable', 'string', 'max:20', 'regex:/^[A-Za-z0-9]+$/'],
+        ], [
+            'data_entrega.required' => 'Informe a data de entrega desejada.',
+            'data_entrega.after' => 'A data de entrega precisa ser depois de hoje.',
+            'transportadora.regex' => 'Use o código da transportadora no Protheus (só letras e números).',
+        ]);
+
         try {
-            $gerador->preparar($orcamento);
+            $reaproveitou = $gerador->preparar($orcamento, (string) ($dados['data_entrega'] ?? ''), $dados['transportadora'] ?? null);
         } catch (PortalPedidoInvalidoException $e) {
             /*
              * Nada foi gravado. A mensagem é escrita para o vendedor e diz o que fazer,
@@ -512,7 +533,9 @@ class OrcamentoController extends Controller
 
         return back()->with('portalAviso', [
             'tipo' => 'ok',
-            'mensagem' => 'Enviando ao Portal. Você recebe o número do pedido pelo sino em alguns segundos.',
+            'mensagem' => $reaproveitou
+                ? 'Reenviando a mesma requisição da tentativa anterior (com a mesma data de entrega). Se o pedido já tiver sido criado, o Portal devolve o mesmo número pelo sino.'
+                : 'Enviando ao Portal. Você recebe o número do pedido e a data de entrega confirmada pelo sino em alguns segundos.',
         ]);
     }
 

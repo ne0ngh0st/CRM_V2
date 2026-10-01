@@ -204,7 +204,9 @@ function pdfUrl(orcamento, download) {
                                 <span
                                     v-else-if="orcamento.portalPedidoId"
                                     class="inline-flex items-center rounded border border-green-300 bg-green-50 px-1.5 text-[0.65rem] font-medium leading-5 text-green-700"
-                                    :title="`Pedido criado no Portal em ${orcamento.portalEnviadoEm}`"
+                                    :title="`Pedido criado no Portal em ${orcamento.portalEnviadoEm}` + (orcamento.portalEntregaPrevista
+                                        ? ` · entrega prevista ${orcamento.portalEntregaPrevista.split('-').reverse().join('/')}`
+                                        : '')"
                                 >
                                     nº {{ orcamento.portalPedidoId }}
                                 </span>

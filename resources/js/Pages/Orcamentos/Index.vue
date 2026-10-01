@@ -10,8 +10,7 @@ import Pagination from '@/Components/Pagination.vue';
 import OrcamentosTabela from '@/Components/Orcamentos/OrcamentosTabela.vue';
 import RejeitarOrcamentoModal from '@/Components/Orcamentos/RejeitarOrcamentoModal.vue';
 import ExcluirOrcamentoModal from '@/Components/Orcamentos/ExcluirOrcamentoModal.vue';
-import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
-import { useConfirmacao } from '@/composables/useConfirmacao.js';
+import TransformarEmPedidoModal from '@/Components/Orcamentos/TransformarEmPedidoModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import { ROTULOS_STATUS_ORCAMENTO, ROTULOS_NIVEL_APROVACAO } from '@/constants/orcamentos.js';
 import { contarFiltrosAtivos } from '@/utils/filtros';
@@ -164,25 +163,13 @@ function aprovar(orcamento) {
 // na hora, e não pelo sino minutos depois.
 const portalAviso = computed(() => usePage().props.flash?.portalAviso ?? null);
 
-const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+const modalPortal = ref(false);
 
-async function enviarAoPortal(orcamento) {
-    // ⚠️ Confirmação explícita: isto cria um pedido no Portal, que é ação para fora do
-    // CRM e não tem desfazer por aqui.
-    const ok = await confirmar({
-        titulo: 'Transformar em pedido',
-        subtitulo: orcamento.clienteNome,
-        mensagem: `O orçamento #${orcamento.id} (${formatBRL(orcamento.valorTotal)}) vira um pedido no Portal Autopel.`,
-        detalhe: 'O pedido é criado fora do CRM e não há como desfazer por aqui.',
-        rotuloConfirmar: 'Transformar em pedido',
-        tom: 'atencao',
-    });
-    if (!ok) return;
-
-    router.post(route('orcamentos.portal', orcamento.id), {}, {
-        preserveScroll: true,
-        preserveState: true,
-    });
+// A confirmação mora no TransformarEmPedidoModal: ela pede a data de entrega (e, no
+// FOB, a transportadora) e o servidor pode recusá-las com erro de validação.
+function enviarAoPortal(orcamento) {
+    orcamentoAtivo.value = orcamento;
+    modalPortal.value = true;
 }
 </script>
 
@@ -375,6 +362,6 @@ async function enviarAoPortal(orcamento) {
         <RejeitarOrcamentoModal :show="modalRejeitar" :orcamento="orcamentoAtivo" @close="modalRejeitar = false" />
         <ExcluirOrcamentoModal :show="modalExcluir" :orcamento="orcamentoAtivo" @close="modalExcluir = false" />
 
-        <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
+        <TransformarEmPedidoModal :show="modalPortal" :orcamento="orcamentoAtivo" @close="modalPortal = false" />
     </AuthenticatedLayout>
 </template>

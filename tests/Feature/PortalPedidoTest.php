@@ -58,6 +58,12 @@ class PortalPedidoTest extends TestCase
         return $admin;
     }
 
+    /** O que o modal manda: a data de entrega desejada (e a transportadora, no FOB). */
+    private function envio(array $extra = []): array
+    {
+        return array_merge(['data_entrega' => now()->addDays(10)->format('Y-m-d')], $extra);
+    }
+
     /** Cenário ligado: cliente do TOTVS, orçamento aprovado e um item de catálogo. */
     private function cenario(array $sobrescreve = []): array
     {
@@ -77,6 +83,7 @@ class PortalPedidoTest extends TestCase
             'cliente_nome' => 'CENTRAL SUPERMERCADOS',
             'cliente_cnpj' => '08019075000207',
             'tipo_produto_servico' => 'servico',
+            'tipo_frete' => $sobrescreve['frete'] ?? 'CIF',
             'valor_total' => 2700,
             'nivel_aprovacao' => 'nenhum',
             'status_gestor' => $sobrescreve['status'] ?? 'aprovado',
@@ -217,7 +224,7 @@ class PortalPedidoTest extends TestCase
         Bus::fake();
         [$vendedor, $orcamento] = $this->cenario(['semCliente' => true]);
 
-        $this->actingAs($this->admin())->post(route('orcamentos.portal', $orcamento->id));
+        $this->actingAs($this->admin())->post(route('orcamentos.portal', $orcamento->id), $this->envio());
 
         Bus::assertNotDispatched(EnviarPedidoAoPortalJob::class);
         $this->assertNull($orcamento->fresh()->portal_idempotency_key);
@@ -233,7 +240,7 @@ class PortalPedidoTest extends TestCase
         [$vendedor, $orcamento] = $this->cenario();
 
         $this->actingAs($this->admin())
-            ->post(route('orcamentos.portal', $orcamento->id))
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio())
             ->assertRedirect();
 
         Bus::assertDispatched(EnviarPedidoAoPortalJob::class);
@@ -250,6 +257,8 @@ class PortalPedidoTest extends TestCase
         $this->assertSame(900, $corpo['products'][0]['quantity']);
         $this->assertSame('V23730', $corpo['products'][0]['productCode']);
         $this->assertSame('SALE', $corpo['products'][0]['invoiceType']);
+        $this->assertSame('CIF', $corpo['shippingType']);
+        $this->assertSame(now()->addDays(10)->format('Y-m-d'), $corpo['deliveryTime']);
     }
 
     /**
@@ -260,10 +269,10 @@ class PortalPedidoTest extends TestCase
         Bus::fake();
         [$vendedor, $orcamento] = $this->cenario();
 
-        $this->actingAs($this->admin())->post(route('orcamentos.portal', $orcamento->id));
+        $this->actingAs($this->admin())->post(route('orcamentos.portal', $orcamento->id), $this->envio());
         $chave = $orcamento->fresh()->portal_idempotency_key;
 
-        $this->actingAs($this->admin())->post(route('orcamentos.portal', $orcamento->id));
+        $this->actingAs($this->admin())->post(route('orcamentos.portal', $orcamento->id), $this->envio());
 
         $this->assertSame($chave, $orcamento->fresh()->portal_idempotency_key);
     }
@@ -277,7 +286,7 @@ class PortalPedidoTest extends TestCase
         [$vendedor, $orcamento] = $this->cenario();
         $gerador = app(GeradorDePedidoNoPortal::class);
 
-        $gerador->preparar($orcamento);
+        $gerador->preparar($orcamento, '2026-10-15');
         $gerador->enviar($orcamento->fresh());
 
         $orcamento->refresh();
@@ -307,7 +316,7 @@ class PortalPedidoTest extends TestCase
         [$vendedor, $orcamento] = $this->cenario();
         $gerador = app(GeradorDePedidoNoPortal::class);
 
-        $gerador->preparar($orcamento);
+        $gerador->preparar($orcamento, '2026-10-15');
         $gerador->enviar($orcamento->fresh());
 
         $orcamento->refresh();
@@ -340,13 +349,174 @@ class PortalPedidoTest extends TestCase
         [$vendedor, $orcamento] = $this->cenario();
         $gerador = app(GeradorDePedidoNoPortal::class);
 
-        $gerador->preparar($orcamento);
-        $gerador->enviar($orcamento->fresh());
-        $gerador->enviar($orcamento->fresh());
+        // Recusa apaga a chave (nada foi gravado lá), então cada tentativa é um preparo novo.
+        foreach ([1, 2] as $tentativa) {
+            $gerador->preparar($orcamento->fresh(), '2026-10-15');
+            $gerador->enviar($orcamento->fresh());
+        }
 
         // Se a chave de idempotência do NotificacaoService fosse usada aqui, a segunda
         // falha ficaria muda e o vendedor concluiria que deu certo.
         $this->assertSame(2, Notificacao::where('user_id', $vendedor->id)
             ->where('tipo', 'portal_pedido_erro')->count());
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Versão da API de 2026-09-30: data de entrega, transportadora e resposta do ERP
+    |--------------------------------------------------------------------------
+    */
+
+    public function test_sem_data_de_entrega_nada_e_preparado(): void
+    {
+        Bus::fake();
+        [, $orcamento] = $this->cenario();
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), [])
+            ->assertSessionHasErrors('data_entrega');
+
+        Bus::assertNotDispatched(EnviarPedidoAoPortalJob::class);
+        $this->assertNull($orcamento->fresh()->portal_idempotency_key);
+    }
+
+    public function test_data_de_hoje_ou_passada_e_recusada(): void
+    {
+        [, $orcamento] = $this->cenario();
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio(['data_entrega' => now()->format('Y-m-d')]))
+            ->assertSessionHasErrors('data_entrega');
+    }
+
+    public function test_fob_leva_a_transportadora_ate_o_corpo(): void
+    {
+        Bus::fake();
+        [, $orcamento] = $this->cenario(['frete' => 'FOB']);
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio(['transportadora' => 'T00042']));
+
+        $corpo = $orcamento->fresh()->portal_payload;
+        $this->assertSame('FOB', $corpo['shippingType']);
+        $this->assertSame('T00042', $corpo['carrierCode']);
+    }
+
+    /**
+     * 🚨 Não existe endpoint de consulta: a resposta é a única forma de saber o que o
+     * ERP gravou. E a data que vale é a DELE — foi pedida 15/10 e voltou 17/10, com 201
+     * e sem aviso. O vendedor precisa ler a data ajustada, não a que digitou.
+     */
+    public function test_resposta_do_erp_e_guardada_e_a_data_ajustada_vai_no_aviso(): void
+    {
+        Http::fake([
+            '*/v1/api/orders' => Http::response(['payload' => [
+                'id' => 4512,
+                'status' => 'AWAITING_APPROVAL',
+                'shippingType' => 'CIF',
+                'carrierCode' => 'T00042',
+                'shippingCost' => 18500,
+                'deliveryTime' => '2026-10-17',
+                'expectedBillingDate' => '2026-10-13',
+            ]], 201),
+        ]);
+
+        [$vendedor, $orcamento] = $this->cenario();
+        $gerador = app(GeradorDePedidoNoPortal::class);
+
+        $gerador->preparar($orcamento, '2026-10-15');
+        $gerador->enviar($orcamento->fresh());
+
+        $orcamento->refresh();
+        $this->assertSame('2026-10-17', $orcamento->portal_resposta['deliveryTime']);
+        $this->assertSame(18500, $orcamento->portal_resposta['shippingCost']);
+
+        $aviso = Notificacao::where('user_id', $vendedor->id)->where('tipo', 'portal_pedido_criado')->value('mensagem');
+        $this->assertStringContainsString('17/10/2026', $aviso);
+        $this->assertStringContainsString('15/10/2026', $aviso);
+        $this->assertStringContainsString('13/10/2026', $aviso);
+    }
+
+    /**
+     * O ERP recusou a data (400, nada gravado lá). A próxima tentativa vai com OUTRA
+     * data — logo, outro corpo — e por isso precisa de chave nova: a antiga com corpo
+     * diferente seria 409 de chave reutilizada.
+     */
+    public function test_recusa_libera_nova_data_com_chave_nova(): void
+    {
+        Http::fake([
+            '*/v1/api/orders' => Http::response([
+                'message' => 'A data de entrega desejada no pedido é inválida. A próxima data válida seria 2026-10-20',
+            ], 400),
+        ]);
+
+        [, $orcamento] = $this->cenario();
+        $gerador = app(GeradorDePedidoNoPortal::class);
+
+        $gerador->preparar($orcamento, '2026-10-15');
+        $chaveAntiga = $orcamento->fresh()->portal_idempotency_key;
+        $gerador->enviar($orcamento->fresh());
+
+        $orcamento->refresh();
+        $this->assertNull($orcamento->portal_idempotency_key);
+        $this->assertStringContainsString('2026-10-20', $orcamento->portal_erro);
+
+        $this->assertFalse($gerador->preparar($orcamento, '2026-10-20'));
+
+        $orcamento->refresh();
+        $this->assertNotSame($chaveAntiga, $orcamento->portal_idempotency_key);
+        $this->assertSame('2026-10-20', $orcamento->portal_payload['deliveryTime']);
+    }
+
+    /**
+     * 🚨 Resultado INCERTO (fila, ou o Portal não respondeu): o pedido pode existir.
+     * O reenvio é a requisição idêntica com a mesma chave — uma data nova digitada no
+     * modal NÃO pode entrar, senão vira 409 ou, pior, um segundo pedido.
+     */
+    public function test_reenvio_de_resultado_incerto_mantem_corpo_e_chave(): void
+    {
+        [, $orcamento] = $this->cenario();
+        $gerador = app(GeradorDePedidoNoPortal::class);
+
+        $gerador->preparar($orcamento, '2026-10-15');
+        $chave = $orcamento->fresh()->portal_idempotency_key;
+
+        $this->assertTrue($gerador->preparar($orcamento->fresh(), '2026-12-01'));
+
+        $orcamento->refresh();
+        $this->assertSame($chave, $orcamento->portal_idempotency_key);
+        $this->assertSame('2026-10-15', $orcamento->portal_payload['deliveryTime']);
+    }
+
+    public function test_reenvio_nao_exige_data_no_modal(): void
+    {
+        Bus::fake();
+        [, $orcamento] = $this->cenario();
+        app(GeradorDePedidoNoPortal::class)->preparar($orcamento, '2026-10-15');
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), [])
+            ->assertSessionHasNoErrors();
+
+        Bus::assertDispatched(EnviarPedidoAoPortalJob::class);
+    }
+
+    /**
+     * Sem isto o orçamento ficava calado para sempre quando o Portal não respondia:
+     * nem pedido, nem erro. A chave fica — o pedido pode ter sido criado.
+     */
+    public function test_job_esgotado_avisa_e_mantem_a_chave(): void
+    {
+        [$vendedor, $orcamento] = $this->cenario();
+        app(GeradorDePedidoNoPortal::class)->preparar($orcamento, '2026-10-15');
+        $chave = $orcamento->fresh()->portal_idempotency_key;
+
+        (new EnviarPedidoAoPortalJob($orcamento->id))->failed(new \RuntimeException('timeout'));
+
+        $orcamento->refresh();
+        $this->assertSame($chave, $orcamento->portal_idempotency_key);
+        $this->assertStringContainsString('não duplica', $orcamento->portal_erro);
+        $this->assertTrue($orcamento->temEnvioIncertoAoPortal());
+        $this->assertDatabaseHas('notificacoes', ['user_id' => $vendedor->id, 'tipo' => 'portal_pedido_erro']);
     }
 }
