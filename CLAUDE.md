@@ -2820,10 +2820,15 @@ enquanto — a Carteira continua só leitura (Regra nº 4). Retrato de produçã
 **14.659 filiais não ativas** (16% do cadastro), **68 delas compraram nos últimos 290
 dias** — esses são o primeiro alvo se o fluxo de inativação um dia entrar.
 
-- Pill vermelha abaixo do status: na linha agrupada, **"N filiais irregulares"** (ou a
-  situação, se o cliente tem uma filial só); na sub-linha da filial e na ficha, a
-  situação da própria filial. Só aparece quando é irregular — CNPJ nunca verificado não
-  é acusado. Componente único: `Components/Receita/PillReceita.vue`.
+- **O próprio CNPJ fica vermelho, com um ícone de alerta pequeno**, e o detalhe
+  (situação, desde quando, mês da base) vai no tooltip. Com várias filiais, a linha
+  "63 filiais · 11 entregas" ganha "· 3 irregulares" (vermelho, com tooltip). Nenhuma linha a mais na
+  tabela. Mesmo componente na sub-linha da filial e no cabeçalho da ficha:
+  `Components/Receita/CnpjReceita.vue`. CNPJ nunca verificado não é acusado.
+- ⚠️ **A primeira versão era uma pill vermelha abaixo do status, e o Tony recusou**
+  ("poluiu muito a página de carteira"). Filtrada por irregular, TODA linha ganhava uma
+  pill — a tela virava vermelha. A informação é sobre o CNPJ, então mora no CNPJ. Não
+  voltar a pôr badge na coluna de status.
 - Filtro **"Receita: CNPJ irregular"** e coluna **"Situação Receita"** no Excel.
 - **"Irregular" = situação conhecida e diferente de ATIVA**, e mora em
   `SituacaoCadastral::irregular()` / `sqlIrregular()`. O front não tem cópia: o servidor

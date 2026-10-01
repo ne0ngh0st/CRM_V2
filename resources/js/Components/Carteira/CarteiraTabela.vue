@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { router, Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
-import PillReceita from '@/Components/Receita/PillReceita.vue';
+import CnpjReceita from '@/Components/Receita/CnpjReceita.vue';
 import SortableTh from '@/Components/Tabela/SortableTh.vue';
 import BotoesContato from '@/Components/Contato/BotoesContato.vue';
 import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
@@ -155,12 +155,15 @@ function criarOrcamento(cliente) {
                     </td>
                     <td class="tbl-td tbl-td-titulo">
                         <span class="tbl-main sm:max-w-[220px]" :title="cliente.razaoSocial">{{ cliente.razaoSocial }}</span>
-                        <span class="tbl-sub">{{ cliente.cnpj ?? '—' }}</span>
+                        <!-- CNPJ irregular na Receita: o próprio número fica vermelho, com ícone
+                             e tooltip. Nenhuma linha a mais — a pill abaixo do status foi recusada
+                             por poluir a tela. Com várias filiais, a contagem vai na linha delas. -->
+                        <span class="tbl-sub"><CnpjReceita :cnpj="cliente.cnpj" :receita="cliente.receita" /></span>
                         <!-- Filial e entrega contadas separadamente: dizer que a AUTOPASS
                              tem 220 filiais seria falso — são 2 filiais e 218 pontos de
                              entrega (confirmado com o TOTVS). -->
                         <span v-if="expansivel(cliente)" class="tbl-sub text-cyan-dark">
-                            {{ cliente.lojas - cliente.entregas }} {{ cliente.lojas - cliente.entregas === 1 ? 'filial' : 'filiais' }}<template v-if="cliente.entregas"> · {{ cliente.entregas }} entrega{{ cliente.entregas === 1 ? '' : 's' }}</template>
+                            {{ cliente.lojas - cliente.entregas }} {{ cliente.lojas - cliente.entregas === 1 ? 'filial' : 'filiais' }}<template v-if="cliente.entregas"> · {{ cliente.entregas }} entrega{{ cliente.entregas === 1 ? '' : 's' }}</template><template v-if="cliente.receita?.irregulares"> · <span class="font-medium text-red-700" title="Lojas com CNPJ baixado, inapto, suspenso, nulo ou inexistente na Receita — abra a linha para ver quais">{{ cliente.receita.irregulares }} irregular{{ cliente.receita.irregulares === 1 ? '' : 'es' }}</span></template>
                         </span>
                     </td>
                     <td class="tbl-td" data-rotulo="Grupo">
@@ -203,8 +206,6 @@ function criarOrcamento(cliente) {
                             </StatusPill>
                         </button>
                         <StatusPill v-else :tone="TONS_STATUS_CARTEIRA[cliente.status]" size="sm">{{ ROTULOS_STATUS_CARTEIRA[cliente.status] }}</StatusPill>
-                        <!-- Situação na Receita logo abaixo do status: só aparece quando é irregular. -->
-                        <PillReceita :receita="cliente.receita" :lojas="cliente.lojas" class="mt-1 block" />
                     </td>
                     <td class="tbl-td" data-rotulo="Última compra">{{ cliente.dataUltimaCompra ?? 'Nunca' }}</td>
                     <td class="tbl-td" data-rotulo="Último contato">
@@ -358,7 +359,7 @@ function criarOrcamento(cliente) {
                                             <span v-if="filial.ehEntrega" class="tbl-sub">entrega</span>
                                         </td>
                                         <td class="tbl-itens-td">{{ filial.razaoSocial }}</td>
-                                        <td class="tbl-itens-td">{{ filial.cnpj ?? '—' }}</td>
+                                        <td class="tbl-itens-td"><CnpjReceita :cnpj="filial.cnpj" :receita="filial.receita" /></td>
                                         <td class="tbl-itens-td">
                                             <EnderecoLink
                                                 :logradouro="filial.endereco ?? ''"
@@ -374,7 +375,6 @@ function criarOrcamento(cliente) {
                                             <StatusPill :tone="TONS_STATUS_CARTEIRA[filial.status]" size="sm">
                                                 {{ ROTULOS_STATUS_CARTEIRA[filial.status] }}
                                             </StatusPill>
-                                            <PillReceita :receita="filial.receita" class="mt-1 block" />
                                         </td>
                                         <td class="tbl-itens-td">{{ filial.dataUltimaCompra ?? 'Nunca' }}</td>
                                         <td class="tbl-itens-td">
