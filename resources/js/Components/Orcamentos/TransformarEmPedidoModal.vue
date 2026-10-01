@@ -4,6 +4,7 @@ import { router, useForm } from '@inertiajs/vue3';
 import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import InputError from '@/Components/InputError.vue';
 import { ROTULOS_TIPO_VENDA } from '@/constants/orcamentos.js';
+import CondicaoPagamentoSelect from '@/Components/Orcamentos/CondicaoPagamentoSelect.vue';
 
 /*
  * "Transformar em pedido" no Portal Autopel.
@@ -11,7 +12,9 @@ import { ROTULOS_TIPO_VENDA } from '@/constants/orcamentos.js';
  * Componente próprio (e não `useConfirmacao`) porque tem campos e `useForm`: a data de
  * entrega e, no FOB, a transportadora — e o servidor pode recusar os dois com erro de
  * validação, que precisa aparecer aqui dentro. Orçamento anterior ao campo "Tipo de venda"
- * (2026-10-01) escolhe o tipo aqui também, e ele fica gravado no orçamento.
+ * (2026-10-01) escolhe o tipo aqui também, e ele fica gravado no orçamento. O mesmo vale
+ * para a condição de pagamento do Protheus, que já abre com a sugestão do servidor (o
+ * texto antigo reconhecido na lista) quando houver uma.
  *
  * ⚠️ Desde a versão de 2026-09-30 da API o pedido nasce DIRETO na fila de aprovação,
  * não mais como rascunho que alguém da Autopel completava. Não há volta pelo fluxo
@@ -24,11 +27,12 @@ import { ROTULOS_TIPO_VENDA } from '@/constants/orcamentos.js';
 const props = defineProps({
     show: { type: Boolean, default: false },
     orcamento: { type: Object, default: null },
+    condicoes: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(['close']);
 
-const form = useForm({ data_entrega: '', transportadora: '', tipo_venda: '' });
+const form = useForm({ data_entrega: '', transportadora: '', tipo_venda: '', condicao_pagamento_codigo: '' });
 
 const reenvio = computed(() => !!props.orcamento?.portalReenvio);
 const fob = computed(() => props.orcamento?.tipoFrete === 'FOB');
@@ -37,6 +41,7 @@ const fob = computed(() => props.orcamento?.tipoFrete === 'FOB');
 const semFrete = computed(() => !reenvio.value && !['CIF', 'FOB'].includes(props.orcamento?.tipoFrete));
 // Sem valor pré-marcado, igual ao formulário: consumo e revenda têm TES diferente.
 const pedeTipoVenda = computed(() => !reenvio.value && !semFrete.value && !props.orcamento?.tipoVenda);
+const pedeCondicao = computed(() => !reenvio.value && !semFrete.value && !props.orcamento?.condicaoPagamentoCodigo);
 
 // Piso do seletor: amanhã, no fuso do navegador. O ERP é quem valida de verdade.
 const amanha = computed(() => {
@@ -71,6 +76,7 @@ watch(() => props.show, (aberto) => {
     if (aberto) {
         form.reset();
         form.clearErrors();
+        form.condicao_pagamento_codigo = props.orcamento?.condicaoPagamentoSugerida ?? '';
     }
 });
 
@@ -91,6 +97,7 @@ function enviar() {
             // ⚠️ Só no FOB. No CIF quem escolhe a transportadora é o ERP, e a API não aceita o campo.
             transportadora: fob.value && !reenvio.value ? d.transportadora.trim() : null,
             tipo_venda: pedeTipoVenda.value ? d.tipo_venda : null,
+            condicao_pagamento_codigo: pedeCondicao.value ? d.condicao_pagamento_codigo : null,
         }))
         .post(route('orcamentos.portal', props.orcamento.id), {
             preserveScroll: true,
@@ -138,6 +145,19 @@ function enviar() {
                 <span class="mt-1 block text-[0.65rem] leading-3 text-gray-400">Fica gravado no orçamento.</span>
                 <InputError :message="form.errors.tipo_venda" class="mt-1" />
             </label>
+
+            <div v-if="pedeCondicao" class="block sm:col-span-2">
+                <span class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Condição de pagamento (Protheus)</span>
+                <CondicaoPagamentoSelect
+                    v-model="form.condicao_pagamento_codigo"
+                    :opcoes="condicoes"
+                    input-class="mt-1 block w-full rounded border-gray-300 py-1.5 text-sm focus:border-cyan focus:ring-cyan"
+                />
+                <span v-if="orcamento?.formaPagamento" class="mt-1 block text-[0.65rem] leading-3 text-gray-400">
+                    No orçamento: "{{ orcamento.formaPagamento }}". Fica gravado no orçamento.
+                </span>
+                <InputError :message="form.errors.condicao_pagamento_codigo" class="mt-1" />
+            </div>
 
             <label v-if="fob" class="block">
                 <span class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Transportadora (cód. Protheus)</span>

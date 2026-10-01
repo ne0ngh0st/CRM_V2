@@ -1,15 +1,3 @@
-export const OPCOES_FORMA_PAGAMENTO = [
-    'A VISTA',
-    '7DDL',
-    '14DDL',
-    '21DDL',
-    '28DDL',
-    '28/35/42DDL',
-    '28/42/56DDL',
-    '30/45/60DDL',
-    'Outros',
-];
-
 export const ROTULOS_STATUS_ORCAMENTO = {
     pendente: 'Pendente',
     aprovado: 'Aprovado',

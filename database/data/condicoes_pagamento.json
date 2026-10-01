@@ -1,0 +1,1960 @@
+{
+ "fonte": "SE4 do Protheus — 'condiçoes pagamento.xlsx' (Listagem do Browse, Dt.Ref 01/10/2026)",
+ "condicoes": [
+  {
+   "codigo": "000",
+   "descricao": "BONIFICACAO / REMESSA",
+   "tipo": "1"
+  },
+  {
+   "codigo": "001",
+   "descricao": "A VISTA",
+   "tipo": "1"
+  },
+  {
+   "codigo": "002",
+   "descricao": "02 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "003",
+   "descricao": "03 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "004",
+   "descricao": "04 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "005",
+   "descricao": "05 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "006",
+   "descricao": "06 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "007",
+   "descricao": "07 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "008",
+   "descricao": "08 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "009",
+   "descricao": "09 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "010",
+   "descricao": "10 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "011",
+   "descricao": "11 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "012",
+   "descricao": "12 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "013",
+   "descricao": "13 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "014",
+   "descricao": "14 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "015",
+   "descricao": "15 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "016",
+   "descricao": "16 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "017",
+   "descricao": "17 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "018",
+   "descricao": "18 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "019",
+   "descricao": "19 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "020",
+   "descricao": "20 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "021",
+   "descricao": "21 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "022",
+   "descricao": "22 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "023",
+   "descricao": "23 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "024",
+   "descricao": "24 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "025",
+   "descricao": "25 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "026",
+   "descricao": "26 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "027",
+   "descricao": "27 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "028",
+   "descricao": "28 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "029",
+   "descricao": "29 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "030",
+   "descricao": "30 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "031",
+   "descricao": "31 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "032",
+   "descricao": "32 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "033",
+   "descricao": "33 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "034",
+   "descricao": "34 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "035",
+   "descricao": "35 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "036",
+   "descricao": "36 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "037",
+   "descricao": "37 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "038",
+   "descricao": "38 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "039",
+   "descricao": "39 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "040",
+   "descricao": "40 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "041",
+   "descricao": "41 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "042",
+   "descricao": "42 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "043",
+   "descricao": "43 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "044",
+   "descricao": "44 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "045",
+   "descricao": "45 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "046",
+   "descricao": "46 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "047",
+   "descricao": "47 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "048",
+   "descricao": "48 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "049",
+   "descricao": "49 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "050",
+   "descricao": "50 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "051",
+   "descricao": "51 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "052",
+   "descricao": "52 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "053",
+   "descricao": "53 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "054",
+   "descricao": "54 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "055",
+   "descricao": "55 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "056",
+   "descricao": "56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "057",
+   "descricao": "57 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "058",
+   "descricao": "58 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "059",
+   "descricao": "59 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "060",
+   "descricao": "60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "061",
+   "descricao": "28 / 35 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "062",
+   "descricao": "28 / 42 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "063",
+   "descricao": "30 / 45 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "064",
+   "descricao": "35 / 45 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "065",
+   "descricao": "20 / 40 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "066",
+   "descricao": "21 / 35 / 45 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "067",
+   "descricao": "28 / 35 / 42 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "068",
+   "descricao": "28 / 35 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "069",
+   "descricao": "28 / 42 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "070",
+   "descricao": "30 / 45 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "071",
+   "descricao": "28 / 35 / 42 / 49 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "072",
+   "descricao": "28 / 35 / 42 / 49 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "073",
+   "descricao": "70 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "074",
+   "descricao": "45 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "075",
+   "descricao": "90 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "076",
+   "descricao": "35 / 42 / 49 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "077",
+   "descricao": "30 / 40 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "078",
+   "descricao": "35 / 42 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "079",
+   "descricao": "30 / 60 / 90 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "080",
+   "descricao": "21 / 28 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "081",
+   "descricao": "30 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "082",
+   "descricao": "10 X DDL",
+   "tipo": "5"
+  },
+  {
+   "codigo": "083",
+   "descricao": "30 / 40 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "084",
+   "descricao": "21 / 32 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "085",
+   "descricao": "21 / 28 / 35 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "086",
+   "descricao": "30 / 40 / 50 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "087",
+   "descricao": "37 / 52 / 67 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "088",
+   "descricao": "35 / 45 / 55 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "089",
+   "descricao": "01 / 15 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "090",
+   "descricao": "30 / 58 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "091",
+   "descricao": "07 / 25 / 30 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "092",
+   "descricao": "20 / 40 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "093",
+   "descricao": "20 / 35 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "094",
+   "descricao": "35 / 70 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "095",
+   "descricao": "28 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "096",
+   "descricao": "14 / 21 / 28 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "097",
+   "descricao": "42 / 56 / 70 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "098",
+   "descricao": "07 / 35 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "099",
+   "descricao": "15 / 30 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "100",
+   "descricao": "21 / 28 / 35 / 42 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "101",
+   "descricao": "42 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "102",
+   "descricao": "01 / 15 / 20 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "103",
+   "descricao": "60 / 75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "104",
+   "descricao": "21 / 42 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "105",
+   "descricao": "75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "106",
+   "descricao": "14 / 28 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "107",
+   "descricao": "35 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "108",
+   "descricao": "10 / 30 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "109",
+   "descricao": "120 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "110",
+   "descricao": "21 / 45 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "111",
+   "descricao": "06 / 14 / 45 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "112",
+   "descricao": "28 / 56 / 84 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "113",
+   "descricao": "150 / 180 / 210 / 240 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "114",
+   "descricao": "A VISTA / 45",
+   "tipo": "1"
+  },
+  {
+   "codigo": "116",
+   "descricao": "30/45/60/75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "117",
+   "descricao": "30 / 35 / 45 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "118",
+   "descricao": "25 / 42 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "119",
+   "descricao": "30 / 60 / 90 / 120 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "120",
+   "descricao": "28 / 32 / 38 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "121",
+   "descricao": "63 / 89 / 120 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "122",
+   "descricao": "15 / 30 / 45 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "123",
+   "descricao": "21 / 45 / 63 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "124",
+   "descricao": "40 DDL REDECARD",
+   "tipo": "1"
+  },
+  {
+   "codigo": "125",
+   "descricao": "60 / 90 / 120 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "126",
+   "descricao": "45 / 60 / 70 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "127",
+   "descricao": "25 / 50 / 75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "128",
+   "descricao": "14 / 20 / 30 / 40 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "129",
+   "descricao": "28 / 35 / 42 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "130",
+   "descricao": "60/75/90/105/120/135 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "131",
+   "descricao": "20 / 30 / 40 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "132",
+   "descricao": "01 / 28 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "133",
+   "descricao": "35 / 49 / 63 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "134",
+   "descricao": "30 / 45 / 60 / 75 / 90 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "135",
+   "descricao": "05 FIXO",
+   "tipo": "7"
+  },
+  {
+   "codigo": "136",
+   "descricao": "A VISTA / 28 / 35",
+   "tipo": "1"
+  },
+  {
+   "codigo": "137",
+   "descricao": "45 / 60 / 75 / 90 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "138",
+   "descricao": "42 / 56 / 75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "139",
+   "descricao": "45 / 60 / 75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "140",
+   "descricao": "42 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "141",
+   "descricao": "28 / 45 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "142",
+   "descricao": "90 / 120 / 150",
+   "tipo": "1"
+  },
+  {
+   "codigo": "143",
+   "descricao": "42 / 49 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "144",
+   "descricao": "A VISTA / 35 / 49 / 63 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "145",
+   "descricao": "A VISTA / 35 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "146",
+   "descricao": "150 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "147",
+   "descricao": "A VISTA / 28 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "148",
+   "descricao": "28 / 42 / 56 / 70 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "149",
+   "descricao": "05 / 35 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "150",
+   "descricao": "60 / 90 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "151",
+   "descricao": "23 / 30 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "152",
+   "descricao": "45 DDL VENC TERCA",
+   "tipo": "6"
+  },
+  {
+   "codigo": "153",
+   "descricao": "21 / 28 / 35 / 42 / 49 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "154",
+   "descricao": "FAT AT+ 15 C/ V",
+   "tipo": "3"
+  },
+  {
+   "codigo": "155",
+   "descricao": "FAT 16 A 31 C/",
+   "tipo": "3"
+  },
+  {
+   "codigo": "156",
+   "descricao": "30,60,90 VCT 4F",
+   "tipo": "6"
+  },
+  {
+   "codigo": "157",
+   "descricao": "60 / 90 DDL C/ VENC QUARTA",
+   "tipo": "6"
+  },
+  {
+   "codigo": "158",
+   "descricao": "15 / 49 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "159",
+   "descricao": "67 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "160",
+   "descricao": "28 / 49 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "161",
+   "descricao": "25 / DFM",
+   "tipo": "1"
+  },
+  {
+   "codigo": "162",
+   "descricao": "11 FORA O MES",
+   "tipo": "7"
+  },
+  {
+   "codigo": "163",
+   "descricao": "30 FIXOS",
+   "tipo": "7"
+  },
+  {
+   "codigo": "164",
+   "descricao": "48 X DDL",
+   "tipo": "5"
+  },
+  {
+   "codigo": "165",
+   "descricao": "A VISTA / 30 / 60",
+   "tipo": "1"
+  },
+  {
+   "codigo": "166",
+   "descricao": "A VISTA / 21 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "167",
+   "descricao": "84 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "168",
+   "descricao": "21 DFM",
+   "tipo": "7"
+  },
+  {
+   "codigo": "169",
+   "descricao": "A VISTA / 30 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "170",
+   "descricao": "15 / 21 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "171",
+   "descricao": "10 DIAS FIXOS",
+   "tipo": "7"
+  },
+  {
+   "codigo": "172",
+   "descricao": "42 / 63 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "173",
+   "descricao": "VENC FIXO 10 MES SEGUINTE",
+   "tipo": "7"
+  },
+  {
+   "codigo": "174",
+   "descricao": "VENC FIXO 20 MES SEGUINTE",
+   "tipo": "7"
+  },
+  {
+   "codigo": "175",
+   "descricao": "VENC FIXO 30 MES SEGUINTE",
+   "tipo": "7"
+  },
+  {
+   "codigo": "176",
+   "descricao": "35 / 42 / 49 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "177",
+   "descricao": "15 / 42 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "178",
+   "descricao": "30 / 40 / 50 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "190",
+   "descricao": "8X",
+   "tipo": "1"
+  },
+  {
+   "codigo": "191",
+   "descricao": "6X",
+   "tipo": "1"
+  },
+  {
+   "codigo": "192",
+   "descricao": "28 DDL VENC DIA 10 OU 30",
+   "tipo": "3"
+  },
+  {
+   "codigo": "193",
+   "descricao": "45 / 75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "194",
+   "descricao": "28 DDL VENC DIA 20 OU 30",
+   "tipo": "3"
+  },
+  {
+   "codigo": "195",
+   "descricao": "26 / DFM",
+   "tipo": "1"
+  },
+  {
+   "codigo": "196",
+   "descricao": "VENC NO ULTIMO DIA MES",
+   "tipo": "7"
+  },
+  {
+   "codigo": "197",
+   "descricao": "A VISTA / 15 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "198",
+   "descricao": "30 DDL VENC DIA 10 / 20 E 30",
+   "tipo": "3"
+  },
+  {
+   "codigo": "199",
+   "descricao": "05 FIXO FORA O MES",
+   "tipo": "7"
+  },
+  {
+   "codigo": "200",
+   "descricao": "NOTA FISCAL ECOPAPER",
+   "tipo": "7"
+  },
+  {
+   "codigo": "201",
+   "descricao": "30 DDL COM VENCTO 10 OU 20",
+   "tipo": "3"
+  },
+  {
+   "codigo": "202",
+   "descricao": "ITAU VENC 10 E 30 DEPEN DO FAT",
+   "tipo": "3"
+  },
+  {
+   "codigo": "203",
+   "descricao": "30/60/90 VENC 06,16,26",
+   "tipo": "B"
+  },
+  {
+   "codigo": "204",
+   "descricao": "30/60 VENC 15, 30",
+   "tipo": "B"
+  },
+  {
+   "codigo": "205",
+   "descricao": "15 DIA UTIL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "206",
+   "descricao": "28,35,42,49,56,63,70,77 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "207",
+   "descricao": "14/21/28/35/42 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "208",
+   "descricao": "30 DDL VENC DIA 30 CADA MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "209",
+   "descricao": "30 DDL VENC 4 FEIRA",
+   "tipo": "6"
+  },
+  {
+   "codigo": "210",
+   "descricao": "28/56 VENC DIA 10",
+   "tipo": "B"
+  },
+  {
+   "codigo": "211",
+   "descricao": "28/42/56 VENC DIA 10,20 E 30",
+   "tipo": "B"
+  },
+  {
+   "codigo": "212",
+   "descricao": "30/60/90/105 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "213",
+   "descricao": "ESTAPAR VENC 15,25 DO MES SUBS",
+   "tipo": "3"
+  },
+  {
+   "codigo": "214",
+   "descricao": "20 DDL VENC DIA 5, 15 E 25",
+   "tipo": "3"
+  },
+  {
+   "codigo": "215",
+   "descricao": "28 / 56 / 84 / 112 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "216",
+   "descricao": "A VISTA / 30 / 60 / 90",
+   "tipo": "1"
+  },
+  {
+   "codigo": "217",
+   "descricao": "A VISTA – 28/35/42/49 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "218",
+   "descricao": "50 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "219",
+   "descricao": "10 / 20",
+   "tipo": "1"
+  },
+  {
+   "codigo": "221",
+   "descricao": "90 DDL VENC 10,20 E 30 OU 31",
+   "tipo": "3"
+  },
+  {
+   "codigo": "222",
+   "descricao": "COND ESPEC CLIENTE ADAMANTINA",
+   "tipo": "B"
+  },
+  {
+   "codigo": "223",
+   "descricao": "A VISTA / 7 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "224",
+   "descricao": "60 DDL VENCTO QUARTA-FEIRA",
+   "tipo": "4"
+  },
+  {
+   "codigo": "225",
+   "descricao": "60 DDL VENCTO QUINTA-FEIRA",
+   "tipo": "4"
+  },
+  {
+   "codigo": "226",
+   "descricao": "21 / 42 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "227",
+   "descricao": "90 / 120",
+   "tipo": "1"
+  },
+  {
+   "codigo": "228",
+   "descricao": "49 / 56 / 63 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "229",
+   "descricao": "63 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "230",
+   "descricao": "65 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "231",
+   "descricao": "07 / 14 / 21 / 28 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "232",
+   "descricao": "15 / 30 / 45 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "233",
+   "descricao": "21 / 35 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "234",
+   "descricao": "FAT 1-15 E 16-31 VENC 10 E 25",
+   "tipo": "3"
+  },
+  {
+   "codigo": "235",
+   "descricao": "A VISTA / 14 / 30",
+   "tipo": "1"
+  },
+  {
+   "codigo": "236",
+   "descricao": "A VISTA / 90 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "237",
+   "descricao": "PARCEL EM 14 VEZES",
+   "tipo": "4"
+  },
+  {
+   "codigo": "238",
+   "descricao": "15 DDL VENC 05,10,15,20,25,30",
+   "tipo": "3"
+  },
+  {
+   "codigo": "239",
+   "descricao": "28/35 DDL VENC5,10,15,20,25,30",
+   "tipo": "B"
+  },
+  {
+   "codigo": "240",
+   "descricao": "60 / 120 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "241",
+   "descricao": "28/35/42 DDL VENCTO TERCA FEIR",
+   "tipo": "B"
+  },
+  {
+   "codigo": "242",
+   "descricao": "7 / 28 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "243",
+   "descricao": "30/60 DDL VENC 5,10,15,20,25",
+   "tipo": "B"
+  },
+  {
+   "codigo": "244",
+   "descricao": "30 DDL VENC 5,10,15,20,25",
+   "tipo": "B"
+  },
+  {
+   "codigo": "245",
+   "descricao": "15/30 DDL VENC 10,20,30",
+   "tipo": "B"
+  },
+  {
+   "codigo": "246",
+   "descricao": "60 DDL VENC 05, 20",
+   "tipo": "3"
+  },
+  {
+   "codigo": "247",
+   "descricao": "45 DDL VENCTO SEGUNDA FEIRA",
+   "tipo": "4"
+  },
+  {
+   "codigo": "248",
+   "descricao": "7 / 21 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "249",
+   "descricao": "15 DDL VENC 01,11 OU 21",
+   "tipo": "3"
+  },
+  {
+   "codigo": "250",
+   "descricao": "A VISTA / 28 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "251",
+   "descricao": "A VISTA / 15 / 21 / 28 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "252",
+   "descricao": "28/35/42/49 VENC 1/07/15/22/27",
+   "tipo": "B"
+  },
+  {
+   "codigo": "253",
+   "descricao": "25 / 55 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "254",
+   "descricao": "30 DDL VENC 05 OJI PAPEIS",
+   "tipo": "3"
+  },
+  {
+   "codigo": "255",
+   "descricao": "60 DDL VENC 05 OJI PAPEIS",
+   "tipo": "3"
+  },
+  {
+   "codigo": "256",
+   "descricao": "60 DDL VENC 10,20 E 30 MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "257",
+   "descricao": "30 / 60 / 75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "258",
+   "descricao": "30 DDL 12 X",
+   "tipo": "5"
+  },
+  {
+   "codigo": "259",
+   "descricao": "30,60,90,120,150,180,210,240",
+   "tipo": "1"
+  },
+  {
+   "codigo": "260",
+   "descricao": "30 DDL VENC 7,14,21,28 MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "261",
+   "descricao": "32 DDL VENC 10 MUNKSJO",
+   "tipo": "3"
+  },
+  {
+   "codigo": "262",
+   "descricao": "64 DDL VENC 10 MUNKSJO",
+   "tipo": "3"
+  },
+  {
+   "codigo": "263",
+   "descricao": "28 DDL VENC DIAS 05,10,17,25",
+   "tipo": "3"
+  },
+  {
+   "codigo": "264",
+   "descricao": "35 DDL VENC 2 FEIRA",
+   "tipo": "4"
+  },
+  {
+   "codigo": "265",
+   "descricao": "30 DDL VENC 5,15,25",
+   "tipo": "B"
+  },
+  {
+   "codigo": "266",
+   "descricao": "28/56 DDL VENCTO TERCA FEIRA",
+   "tipo": "B"
+  },
+  {
+   "codigo": "267",
+   "descricao": "28 / 56 / 63 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "268",
+   "descricao": "45 DDL VENC QUARTA FEIRA",
+   "tipo": "4"
+  },
+  {
+   "codigo": "269",
+   "descricao": "30 DDL COM VENCTO 15 OU 30",
+   "tipo": "3"
+  },
+  {
+   "codigo": "270",
+   "descricao": "28 / 56 / 72 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "271",
+   "descricao": "21 / 42 / 63 / 84 / 105 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "272",
+   "descricao": "30 DDL FORA MES",
+   "tipo": "1"
+  },
+  {
+   "codigo": "273",
+   "descricao": "21 / 28 / 35 / 45 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "274",
+   "descricao": "45 DDL VENCTO TERCA FEIRA",
+   "tipo": "4"
+  },
+  {
+   "codigo": "275",
+   "descricao": "30 DDL VENC 7,14,19,25",
+   "tipo": "3"
+  },
+  {
+   "codigo": "276",
+   "descricao": "A VISTA / 28 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "277",
+   "descricao": "28,35,42,49,56,63,70 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "278",
+   "descricao": "28,35,42,49,56,63 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "280",
+   "descricao": "30 DDL COM VENCTO 01 OU 10",
+   "tipo": "3"
+  },
+  {
+   "codigo": "281",
+   "descricao": "15 DDL VCTO ULT DIA DO MES",
+   "tipo": "7"
+  },
+  {
+   "codigo": "282",
+   "descricao": "PARCEL EM 12 VEZES",
+   "tipo": "4"
+  },
+  {
+   "codigo": "283",
+   "descricao": "PARCEL EM 12 VEZES",
+   "tipo": "4"
+  },
+  {
+   "codigo": "284",
+   "descricao": "07/ 14",
+   "tipo": "1"
+  },
+  {
+   "codigo": "285",
+   "descricao": "45 DDL COM VENCTO 15 OU 30",
+   "tipo": "3"
+  },
+  {
+   "codigo": "286",
+   "descricao": "60/ 75/ 90",
+   "tipo": "1"
+  },
+  {
+   "codigo": "287",
+   "descricao": "40 / 70 / 80 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "288",
+   "descricao": "VISTA / 35 / 42 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "289",
+   "descricao": "30 / 60 DDL VENC DIA 15",
+   "tipo": "B"
+  },
+  {
+   "codigo": "290",
+   "descricao": "40 / 70 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "291",
+   "descricao": "200 / 207 / 214 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "292",
+   "descricao": "28 / 42 VENC DIA 15 E 30",
+   "tipo": "B"
+  },
+  {
+   "codigo": "293",
+   "descricao": "A VISTA, 30, 45, 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "294",
+   "descricao": "30/60/90-84,05%/ 7,98%/ 7,97%",
+   "tipo": "B"
+  },
+  {
+   "codigo": "295",
+   "descricao": "VENC NO ULTIMO DIA MES 2X",
+   "tipo": "7"
+  },
+  {
+   "codigo": "296",
+   "descricao": "60 / 90 /120 / 150 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "297",
+   "descricao": "01/30/60/90/120 RF",
+   "tipo": "1"
+  },
+  {
+   "codigo": "298",
+   "descricao": "15 DIAS FORA O MES",
+   "tipo": "1"
+  },
+  {
+   "codigo": "299",
+   "descricao": "90 / 120 / 150 / 180 DD.",
+   "tipo": "1"
+  },
+  {
+   "codigo": "300",
+   "descricao": "30/60/90 VENC DIA 05 / 15 / 25",
+   "tipo": "B"
+  },
+  {
+   "codigo": "301",
+   "descricao": "56 / 70 / 84 / 98 / 112 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "302",
+   "descricao": "30 DDL VENC DIA 07 DE CADA MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "303",
+   "descricao": "42 DDL VENC DIA 01 DE CADA MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "304",
+   "descricao": "12 DIAS UTEIS FORA O MES",
+   "tipo": "1"
+  },
+  {
+   "codigo": "305",
+   "descricao": "30/60/90/120/150/180 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "306",
+   "descricao": "05 DIAS UTEIS FORA O MES",
+   "tipo": "1"
+  },
+  {
+   "codigo": "307",
+   "descricao": "VISTA / 28 /35 / 42 50%-16,66%",
+   "tipo": "B"
+  },
+  {
+   "codigo": "308",
+   "descricao": "07 / 14 / 21 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "309",
+   "descricao": "28 / 42 VENC DIA 15 E 30",
+   "tipo": "B"
+  },
+  {
+   "codigo": "310",
+   "descricao": "45 DDL COM VENCTO 07/14/21/28",
+   "tipo": "3"
+  },
+  {
+   "codigo": "311",
+   "descricao": "15 DDL FORA A QUINZENA",
+   "tipo": "3"
+  },
+  {
+   "codigo": "312",
+   "descricao": "30% A VISTA/ 20 / 40 / 60",
+   "tipo": "B"
+  },
+  {
+   "codigo": "313",
+   "descricao": "42 DDL COM VENCTO 05/10 OU 25",
+   "tipo": "3"
+  },
+  {
+   "codigo": "314",
+   "descricao": "VENC 28 DE CADA MES %",
+   "tipo": "B"
+  },
+  {
+   "codigo": "315",
+   "descricao": "30 DDL VENC DIA 12",
+   "tipo": "3"
+  },
+  {
+   "codigo": "317",
+   "descricao": "30 DDL VENC DIA 10 OU 25",
+   "tipo": "3"
+  },
+  {
+   "codigo": "318",
+   "descricao": "30 DDL COM VENCTO 15 OU 31",
+   "tipo": "3"
+  },
+  {
+   "codigo": "319",
+   "descricao": "50 DDL COM VENCTO 7,17 OU 27",
+   "tipo": "3"
+  },
+  {
+   "codigo": "320",
+   "descricao": "45 DDL COM VENCTO 10, 25",
+   "tipo": "3"
+  },
+  {
+   "codigo": "321",
+   "descricao": "30,60,90,120,150,180 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "322",
+   "descricao": "30,60,90,120,150 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "323",
+   "descricao": "50% A VISTA/ 28 / 49",
+   "tipo": "B"
+  },
+  {
+   "codigo": "324",
+   "descricao": "50% A VISTA/ 21 / 28 / 35",
+   "tipo": "B"
+  },
+  {
+   "codigo": "325",
+   "descricao": "30 / 40 / 60 / 75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "326",
+   "descricao": "14 / 28 / 42 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "327",
+   "descricao": "50% A VISTA/ 28 / 35",
+   "tipo": "B"
+  },
+  {
+   "codigo": "328",
+   "descricao": "30 / 45 / 60 5 UTEIS",
+   "tipo": "1"
+  },
+  {
+   "codigo": "329",
+   "descricao": "21/35/42/63 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "330",
+   "descricao": "35 DDL COM VENCTO 3,9,17,24,30",
+   "tipo": "3"
+  },
+  {
+   "codigo": "331",
+   "descricao": "50% A VISTA/ 28 / 49",
+   "tipo": "B"
+  },
+  {
+   "codigo": "332",
+   "descricao": "35 / 45 / 52 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "333",
+   "descricao": "15/ 30/ 45/ 60/ 75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "334",
+   "descricao": "20/40/60/80/100 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "335",
+   "descricao": "50% A VISTA/ 30 / 45 / 60",
+   "tipo": "B"
+  },
+  {
+   "codigo": "336",
+   "descricao": "80 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "337",
+   "descricao": "56/70/84 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "338",
+   "descricao": "28 / 43 / 58 / 73 / 88 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "339",
+   "descricao": "35 / 45 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "340",
+   "descricao": "35,42",
+   "tipo": "1"
+  },
+  {
+   "codigo": "341",
+   "descricao": "60 DDL VENC 10,20 DO MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "342",
+   "descricao": "30 DDL VENC 25 DO MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "343",
+   "descricao": "98/112/126 DIAS",
+   "tipo": "1"
+  },
+  {
+   "codigo": "344",
+   "descricao": "A VISTA / 30/60/90/120/150",
+   "tipo": "1"
+  },
+  {
+   "codigo": "345",
+   "descricao": "15,45,75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "346",
+   "descricao": "50% A VISTA/ 28 / 35 / 42",
+   "tipo": "B"
+  },
+  {
+   "codigo": "347",
+   "descricao": "60 DDL VENC 10,25 MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "348",
+   "descricao": "30 DDL VENC 3 FEIRA",
+   "tipo": "6"
+  },
+  {
+   "codigo": "349",
+   "descricao": "60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "350",
+   "descricao": "30 DDL COM VENCTO 01 OU 16",
+   "tipo": "3"
+  },
+  {
+   "codigo": "351",
+   "descricao": "90 DDL COM VENCTO 10 OU 25",
+   "tipo": "3"
+  },
+  {
+   "codigo": "352",
+   "descricao": "30 DDL FAT 15 VENC 15 APOS 25",
+   "tipo": "3"
+  },
+  {
+   "codigo": "353",
+   "descricao": "45 DDL VENC 15 0U 30 DO MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "354",
+   "descricao": "49 / 56 / 63 / 70 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "355",
+   "descricao": "60 DDL VENC 05,15 E 25 MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "356",
+   "descricao": "35 / 42 / 49 / 56 / 63 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "357",
+   "descricao": "A VISTA / 50 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "358",
+   "descricao": "35 DDL VENC 5,15,20",
+   "tipo": "3"
+  },
+  {
+   "codigo": "359",
+   "descricao": "180 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "360",
+   "descricao": "21 / 28 / 35 / 42 / 49 / 56 DL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "361",
+   "descricao": "15,30,45,60,75,90,105 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "362",
+   "descricao": "260 / 270 / 280 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "363",
+   "descricao": "60 / 75 / 90 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "364",
+   "descricao": "50 DDL COM VENCTO 5 / 15 / 20",
+   "tipo": "3"
+  },
+  {
+   "codigo": "365",
+   "descricao": "TESTE",
+   "tipo": "3"
+  },
+  {
+   "codigo": "366",
+   "descricao": "45 DDL VENC QUINTA FEIRA",
+   "tipo": "4"
+  },
+  {
+   "codigo": "367",
+   "descricao": "60 DDL VENC 15 E 30 MES",
+   "tipo": "3"
+  },
+  {
+   "codigo": "368",
+   "descricao": "28 DDL VENC QUARTA FEIRA",
+   "tipo": "4"
+  },
+  {
+   "codigo": "369",
+   "descricao": "20,30,40,50,60,70 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "370",
+   "descricao": "100 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "371",
+   "descricao": "12 X VENC DIA 28 DE CADA MES",
+   "tipo": "7"
+  },
+  {
+   "codigo": "372",
+   "descricao": "07/21/4 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "373",
+   "descricao": "30/60/90/120/150/180/210 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "374",
+   "descricao": "35/42/49/56/63 VENC QUART",
+   "tipo": "6"
+  },
+  {
+   "codigo": "375",
+   "descricao": "30/45/60 VENC 5,10,15,20,25",
+   "tipo": "B"
+  },
+  {
+   "codigo": "376",
+   "descricao": "30% A VISTA / 21 / 28 DDL",
+   "tipo": "B"
+  },
+  {
+   "codigo": "377",
+   "descricao": "30,45,60 VENC QUARTA-FEIRA",
+   "tipo": "B"
+  },
+  {
+   "codigo": "378",
+   "descricao": "45 DDL VENC 5,15,25",
+   "tipo": "B"
+  },
+  {
+   "codigo": "379",
+   "descricao": "A VISTA, 30, 60, 90, 120 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "380",
+   "descricao": "VENC 1-14 P=15/VENC 15-31 P=01",
+   "tipo": "3"
+  },
+  {
+   "codigo": "381",
+   "descricao": "42,49,56 VENC DIF 12,20,30,31",
+   "tipo": "B"
+  },
+  {
+   "codigo": "382",
+   "descricao": "50% A VISTA/ 30 / 45",
+   "tipo": "B"
+  },
+  {
+   "codigo": "383",
+   "descricao": "A VISTA / 10 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "384",
+   "descricao": "10 / 30 / 60 / 90 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "385",
+   "descricao": "A VISTA 25% / 28 / 56 / 84 DDL",
+   "tipo": "B"
+  },
+  {
+   "codigo": "386",
+   "descricao": "15,45,DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "387",
+   "descricao": "30 / 56 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "388",
+   "descricao": "30/45/60/75/90/105 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "389",
+   "descricao": "7 / 20 / 40 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "390",
+   "descricao": "PAG MENOS VENC 01,15 DO MES SUBS",
+   "tipo": "3"
+  },
+  {
+   "codigo": "391",
+   "descricao": "30 DDL VENC 5 FEIRA",
+   "tipo": "6"
+  },
+  {
+   "codigo": "392",
+   "descricao": "40 / 50 / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "393",
+   "descricao": "30/60/90 VENC TERCA FEIRA",
+   "tipo": "B"
+  },
+  {
+   "codigo": "394",
+   "descricao": "VENC 6-20 P=20 / VENC 21-05 P=05",
+   "tipo": "3"
+  },
+  {
+   "codigo": "395",
+   "descricao": "35/42/49 VENC QUINTA FEIRA",
+   "tipo": "B"
+  },
+  {
+   "codigo": "396",
+   "descricao": "30 / 50 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "397",
+   "descricao": "28 / 42 / 56 / 70 / 84 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "398",
+   "descricao": "45 / 75 / 90 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "399",
+   "descricao": "84 / 112 / 140DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "400",
+   "descricao": "20/40/60/80/100/120/140/160/180 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "401",
+   "descricao": "28 DDL VENC DIA 15 OU 20",
+   "tipo": "3"
+  },
+  {
+   "codigo": "402",
+   "descricao": "30/60/90/120/150/180/210/240/270/300 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "403",
+   "descricao": "A VISTA / 60 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "404",
+   "descricao": "30 / 45 / 60/ 75 DDL",
+   "tipo": "1"
+  },
+  {
+   "codigo": "405",
+   "descricao": "7 / 60 DDL",
+   "tipo": "1"
+  }
+ ]
+}

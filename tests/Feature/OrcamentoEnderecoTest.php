@@ -70,6 +70,7 @@ class OrcamentoEnderecoTest extends TestCase
             'cliente_cnpj' => '16729628000162',
             'tipo_frete' => 'CIF',
             'tipo_venda' => 'consumo',
+            'condicao_pagamento_codigo' => '028',
             'tipo_produto_servico' => 'produto',
             'itens' => [[
                 'tipo_item' => 'outro',
@@ -354,6 +355,7 @@ class OrcamentoEnderecoTest extends TestCase
             'status_gestor' => 'pendente',
             'tipo_frete' => 'CIF',
             'tipo_venda' => 'consumo',
+            'condicao_pagamento_codigo' => '028',
             'tipo_produto_servico' => 'produto',
         ];
     }

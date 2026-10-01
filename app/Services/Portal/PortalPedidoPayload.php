@@ -127,6 +127,20 @@ class PortalPedidoPayload
          * nunca mandado como null. O CRM não modela endereço de entrega alternativo, então
          * `deliveryClient*` fica de fora — o Portal entrega no próprio cliente.
          */
+        /*
+         * Código da condição no Protheus (SE4). Sem ele o Portal assume o padrão do
+         * cadastro do cliente — que pode não ser o que foi negociado no orçamento. Por
+         * isso é obrigatório aqui; o modal pede a condição antes de chegar a este ponto.
+         */
+        $condicao = trim((string) $orcamento->condicao_pagamento_codigo);
+
+        if ($condicao === '') {
+            throw new PortalPedidoInvalidoException(
+                'O orçamento não tem a condição de pagamento do Protheus definida.'
+            );
+        }
+
+        $corpo['paymentConditionCode'] = $condicao;
         $corpo['orderReference'] = 'ORC-'.$orcamento->id;
 
         if (filled($orcamento->observacoes)) {

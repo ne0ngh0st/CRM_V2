@@ -2634,6 +2634,18 @@ valor fica gravado no orçamento. ⚠️ Não é o "Faturamento: Produto/Serviç
 pagamento** (o CRM guarda texto, não o código do Protheus; ~30% "Outros" livre) em
 `docs/integracao-portal-pedidos.md` §4.11.
 
+### Condição de pagamento do Protheus no orçamento — 2026-10-01
+
+A "Forma de pagamento" deixou de ser texto livre: é uma das **391 condições da SE4**
+(`condicoes_pagamento`, carregada pela migration a partir de
+`database/data/condicoes_pagamento.json`), escolhida num seletor com busca e ordenado
+pelo uso nos pedidos do TOTVS. O código vai ao Portal como `paymentConditionCode`;
+`forma_pagamento` segue existindo como a descrição oficial (PDF/tela/Excel/BI intactos).
+⚠️ O "Outros" acabou de propósito — o Portal só aceita condição ativa no Protheus.
+Orçamento antigo ganha a condição SUGERIDA a partir do texto (91% dos de produção são
+reconhecidos). Lista nova do Protheus: `condicoes-pagamento:importar <xlsx> --json`.
+Detalhe em §4.12 do doc da integração.
+
 ### O 232 virou a fonte da venda; o 200 só dá a etapa — 2026-09-25
 
 Setembro/2026 saía **R$ 61,5 mi no CRM e no BI contra R$ 58,4 mi no Excel do 232**. O

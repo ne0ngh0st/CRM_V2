@@ -15,6 +15,7 @@ use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Notificacao\NotificacaoService;
 use App\Services\Orcamento\NivelAprovacaoCalculator;
 use App\Services\Orcamento\OrcamentoCalculoService;
+use App\Services\Orcamento\CondicoesPagamento;
 use App\Services\Portal\GeradorDePedidoNoPortal;
 use App\Services\Portal\PortalPedidoInvalidoException;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -121,6 +122,11 @@ class OrcamentoController extends Controller
             'formaPagamento' => $o->forma_pagamento,
             'tipoFrete' => $o->tipo_frete,
             'tipoVenda' => $o->tipo_venda,
+            'condicaoPagamentoCodigo' => $o->condicao_pagamento_codigo,
+            // Só quando o modal vai precisar: reconhecer o texto custa uma passada na lista.
+            'condicaoPagamentoSugerida' => $portalHabilitado && $o->condicao_pagamento_codigo === null
+                ? CondicoesPagamento::sugerirCodigo($o->forma_pagamento)
+                : null,
             'tipoProdutoServico' => $o->tipo_produto_servico,
             'valorTotal' => (float) $o->valor_total,
             'dataValidade' => optional($o->data_validade)->format('Y-m-d'),
@@ -174,6 +180,8 @@ class OrcamentoController extends Controller
         return Inertia::render('Orcamentos/Index', [
             'role' => $role,
             'portalHabilitado' => $portalHabilitado,
+            // A lista inteira só vai quando o modal do Portal existe nesta tela.
+            'condicoesPagamento' => $portalHabilitado ? CondicoesPagamento::opcoes() : [],
             'podeExcluir' => in_array($role, ['admin', 'diretor'], true),
             'orcamentos' => $orcamentos,
             'kpis' => $kpis,
@@ -330,6 +338,7 @@ class OrcamentoController extends Controller
             'copiaDe' => $copiaDe,
             'materiasPrimas' => $isAdmin ? $this->materiasPrimasParaSelect() : [],
             'outrasInformacoesPadrao' => self::OUTRAS_INFORMACOES_PADRAO,
+            'condicoesPagamento' => CondicoesPagamento::opcoes(),
         ]);
     }
 
@@ -351,6 +360,7 @@ class OrcamentoController extends Controller
             'copiaDe' => null,
             'materiasPrimas' => $isAdmin ? $this->materiasPrimasParaSelect() : [],
             'outrasInformacoesPadrao' => self::OUTRAS_INFORMACOES_PADRAO,
+            'condicoesPagamento' => CondicoesPagamento::opcoes(),
         ]);
     }
 
@@ -370,7 +380,9 @@ class OrcamentoController extends Controller
                 'cliente_estado' => $data['cliente_estado'] ?? null,
                 'cliente_cep' => $data['cliente_cep'] ?? null,
                 'cliente_contato' => $data['cliente_contato'] ?? null,
-                'forma_pagamento' => $data['forma_pagamento'] ?? null,
+                'condicao_pagamento_codigo' => $data['condicao_pagamento_codigo'],
+                // A descrição oficial do Protheus, copiada: é o que PDF, tela, Excel e BI leem.
+                'forma_pagamento' => CondicoesPagamento::descricaoDe($data['condicao_pagamento_codigo']),
                 'tipo_frete' => $data['tipo_frete'],
                 'tipo_venda' => $data['tipo_venda'],
                 'tipo_produto_servico' => $data['tipo_produto_servico'],
@@ -420,7 +432,9 @@ class OrcamentoController extends Controller
                 'cliente_estado' => $data['cliente_estado'] ?? null,
                 'cliente_cep' => $data['cliente_cep'] ?? null,
                 'cliente_contato' => $data['cliente_contato'] ?? null,
-                'forma_pagamento' => $data['forma_pagamento'] ?? null,
+                'condicao_pagamento_codigo' => $data['condicao_pagamento_codigo'],
+                // A descrição oficial do Protheus, copiada: é o que PDF, tela, Excel e BI leem.
+                'forma_pagamento' => CondicoesPagamento::descricaoDe($data['condicao_pagamento_codigo']),
                 'tipo_frete' => $data['tipo_frete'],
                 'tipo_venda' => $data['tipo_venda'],
                 'tipo_produto_servico' => $data['tipo_produto_servico'],
@@ -518,16 +532,19 @@ class OrcamentoController extends Controller
          * — o mesmo tratamento do frete em vez de obrigar a reabrir o formulário.
          */
         $pedeTipoVenda = ! $reenvio && $orcamento->tipo_venda === null;
+        $pedeCondicao = ! $reenvio && $orcamento->condicao_pagamento_codigo === null;
 
         $dados = $request->validate([
             'data_entrega' => [$reenvio ? 'nullable' : 'required', 'date_format:Y-m-d', 'after:today'],
             'transportadora' => ['nullable', 'string', 'max:20', 'regex:/^[A-Za-z0-9]+$/'],
             'tipo_venda' => [$pedeTipoVenda ? 'required' : 'nullable', Rule::in(Orcamento::TIPOS_VENDA)],
+            'condicao_pagamento_codigo' => [$pedeCondicao ? 'required' : 'nullable', Rule::exists('condicoes_pagamento', 'codigo')->where('ativo', true)],
         ], [
             'data_entrega.required' => 'Informe a data de entrega desejada.',
             'data_entrega.after' => 'A data de entrega precisa ser depois de hoje.',
             'transportadora.regex' => 'Use o código da transportadora no Protheus (só letras e números).',
             'tipo_venda.required' => 'Escolha o tipo de venda.',
+            'condicao_pagamento_codigo.required' => 'Escolha a condição de pagamento.',
         ]);
 
         /*
@@ -537,6 +554,14 @@ class OrcamentoController extends Controller
          */
         if ($pedeTipoVenda) {
             $orcamento->update(['tipo_venda' => $dados['tipo_venda']]);
+        }
+
+        // Mesma regra para a condição: grava no orçamento, junto com a descrição oficial.
+        if ($pedeCondicao) {
+            $orcamento->update([
+                'condicao_pagamento_codigo' => $dados['condicao_pagamento_codigo'],
+                'forma_pagamento' => CondicoesPagamento::descricaoDe($dados['condicao_pagamento_codigo']),
+            ]);
         }
 
         try {
@@ -695,7 +720,7 @@ class OrcamentoController extends Controller
         return response()->json($produtos);
     }
 
-    /** @return array{cliente_nome: string, cliente_cnpj: ?string, cliente_contato: ?string, forma_pagamento: ?string, tipo_frete: string, tipo_venda: string, tipo_produto_servico: string, data_validade: ?string, observacoes: ?string, variacao_producao_personalizado: ?string, prazo_producao: ?string, garantia_imagem: ?string, texto_importante: ?string, itens: array} */
+    /** @return array{cliente_nome: string, cliente_cnpj: ?string, cliente_contato: ?string, condicao_pagamento_codigo: string, tipo_frete: string, tipo_venda: string, tipo_produto_servico: string, data_validade: ?string, observacoes: ?string, variacao_producao_personalizado: ?string, prazo_producao: ?string, garantia_imagem: ?string, texto_importante: ?string, itens: array} */
     private function validarOrcamento(Request $request): array
     {
         return $request->validate([
@@ -708,7 +733,11 @@ class OrcamentoController extends Controller
             'cliente_cep' => ['nullable', 'string', 'max:10'],
             'cliente_id' => ['nullable', 'integer', 'exists:clientes,id'],
             'cliente_contato' => ['nullable', 'string', 'max:255'],
-            'forma_pagamento' => ['nullable', 'string', 'max:50'],
+            /*
+             * Só condição ATIVA do Protheus: o Portal recusa qualquer outra, e o texto livre
+             * ("COMBINAR", "30/60 após análise de crédito") era ~30% dos orçamentos.
+             */
+            'condicao_pagamento_codigo' => ['required', 'string', Rule::exists('condicoes_pagamento', 'codigo')->where('ativo', true)],
             'tipo_frete' => ['required', Rule::in(['CIF', 'FOB'])],
             /*
              * Sem valor pré-marcado no formulário, de propósito: consumo e revenda têm TES
@@ -973,7 +1002,7 @@ class OrcamentoController extends Controller
         };
     }
 
-    /** @return array{id: int, statusGestor: string, clienteNome: string, clienteCnpj: ?string, clienteContato: ?string, formaPagamento: ?string, tipoFrete: ?string, tipoVenda: ?string, tipoProdutoServico: string, dataValidade: ?string, observacoes: ?string, variacaoProducaoPersonalizado: ?string, prazoProducao: ?string, garantiaImagem: ?string, textoImportante: ?string, itens: array} */
+    /** @return array{id: int, statusGestor: string, clienteNome: string, clienteCnpj: ?string, clienteContato: ?string, formaPagamento: ?string, condicaoPagamentoCodigo: ?string, tipoFrete: ?string, tipoVenda: ?string, tipoProdutoServico: string, dataValidade: ?string, observacoes: ?string, variacaoProducaoPersonalizado: ?string, prazoProducao: ?string, garantiaImagem: ?string, textoImportante: ?string, itens: array} */
     private function mapOrcamentoParaForm(Orcamento $orcamento, bool $isAdmin): array
     {
         $endereco = $orcamento->enderecoDoDocumento();
@@ -1000,6 +1029,12 @@ class OrcamentoController extends Controller
             'clienteCep' => $endereco['cep'],
             'clienteContato' => $orcamento->cliente_contato,
             'formaPagamento' => $orcamento->forma_pagamento,
+            /*
+             * Orçamento anterior à lista do Protheus tem só o texto: o servidor sugere a
+             * condição de mesma descrição, e o vendedor confirma ao salvar.
+             */
+            'condicaoPagamentoCodigo' => $orcamento->condicao_pagamento_codigo
+                ?? CondicoesPagamento::sugerirCodigo($orcamento->forma_pagamento),
             'tipoFrete' => $orcamento->tipo_frete,
             'tipoVenda' => $orcamento->tipo_venda,
             'tipoProdutoServico' => $orcamento->tipo_produto_servico,

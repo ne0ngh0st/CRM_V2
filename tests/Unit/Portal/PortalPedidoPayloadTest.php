@@ -52,6 +52,7 @@ class PortalPedidoPayloadTest extends TestCase
             'tipo_produto_servico' => 'produto',
             'tipo_frete' => 'CIF',
             'tipo_venda' => 'consumo',
+            'condicao_pagamento_codigo' => '067',
             'observacoes' => null,
         ], $atributos));
 
@@ -189,6 +190,25 @@ class PortalPedidoPayloadTest extends TestCase
 
         // Todos os itens com o mesmo tipo: o Portal não aceita consumo e revenda juntos.
         $this->assertSame([$esperado, $esperado], array_column($corpo['products'], 'invoiceType'));
+    }
+
+    public function test_condicao_de_pagamento_vai_pelo_codigo_do_protheus(): void
+    {
+        $corpo = $this->montar($this->orcamento([[]], ['condicao_pagamento_codigo' => '067']));
+
+        $this->assertSame('067', $corpo['paymentConditionCode']);
+    }
+
+    /**
+     * Sem código, o Portal assumiria o padrão do cadastro do cliente — que pode não ser
+     * o prazo negociado. Recusa em vez de mandar sem.
+     */
+    public function test_orcamento_sem_condicao_de_pagamento_e_recusado(): void
+    {
+        $this->expectException(PortalPedidoInvalidoException::class);
+        $this->expectExceptionMessageMatches('/condição de pagamento/');
+
+        $this->montar($this->orcamento([[]], ['condicao_pagamento_codigo' => null]));
     }
 
     /** Sem default: um chute de "consumo" faria pedido de revenda sair com a TES errada. */

@@ -1,6 +1,6 @@
 <script setup>
 import { resumo as resumoOrcamento } from '@/utils/orcamento';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
@@ -12,8 +12,8 @@ import DocPainel from '@/Components/Orcamentos/DocPainel.vue';
 import DocLinha from '@/Components/Orcamentos/DocLinha.vue';
 import ClienteBuscaBar from '@/Components/Orcamentos/ClienteBuscaBar.vue';
 import ItensTabela from '@/Components/Orcamentos/ItensTabela.vue';
+import CondicaoPagamentoSelect from '@/Components/Orcamentos/CondicaoPagamentoSelect.vue';
 import {
-    OPCOES_FORMA_PAGAMENTO,
     ROTULOS_STATUS_ORCAMENTO,
     TONS_STATUS_ORCAMENTO,
     ROTULOS_TIPO_PRODUTO_SERVICO,
@@ -29,6 +29,8 @@ const props = defineProps({
     copiaDe: { type: Object, default: null },
     materiasPrimas: { type: Array, default: () => [] },
     outrasInformacoesPadrao: Object,
+    // Condições do Protheus (SE4), as mais usadas primeiro.
+    condicoesPagamento: { type: Array, default: () => [] },
 });
 
 // Editar usa props.orcamento (PATCH); copiar usa props.copiaDe (POST, documento novo).
@@ -73,7 +75,9 @@ const form = useForm({
     cliente_estado: fonte?.clienteEstado ?? props.prefillCliente?.estado ?? '',
     cliente_cep: fonte?.clienteCep ?? props.prefillCliente?.cep ?? '',
     cliente_contato: fonte?.clienteContato ?? props.prefillCliente?.contato ?? '',
-    forma_pagamento: fonte?.formaPagamento ?? '',
+    // Código da condição no Protheus. Orçamento antigo chega com a SUGESTÃO do servidor
+    // (o texto gravado reconhecido na lista) — ou vazio, se o texto não bate com nenhuma.
+    condicao_pagamento_codigo: fonte?.condicaoPagamentoCodigo ?? '',
     tipo_frete: fonte?.tipoFrete ?? 'CIF',
     // Sem default, de propósito: consumo e revenda têm tributação diferente, e um valor
     // pré-marcado faria o vendedor passar reto. Orçamento antigo reabre em branco.
@@ -99,22 +103,6 @@ const form = useForm({
         }))
         : [itemVazio()],
 });
-
-// "Outros" no select revela um campo de texto livre — como o forma_pagamento
-// já é string livre no banco, o valor digitado vai direto pra form.forma_pagamento.
-const OPCOES_FIXAS = OPCOES_FORMA_PAGAMENTO.slice(0, -1);
-const modoFormaPagamentoLivre = ref(form.forma_pagamento !== '' && !OPCOES_FIXAS.includes(form.forma_pagamento));
-
-function selecionarFormaPagamento(valor) {
-    if (valor === '__livre__') {
-        modoFormaPagamentoLivre.value = true;
-        form.forma_pagamento = '';
-
-        return;
-    }
-
-    form.forma_pagamento = valor;
-}
 
 function selecionarCliente(cliente) {
     // Os dois vínculos são mutuamente exclusivos: trocar de lead para cliente (ou o
@@ -267,23 +255,17 @@ function salvar() {
                                     <InputError :message="form.errors.data_validade" />
                                 </DocLinha>
                                 <DocLinha rotulo="Forma de pagamento">
-                                    <select
-                                        v-if="!modoFormaPagamentoLivre"
-                                        :value="form.forma_pagamento"
-                                        class="doc-campo"
-                                        @change="selecionarFormaPagamento($event.target.value)"
-                                    >
-                                        <option value="">Selecione</option>
-                                        <option v-for="opcao in OPCOES_FIXAS" :key="opcao" :value="opcao">{{ opcao }}</option>
-                                        <option value="__livre__">Outros</option>
-                                    </select>
-                                    <div v-else class="flex items-center gap-2">
-                                        <input v-model="form.forma_pagamento" type="text" placeholder="Descreva a forma de pagamento" class="doc-campo" />
-                                        <button type="button" class="whitespace-nowrap text-[0.65rem] text-gray-400 underline" @click="modoFormaPagamentoLivre = false; form.forma_pagamento = ''">
-                                            voltar
-                                        </button>
-                                    </div>
-                                    <InputError :message="form.errors.forma_pagamento" />
+                                    <CondicaoPagamentoSelect
+                                        v-model="form.condicao_pagamento_codigo"
+                                        :opcoes="condicoesPagamento"
+                                        input-class="doc-campo"
+                                    />
+                                    <!-- Orçamento antigo com texto que não bate com nenhuma condição: mostra o
+                                         que estava escrito, para o vendedor achar o equivalente na lista. -->
+                                    <p v-if="!form.condicao_pagamento_codigo && fonte?.formaPagamento" class="mt-0.5 text-[0.65rem] text-amber-dark">
+                                        Antes: "{{ fonte.formaPagamento }}". Escolha a condição do Protheus equivalente.
+                                    </p>
+                                    <InputError :message="form.errors.condicao_pagamento_codigo" />
                                 </DocLinha>
                                 <DocLinha rotulo="Frete">
                                     <div class="flex flex-col gap-1">

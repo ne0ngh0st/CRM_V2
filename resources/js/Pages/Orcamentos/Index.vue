@@ -19,6 +19,7 @@ const props = defineProps({
     role: String,
     podeExcluir: Boolean,
     portalHabilitado: { type: Boolean, default: false },
+    condicoesPagamento: { type: Array, default: () => [] },
     orcamentos: Object,
     kpis: Object,
     filaAprovacao: { type: Object, default: null },
@@ -362,6 +363,6 @@ function enviarAoPortal(orcamento) {
         <RejeitarOrcamentoModal :show="modalRejeitar" :orcamento="orcamentoAtivo" @close="modalRejeitar = false" />
         <ExcluirOrcamentoModal :show="modalExcluir" :orcamento="orcamentoAtivo" @close="modalExcluir = false" />
 
-        <TransformarEmPedidoModal :show="modalPortal" :orcamento="orcamentoAtivo" @close="modalPortal = false" />
+        <TransformarEmPedidoModal :show="modalPortal" :orcamento="orcamentoAtivo" :condicoes="condicoesPagamento" @close="modalPortal = false" />
     </AuthenticatedLayout>
 </template>

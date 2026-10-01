@@ -936,7 +936,7 @@ no lugar: o Portal quer o enum fixo dele.
   formulário (`tipo_produto_servico`): aquele só decide se o preço embute IPI.
 - ⚠️ "Serviço" só é aceito pelo Portal para produto do grupo 3 — a recusa vem deles.
 
-### Condição de pagamento — pendente do lado deles
+### Condição de pagamento — ✅ resolvida no mesmo dia, ver §4.12
 
 O Portal assume o prazo do cadastro do cliente no Protheus (o 1133 entrou com 28 DDL sem
 mandarmos nada). O Philipe vai acrescentar o campo; a Laís avisou que **só aceitam
@@ -949,6 +949,37 @@ orçamentos de produção desde agosto usam "Outros" com texto livre ("30", "35 
 ("28DDL" × "28 DDL"). Caminho: trocar o select por uma lista das condições do Protheus
 (código + descrição), sem "Outros". Depende de eles dizerem se o campo recebe código ou
 descrição e mandarem a lista.
+
+## 4.12 Condição de pagamento do Protheus — 2026-10-01 (feito)
+
+O Philipe acrescentou `paymentConditionCode` (código da SE4, ex.: `"001"`); sem ele o Portal
+assume o padrão do cadastro do cliente. A lista veio do Protheus no mesmo dia
+(`DOCS\CRM\condiçoes pagamento.xlsx`, "Listagem do Browse"): **391 condições**.
+
+- **`condicoes_pagamento`** (código, descrição, tipo, ativo) — carregada PELA MIGRATION a
+  partir de `database/data/condicoes_pagamento.json` (versionado), porque seeder não roda
+  no deploy e tabela vazia travaria a criação de orçamento. Atualizar:
+  `php artisan condicoes-pagamento:importar <xlsx> --json`. Condição que sai da lista é
+  **desativada, nunca apagada**.
+- Conferido antes de construir: os **167 códigos** usados nos pedidos do TOTVS nos últimos
+  12 meses (`pedidos.condicao_pagamento`) estão todos na lista — o formato é o mesmo.
+- **`orcamentos.condicao_pagamento_codigo`**, obrigatório no formulário; `forma_pagamento`
+  continua, agora sempre a DESCRIÇÃO oficial — PDF, tela, Excel e BI não mudaram.
+- O "Outros" com texto livre **acabou**. O seletor tem busca e ordena pelo uso real nos
+  pedidos (cache de 1 dia); mostra o código junto porque cinco descrições se repetem
+  ("60 DDL" é 060 e 349).
+- **Orçamento antigo**: `CondicoesPagamento::sugerirCodigo()` reconhece o texto gravado
+  (sem espaço, "DIAS" = DDL, zero à esquerda fora, número puro ganha DDL; repetida fica
+  com o menor código) e o pré-preenche no formulário e no modal — sugestão, nunca gravada
+  sem alguém confirmar. Medido: **279 dos 306** orçamentos de produção desde 28/08 (91%)
+  são reconhecidos; 21 não tinham forma; só 6 ficam para escolher à mão ("COMBINAR" ×4,
+  "50% à vista/50% 28", "30/60 Dias após análise de crédito").
+- Sem condição, o pedido é recusado — mandar sem faria o Portal usar o padrão do cliente,
+  que pode não ser o negociado.
+
+Testes: `CondicoesPagamentoTest` (carga, reconhecimento de 9 textos, desativação, ordem por
+uso, formulário recusando fora da lista/inativa, importador com cabeçalho repetido) +
+payload e envio. **Quatro mutações, as quatro mordidas.**
 
 ## 5. Lacunas de schema — medidas, não estimadas
 

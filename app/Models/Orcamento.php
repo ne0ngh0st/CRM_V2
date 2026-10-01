@@ -36,6 +36,7 @@ class Orcamento extends Model
         'cliente_cep',
         'cliente_contato',
         'forma_pagamento',
+        'condicao_pagamento_codigo',
         'tipo_frete',
         'tipo_venda',
         'tipo_produto_servico',

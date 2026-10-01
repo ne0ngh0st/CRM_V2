@@ -85,6 +85,8 @@ class PortalPedidoTest extends TestCase
             'tipo_produto_servico' => 'servico',
             'tipo_frete' => $sobrescreve['frete'] ?? 'CIF',
             'tipo_venda' => array_key_exists('tipoVenda', $sobrescreve) ? $sobrescreve['tipoVenda'] : 'consumo',
+            'condicao_pagamento_codigo' => array_key_exists('condicao', $sobrescreve) ? $sobrescreve['condicao'] : '028',
+            'forma_pagamento' => $sobrescreve['formaPagamento'] ?? '28 DDL',
             'valor_total' => 2700,
             'nivel_aprovacao' => 'nenhum',
             'status_gestor' => $sobrescreve['status'] ?? 'aprovado',
@@ -125,6 +127,7 @@ class PortalPedidoTest extends TestCase
             'cliente_nome' => 'CENTRAL SUPERMERCADOS',
             'tipo_frete' => 'CIF',
             'tipo_venda' => 'consumo',
+            'condicao_pagamento_codigo' => '028',
             'tipo_produto_servico' => 'servico',
             'itens' => [[
                 'tipo_item' => 'bobina',
@@ -562,6 +565,7 @@ class PortalPedidoTest extends TestCase
         $this->actingAs($vendedor)->post(route('orcamentos.store'), [
             'cliente_nome' => 'CENTRAL SUPERMERCADOS',
             'tipo_frete' => 'CIF',
+            'condicao_pagamento_codigo' => '028',
             'tipo_produto_servico' => 'produto',
             'itens' => [['tipo_item' => 'bobina', 'descricao' => 'BOBINA', 'quantidade' => 10, 'valor_unitario' => 3]],
         ])->assertSessionHasErrors('tipo_venda');
@@ -601,5 +605,57 @@ class PortalPedidoTest extends TestCase
         $orcamento->refresh();
         $this->assertSame('consumo', $orcamento->tipo_venda);
         $this->assertSame('SALE', $orcamento->portal_payload['products'][0]['invoiceType']);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Condição de pagamento do Protheus — 2026-10-01
+    |--------------------------------------------------------------------------
+    */
+
+    /** Orçamento antigo (só texto): o modal pede a condição, e ela fica gravada com a descrição oficial. */
+    public function test_orcamento_antigo_escolhe_a_condicao_no_envio_e_ela_fica_gravada(): void
+    {
+        Bus::fake();
+        [, $orcamento] = $this->cenario(['condicao' => null, 'formaPagamento' => 'COMBINAR']);
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio())
+            ->assertSessionHasErrors('condicao_pagamento_codigo');
+        Bus::assertNotDispatched(EnviarPedidoAoPortalJob::class);
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio(['condicao_pagamento_codigo' => '069']))
+            ->assertSessionHasNoErrors();
+
+        $orcamento->refresh();
+        $this->assertSame('069', $orcamento->condicao_pagamento_codigo);
+        $this->assertSame('28 / 42 / 56 DDL', $orcamento->forma_pagamento);
+        $this->assertSame('069', $orcamento->portal_payload['paymentConditionCode']);
+    }
+
+    /** A tela leva a sugestão pronta: texto antigo reconhecido vira a condição pré-escolhida no modal. */
+    public function test_listagem_sugere_a_condicao_a_partir_do_texto_antigo(): void
+    {
+        [, $orcamento] = $this->cenario(['condicao' => null, 'formaPagamento' => '28/35/42DDL']);
+
+        $this->actingAs($this->admin())
+            ->get(route('orcamentos.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('orcamentos.data.0.condicaoPagamentoCodigo', null)
+                ->where('orcamentos.data.0.condicaoPagamentoSugerida', '067')
+                ->has('condicoesPagamento', 391));
+    }
+
+    /** O envio não troca a condição que veio do formulário. */
+    public function test_envio_nao_sobrescreve_a_condicao_do_formulario(): void
+    {
+        Bus::fake();
+        [, $orcamento] = $this->cenario();
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio(['condicao_pagamento_codigo' => '001']));
+
+        $this->assertSame('028', $orcamento->fresh()->portal_payload['paymentConditionCode']);
     }
 }
