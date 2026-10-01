@@ -2644,7 +2644,8 @@ pelo uso nos pedidos do TOTVS. O código vai ao Portal como `paymentConditionCod
 ⚠️ O "Outros" acabou de propósito — o Portal só aceita condição ativa no Protheus.
 Orçamento antigo ganha a condição SUGERIDA a partir do texto (91% dos de produção são
 reconhecidos). Lista nova do Protheus: `condicoes-pagamento:importar <xlsx> --json`.
-Detalhe em §4.12 do doc da integração.
+✅ Homologado com o pedido 1134 (condição e tipo de nota conferidos na tela do
+Portal). Detalhe em §4.12 do doc da integração.
 
 ### O 232 virou a fonte da venda; o 200 só dá a etapa — 2026-09-25
 

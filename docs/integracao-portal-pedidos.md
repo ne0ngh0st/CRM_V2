@@ -981,6 +981,19 @@ Testes: `CondicoesPagamentoTest` (carga, reconhecimento de 9 textos, desativaç�
 uso, formulário recusando fora da lista/inativa, importador com cabeçalho repetido) +
 payload e envio. **Quatro mutações, as quatro mordidas.**
 
+### ✅ Homologado em 2026-10-01 — pedido 1134
+
+Orçamento #2378 do dev (Alan Dayan → Decathlon 000646/0004, 5 × V13354, CIF, venda
+consumo, condição **067 — 28 / 35 / 42 DDL**, entrega pedida 20/10). Conferido na tela do
+Portal: **condição 28 / 35 / 42 DDL** (no 1133, sem o campo, tinha entrado o 28 DDL do
+cadastro do cliente), **tipo de nota Venda (Consumo)**, total R$ 2.086,70, entrega 20/10,
+faturamento previsto 15/10. ⚠️ A resposta da API não devolve condição nem tipo de nota:
+a única prova é a tela deles.
+
+No caminho, a API de homolog ficou inalcançável pela rede do escritório (o 5G alcançava);
+as 3 tentativas falharam, o orçamento ficou "resultado incerto" e o reenvio pelo botão
+usou a mesma chave — exatamente o caminho desenhado em §4.10.
+
 ## 5. Lacunas de schema — medidas, não estimadas
 
 Números tirados do `palma_v2` de desenvolvimento em 2026-09-09 (1.864 orçamentos,
