@@ -73,15 +73,8 @@ const itensDoUsuario = computed(() => menuUsuario(perfil.value));
                     <div class="flex h-16 justify-between">
                         <div class="flex min-w-0">
                             <div class="flex shrink-0 items-center">
-                                <!--
-                                    Autopel é a marca em destaque; PALMA é o nome do sistema e vem
-                                    depois, menor. No celular só a mão, para não roubar a barra.
-                                -->
-                                <Link :href="route('dashboard')" class="inline-flex min-h-11 items-center gap-3">
-                                    <img src="/images/autopel-logo-white.png" alt="Autopel" class="h-8 w-auto" />
-                                    <span class="h-6 w-px bg-white/25" aria-hidden="true"></span>
-                                    <img src="/images/palma/palma-simbolo-branco.svg" alt="PALMA" class="h-6 w-auto sm:hidden" />
-                                    <img src="/images/palma/palma-logo-compacto-branco.svg" alt="PALMA" class="hidden h-6 w-auto sm:block" />
+                                <Link :href="route('dashboard')" class="inline-flex min-h-11 items-center">
+                                    <img src="/images/palma/palma-logo-compacto-branco.svg" alt="PALMA" class="h-9 w-auto" />
                                 </Link>
                             </div>
 

@@ -188,14 +188,13 @@ Valor que **varia por caso de uso** não é decisão repetida: `min-w-[1000px]` 
 Centralizar cria dependência de **ordem** e de **cascata**, que não existia quando tudo era cópia. Caso real: no `app.css`, `.tbl-acao:disabled:hover` e `.tbl-acao-verde:hover` têm a mesma especificidade — quem ganha é o que vier por último no arquivo. Reordenar o CSS "pra organizar" quebra o estado desabilitado sem erro nenhum. Quando extrair algo, **comentar no próprio arquivo o que não pode ser reordenado/removido**.
 
 ## Marca Autopel
-- **Hierarquia das marcas (decisão do Tony, 2026-10-02): AUTOPEL em evidência, PALMA
-  como o nome do sistema, sempre junto e menor.** Navbar: Autopel + filete + PALMA compacto
-  (no celular só a mão). Login: Autopel no topo e PALMA no bloco de boas-vindas (no celular
-  os dois acima do formulário, porque o painel navy some). E-mail de senha: Autopel e,
-  embaixo, PALMA pequeno. Orçamento (PDF e folha na tela): cabeçalho só Autopel, a mão
-  aparece no rodapé ao lado de "gerado pelo sistema PALMA". **Ícone do app/favicon é a
-  mão** — é o único lugar em que o PALMA vem sozinho. Fichas de bobina/etiqueta, relatórios
-  e o resumo diário seguem só Autopel.
+- **No sistema, só a marca PALMA (decisão do Tony, 2026-10-02).** Navbar, login, ícone do
+  app/favicon e e-mails do sistema (senha, resumo diário) usam o PALMA sozinho — testamos
+  Autopel + PALMA lado a lado e ficou ruim ("dois logos não tá dando certo"); não voltar a
+  juntar os dois. O "por Autopel" do próprio logo é quem carrega a empresa. **Documento que
+  vai para o CLIENTE continua Autopel** (cabeçalho do orçamento, fichas de bobina/etiqueta,
+  relatórios); no orçamento a mão aparece só discreta no rodapé, ao lado de "gerado pelo
+  sistema PALMA".
 - **Marca PALMA = `scripts/gerar-marca-palma.py`.** A mão vetorizada (13 polígonos), as
   cores e a composição "PALMA / por Autopel" moram nesse script; `public/images/palma/*`,
   `public/images/pwa/*` e `public/favicon.ico` são SAÍDA dele — não editar à mão, mudar o

@@ -12,19 +12,17 @@ import { Link } from '@inertiajs/vue3';
 
             <Link href="/" class="relative z-10">
                 <img
-                    src="/images/autopel-logo-white.png"
-                    alt="Autopel"
-                    class="h-12 w-auto"
+                    src="/images/palma/palma-logo-branco.svg"
+                    alt="PALMA por Autopel"
+                    class="h-16 w-auto"
                 />
             </Link>
 
             <div class="relative z-10 max-w-sm">
-                <img
-                    src="/images/palma/palma-logo-branco.svg"
-                    alt="PALMA por Autopel"
-                    class="h-14 w-auto"
-                />
-                <h1 class="mt-8 text-4xl font-bold">Olá!</h1>
+                <span class="block text-[11px] font-medium uppercase tracking-[0.3em] text-sky-200/90">
+                    CRM comercial da Autopel
+                </span>
+                <h1 class="mt-3 text-4xl font-bold">Olá!</h1>
                 <p class="mt-2 text-xl text-sky-100">Seja bem-vindo(a) de volta.</p>
                 <p class="mt-4 max-w-xs text-sm leading-relaxed text-sky-200/80">
                     Entre para continuar acessando a plataforma de inteligência comercial da Autopel.
@@ -35,10 +33,11 @@ import { Link } from '@inertiajs/vue3';
         <div class="flex w-full flex-1 flex-col items-center justify-center bg-white px-6 py-12">
             <div class="w-full sm:max-w-md">
                 <!-- No celular o painel navy some (md:flex): sem isto o login não tem marca nenhuma. -->
-                <div class="mb-8 flex flex-col items-center gap-4 md:hidden">
-                    <img src="/images/autopel-logo.png" alt="Autopel" class="h-12 w-auto" />
-                    <img src="/images/palma/palma-logo-compacto.svg" alt="PALMA" class="h-8 w-auto" />
-                </div>
+                <img
+                    src="/images/palma/palma-logo.svg"
+                    alt="PALMA por Autopel"
+                    class="mx-auto mb-8 h-14 w-auto md:hidden"
+                />
                 <slot />
             </div>
         </div>

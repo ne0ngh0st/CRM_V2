@@ -86,11 +86,11 @@
                                 <tr>
                                     <td align="left" valign="middle">
                                         @if ($logo && isset($message))
-                                            <img src="{{ $message->embed($logo) }}" alt="Autopel" width="96" style="display:block; width:96px; height:auto; border:0;">
+                                            <img src="{{ $message->embed($logo) }}" alt="PALMA" width="110" style="display:block; width:110px; height:auto; border:0;">
                                         @elseif ($logo)
-                                            <img src="data:image/png;base64,{{ base64_encode(file_get_contents($logo)) }}" alt="Autopel" width="96" style="display:block; width:96px; height:auto; border:0;">
+                                            <img src="data:image/png;base64,{{ base64_encode(file_get_contents($logo)) }}" alt="PALMA" width="110" style="display:block; width:110px; height:auto; border:0;">
                                         @else
-                                            <span style="color:#ffffff; font-size:16px; font-weight:bold; letter-spacing:1px;">AUTOPEL</span>
+                                            <span style="color:#ffffff; font-size:16px; font-weight:bold; letter-spacing:1px;">PALMA</span>
                                         @endif
                                     </td>
                                     <td align="right" valign="middle" style="font-size:13px; line-height:18px; color:#c9dcec;">

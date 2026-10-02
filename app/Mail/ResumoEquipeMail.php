@@ -59,7 +59,7 @@ class ResumoEquipeMail extends Mailable
      */
     public static function dadosDaView(array $resumo, string $nomeDestinatario): array
     {
-        $logo = public_path('images/autopel-logo-white.png');
+        $logo = public_path('images/palma/palma-logo-compacto-branco.png');
 
         return [
             'r' => $resumo,

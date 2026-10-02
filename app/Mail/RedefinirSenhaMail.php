@@ -42,7 +42,6 @@ class RedefinirSenhaMail extends Mailable
                 'nome' => $this->nome,
                 'minutos' => $this->minutos,
                 'logo' => $this->logoBranco(),
-                'logoPalma' => file_exists($p = public_path('images/palma/palma-logo-compacto-branco.png')) ? $p : null,
             ],
         );
     }
@@ -60,7 +59,7 @@ class RedefinirSenhaMail extends Mailable
      */
     private function logoBranco(): ?string
     {
-        $branco = public_path('images/autopel-logo-white.png');
+        $branco = public_path('images/palma/palma-logo-branco.png');
 
         return file_exists($branco) ? $branco : null;
     }
