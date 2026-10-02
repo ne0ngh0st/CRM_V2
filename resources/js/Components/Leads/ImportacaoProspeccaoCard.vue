@@ -73,7 +73,19 @@ const subtitulo = computed(() => {
                     <div class="flex flex-wrap gap-2">
                         <KpiTile :value="formatInteiro(r.novos)" label="Leads novos" tone="ok" compact />
                         <KpiTile :value="formatInteiro(r.atualizados)" label="Já no CRM, atualizados" compact />
+                        <!-- Estado de AGORA: some quando o código for preenchido e reimportado. -->
+                        <KpiTile
+                            :value="formatInteiro(importacao.semVendedor)"
+                            label="Sem vendedor (atribuir)"
+                            :tone="importacao.semVendedor ? 'warn' : 'default'"
+                            :href="importacao.semVendedor ? route('leads.index', { origem: 'prospeccao', sem_vendedor: 1 }) : null"
+                            compact
+                        />
                     </div>
+                    <p v-if="importacao.semVendedor" class="mt-1 text-[0.7rem] text-gray-500">
+                        Lead sem vendedor só aparece para admin e diretor. Para atribuir, preencha o
+                        <code>cod_vendedor</code> no CSV e importe de novo.
+                    </p>
                 </div>
 
                 <div>

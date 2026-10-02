@@ -164,22 +164,38 @@ class LeadsSituacaoReceitaTest extends TestCase
         $this->artisan('totvs:import-leads');
     }
 
-    public function test_sem_vendedor_vai_para_o_padrao_e_em_lead_existente_nao_apaga_o_dono(): void
+    public function test_sem_vendedor_ou_zerado_nasce_sem_dono_e_em_lead_existente_nao_apaga_o_dono(): void
     {
-        config(['totvs.arquivos.leads.vendedor_padrao' => '10617']);
         $this->situacao(self::ATIVA, 'ATIVA');
+        $this->situacao(self::INAPTA, 'ATIVA');
         $existente = $this->lead(self::BAIXADA);
         DB::table('leads')->where('id', $existente)->update(['cod_vendedor' => '000197']);
         $this->escreverLinhas([
-            ['cnpj' => self::ATIVA, 'razao_social' => 'NOVO', 'segmento' => '101'],
+            ['cnpj' => self::ATIVA, 'razao_social' => 'NOVO VAZIO', 'segmento' => '101'],
+            ['cnpj' => self::INAPTA, 'razao_social' => 'NOVO ZERADO', 'segmento' => '101', 'cod_vendedor' => '0'],
             ['cnpj' => self::BAIXADA, 'razao_social' => 'EXISTENTE', 'segmento' => '101'],
         ]);
 
         $this->artisan('totvs:import-leads')->assertSuccessful();
 
-        $this->assertSame('010617', DB::table('leads')->where('razao_social', 'NOVO')->value('cod_vendedor'));
+        $this->assertNull(DB::table('leads')->where('razao_social', 'NOVO VAZIO')->value('cod_vendedor'));
+        $this->assertNull(DB::table('leads')->where('razao_social', 'NOVO ZERADO')->value('cod_vendedor'));
         $this->assertSame('000197', DB::table('leads')->where('id', $existente)->value('cod_vendedor'));
         $this->assertSame('EXISTENTE', DB::table('leads')->where('id', $existente)->value('razao_social'));
+    }
+
+    public function test_atribuir_dono_e_preencher_o_codigo_e_importar_de_novo(): void
+    {
+        $this->situacao(self::ATIVA, 'ATIVA');
+        $this->escreverLinhas([['cnpj' => self::ATIVA, 'razao_social' => 'SEM DONO', 'segmento' => '101']]);
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+        $id = DB::table('leads')->value('id');
+
+        $this->escreverLinhas([['cnpj' => self::ATIVA, 'razao_social' => 'SEM DONO', 'segmento' => '101', 'cod_vendedor' => '10755']]);
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+
+        $this->assertSame([$id], DB::table('leads')->pluck('id')->all(), 'é o mesmo lead, não um segundo');
+        $this->assertSame('010755', DB::table('leads')->where('id', $id)->value('cod_vendedor'));
     }
 
     public function test_template_do_repositorio_tem_o_cabecalho_do_import(): void

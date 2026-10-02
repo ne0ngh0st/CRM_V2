@@ -25,9 +25,13 @@ use Throwable;
  * filtro `MARCAÇÃO PROSPECT = SAI PROSPECT`). Os leads que vieram de lá continuam no CRM;
  * como não estão nos CSVs novos, aparecem só como "sumiram da base" (nunca apagados).
  *
- * ⚠️ `cod_vendedor` em branco: o lead NOVO vai para `config('totvs.arquivos.leads.
- * vendedor_padrao')` — sem dono, `LeadController::scopeQuery` não o mostra a ninguém.
- * Em lead que já existe, campo em branco no CSV nunca apaga o que está no CRM.
+ * ⚠️ `cod_vendedor` em branco OU zerado (`0`, `000000`): o lead NOVO nasce SEM DONO
+ * (decisão do Tony, 2026-10-02 — "depois vamos atribuir aos vendedores corretos"). Sem
+ * código, `LeadController::scopeQuery` o mostra só a quem vê a empresa inteira (admin e
+ * diretor); nenhum vendedor o vê. A ATRIBUIÇÃO é o próprio import: preencher o código no
+ * CSV e rodar de novo — o lead é adotado pelo CNPJ e ganha o dono. Campo em branco no
+ * CSV nunca apaga o dono que um lead já tem.
+ * (Até esta data o lead sem código ia para a Venda Interna, 010617.)
  *
  * Difere do `legado:import-leads` em três pontos, e todos são correção de defeito, não
  * preferência:
@@ -407,7 +411,7 @@ class ImportLeadsTotvs extends Command
             $fantasia = Normalizador::valorOuNull($linha['nome_fantasia']);
 
             $registro = [
-                'cod_vendedor' => Normalizador::codigoVendedor($linha['cod_vendedor']),
+                'cod_vendedor' => $this->codigoVendedorOuNull($linha['cod_vendedor']),
                 'nome' => $fantasia ?? $razaoSocial,
                 'razao_social' => $razaoSocial,
                 'nome_fantasia' => $fantasia,
@@ -522,11 +526,9 @@ class ImportLeadsTotvs extends Command
     {
         $agora = now();
         $lote = [];
-        $padrao = Normalizador::codigoVendedor(config('totvs.arquivos.leads.vendedor_padrao'));
 
         foreach ($novos as $registro) {
             $registro = array_diff_key($registro, array_flip(self::SO_PARA_CONTA));
-            $registro['cod_vendedor'] ??= $padrao;
             $lote[] = $registro + [
                 'origem' => Lead::ORIGEM_PROSPECCAO,
                 'user_id' => null,
@@ -564,6 +566,19 @@ class ImportLeadsTotvs extends Command
             DB::table('leads')->where('id', $existentes[$digitos])
                 ->update($registro + ['origem' => Lead::ORIGEM_PROSPECCAO, 'updated_at' => $agora]);
         }
+    }
+
+    /**
+     * Código de vendedor da planilha, com zero vindo da planilha ("0", "000000") tratado
+     * como VAZIO: é como quem monta a lista marca "ainda sem dono". Gravar "000000"
+     * criaria um dono que não existe e esconderia o lead de todo mundo do mesmo jeito,
+     * mas sem aparecer como "sem vendedor".
+     */
+    private function codigoVendedorOuNull(mixed $valor): ?string
+    {
+        $codigo = Normalizador::codigoVendedor($valor);
+
+        return $codigo === null || preg_match('/^0+$/', $codigo) ? null : $codigo;
     }
 
     private function valorPositivoOuNull(mixed $valor): ?float

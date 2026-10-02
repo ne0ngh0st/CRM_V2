@@ -130,6 +130,8 @@ class AtualizacaoDadosController extends Controller
             // Estado de AGORA, não da rodada: alguém pode ter decidido depois dela.
             'sugestoesPendentes' => Lead::query()->visivel()->where('conta_vinculo', Lead::CONTA_SUGERIDA)->count(),
             'prospeccaoNoCrm' => Lead::query()->visivel()->where('origem', Lead::ORIGEM_PROSPECCAO)->count(),
+            // Mesmo recorte do link (/leads?origem=prospeccao&sem_vendedor=1), para o número bater.
+            'semVendedor' => Lead::query()->visivel()->where('origem', Lead::ORIGEM_PROSPECCAO)->whereNull('cod_vendedor')->count(),
         ];
     }
 

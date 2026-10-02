@@ -112,9 +112,8 @@ return [
             'arquivo' => ['Leads/*.csv'],
             'rlt' => null,
             'periodo' => 'completo',
-            // Dono do lead NOVO que vem com `cod_vendedor` em branco — o mesmo da venda
-            // interna, que já recebe os leads do site. Sem dono, ninguém vê o lead.
-            'vendedor_padrao' => env('LEADS_VENDEDOR_PADRAO', '010617'),
+            // ⚠️ Sem `vendedor_padrao` desde 2026-10-02: lead sem código nasce sem dono e
+            // é atribuído depois, pelo próprio CSV (ver ImportLeadsTotvs).
         ],
 
         /*

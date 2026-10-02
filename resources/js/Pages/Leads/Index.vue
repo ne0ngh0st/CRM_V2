@@ -44,6 +44,8 @@ const filtros = reactive({
     // Recorte vindo da Visão Diretor (leads de uma rede). Entra aqui para o Excel e o
     // "aplicar filtros" levarem junto, como o `conta_alvo` da Carteira.
     conta_alvo: props.filtros.contaAlvo?.id ? String(props.filtros.contaAlvo.id) : '',
+    // Leads da prospecção sem dono, vindo do card da /atualizacoes.
+    sem_vendedor: props.filtros.semVendedor ? '1' : '',
     visao_supervisor: props.visao.visaoSupervisor || '',
     visao_vendedor: props.visao.visaoVendedor || '',
 });
@@ -100,7 +102,7 @@ function onBuscaInput() {
 function limparFiltros() {
     Object.assign(filtros, {
         busca: '', estado: '', segmento: '', status: '',
-        origem: '', conta_alvo: '',
+        origem: '', conta_alvo: '', sem_vendedor: '',
         ordenar: 'nome_asc', visao_supervisor: '', visao_vendedor: '',
     });
     aplicarFiltros();
@@ -108,6 +110,11 @@ function limparFiltros() {
 
 function limparContaAlvo() {
     filtros.conta_alvo = '';
+    aplicarFiltros();
+}
+
+function limparSemVendedor() {
+    filtros.sem_vendedor = '';
     aplicarFiltros();
 }
 
@@ -160,7 +167,7 @@ async function abrirCaptura(lead) {
  * do Excel responde outra pergunta ("o arquivo sai recortado?") e aí a busca conta.
  */
 const filtrosAtivos = computed(() => {
-    const campos = ['estado', 'segmento', 'status', 'origem', 'conta_alvo', 'visao_supervisor', 'visao_vendedor'];
+    const campos = ['estado', 'segmento', 'status', 'origem', 'conta_alvo', 'sem_vendedor', 'visao_supervisor', 'visao_vendedor'];
 
     return contarFiltrosAtivos(filtros, campos);
 });
@@ -279,6 +286,23 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
                         type="button"
                         class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
                         @click="limparContaAlvo"
+                    >
+                        Limpar recorte
+                    </button>
+                </div>
+
+                <div
+                    v-if="filtros.sem_vendedor"
+                    class="flex flex-wrap items-center justify-between gap-2 rounded border border-amber/60 bg-amber/10 px-3 py-2"
+                >
+                    <p class="text-sm text-gray-700">
+                        Mostrando apenas os leads <strong class="font-semibold">sem vendedor</strong>, esperando
+                        atribuição. Para atribuir, preencha o <code>cod_vendedor</code> no CSV da prospecção e importe de novo.
+                    </p>
+                    <button
+                        type="button"
+                        class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
+                        @click="limparSemVendedor"
                     >
                         Limpar recorte
                     </button>

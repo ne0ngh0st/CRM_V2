@@ -2850,8 +2850,13 @@ LEIA-ME ficam em `Leads/_MODELO/`. Subpasta não é lida (o glob é `Leads/*.csv
 - **Cabeçalho diferente PARA o import**; linha ruim (CNPJ ≠ 14 dígitos, sem razão social,
   segmento fora de `segmentos`) é recusada e listada como `arquivo:linha`.
 - Segmento aceita código ou nome; grava o nome oficial.
-- `cod_vendedor` vazio: lead NOVO vai para `totvs.arquivos.leads.vendedor_padrao` (010617).
+- `cod_vendedor` vazio ou zerado (`0`, `000000`): lead NOVO nasce **sem dono** (Tony,
+  2026-10-02; até então ia para a Venda Interna). Só admin/diretor o veem. **A atribuição é
+  o próprio import**: preencher o código no CSV e reimportar (adota pelo CNPJ). A
+  `/atualizacoes` conta "Sem vendedor (atribuir)" e abre `/leads?sem_vendedor=1`.
   Em lead existente, **campo vazio no CSV nunca apaga** o que o CRM tem.
+- `/atualizacoes` → card "Leads da prospecção": cada rodada do import (inclusive dry-run e
+  falha) grava o relatório em `leads_importacoes`.
 - `Normalizador::digitosCnpj()` devolve o zero que o Excel come (12-13 dígitos → 14). É
   usado pelo import E pela carga da Receita, que também passou a ler todos os CSVs.
 - Os scripts de envio sobem `Leads/*.csv` para o S3. ⚠️ O `totvs:sincronizar-s3` não apaga

@@ -153,6 +153,7 @@ class LeadController extends Controller
                 'origem' => $origem,
                 'ordenar' => $ordenar,
                 'contaAlvo' => $this->contaAlvoParaTela($request),
+                'semVendedor' => $request->boolean('sem_vendedor'),
             ],
             'opcoes' => [
                 // Dois DISTINCT sobre os 17 mil leads (45 ms medidos no de estado). Dependem
@@ -454,6 +455,11 @@ class LeadController extends Controller
         }
         if (($contaAlvo = $this->contaAlvoId($request)) !== null) {
             $query->ligadoAConta($contaAlvo);
+        }
+        // Leads da prospecção ainda sem dono (/atualizacoes → "Sem vendedor"). Para quem
+        // tem escopo de vendedor o resultado é vazio de qualquer jeito: o escopo já exige código.
+        if ($request->boolean('sem_vendedor')) {
+            $query->whereNull('cod_vendedor');
         }
 
         return $query;
