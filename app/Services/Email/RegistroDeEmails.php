@@ -46,6 +46,15 @@ class RegistroDeEmails
             ]);
         } catch (Throwable $e) {
             Log::warning('Falha ao registrar e-mail enviado', ['erro' => $e->getMessage()]);
+
+            return;
+        }
+
+        // Separado do registro: falhar o aviso da cota não pode apagar o log do envio.
+        try {
+            CotaDeEmails::avisarSeCruzouMarco();
+        } catch (Throwable $e) {
+            Log::warning('Falha ao conferir a cota de e-mails', ['erro' => $e->getMessage()]);
         }
     }
 

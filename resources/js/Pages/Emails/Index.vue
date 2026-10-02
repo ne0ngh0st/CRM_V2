@@ -11,12 +11,14 @@ import DarkCard from '@/Components/DarkCard.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import FilterField from '@/Components/FilterField.vue';
 import Pagination from '@/Components/Pagination.vue';
+import KpiTile from '@/Components/KpiTile.vue';
 
 const props = defineProps({
     emails: { type: Object, required: true },
     filtros: { type: Object, required: true },
     diasRetencao: { type: Number, default: 90 },
     redirecionamentos: { type: Object, default: () => ({}) },
+    cota: { type: Object, required: true },
 });
 
 const status = ref(props.filtros.status || '');
@@ -40,6 +42,29 @@ watch(busca, () => {
 
 const linhas = computed(() => props.emails.data ?? []);
 const redirecionados = computed(() => Object.entries(props.redirecionamentos));
+
+const fmt = (n) => Number(n).toLocaleString('pt-BR');
+
+// O nível vem decidido do servidor (CotaDeEmails); aqui só a cor.
+const TOM_COTA = { ok: 'ok', atencao: 'warn', esgotada: 'danger' };
+const tomCota = computed(() => TOM_COTA[props.cota.nivel] ?? 'default');
+const corBarra = computed(() => ({ ok: 'bg-emerald-500', atencao: 'bg-amber', esgotada: 'bg-red-500' })[props.cota.nivel]);
+const larguraBarra = computed(() => `${Math.min(100, props.cota.percentual)}%`);
+const projecaoEstoura = computed(() => props.cota.projecao !== null && props.cota.projecao > props.cota.limite);
+
+const avisoCota = computed(() => {
+    const c = props.cota;
+    if (c.nivel === 'esgotada') {
+        return `Cota do mês esgotada (${fmt(c.enviados)} de ${fmt(c.limite)}). O SMTP pode recusar os próximos envios até ${c.renovaEm} — confira os "Falharam" abaixo.`;
+    }
+    if (c.nivel === 'atencao' && c.percentual >= 80) {
+        return `Já foram ${c.percentual.toLocaleString('pt-BR')}% da cota do mês. Restam ${fmt(c.restantes)} envios para ${c.diasRestantes} dia(s).`;
+    }
+    if (c.nivel === 'atencao') {
+        return `No ritmo atual o mês fecha em ~${fmt(c.projecao)} envios, acima da cota de ${fmt(c.limite)}.`;
+    }
+    return null;
+});
 </script>
 
 <template>
@@ -80,6 +105,53 @@ const redirecionados = computed(() => Object.entries(props.redirecionamentos));
                     </FilterField>
                 </template>
             </PageHero>
+
+            <DarkCard
+                class="mb-4"
+                title="Cota do SMTP"
+                :subtitle="`${cota.mes} · ${fmt(cota.limite)} envios por mês, renova em ${cota.renovaEm}`"
+            >
+                <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5">
+                        <path d="M4 18a8 8 0 1 1 16 0" stroke-linecap="round" />
+                        <path d="m12 18 4-5" stroke-linecap="round" />
+                    </svg>
+                </template>
+                <template #actions>
+                    <StatusPill :tone="tomCota === 'default' ? 'neutral' : tomCota" surface="dark">
+                        {{ cota.nivel === 'esgotada' ? 'Esgotada' : cota.nivel === 'atencao' ? 'Atenção' : 'Dentro da cota' }}
+                    </StatusPill>
+                </template>
+
+                <div
+                    v-if="avisoCota"
+                    class="mb-3 rounded border px-3 py-2 text-sm"
+                    :class="cota.nivel === 'esgotada' ? 'border-red-300 bg-red-50 text-red-700' : 'border-amber-300 bg-amber-50 text-amber-700'"
+                    role="alert"
+                >
+                    {{ avisoCota }}
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                    <KpiTile :value="`${fmt(cota.enviados)} / ${fmt(cota.limite)}`" label="Enviados no mês" :tone="tomCota" />
+                    <KpiTile :value="`${cota.percentual.toLocaleString('pt-BR')}%`" label="Da cota usada" :tone="tomCota" />
+                    <KpiTile :value="fmt(cota.restantes)" label="Restantes" />
+                    <KpiTile
+                        :value="cota.projecao === null ? '—' : `~${fmt(cota.projecao)}`"
+                        label="Projeção do mês"
+                        :tone="projecaoEstoura ? 'warn' : 'default'"
+                    />
+                </div>
+
+                <div class="mt-3 h-2 w-full overflow-hidden rounded bg-gray-100" :title="`${cota.percentual}% da cota`">
+                    <div class="h-full transition-all" :class="corBarra" :style="{ width: larguraBarra }" />
+                </div>
+                <p class="mt-2 text-[0.7rem] text-gray-500">
+                    Conta cada mensagem aceita pelo SMTP (falhas não entram).
+                    <template v-if="cota.projecao === null">A projeção aparece a partir do 5º dia do mês.</template>
+                    E-mail enviado do ambiente de desenvolvimento usa a mesma conta e não aparece aqui.
+                </p>
+            </DarkCard>
 
             <DarkCard title="Envios" :subtitle="`${Number(emails.total).toLocaleString('pt-BR')} registro(s), do mais recente ao mais antigo`">
                 <template #icon>

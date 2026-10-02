@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\EmailEnviado;
+use App\Services\Email\CotaDeEmails;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -47,6 +48,7 @@ class EmailEnviadoController extends Controller
             'emails' => $emails,
             'filtros' => ['status' => $status, 'busca' => $busca],
             'diasRetencao' => EmailEnviado::DIAS_RETENCAO,
+            'cota' => CotaDeEmails::resumo(),
             // Os dois interruptores de teste: com valor, NADA chega a quem deveria.
             'redirecionamentos' => array_filter([
                 'Cadastros' => config('cadastros.redirecionar_emails_para'),

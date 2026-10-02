@@ -108,6 +108,12 @@ return [
     |
     */
 
+    /*
+    | Cota mensal do SMTP (smtplw: 500 envios/mês). Lida por App\Services\Email\CotaDeEmails:
+    | KPI da tela /emails e aviso no sino dos admins em 80% e 100%.
+    */
+    'cota_mensal' => (int) env('MAIL_COTA_MENSAL', 500),
+
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', 'Example'),
