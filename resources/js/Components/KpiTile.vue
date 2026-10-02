@@ -12,6 +12,12 @@ defineProps({
     compact: { type: Boolean, default: false },
     href: { type: String, default: null },
     /**
+     * Tile que ABRE alguma coisa na própria tela (ex.: a lista por trás do número, num
+     * modal) em vez de navegar. Vira `<button>` com a mesma cara de clicável do `href`; o
+     * `@click` de quem usa cai direto nele.
+     */
+    botao: { type: Boolean, default: false },
+    /**
      * O tile representa o recorte que está aplicado na tela.
      *
      * ⚠️ Só faz sentido quando o tile é um FILTRO da própria tela (os três status da
@@ -65,12 +71,13 @@ const toneBorda = {
 
 <template>
     <component
-        :is="href ? Link : 'div'"
+        :is="href ? Link : (botao ? 'button' : 'div')"
         :href="href ?? undefined"
+        :type="botao && !href ? 'button' : undefined"
         class="flex-1 basis-auto rounded border px-2.5 py-2 text-center"
         :class="[
             ativo ? [toneBorda[tone], 'bg-white shadow-sm'] : 'border-gray-200 bg-gray-50',
-            href ? 'cursor-pointer transition hover:border-navy hover:bg-white hover:shadow-sm' : '',
+            href || botao ? 'cursor-pointer transition hover:border-navy hover:bg-white hover:shadow-sm' : '',
         ]"
         :title="ativo ? 'Filtro aplicado — clique para remover' : undefined"
         :aria-current="ativo ? 'true' : undefined"

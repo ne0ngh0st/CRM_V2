@@ -22,15 +22,15 @@ class LeadsSituacaoReceitaTest extends TestCase
     use RefreshDatabase;
     use UsaDiretorioDeRelatorios;
 
-    private const ATIVA = '11111111000111';
+    private const ATIVA = '11111111000191';
 
-    private const INAPTA = '22222222000122';
+    private const INAPTA = '22222222000191';
 
-    private const BAIXADA = '33333333000133';
+    private const BAIXADA = '33333333000191';
 
-    private const DESCONHECIDA = '44444444000144';
+    private const DESCONHECIDA = '44444444000191';
 
-    private const INEXISTENTE = '55555555000155';
+    private const INEXISTENTE = '55555555000191';
 
     private array $zips = [];
 
@@ -105,7 +105,7 @@ class LeadsSituacaoReceitaTest extends TestCase
 
     public function test_cnpj_sem_o_zero_a_esquerda_e_reconhecido(): void
     {
-        $cnpj = '06666666000166';
+        $cnpj = '06666666000160';
         $this->situacao($cnpj, 'ATIVA');
         $this->escreverBase([$cnpj], semMascara: true);
 

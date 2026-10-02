@@ -10,6 +10,7 @@ use App\Models\TotvsImportacao;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\AtualizadorTotvs;
 use App\Services\Totvs\FrescorDoDado;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -121,6 +122,7 @@ class AtualizacaoDadosController extends Controller
         return [
             'emAndamento' => LeadImportacao::query()->emAndamento()->exists(),
             'ultima' => $ultima === null ? null : [
+                'id' => $ultima->id,
                 'simulacao' => $ultima->simulacao,
                 // A órfã (worker morreu no meio) aparece como travada, não "executando" para sempre.
                 'status' => $ultima->travou() ? 'travada' : $ultima->status,
@@ -138,6 +140,49 @@ class AtualizacaoDadosController extends Controller
             // Mesmo recorte do link (/leads?origem=prospeccao&sem_vendedor=1), para o número bater.
             'semVendedor' => Lead::query()->visivel()->where('origem', Lead::ORIGEM_PROSPECCAO)->whereNull('cod_vendedor')->count(),
         ];
+    }
+
+    /**
+     * A lista por trás de um número do card (o clique). Lida aqui, sob demanda, e não no
+     * carregamento: pode ter milhares de linhas, e a página recarrega sozinha a cada 4 s
+     * durante uma rodada.
+     *
+     * ⚠️ `chave` é whitelist (`LeadImportacao::DETALHES` + `recusadas`), não organização.
+     */
+    public function detalheLeads(Request $request, LeadImportacao $rodada, string $chave): JsonResponse
+    {
+        $this->autorizarAdmin($request);
+
+        if ($chave === 'recusadas') {
+            return response()->json([
+                'titulo' => 'Linhas fora do padrão',
+                'itens' => collect($rodada->recusadas ?? [])->map(fn (string $l) => ['cnpj' => null, 'nome' => $l, 'info' => null])->all(),
+                'total' => (int) ($rodada->resultado['recusadas'] ?? 0),
+            ]);
+        }
+
+        abort_unless(array_key_exists($chave, LeadImportacao::DETALHES), 404);
+
+        $itens = $rodada->detalhes[$chave] ?? [];
+
+        return response()->json([
+            'titulo' => LeadImportacao::DETALHES[$chave],
+            'itens' => $itens,
+            // O total real, para a tela dizer "mostrando N de M" quando a lista foi cortada.
+            'total' => max(count($itens), $this->totalDoResultado($rodada->resultado ?? [], $chave)),
+        ]);
+    }
+
+    /** @param  array<string, mixed>  $r */
+    private function totalDoResultado(array $r, string $chave): int
+    {
+        return (int) match ($chave) {
+            'naoAtivos' => array_sum($r['receitaPorSituacao'] ?? []),
+            'viraramCliente' => $r['leadsQueViraramCliente'] ?? 0,
+            'redesCriadas' => $r['contas']['criadas'] ?? 0,
+            'ligados' => $r['contas']['confirmados'] ?? 0,
+            default => $r[$chave] ?? 0,
+        };
     }
 
     /**

@@ -25,8 +25,27 @@ class LeadImportacao extends Model
      */
     public const MINUTOS_ATE_TRAVAR = 30;
 
+    /** Teto de linhas guardadas por lista de detalhe. A contagem em `resultado` é sempre a real. */
+    public const MAXIMO_POR_DETALHE = 2000;
+
+    /**
+     * As listas que o card abre no clique, com o rótulo de cada uma. A chave é o contrato
+     * entre `ImportLeadsTotvs` (que grava) e o card (que pede): mudou aqui, muda lá.
+     */
+    public const DETALHES = [
+        'novos' => 'Leads novos',
+        'atualizados' => 'Já no CRM, atualizados',
+        'jaClientes' => 'Já eram clientes (TOTVS)',
+        'naoAtivos' => 'CNPJ não ativo na Receita',
+        'segurados' => 'Esperando a Receita',
+        'deOutraOrigem' => 'Já eram lead manual/site',
+        'viraramCliente' => 'Leads que viraram cliente (não mexidos)',
+        'redesCriadas' => 'Redes criadas',
+        'ligados' => 'Leads ligados a rede',
+    ];
+
     protected $fillable = [
-        'simulacao', 'user_id', 'status', 'arquivos', 'resultado', 'recusadas', 'erro', 'iniciada_em', 'concluida_em',
+        'simulacao', 'user_id', 'status', 'arquivos', 'resultado', 'recusadas', 'detalhes', 'erro', 'iniciada_em', 'concluida_em',
     ];
 
     protected function casts(): array
@@ -36,6 +55,7 @@ class LeadImportacao extends Model
             'arquivos' => 'array',
             'resultado' => 'array',
             'recusadas' => 'array',
+            'detalhes' => 'array',
             'iniciada_em' => 'datetime',
             'concluida_em' => 'datetime',
         ];

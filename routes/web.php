@@ -225,6 +225,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/atualizacoes', [AtualizacaoDadosController::class, 'index'])->name('atualizacoes.index');
     Route::post('/atualizacoes', [AtualizacaoDadosController::class, 'disparar'])->name('atualizacoes.disparar');
     Route::post('/atualizacoes/leads', [AtualizacaoDadosController::class, 'importarLeads'])->name('atualizacoes.leads');
+    Route::get('/atualizacoes/leads/{rodada}/{chave}', [AtualizacaoDadosController::class, 'detalheLeads'])->name('atualizacoes.leads.detalhe');
 
     // Log do SMTP. Admin-only checado no controller.
     Route::get('/emails', [EmailEnviadoController::class, 'index'])->name('emails.index');

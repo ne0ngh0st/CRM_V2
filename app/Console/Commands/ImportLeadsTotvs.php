@@ -204,12 +204,15 @@ class ImportLeadsTotvs extends Command
         $adotados = array_intersect_key($porCnpj, $existentes);
         $sumiram = count(array_diff_key($existentes, $porCnpj));
 
-        $novosDeOutraOrigem = count(array_intersect_key($novos, $deOutraOrigem));
+        $listaOutraOrigem = array_keys(array_intersect_key($novos, $deOutraOrigem));
+        $novosDeOutraOrigem = count($listaOutraOrigem);
         $novos = array_diff_key($novos, $deOutraOrigem);
 
         $jaClientes = $this->cnpjsDeClientes(array_keys($porCnpj));
-        $novosJaClientes = count(array_intersect_key($novos, $jaClientes));
-        $adotadosJaClientes = count(array_intersect_key($adotados, $jaClientes));
+        $listaJaClientes = array_keys(array_intersect_key($novos, $jaClientes));
+        $listaViraramCliente = array_keys(array_intersect_key($adotados, $jaClientes));
+        $novosJaClientes = count($listaJaClientes);
+        $adotadosJaClientes = count($listaViraramCliente);
         $novos = array_diff_key($novos, $jaClientes);
         // Lead que virou cliente fica como está: nem atualizado pelo CSV, nem ligado a uma
         // rede da Visão Diretor. Quem cuida dele agora é a Carteira.
@@ -230,9 +233,8 @@ class ImportLeadsTotvs extends Command
             $naHora = $situacao->consultarDesconhecidos($desconhecidos);
         }
 
-        [$novos, $barrados, $semSituacao] = $this->filtrarPelaReceita(
-            $novos, $situacao->situacoes($cnpjsNovos)
-        );
+        $sitAgora = $situacao->situacoes($cnpjsNovos);
+        [$novos, $barrados, $semSituacao] = $this->filtrarPelaReceita($novos, $sitAgora);
 
         $this->line('  já no CRM (atualiza, mantendo o id): '.number_format(count($adotados), 0, ',', '.'));
         $this->line('  cadastros novos: '.number_format(count($novos), 0, ',', '.'));
@@ -302,6 +304,19 @@ class ImportLeadsTotvs extends Command
          * ⚠️ Os nomes destas chaves são o contrato com `Atualizacoes/Index.vue`. Mudou um,
          * mude lá — senão o card mostra zero sem erro nenhum.
          */
+        // As listas por trás de cada número do card (o clique abre). Ver LeadImportacao::DETALHES.
+        $idParaCnpj = array_flip(array_map('intval', $ids));
+        $registro->update(['detalhes' => $this->montarDetalhes($porCnpj, [
+            'novos' => array_keys($novos),
+            'atualizados' => array_keys($adotados),
+            'jaClientes' => $listaJaClientes,
+            'naoAtivos' => array_values(array_filter($cnpjsNovos, fn ($c) => isset($sitAgora[$c]) && ! SituacaoCadastral::permiteLead($sitAgora[$c]))),
+            'segurados' => array_values(array_filter($cnpjsNovos, fn ($c) => ! isset($sitAgora[$c]))),
+            'deOutraOrigem' => $listaOutraOrigem,
+            'viraramCliente' => $listaViraramCliente,
+        ], $jaClientes, $sitAgora, $contas['detalhe'] ?? [], $idParaCnpj)]);
+        unset($contas['detalhe']);
+
         $registro->update(['resultado' => [
             'linhas' => $lidas,
             'cnpjs' => count($porCnpj),
@@ -421,6 +436,18 @@ class ImportLeadsTotvs extends Command
 
                 continue;
             }
+            // Dígito verificador errado é CNPJ digitado errado: as fontes da Receita recusam,
+            // e sem barrar aqui o lead ficava "esperando a Receita" para sempre.
+            if (! Normalizador::cnpjValido($digitos)) {
+                $certo = Normalizador::dvCnpj(substr($digitos, 0, 12));
+                // Dígitos todos iguais (000…, 111…) não têm "final certo" a sugerir.
+                $recusadas[] = preg_match('/^(\d)\1{13}$/', $digitos)
+                    ? "{$onde} — CNPJ inválido ('{$linha['cnpj']}')"
+                    : "{$onde} — CNPJ com dígito verificador errado ('{$linha['cnpj']}'; "
+                        ."com esta base, o certo terminaria em -{$certo}). Conferir o CNPJ na planilha";
+
+                continue;
+            }
 
             $razaoSocial = Normalizador::valorOuNull($linha['razao_social']);
             if ($razaoSocial === null) {
@@ -498,23 +525,78 @@ class ImportLeadsTotvs extends Command
     }
 
     /**
-     * CNPJs (14 dígitos) da lista que já existem em `clientes`.
+     * CNPJs (14 dígitos) da lista que já existem em `clientes`, com quem é o cliente e de
+     * qual vendedor — é o que o card mostra ao clicar em "Já eram clientes".
      *
      * @param  list<int|string>  $cnpjs
-     * @return array<string, true>
+     * @return array<string, array{razao: string, codVendedor: ?string}>
      */
     private function cnpjsDeClientes(array $cnpjs): array
     {
         $achados = [];
 
         foreach (array_chunk(array_map('strval', $cnpjs), 1000) as $lote) {
-            DB::table('clientes')->whereIn('cnpj_digitos', $lote)->distinct()
-                ->pluck('cnpj_digitos')->each(function ($c) use (&$achados) {
-                    $achados[(string) $c] = true;
+            DB::table('clientes')->whereIn('cnpj_digitos', $lote)
+                ->orderBy('id')->get(['cnpj_digitos', 'razao_social', 'cod_vendedor'])
+                ->each(function ($c) use (&$achados) {
+                    $achados[(string) $c->cnpj_digitos] ??= ['razao' => $c->razao_social, 'codVendedor' => $c->cod_vendedor];
                 });
         }
 
         return $achados;
+    }
+
+    /**
+     * Uma lista por número do card: CNPJ formatado, nome e o porquê. Cada lista é cortada
+     * em `LeadImportacao::MAXIMO_POR_DETALHE` — a contagem de `resultado` é sempre a real.
+     *
+     * @param  array<string, array<string, mixed>>  $porCnpj
+     * @param  array<string, list<int|string>>  $listas  chave do detalhe → CNPJs (14 dígitos)
+     * @param  array<string, array{razao: string, codVendedor: ?string}>  $clientes
+     * @param  array<string, string>  $situacoes
+     * @param  array{redesCriadas?: list<string>, ligados?: array<int, string>}  $contas
+     * @param  array<int, int|string>  $idParaCnpj
+     * @return array<string, list<array{cnpj: ?string, nome: string, info: ?string}>>
+     */
+    private function montarDetalhes(array $porCnpj, array $listas, array $clientes, array $situacoes, array $contas, array $idParaCnpj): array
+    {
+        $vendedores = app(\App\Services\Vendedores\NomeVendedorResolver::class)->porCodigo(
+            collect($clientes)->pluck('codVendedor')->filter()->unique()
+        );
+        $rotulosReceita = ['BAIXADA' => 'Baixada', 'INAPTA' => 'Inapta', 'SUSPENSA' => 'Suspensa', 'NULA' => 'Nula', SituacaoCadastral::INEXISTENTE => 'Inexistente'];
+
+        $item = fn ($cnpj, ?string $info = null) => [
+            'cnpj' => $porCnpj[$cnpj]['cnpj'] ?? Normalizador::documento((string) $cnpj),
+            'nome' => $porCnpj[$cnpj]['razao_social'] ?? '—',
+            'info' => $info,
+        ];
+
+        $detalhes = [];
+        foreach ($listas as $chave => $cnpjs) {
+            $detalhes[$chave] = collect($cnpjs)
+                ->take(LeadImportacao::MAXIMO_POR_DETALHE)
+                ->map(fn ($c) => match ($chave) {
+                    'jaClientes', 'viraramCliente' => $item($c, isset($clientes[(string) $c])
+                        ? 'Cliente: '.$clientes[(string) $c]['razao'].' · vendedor '
+                            .($vendedores[$clientes[(string) $c]['codVendedor']] ?? $clientes[(string) $c]['codVendedor'] ?? '—')
+                        : null),
+                    'naoAtivos' => $item($c, 'Receita: '.($rotulosReceita[$situacoes[(string) $c] ?? ''] ?? ($situacoes[(string) $c] ?? '?'))),
+                    'segurados' => $item($c, 'A Receita não respondeu; consultado de novo na próxima rodada'),
+                    'deOutraOrigem' => $item($c, 'Já existe como lead cadastrado à mão ou vindo do site'),
+                    default => $item($c, ($porCnpj[$c]['segmento'] ?? null)),
+                })
+                ->values()->all();
+        }
+
+        $detalhes['redesCriadas'] = collect($contas['redesCriadas'] ?? [])
+            ->map(fn (string $nome) => ['cnpj' => null, 'nome' => $nome, 'info' => 'Rede nova na Maiores por Segmento'])
+            ->values()->all();
+
+        $detalhes['ligados'] = collect($contas['ligados'] ?? [])
+            ->map(fn (string $rede, $leadId) => $item($idParaCnpj[$leadId] ?? null, 'Rede: '.$rede))
+            ->values()->all();
+
+        return $detalhes;
     }
 
     /**

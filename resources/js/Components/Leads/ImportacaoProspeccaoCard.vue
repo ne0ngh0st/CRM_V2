@@ -13,6 +13,7 @@
 import { computed, ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import DarkCard from '@/Components/DarkCard.vue';
+import ModalPadrao from '@/Components/ModalPadrao.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import { ROTULOS_SITUACAO_RECEITA } from '@/constants/receita.js';
@@ -38,6 +39,29 @@ const subtitulo = computed(() => {
 
     return ultima.value.simulacao ? `Simulação de ${quando}${quem} — nada foi gravado` : `Importação de ${quando}${quem}`;
 });
+
+/*
+ * Clique num número → a lista por trás dele, buscada sob demanda (pode ter milhares de
+ * linhas; carregar junto da página pesaria em todo recarregamento automático).
+ */
+const lista = ref({ aberta: false, titulo: '', itens: [], total: 0, carregando: false, erro: null });
+
+async function abrir(chave) {
+    if (!ultima.value?.id) return;
+    lista.value = { aberta: true, titulo: '', itens: [], total: 0, carregando: true, erro: null };
+
+    try {
+        const resposta = await fetch(route('atualizacoes.leads.detalhe', { rodada: ultima.value.id, chave }), {
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        });
+        if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+        const dados = await resposta.json();
+        lista.value = { ...lista.value, ...dados, carregando: false };
+    } catch {
+        lista.value = { ...lista.value, carregando: false, erro: 'Não foi possível carregar a lista.' };
+    }
+}
 
 const enviando = ref(false);
 
@@ -122,19 +146,19 @@ function rodar(simulacao) {
                 <div>
                     <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Entraram</p>
                     <div class="flex flex-wrap gap-2">
-                        <KpiTile :value="formatInteiro(r.novos)" label="Leads novos" tone="ok" compact />
-                        <KpiTile :value="formatInteiro(r.atualizados)" label="Já no CRM, atualizados" compact />
+                        <KpiTile :value="formatInteiro(r.novos)" label="Leads novos" tone="ok" compact :botao="r.novos > 0" @click="r.novos && abrir('novos')" />
+                        <KpiTile :value="formatInteiro(r.atualizados)" label="Já no CRM, atualizados" compact :botao="r.atualizados > 0" @click="r.atualizados && abrir('atualizados')" />
                     </div>
                 </div>
 
                 <div>
                     <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Não entraram</p>
                     <div class="flex flex-wrap gap-2">
-                        <KpiTile :value="formatInteiro(r.jaClientes)" label="Já eram clientes (TOTVS)" tone="info" compact />
-                        <KpiTile :value="formatInteiro(naReceita)" label="CNPJ não ativo na Receita" tone="danger" compact />
-                        <KpiTile :value="formatInteiro(r.segurados)" label="Esperando a Receita" :tone="r.segurados ? 'warn' : 'default'" compact />
-                        <KpiTile :value="formatInteiro(r.recusadas)" label="Linhas fora do padrão" :tone="r.recusadas ? 'danger' : 'default'" compact />
-                        <KpiTile :value="formatInteiro(r.deOutraOrigem)" label="Já eram lead manual/site" compact />
+                        <KpiTile :value="formatInteiro(r.jaClientes)" label="Já eram clientes (TOTVS)" tone="info" compact :botao="r.jaClientes > 0" @click="r.jaClientes && abrir('jaClientes')" />
+                        <KpiTile :value="formatInteiro(naReceita)" label="CNPJ não ativo na Receita" tone="danger" compact :botao="naReceita > 0" @click="naReceita && abrir('naoAtivos')" />
+                        <KpiTile :value="formatInteiro(r.segurados)" label="Esperando a Receita" :tone="r.segurados ? 'warn' : 'default'" compact :botao="r.segurados > 0" @click="r.segurados && abrir('segurados')" />
+                        <KpiTile :value="formatInteiro(r.recusadas)" label="Linhas fora do padrão" :tone="r.recusadas ? 'danger' : 'default'" compact :botao="r.recusadas > 0" @click="r.recusadas && abrir('recusadas')" />
+                        <KpiTile :value="formatInteiro(r.deOutraOrigem)" label="Já eram lead manual/site" compact :botao="r.deOutraOrigem > 0" @click="r.deOutraOrigem && abrir('deOutraOrigem')" />
                     </div>
                     <p v-if="naReceita" class="mt-1 text-[0.7rem] text-gray-500">
                         Na Receita:
@@ -153,16 +177,19 @@ function rodar(simulacao) {
                         de novo mais tarde — eles são consultados de novo.
                     </p>
                     <p v-if="r.leadsQueViraramCliente" class="mt-1 text-[0.7rem] text-gray-500">
-                        Além disso, {{ formatInteiro(r.leadsQueViraramCliente) }} lead(s) que já estavam no CRM viraram
-                        cliente e não foram mexidos.
+                        Além disso,
+                        <button type="button" class="font-medium text-teal hover:underline" @click="abrir('viraramCliente')">
+                            {{ formatInteiro(r.leadsQueViraramCliente) }} lead(s)
+                        </button>
+                        que já estavam no CRM viraram cliente e não foram mexidos.
                     </p>
                 </div>
 
                 <div>
                     <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Maiores por Segmento</p>
                     <div class="flex flex-wrap gap-2">
-                        <KpiTile :value="formatInteiro(contas.criadas ?? 0)" label="Redes criadas" compact />
-                        <KpiTile :value="formatInteiro(contas.confirmados ?? 0)" label="Leads ligados a rede" compact />
+                        <KpiTile :value="formatInteiro(contas.criadas ?? 0)" label="Redes criadas" compact :botao="contas.criadas > 0" @click="contas.criadas && abrir('redesCriadas')" />
+                        <KpiTile :value="formatInteiro(contas.confirmados ?? 0)" label="Leads ligados a rede" compact :botao="contas.confirmados > 0" @click="contas.confirmados && abrir('ligados')" />
                     </div>
                 </div>
             </template>
@@ -224,4 +251,27 @@ function rodar(simulacao) {
             </details>
         </div>
     </DarkCard>
+
+    <ModalPadrao
+        :show="lista.aberta"
+        :titulo="lista.titulo || 'Carregando…'"
+        :subtitulo="lista.carregando ? '' : (lista.total > lista.itens.length ? `Mostrando ${formatInteiro(lista.itens.length)} de ${formatInteiro(lista.total)}` : `${formatInteiro(lista.itens.length)} item(ns)`)"
+        max-width="2xl"
+        @close="lista.aberta = false"
+    >
+        <p v-if="lista.carregando" class="py-6 text-center text-sm text-gray-500">Carregando…</p>
+        <p v-else-if="lista.erro" class="rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">{{ lista.erro }}</p>
+        <p v-else-if="!lista.itens.length" class="py-6 text-center text-sm text-gray-500">
+            Lista não disponível para esta rodada (rodadas anteriores a 02/10 não guardavam o detalhe).
+        </p>
+        <ul v-else class="max-h-[60vh] divide-y divide-gray-100 overflow-y-auto">
+            <li v-for="(item, i) in lista.itens" :key="i" class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-1.5 text-sm">
+                <div class="min-w-0">
+                    <p class="truncate font-medium text-gray-800" :title="item.nome">{{ item.nome }}</p>
+                    <p v-if="item.cnpj" class="text-[0.7rem] tabular-nums text-gray-500">{{ item.cnpj }}</p>
+                </div>
+                <p v-if="item.info" class="text-xs text-gray-500 sm:text-right">{{ item.info }}</p>
+            </li>
+        </ul>
+    </ModalPadrao>
 </template>

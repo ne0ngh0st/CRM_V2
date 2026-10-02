@@ -49,7 +49,7 @@ class LeadsDaProspeccaoTest extends TestCase
 
     public function test_lead_novo_nasce_com_a_origem_prospeccao(): void
     {
-        $this->importar([$this->linha('11111111000111', 'EMPRESA A', '101')]);
+        $this->importar([$this->linha('11111111000191', 'EMPRESA A', '101')]);
 
         $this->assertSame(Lead::ORIGEM_PROSPECCAO, Lead::sole()->origem);
     }
@@ -59,7 +59,7 @@ class LeadsDaProspeccaoTest extends TestCase
         $conta = $this->conta('Drogaria São Paulo');
 
         // Caixa, acento e espaço diferentes: é a mesma rede.
-        $this->importar([$this->linha('11111111000111', 'DROGARIA SAO PAULO S/A', '109', rede: 'drogaria sao  paulo')]);
+        $this->importar([$this->linha('11111111000191', 'DROGARIA SAO PAULO S/A', '109', rede: 'drogaria sao  paulo')]);
 
         $this->assertSame(1, ContaEstrategica::count());
         $lead = Lead::sole();
@@ -72,8 +72,8 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->conta('RAIA DROGASIL', ordem: 7);
 
         $this->importar([
-            $this->linha('11111111000111', 'FARMA NOVA LTDA', '109', rede: 'FARMA NOVA', filiais: '42'),
-            $this->linha('22222222000122', 'FARMA NOVA FILIAL', '109', rede: 'Farma Nova'),
+            $this->linha('11111111000191', 'FARMA NOVA LTDA', '109', rede: 'FARMA NOVA', filiais: '42'),
+            $this->linha('22222222000191', 'FARMA NOVA FILIAL', '109', rede: 'Farma Nova'),
         ]);
 
         $nova = ContaEstrategica::where('nome', 'FARMA NOVA')->sole();
@@ -88,7 +88,7 @@ class LeadsDaProspeccaoTest extends TestCase
     {
         $conta = $this->conta('RAIA DROGASIL', filiais: 2390);
 
-        $this->importar([$this->linha('11111111000111', 'RAIA', '109', rede: 'RAIA DROGASIL', filiais: '10')]);
+        $this->importar([$this->linha('11111111000191', 'RAIA', '109', rede: 'RAIA DROGASIL', filiais: '10')]);
 
         $this->assertSame(2390, $conta->fresh()->filiais_mercado);
     }
@@ -97,7 +97,7 @@ class LeadsDaProspeccaoTest extends TestCase
     {
         $conta = $this->conta('RAIA DROGASIL');
 
-        $this->importar([$this->linha('11111111000111', 'RAIA DROGASIL S/A', '109')]);
+        $this->importar([$this->linha('11111111000191', 'RAIA DROGASIL S/A', '109')]);
 
         $lead = Lead::sole();
         $this->assertSame(Lead::CONTA_SUGERIDA, $lead->conta_vinculo);
@@ -116,7 +116,7 @@ class LeadsDaProspeccaoTest extends TestCase
     public function test_sugestao_recusada_nao_volta_no_proximo_import(): void
     {
         $this->conta('RAIA DROGASIL');
-        $linhas = [$this->linha('11111111000111', 'RAIA DROGASIL S/A', '109')];
+        $linhas = [$this->linha('11111111000191', 'RAIA DROGASIL S/A', '109')];
         $this->importar($linhas);
 
         $this->actingAs($this->diretor())
@@ -133,7 +133,7 @@ class LeadsDaProspeccaoTest extends TestCase
     {
         $this->conta('RAIA DROGASIL');
 
-        $this->importar([$this->linha('11111111000111', 'BOTICA DO BAIRRO ME', '109')]);
+        $this->importar([$this->linha('11111111000191', 'BOTICA DO BAIRRO ME', '109')]);
 
         $this->assertSame(1, ContaEstrategica::count());
         $this->assertNull(Lead::sole()->conta_vinculo);
@@ -141,7 +141,7 @@ class LeadsDaProspeccaoTest extends TestCase
 
     public function test_segmento_fora_das_abas_fica_so_em_leads(): void
     {
-        $this->importar([$this->linha('11111111000111', 'MERCADO X', '101', rede: 'MERCADO X')]);
+        $this->importar([$this->linha('11111111000191', 'MERCADO X', '101', rede: 'MERCADO X')]);
 
         $this->assertSame(0, ContaEstrategica::count());
         $this->assertNull(Lead::sole()->conta_estrategica_id);
@@ -151,9 +151,9 @@ class LeadsDaProspeccaoTest extends TestCase
     {
         $conta = $this->conta('FARMA NOVA');
         $this->importar([
-            $this->linha('11111111000111', 'FARMA NOVA 1', '109', rede: 'FARMA NOVA'),
-            $this->linha('22222222000122', 'FARMA NOVA 2', '109', rede: 'FARMA NOVA'),
-            $this->linha('33333333000133', 'OUTRA COISA', '109'),
+            $this->linha('11111111000191', 'FARMA NOVA 1', '109', rede: 'FARMA NOVA'),
+            $this->linha('22222222000191', 'FARMA NOVA 2', '109', rede: 'FARMA NOVA'),
+            $this->linha('33333333000191', 'OUTRA COISA', '109'),
         ]);
         // Excluído sai dos dois lados.
         Lead::where('razao_social', 'FARMA NOVA 2')->update(['status' => 'excluido']);
@@ -173,8 +173,8 @@ class LeadsDaProspeccaoTest extends TestCase
     {
         $conta = $this->conta('FARMA NOVA');
         $this->importar([
-            $this->linha('11111111000111', 'FARMA NOVA 1', '109', rede: 'FARMA NOVA'),
-            $this->linha('33333333000133', 'OUTRA COISA', '109'),
+            $this->linha('11111111000191', 'FARMA NOVA 1', '109', rede: 'FARMA NOVA'),
+            $this->linha('33333333000191', 'OUTRA COISA', '109'),
         ]);
 
         $vendedor = User::factory()->create(['is_active' => true]);
@@ -190,10 +190,10 @@ class LeadsDaProspeccaoTest extends TestCase
     {
         $id = DB::table('leads')->insertGetId([
             'origem' => Lead::ORIGEM_SISTEMA, 'nome' => 'A', 'razao_social' => 'A',
-            'cnpj' => '11.111.111/0001-11', 'status' => 'ativo', 'created_at' => now(), 'updated_at' => now(),
+            'cnpj' => '11.111.111/0001-91', 'status' => 'ativo', 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $this->importar([$this->linha('11111111000111', 'EMPRESA A', '101')]);
+        $this->importar([$this->linha('11111111000191', 'EMPRESA A', '101')]);
 
         $this->assertSame([$id], Lead::pluck('id')->all());
         $this->assertSame(Lead::ORIGEM_PROSPECCAO, Lead::sole()->origem);
@@ -203,10 +203,10 @@ class LeadsDaProspeccaoTest extends TestCase
     {
         DB::table('leads')->insert([
             'origem' => Lead::ORIGEM_MANUAL, 'nome' => 'MEU LEAD', 'razao_social' => 'MEU LEAD',
-            'cnpj' => '11.111.111/0001-11', 'status' => 'ativo', 'created_at' => now(), 'updated_at' => now(),
+            'cnpj' => '11.111.111/0001-91', 'status' => 'ativo', 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $this->importar([$this->linha('11111111000111', 'OUTRO NOME', '101')]);
+        $this->importar([$this->linha('11111111000191', 'OUTRO NOME', '101')]);
 
         $this->assertSame(1, Lead::count());
         $this->assertSame('MEU LEAD', Lead::sole()->razao_social);
@@ -215,8 +215,8 @@ class LeadsDaProspeccaoTest extends TestCase
 
     public function test_receita_tambem_tira_lead_da_prospeccao(): void
     {
-        $this->importar([$this->linha('11111111000111', 'EMPRESA A', '101')]);
-        DB::table('cnpj_situacoes')->where('cnpj', '11111111000111')->update(['situacao' => 'BAIXADA']);
+        $this->importar([$this->linha('11111111000191', 'EMPRESA A', '101')]);
+        DB::table('cnpj_situacoes')->where('cnpj', '11111111000191')->update(['situacao' => 'BAIXADA']);
 
         app(SituacaoCadastral::class)->sincronizarLeads();
 
@@ -226,7 +226,7 @@ class LeadsDaProspeccaoTest extends TestCase
     public function test_dry_run_nao_cria_conta_nem_liga_lead(): void
     {
         $this->conta('RAIA DROGASIL');
-        $this->escrever([$this->linha('11111111000111', 'FARMA NOVA', '109', rede: 'FARMA NOVA')]);
+        $this->escrever([$this->linha('11111111000191', 'FARMA NOVA', '109', rede: 'FARMA NOVA')]);
 
         $this->artisan('totvs:import-leads', ['--dry-run' => true])
             ->expectsOutputToContain('contas novas criadas pela coluna `rede`: 1')
@@ -240,16 +240,16 @@ class LeadsDaProspeccaoTest extends TestCase
     {
         DB::table('clientes')->insert([
             'cod_cliente' => '000123', 'loja' => '01', 'razao_social' => 'JA CLIENTE',
-            'cnpj' => '22.222.222/0001-22', 'created_at' => now(), 'updated_at' => now(),
+            'cnpj' => '22.222.222/0001-91', 'created_at' => now(), 'updated_at' => now(),
         ]);
         $linhas = [
-            $this->linha('11111111000111', 'NOVO', '101'),
-            $this->linha('22222222000122', 'JA CLIENTE', '101'),
-            $this->linha('33333333000133', 'BAIXADO', '101'),
+            $this->linha('11111111000191', 'NOVO', '101'),
+            $this->linha('22222222000191', 'JA CLIENTE', '101'),
+            $this->linha('33333333000191', 'BAIXADO', '101'),
             ['cnpj' => '123', 'razao_social' => 'CURTO', 'segmento' => '101'],
         ];
         $this->escrever($linhas);
-        DB::table('cnpj_situacoes')->where('cnpj', '33333333000133')->update(['situacao' => 'BAIXADA']);
+        DB::table('cnpj_situacoes')->where('cnpj', '33333333000191')->update(['situacao' => 'BAIXADA']);
         $this->artisan('totvs:import-leads')->assertSuccessful();
 
         $r = \App\Models\LeadImportacao::sole();
@@ -273,9 +273,60 @@ class LeadsDaProspeccaoTest extends TestCase
                 ->where('leadsProspeccao.emAndamento', false));
     }
 
+    public function test_cnpj_com_digito_errado_e_recusado_sem_consultar_a_receita(): void
+    {
+        // O caso real da primeira planilha: Nissei com -10 no lugar de -22. Sem a checagem,
+        // as fontes respondem 400 e o lead ficava "esperando a Receita" para sempre.
+        $this->escrever([['cnpj' => '79430682000110', 'razao_social' => 'NISSEI', 'segmento' => '109']]);
+        Http::fake(); // qualquer consulta seria um erro deste teste
+
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+
+        Http::assertNothingSent();
+        $r = \App\Models\LeadImportacao::sole();
+        $this->assertSame(0, $r->resultado['segurados']);
+        $this->assertSame(1, $r->resultado['recusadas']);
+        $this->assertStringContainsString('dígito verificador errado', $r->recusadas[0]);
+        $this->assertStringContainsString('-22', $r->recusadas[0]);
+    }
+
+    public function test_cada_numero_do_card_abre_a_lista_com_o_porque(): void
+    {
+        DB::table('clientes')->insert([
+            'cod_cliente' => '000123', 'loja' => '01', 'razao_social' => 'CLIENTE ANTIGO SA',
+            'cnpj' => '22.222.222/0001-91', 'cod_vendedor' => '010617', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->escrever([
+            $this->linha('11111111000191', 'NOVO', '101'),
+            $this->linha('22222222000191', 'JA CLIENTE', '101'),
+            $this->linha('33333333000191', 'BAIXADO', '101'),
+        ]);
+        DB::table('cnpj_situacoes')->where('cnpj', '33333333000191')->update(['situacao' => 'BAIXADA']);
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+        $rodada = \App\Models\LeadImportacao::sole();
+        $admin = $this->admin();
+
+        $clientes = $this->actingAs($admin)->getJson(route('atualizacoes.leads.detalhe', [$rodada, 'jaClientes']))
+            ->assertOk()->json();
+        $this->assertSame('Já eram clientes (TOTVS)', $clientes['titulo']);
+        $this->assertSame('22.222.222/0001-91', $clientes['itens'][0]['cnpj']);
+        $this->assertStringContainsString('CLIENTE ANTIGO SA', $clientes['itens'][0]['info']);
+
+        $receita = $this->actingAs($admin)->getJson(route('atualizacoes.leads.detalhe', [$rodada, 'naoAtivos']))->json();
+        $this->assertSame('BAIXADO', $receita['itens'][0]['nome']);
+        $this->assertSame('Receita: Baixada', $receita['itens'][0]['info']);
+
+        $novos = $this->actingAs($admin)->getJson(route('atualizacoes.leads.detalhe', [$rodada, 'novos']))->json();
+        $this->assertSame(['NOVO'], array_column($novos['itens'], 'nome'));
+        $this->assertSame(1, $novos['total']);
+
+        $this->actingAs($admin)->getJson(route('atualizacoes.leads.detalhe', [$rodada, 'qualquer']))->assertNotFound();
+        $this->actingAs($this->diretor())->getJson(route('atualizacoes.leads.detalhe', [$rodada, 'novos']))->assertForbidden();
+    }
+
     public function test_simulacao_e_falha_tambem_ficam_registradas(): void
     {
-        $this->escrever([$this->linha('11111111000111', 'NOVO', '101')]);
+        $this->escrever([$this->linha('11111111000191', 'NOVO', '101')]);
         $this->artisan('totvs:import-leads', ['--dry-run' => true])->assertSuccessful();
 
         file_put_contents($this->diretorioTotvs.'/Leads/Leads - teste.csv', "cnpj;RAZAO\n1;X\n");
@@ -335,7 +386,7 @@ class LeadsDaProspeccaoTest extends TestCase
 
     public function test_comando_com_rodada_preenche_a_linha_do_botao(): void
     {
-        $this->escrever([$this->linha('11111111000111', 'NOVO', '101')]);
+        $this->escrever([$this->linha('11111111000191', 'NOVO', '101')]);
         $rodada = \App\Models\LeadImportacao::create(['simulacao' => false, 'status' => 'executando', 'iniciada_em' => now()]);
 
         $this->artisan('totvs:import-leads', ['--rodada' => $rodada->id])->assertSuccessful();

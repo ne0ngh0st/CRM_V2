@@ -41,11 +41,15 @@ class ContaDoLead
 
     /**
      * @param  list<array{lead_id: int, segmento: ?string, rede: ?string, filiais: ?int, uf: ?string, nome: string}>  $itens
-     * @return array{criadas: int, confirmados: int, sugeridos: int, ambiguos: int, foraDasAbas: int}
+     * @return array{criadas: int, confirmados: int, sugeridos: int, ambiguos: int, foraDasAbas: int, detalhe: array{redesCriadas: list<string>, ligados: array<int, string>}}
+     *
+     * `detalhe` é o que a /atualizacoes lista no clique: as redes criadas e, por lead
+     * (id), o nome da rede a que ele foi ligado nesta rodada.
      */
     public function vincularDaProspeccao(array $itens, bool $dryRun = false): array
     {
-        $stats = ['criadas' => 0, 'confirmados' => 0, 'sugeridos' => 0, 'ambiguos' => 0, 'foraDasAbas' => 0];
+        $stats = ['criadas' => 0, 'confirmados' => 0, 'sugeridos' => 0, 'ambiguos' => 0, 'foraDasAbas' => 0,
+            'detalhe' => ['redesCriadas' => [], 'ligados' => []]];
 
         $abas = AbasDaPlanilha::codigos();
         $segmentoId = Segmento::query()->whereIn('codigo', $abas)->pluck('id', 'codigo');
@@ -94,6 +98,7 @@ class ContaDoLead
 
             if ($conta === null) {
                 $stats['criadas']++;
+                $stats['detalhe']['redesCriadas'][] = trim($i['rede']);
                 $conta = $porNome[$chave] = $dryRun ? -$stats['criadas'] : $this->criarConta($segmentoId[$i['segmento']], $i);
             } elseif (! $dryRun && $conta->filiais_mercado === null && $i['filiais']) {
                 // Conta sem o número de filiais aprende com o CSV; número já digitado nunca é sobrescrito.
@@ -109,6 +114,7 @@ class ContaDoLead
 
             $ligar[] = [$i['lead_id'], $contaId, Lead::CONTA_CONFIRMADA];
             $stats['confirmados']++;
+            $stats['detalhe']['ligados'][$i['lead_id']] = is_int($conta) ? trim($i['rede']) : $conta->nome;
         }
 
         foreach ($this->sugerir($semRede, $contas, $codigoDoSegmento) as $leadId => $contaIds) {

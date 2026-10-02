@@ -262,6 +262,41 @@ class Normalizador
             : $digitos;
     }
 
+    /**
+     * Os dois dígitos verificadores que um CNPJ de 12 dígitos-base DEVERIA ter (módulo 11).
+     * É o que permite dizer a quem montou a planilha "o certo terminaria em 22", em vez de
+     * só "inválido".
+     */
+    public static function dvCnpj(string $base12): string
+    {
+        $dv = function (string $numeros, array $pesos): int {
+            $soma = 0;
+            foreach (str_split($numeros) as $i => $d) {
+                $soma += (int) $d * $pesos[$i];
+            }
+
+            return ($soma % 11) < 2 ? 0 : 11 - ($soma % 11);
+        };
+
+        $d1 = $dv($base12, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+        $d2 = $dv($base12.$d1, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+
+        return $d1.$d2;
+    }
+
+    /**
+     * CNPJ de 14 dígitos com dígito verificador certo. Achado na primeira planilha real
+     * (2026-10-02): CNPJ digitado errado não é "a Receita não respondeu" — as três fontes
+     * recusam com 400 —, e sem esta checagem o lead ficava preso esperando a Receita.
+     * `00000000000000` e afins (todos iguais) passam no cálculo e não são CNPJ: recusados.
+     */
+    public static function cnpjValido(string $digitos): bool
+    {
+        return strlen($digitos) === 14
+            && ! preg_match('/^(\d)\1{13}$/', $digitos)
+            && self::dvCnpj(substr($digitos, 0, 12)) === substr($digitos, 12);
+    }
+
     /** CNPJ/CPF chega só com dígitos; a base guarda formatado. */
     public static function documento(mixed $bruto): ?string
     {
