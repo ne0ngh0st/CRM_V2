@@ -7,12 +7,14 @@ import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import ImportacaoProspeccaoCard from '@/Components/Leads/ImportacaoProspeccaoCard.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao.js';
 import { ROTULOS_SITUACAO_RECEITA, mesDaBase } from '@/constants/receita.js';
 
 const props = defineProps({
     frescor: { type: Array, default: () => [] },
     receita: { type: Object, default: null },
+    leadsProspeccao: { type: Object, default: null },
     relatorios: { type: Object, default: () => ({ itens: [], erro: null }) },
     rodadas: { type: Array, default: () => [] },
     emAndamento: { type: Boolean, default: false },
@@ -356,6 +358,11 @@ const numero = (n) => (n ?? 0).toLocaleString('pt-BR');
                             </table>
                         </div>
                     </DarkCard>
+                </div>
+
+                <!-- Última rodada do import de leads (CSVs da pasta Leads/) -->
+                <div v-if="leadsProspeccao" class="lg:col-span-3">
+                    <ImportacaoProspeccaoCard :importacao="leadsProspeccao" />
                 </div>
 
                 <!-- Inventário do S3 -->

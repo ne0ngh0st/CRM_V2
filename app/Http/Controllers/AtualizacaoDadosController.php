@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\AtualizarDadosTotvsJob;
+use App\Models\Lead;
+use App\Models\LeadImportacao;
 use App\Models\TotvsImportacao;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\AtualizadorTotvs;
 use App\Services\Totvs\FrescorDoDado;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -52,6 +55,7 @@ class AtualizacaoDadosController extends Controller
         return Inertia::render('Atualizacoes/Index', [
             'frescor' => $this->frescor(),
             'receita' => $this->baseDaReceita(),
+            'leadsProspeccao' => $this->leadsProspeccao(),
             'relatorios' => $this->relatoriosNoS3(),
             'rodadas' => $this->rodadas(),
             'emAndamento' => $this->rodadaEmAndamento() !== null,
@@ -89,6 +93,43 @@ class AtualizacaoDadosController extends Controller
                 ->selectRaw('situacao, COUNT(*) as total')
                 ->groupBy('situacao')->orderByDesc('total')
                 ->pluck('total', 'situacao'),
+        ];
+    }
+
+    /**
+     * A última rodada do `totvs:import-leads` (os CSVs da pasta Leads/): o que entrou e,
+     * principalmente, o que ficou de fora e por quê. Os números são os que o próprio
+     * comando gravou — esta tela não recalcula nada.
+     *
+     * Se a última foi simulação, `ultimaReal` diz quando os leads entraram de verdade:
+     * sem isso, um dry-run de hoje esconderia que a importação real é de semanas atrás.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function leadsProspeccao(): ?array
+    {
+        $ultima = LeadImportacao::query()->latest('id')->first();
+
+        if ($ultima === null) {
+            return null;
+        }
+
+        $ultimaReal = $ultima->simulacao
+            ? LeadImportacao::query()->where('simulacao', false)->where('status', 'sucesso')->latest('id')->value('concluida_em')
+            : $ultima->concluida_em;
+
+        return [
+            'simulacao' => $ultima->simulacao,
+            'status' => $ultima->status,
+            'erro' => $ultima->erro,
+            'em' => ($ultima->concluida_em ?? $ultima->iniciada_em)?->toIso8601String(),
+            'ultimaReal' => $ultimaReal ? Carbon::parse($ultimaReal)->toIso8601String() : null,
+            'arquivos' => $ultima->arquivos ?? [],
+            'resultado' => $ultima->resultado,
+            'recusadas' => $ultima->recusadas ?? [],
+            // Estado de AGORA, não da rodada: alguém pode ter decidido depois dela.
+            'sugestoesPendentes' => Lead::query()->visivel()->where('conta_vinculo', Lead::CONTA_SUGERIDA)->count(),
+            'prospeccaoNoCrm' => Lead::query()->visivel()->where('origem', Lead::ORIGEM_PROSPECCAO)->count(),
         ];
     }
 

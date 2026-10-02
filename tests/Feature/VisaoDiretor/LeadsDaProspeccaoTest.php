@@ -236,6 +236,60 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->assertSame(0, Lead::count());
     }
 
+    public function test_rodada_grava_o_relatorio_e_a_atualizacoes_mostra(): void
+    {
+        DB::table('clientes')->insert([
+            'cod_cliente' => '000123', 'loja' => '01', 'razao_social' => 'JA CLIENTE',
+            'cnpj' => '22.222.222/0001-22', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $linhas = [
+            $this->linha('11111111000111', 'NOVO', '101'),
+            $this->linha('22222222000122', 'JA CLIENTE', '101'),
+            $this->linha('33333333000133', 'BAIXADO', '101'),
+            ['cnpj' => '123', 'razao_social' => 'CURTO', 'segmento' => '101'],
+        ];
+        $this->escrever($linhas);
+        DB::table('cnpj_situacoes')->where('cnpj', '33333333000133')->update(['situacao' => 'BAIXADA']);
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+
+        $r = \App\Models\LeadImportacao::sole();
+        $this->assertFalse($r->simulacao);
+        $this->assertSame('sucesso', $r->status);
+        $this->assertSame(1, $r->resultado['novos']);
+        $this->assertSame(1, $r->resultado['jaClientes']);
+        $this->assertSame(['BAIXADA' => 1], $r->resultado['receitaPorSituacao']);
+        $this->assertSame(1, $r->resultado['recusadas']);
+        $this->assertStringContainsString('Leads - teste.csv:5', $r->recusadas[0]);
+        $this->assertSame([['nome' => 'Leads - teste.csv', 'linhas' => 4]], $r->arquivos);
+
+        $admin = User::factory()->create(['is_active' => true]);
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)->get(route('atualizacoes.index'))
+            ->assertInertia(fn (Assert $p) => $p
+                ->where('leadsProspeccao.resultado.jaClientes', 1)
+                ->where('leadsProspeccao.prospeccaoNoCrm', 1)
+                ->where('leadsProspeccao.simulacao', false));
+    }
+
+    public function test_simulacao_e_falha_tambem_ficam_registradas(): void
+    {
+        $this->escrever([$this->linha('11111111000111', 'NOVO', '101')]);
+        $this->artisan('totvs:import-leads', ['--dry-run' => true])->assertSuccessful();
+
+        file_put_contents($this->diretorioTotvs.'/Leads/Leads - teste.csv', "cnpj;RAZAO\n1;X\n");
+        try {
+            $this->artisan('totvs:import-leads');
+        } catch (\RuntimeException) {
+        }
+
+        [$simulacao, $falha] = \App\Models\LeadImportacao::orderBy('id')->get()->all();
+        $this->assertTrue($simulacao->simulacao);
+        $this->assertSame(1, $simulacao->resultado['novos']);
+        $this->assertSame('falhou', $falha->status);
+        $this->assertStringContainsString('razao_social', $falha->erro);
+    }
+
     // ---------------------------------------------------------------------------------
 
     /** @param list<array<string, string>> $linhas */

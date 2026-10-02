@@ -3,12 +3,14 @@
 namespace App\Console\Commands;
 
 use App\Models\Lead;
+use App\Models\LeadImportacao;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\Normalizador;
 use App\Services\VisaoDiretor\ContaDoLead;
 use App\Services\Totvs\Relatorios;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Importa a base de prospecção: TODOS os CSVs da pasta `Leads/` (um por segmento,
@@ -98,13 +100,38 @@ class ImportLeadsTotvs extends Command
 
     protected $description = 'Importa os CSVs de prospecção da pasta Leads/, deduplicando por CNPJ e preservando os ids';
 
+    /**
+     * Toda rodada deixa um relatório em `leads_importacoes` — inclusive a simulação e a
+     * que falhou (cabeçalho fora do template, por exemplo). É o que a `/atualizacoes` mostra.
+     */
     public function handle(): int
+    {
+        $registro = LeadImportacao::query()->create([
+            'simulacao' => (bool) $this->option('dry-run'),
+            'iniciada_em' => now(),
+        ]);
+
+        try {
+            $codigo = $this->importar($registro);
+        } catch (Throwable $e) {
+            $registro->update(['status' => 'falhou', 'erro' => mb_substr($e->getMessage(), 0, 2000), 'concluida_em' => now()]);
+
+            throw $e;
+        }
+
+        $registro->update(['concluida_em' => now()]);
+
+        return $codigo;
+    }
+
+    private function importar(LeadImportacao $registro): int
     {
         $chunk = (int) $this->option('chunk');
         $dryRun = (bool) $this->option('dry-run');
 
         $arquivos = Relatorios::todos('leads');
         if ($arquivos === []) {
+            $registro->update(['status' => 'falhou', 'erro' => 'Nenhum CSV na pasta Leads/.']);
             $this->error('Nenhum CSV de leads encontrado (padrões em config/totvs.php, domínio "leads").');
 
             return self::FAILURE;
@@ -115,12 +142,21 @@ class ImportLeadsTotvs extends Command
         $preenchimento = [];
         $recusadas = [];
         $lidas = 0;
+        $porArquivo = [];
 
         foreach ($arquivos as $arquivo) {
             $leitor = Relatorios::abrirArquivo($arquivo, 'leads');
+            $porArquivo[] = ['nome' => basename($arquivo), 'linhas' => 0];
             $leitor->exigirColunas(self::COLUNAS);
-            $lidas += $this->lerArquivo($leitor, basename($arquivo), $segmentos, $porCnpj, $preenchimento, $recusadas);
+            $n = $this->lerArquivo($leitor, basename($arquivo), $segmentos, $porCnpj, $preenchimento, $recusadas);
+            $porArquivo[array_key_last($porArquivo)]['linhas'] = $n;
+            $lidas += $n;
         }
+
+        $registro->update([
+            'arquivos' => $porArquivo,
+            'recusadas' => array_slice($recusadas, 0, LeadImportacao::MAXIMO_RECUSADAS),
+        ]);
 
         $this->line(sprintf(
             '%d arquivo(s) em Leads/: %s linhas, %s CNPJs distintos.',
@@ -198,6 +234,8 @@ class ImportLeadsTotvs extends Command
             $this->line('    → apagar anularia as observações que apontam para eles.');
         }
 
+        $sincronia = ['excluidos' => [], 'reativados' => 0];
+
         if ($dryRun) {
             // Lead novo ainda não tem id: um negativo por CNPJ basta para contar as ligações.
             $ids = $existentes;
@@ -205,7 +243,8 @@ class ImportLeadsTotvs extends Command
             foreach (array_keys($novos) as $cnpj) {
                 $ids[$cnpj] = --$provisorio;
             }
-            $this->relatarContas(app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids), true));
+            $contas = app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids), true);
+            $this->relatarContas($contas);
 
             $this->info('[dry-run] nada foi escrito.');
         } else {
@@ -217,7 +256,8 @@ class ImportLeadsTotvs extends Command
             $this->info('Leads gravados: '.number_format(count($novos) + count($adotados), 0, ',', '.'));
 
             $ids = $this->leadsPorCnpj(fn ($q) => $q->whereIn('origem', Lead::ORIGENS_IMPORTADAS));
-            $this->relatarContas(app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids)));
+            $contas = app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids));
+            $this->relatarContas($contas);
 
             $sincronia = $situacao->sincronizarLeads();
             if ($sincronia['excluidos'] !== []) {
@@ -227,6 +267,27 @@ class ImportLeadsTotvs extends Command
                 $this->line('  voltaram (CNPJ regularizado na Receita): '.number_format($sincronia['reativados'], 0, ',', '.'));
             }
         }
+
+        /*
+         * ⚠️ Os nomes destas chaves são o contrato com `Atualizacoes/Index.vue`. Mudou um,
+         * mude lá — senão o card mostra zero sem erro nenhum.
+         */
+        $registro->update(['resultado' => [
+            'linhas' => $lidas,
+            'cnpjs' => count($porCnpj),
+            'recusadas' => count($recusadas),
+            'novos' => count($novos),
+            'atualizados' => count($adotados),
+            'jaClientes' => $novosJaClientes,
+            'leadsQueViraramCliente' => $adotadosJaClientes,
+            'deOutraOrigem' => $novosDeOutraOrigem,
+            'receitaPorSituacao' => $barrados,
+            'segurados' => $semSituacao,
+            'sumiram' => $sumiram,
+            'tiradosPelaReceita' => array_sum($sincronia['excluidos']),
+            'voltaram' => $sincronia['reativados'],
+            'contas' => $contas,
+        ]]);
 
         return self::SUCCESS;
     }
