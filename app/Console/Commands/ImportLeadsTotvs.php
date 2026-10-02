@@ -215,8 +215,23 @@ class ImportLeadsTotvs extends Command
         // rede da Visão Diretor. Quem cuida dele agora é a Carteira.
         $adotados = array_diff_key($adotados, $jaClientes);
 
+        /*
+         * CNPJ que a base mensal da Receita ainda não conhece é consultado NA HORA, pelas
+         * APIs do cartão CNPJ — senão o lead novo esperaria até a próxima carga mensal.
+         * ⚠️ Roda também na simulação: grava só a situação (`cnpj_situacoes`, referência),
+         * nunca lead. Sem isso a simulação mostraria "esperando" o que o import resolveria.
+         */
+        $cnpjsNovos = array_map('strval', array_keys($novos));
+        $desconhecidos = array_values(array_diff($cnpjsNovos, array_keys($situacao->situacoes($cnpjsNovos))));
+        $naHora = ['consultados' => 0, 'indisponiveis' => 0, 'restantes' => 0];
+
+        if ($desconhecidos !== []) {
+            $this->line('  consultando na Receita (cartão CNPJ) '.count($desconhecidos).' CNPJ(s) que a base mensal não conhece…');
+            $naHora = $situacao->consultarDesconhecidos($desconhecidos);
+        }
+
         [$novos, $barrados, $semSituacao] = $this->filtrarPelaReceita(
-            $novos, $situacao->situacoes(array_map('strval', array_keys($novos)))
+            $novos, $situacao->situacoes($cnpjsNovos)
         );
 
         $this->line('  já no CRM (atualiza, mantendo o id): '.number_format(count($adotados), 0, ',', '.'));
@@ -240,8 +255,8 @@ class ImportLeadsTotvs extends Command
         }
 
         if ($semSituacao > 0) {
-            $this->warn('  segurados (situação na Receita desconhecida): '.number_format($semSituacao, 0, ',', '.'));
-            $this->line('    → rode `php artisan receita:importar-situacoes --forcar` e importe de novo.');
+            $this->warn('  segurados (Receita não respondeu ou passou do limite por rodada): '.number_format($semSituacao, 0, ',', '.'));
+            $this->line('    → importe de novo mais tarde: eles são consultados de novo na próxima rodada.');
         }
 
         if ($sumiram > 0) {
@@ -298,6 +313,8 @@ class ImportLeadsTotvs extends Command
             'deOutraOrigem' => $novosDeOutraOrigem,
             'receitaPorSituacao' => $barrados,
             'segurados' => $semSituacao,
+            'consultadosNaHora' => $naHora['consultados'],
+            'receitaIndisponivel' => $naHora['indisponiveis'],
             'sumiram' => $sumiram,
             'tiradosPelaReceita' => array_sum($sincronia['excluidos']),
             'voltaram' => $sincronia['reativados'],

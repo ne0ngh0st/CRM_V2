@@ -146,6 +146,59 @@ class SituacaoCadastral
      * Grava a situação vinda do cartão consultado pela API. A última escrita vence:
      * o cartão costuma ser mais recente que a carga mensal.
      */
+    /** Teto de consultas na hora por rodada de import (~0,5 s cada; ~3 min no pior caso). */
+    public const MAXIMO_CONSULTAS_NA_HORA = 300;
+
+    /** Fontes falhando em sequência: as APIs gratuitas estão bloqueando ou fora — parar. */
+    private const FALHAS_SEGUIDAS_PARA_PARAR = 5;
+
+    /**
+     * Consulta NA HORA, pelas APIs do cartão CNPJ, os CNPJs que a base mensal ainda não
+     * conhece — é o que deixa um lead novo entrar (ou ser barrado) na mesma rodada, em vez
+     * de esperar a próxima carga da Receita (pedido do Tony, 2026-10-02).
+     *
+     * Grava em `cnpj_situacoes` pelo mesmo caminho do botão do cartão
+     * (`CartaoCnpjService::consultar` → `registrarDoCartao`). CNPJ que TODAS as fontes dizem
+     * não existir vira INEXISTENTE. Fonte fora do ar não marca nada: o CNPJ continua
+     * desconhecido e é tentado na rodada seguinte.
+     *
+     * ⚠️ Não serve para massa (5 consultas/min na CNPJá, cota informal nas outras): passou
+     * do teto, ou as fontes começaram a falhar em sequência, para — o resto espera.
+     *
+     * @param  list<string>  $cnpjs  14 dígitos, situação desconhecida
+     * @return array{consultados: int, indisponiveis: int, restantes: int}
+     */
+    public function consultarDesconhecidos(array $cnpjs, int $maximo = self::MAXIMO_CONSULTAS_NA_HORA): array
+    {
+        $cartao = app(CartaoCnpjService::class);
+        $consultados = $indisponiveis = $falhasSeguidas = 0;
+
+        foreach (array_slice($cnpjs, 0, $maximo) as $cnpj) {
+            if ($falhasSeguidas >= self::FALHAS_SEGUIDAS_PARA_PARAR) {
+                break;
+            }
+
+            $consultados++;
+            $resultado = $cartao->consultar((string) $cnpj);
+
+            if ($resultado['status'] === CartaoCnpjService::NAO_ENCONTRADO) {
+                $this->registrarDoCartao((string) $cnpj, self::INEXISTENTE, 'cartao');
+                $falhasSeguidas = 0;
+            } elseif ($resultado['status'] === CartaoCnpjService::INDISPONIVEL) {
+                $indisponiveis++;
+                $falhasSeguidas++;
+            } else {
+                $falhasSeguidas = 0;
+            }
+        }
+
+        return [
+            'consultados' => $consultados,
+            'indisponiveis' => $indisponiveis,
+            'restantes' => count($cnpjs) - $consultados,
+        ];
+    }
+
     public function registrarDoCartao(string $cnpj, ?string $situacao, string $fonte, ?string $dataSituacao = null): void
     {
         if (strlen($cnpj) !== 14 || blank($situacao)) {

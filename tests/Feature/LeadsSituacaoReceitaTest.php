@@ -55,6 +55,8 @@ class LeadsSituacaoReceitaTest extends TestCase
 
     public function test_import_so_deixa_entrar_lead_com_cnpj_ativo(): void
     {
+        // Receita fora do ar na consulta na hora: o desconhecido continua segurado.
+        Http::fake(['*' => Http::response('fora', 503)]);
         $this->situacao(self::ATIVA, 'ATIVA');
         $this->situacao(self::INAPTA, 'INAPTA');
         $this->situacao(self::BAIXADA, 'BAIXADA');
@@ -205,8 +207,50 @@ class LeadsSituacaoReceitaTest extends TestCase
         $this->assertSame(ImportLeadsTotvs::COLUNAS, explode(';', $cabecalho));
     }
 
+    public function test_desconhecido_e_consultado_na_hora_e_entra_se_ativo(): void
+    {
+        Http::fake(['brasilapi.com.br/*' => Http::response([
+            'cnpj' => self::DESCONHECIDA, 'razao_social' => 'EMPRESA NOVA LTDA',
+            'descricao_situacao_cadastral' => 'ATIVA', 'data_situacao_cadastral' => '2020-01-01',
+        ])]);
+        $this->escreverBase([self::DESCONHECIDA]);
+
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+
+        $this->assertSame([self::DESCONHECIDA], $this->cnpjsNoCrm());
+        $this->assertSame('ATIVA', DB::table('cnpj_situacoes')->where('cnpj', self::DESCONHECIDA)->value('situacao'));
+        $this->assertSame(1, \App\Models\LeadImportacao::sole()->resultado['consultadosNaHora']);
+    }
+
+    public function test_cnpj_que_nenhuma_fonte_conhece_vira_inexistente_e_nao_entra(): void
+    {
+        Http::fake(['*' => Http::response(['message' => 'not found'], 404)]);
+        $this->escreverBase([self::DESCONHECIDA]);
+
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+
+        $this->assertSame([], $this->cnpjsNoCrm());
+        $this->assertSame(SituacaoCadastral::INEXISTENTE, DB::table('cnpj_situacoes')->where('cnpj', self::DESCONHECIDA)->value('situacao'));
+        $this->assertSame(0, \App\Models\LeadImportacao::sole()->resultado['segurados']);
+    }
+
+    public function test_consulta_na_hora_respeita_o_teto_e_para_quando_a_receita_cai(): void
+    {
+        Http::fake(['*' => Http::response('fora', 503)]);
+        $cnpjs = array_map(fn ($i) => sprintf('%08d000199', $i), range(1, 20));
+
+        $teto = app(SituacaoCadastral::class)->consultarDesconhecidos($cnpjs, maximo: 3);
+        $this->assertSame(3, $teto['consultados']);
+        $this->assertSame(17, $teto['restantes']);
+
+        // Sem teto apertado: para depois de 5 falhas seguidas, sem martelar as 20.
+        $queda = app(SituacaoCadastral::class)->consultarDesconhecidos($cnpjs);
+        $this->assertSame(5, $queda['consultados']);
+    }
+
     public function test_lead_novo_de_situacao_desconhecida_entra_depois_da_carga(): void
     {
+        Http::fake(['*' => Http::response('fora', 503)]);
         $this->escreverBase([self::DESCONHECIDA]);
 
         $this->artisan('totvs:import-leads')->assertSuccessful();

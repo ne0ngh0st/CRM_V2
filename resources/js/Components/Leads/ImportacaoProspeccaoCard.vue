@@ -142,9 +142,15 @@ function rodar(simulacao) {
                             {{ i ? ' · ' : '' }}{{ ROTULOS_SITUACAO_RECEITA[situacao] ?? situacao }} {{ formatInteiro(n) }}
                         </span>
                     </p>
+                    <p v-if="r.consultadosNaHora" class="mt-1 text-[0.7rem] text-gray-500">
+                        {{ formatInteiro(r.consultadosNaHora) }} CNPJ(s) que a base mensal ainda não tinha foram
+                        consultados na hora na Receita.
+                    </p>
                     <p v-if="r.segurados" class="mt-1 text-[0.7rem] text-amber-dark">
-                        CNPJ que a base da Receita ainda não conhece fica segurado e entra sozinho no
-                        import seguinte à carga da Receita.
+                        Os que ficaram esperando: a Receita não respondeu
+                        <template v-if="r.receitaIndisponivel">({{ formatInteiro(r.receitaIndisponivel) }} sem resposta)</template>
+                        ou passou do limite de consultas por rodada. Clique em <strong>Importar leads</strong>
+                        de novo mais tarde — eles são consultados de novo.
                     </p>
                     <p v-if="r.leadsQueViraramCliente" class="mt-1 text-[0.7rem] text-gray-500">
                         Além disso, {{ formatInteiro(r.leadsQueViraramCliente) }} lead(s) que já estavam no CRM viraram
