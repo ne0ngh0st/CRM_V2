@@ -243,6 +243,8 @@ Route::middleware('auth')->group(function () {
         Route::patch('/maiores-por-segmento/contas/{conta}', [MaioresPorSegmentoController::class, 'update'])->name('maiores.update');
         Route::post('/maiores-por-segmento/contas/{conta}/lead', [MaioresPorSegmentoController::class, 'gerarLead'])->name('maiores.gerar-lead');
         Route::delete('/maiores-por-segmento/contas/{conta}', [MaioresPorSegmentoController::class, 'destroy'])->name('maiores.destroy');
+        Route::post('/maiores-por-segmento/sugestoes/{lead}/confirmar', [MaioresPorSegmentoController::class, 'confirmarSugestao'])->name('maiores.sugestao.confirmar');
+        Route::post('/maiores-por-segmento/sugestoes/{lead}/recusar', [MaioresPorSegmentoController::class, 'recusarSugestao'])->name('maiores.sugestao.recusar');
     });
 });
 

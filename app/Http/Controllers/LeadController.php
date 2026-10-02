@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\AgendamentoLigacao;
+use App\Models\ContaEstrategica;
 use App\Models\Lead;
 use App\Models\Ligacao;
 use App\Services\Cache\CacheDeAgregacao;
@@ -18,6 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -150,6 +152,7 @@ class LeadController extends Controller
                 'status' => $status,
                 'origem' => $origem,
                 'ordenar' => $ordenar,
+                'contaAlvo' => $this->contaAlvoParaTela($request),
             ],
             'opcoes' => [
                 // Dois DISTINCT sobre os 17 mil leads (45 ms medidos no de estado). Dependem
@@ -449,8 +452,38 @@ class LeadController extends Controller
         if ($origem !== '') {
             $query->where('origem', $origem);
         }
+        if (($contaAlvo = $this->contaAlvoId($request)) !== null) {
+            $query->ligadoAConta($contaAlvo);
+        }
 
         return $query;
+    }
+
+    /**
+     * O id do filtro `?conta_alvo=` (Visão Diretor → coluna Atendimento da Maiores por
+     * Segmento), ou null. Mesmo contrato do filtro de mesmo nome da Carteira: só vale para
+     * quem passa no gate da Visão Diretor, e para os demais é IGNORADO, não recusado.
+     */
+    private function contaAlvoId(Request $request): ?int
+    {
+        $bruto = (string) $request->string('conta_alvo');
+
+        if ($bruto === '' || ! ctype_digit($bruto)) {
+            return null;
+        }
+
+        $user = $request->user();
+
+        return $user && Gate::forUser($user)->allows('ver-visao-diretor') ? (int) $bruto : null;
+    }
+
+    /** @return array{id: int, nome: string}|null A faixa "Leads da rede X · Limpar recorte". */
+    private function contaAlvoParaTela(Request $request): ?array
+    {
+        $id = $this->contaAlvoId($request);
+        $conta = $id === null ? null : ContaEstrategica::query()->find($id, ['id', 'nome']);
+
+        return $conta ? ['id' => $conta->id, 'nome' => $conta->nome] : null;
     }
 
     /**

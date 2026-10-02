@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Receita\SituacaoCadastral;
+use App\Services\Totvs\Normalizador;
 use App\Services\Totvs\Relatorios;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -122,9 +123,10 @@ class ImportarSituacoesReceita extends Command
 
         // A base de prospecção que AINDA vai ser importada: sem ela, o lead novo chegaria
         // sem situação conhecida e o import teria que segurá-lo até a próxima carga.
-        if (Relatorios::caminho('leads') !== null) {
-            foreach (Relatorios::abrir('leads')->linhas() as $linha) {
-                $adicionar($linha['cnpj'] ?? null);
+        // Todos os CSVs da pasta Leads/ (um por segmento), não só o mais recente.
+        foreach (Relatorios::todos('leads') as $arquivo) {
+            foreach (Relatorios::abrirArquivo($arquivo, 'leads')->linhas() as $linha) {
+                $adicionar(Normalizador::digitosCnpj($linha['cnpj'] ?? null));
             }
         }
 

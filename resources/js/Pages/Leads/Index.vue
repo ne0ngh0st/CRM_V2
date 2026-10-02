@@ -18,7 +18,7 @@ import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import WordpressCapturaBar from '@/Components/Leads/WordpressCapturaBar.vue';
 import ModalPadrao from '@/Components/ModalPadrao.vue';
 import { contarFiltrosAtivos } from '@/utils/filtros';
-import { ETAPAS_LEAD, ROTULOS_ETAPA_LEAD } from '@/constants/leads.js';
+import { ETAPAS_LEAD, ROTULOS_ETAPA_LEAD, ROTULOS_ORIGEM_LEAD } from '@/constants/leads.js';
 
 const props = defineProps({
     role: String,
@@ -41,6 +41,9 @@ const filtros = reactive({
     status: props.filtros.status || '',
     origem: props.filtros.origem || '',
     ordenar: props.filtros.ordenar || 'nome_asc',
+    // Recorte vindo da Visão Diretor (leads de uma rede). Entra aqui para o Excel e o
+    // "aplicar filtros" levarem junto, como o `conta_alvo` da Carteira.
+    conta_alvo: props.filtros.contaAlvo?.id ? String(props.filtros.contaAlvo.id) : '',
     visao_supervisor: props.visao.visaoSupervisor || '',
     visao_vendedor: props.visao.visaoVendedor || '',
 });
@@ -97,9 +100,14 @@ function onBuscaInput() {
 function limparFiltros() {
     Object.assign(filtros, {
         busca: '', estado: '', segmento: '', status: '',
-        origem: '',
+        origem: '', conta_alvo: '',
         ordenar: 'nome_asc', visao_supervisor: '', visao_vendedor: '',
     });
+    aplicarFiltros();
+}
+
+function limparContaAlvo() {
+    filtros.conta_alvo = '';
     aplicarFiltros();
 }
 
@@ -152,7 +160,7 @@ async function abrirCaptura(lead) {
  * do Excel responde outra pergunta ("o arquivo sai recortado?") e aí a busca conta.
  */
 const filtrosAtivos = computed(() => {
-    const campos = ['estado', 'segmento', 'status', 'origem', 'visao_supervisor', 'visao_vendedor'];
+    const campos = ['estado', 'segmento', 'status', 'origem', 'conta_alvo', 'visao_supervisor', 'visao_vendedor'];
 
     return contarFiltrosAtivos(filtros, campos);
 });
@@ -212,9 +220,7 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
 
                         <FilterField label="Origem" :model-value="filtros.origem" @update:model-value="(v) => { filtros.origem = v; aplicarFiltros(); }">
                             <option value="">Todas</option>
-                            <option value="sistema">Sistema</option>
-                            <option value="manual">Manual</option>
-                            <option value="wordpress">WordPress</option>
+                            <option v-for="(rotulo, valor) in ROTULOS_ORIGEM_LEAD" :key="valor" :value="valor">{{ rotulo }}</option>
                         </FilterField>
 
                         <!--
@@ -254,6 +260,29 @@ const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca
                         </button>
                     </template>
                 </PageHero>
+
+                <!--
+                    Recorte vindo da Visão Diretor (leads de uma rede da Maiores por
+                    Segmento). Sem anunciar, a lista menor parece tela quebrada — mesma
+                    faixa da Carteira.
+                -->
+                <div
+                    v-if="filtros.conta_alvo && props.filtros.contaAlvo"
+                    class="flex flex-wrap items-center justify-between gap-2 rounded border border-teal/40 bg-teal/10 px-3 py-2"
+                >
+                    <p class="text-sm text-gray-700">
+                        Mostrando apenas os leads da rede
+                        <strong class="font-semibold">{{ props.filtros.contaAlvo.nome }}</strong>
+                        (Visão Diretor → Maiores por segmento).
+                    </p>
+                    <button
+                        type="button"
+                        class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
+                        @click="limparContaAlvo"
+                    >
+                        Limpar recorte
+                    </button>
+                </div>
 
                 <WordpressCapturaBar v-if="wordpressCaptura" :captura="wordpressCaptura" />
 

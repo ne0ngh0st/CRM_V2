@@ -109,6 +109,38 @@ class SugestaoDeVinculo
     }
 
     /**
+     * Catálogo no mesmo formato do de grupos, mas de NOMES QUAISQUER — é o que deixa a
+     * prospecção sugerir "este lead é da rede X" com a MESMA heurística da carga da
+     * planilha (`ContaDoLead`), em vez de uma segunda regra de casar nome que divergiria
+     * desta. Cada item já vem do segmento certo, então conta como 100% dele.
+     *
+     * @param  iterable<array{codigo: string, nome: string, segmento: string}>  $itens
+     */
+    public function catalogoDeNomes(iterable $itens): Collection
+    {
+        return collect($itens)
+            ->map(fn (array $i) => [
+                'codigo' => $i['codigo'],
+                'nome' => $i['nome'],
+                'compacto' => $this->compacto($i['nome']),
+                'tokensTodos' => $this->tokensTodos($i['nome']),
+                'tokensDistintivos' => $this->tokensDistintivos($i['nome']),
+                'total' => 1,
+                'porSeg' => [$i['segmento'] => 1],
+            ])
+            ->values();
+    }
+
+    /**
+     * Chave para "é o MESMO nome?" (sem acento, caixa, pontuação nem espaço). É o que a
+     * coluna `rede` da prospecção usa para achar a conta digitada.
+     */
+    public function chaveDeNome(string $nome): string
+    {
+        return $this->compacto($nome);
+    }
+
+    /**
      * @param  Collection<int, array{codigo: string, nome: string, compacto: string, tokensTodos: list<string>, tokensDistintivos: list<string>, total: int, porSeg: array<string, int>}>  $catalogo
      * @return array{grupos: Collection<int, array{codigo: string, nome: string}>, ambiguo: bool}
      */

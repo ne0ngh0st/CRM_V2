@@ -33,6 +33,13 @@ watch(() => props.contas, () => {
 /** Quantos vendedores aparecem por extenso antes do "+N". Coluna estreita de propósito. */
 const VENDEDORES_VISIVEIS = 1;
 
+/** Tooltip do chip de leads: cada lead com responsável e etapa, e para onde o clique leva. */
+function tituloLeads(leads) {
+    const linhas = leads.map((l) => `${l.nome} — ${l.responsavel} (${ROTULOS_ETAPA_LEAD[l.etapa] ?? l.etapa})`);
+
+    return [...linhas, 'Abrir em Leads'].join('\n');
+}
+
 const expandida = ref(null);
 const carregando = ref(null);
 const erro = ref(null);
@@ -135,17 +142,21 @@ async function alternar(conta) {
                             </StatusPill>
                         </td>
                         <td class="tbl-td" data-rotulo="Atendimento" @click.stop>
-                            <!--
-                                Conta sem loja nossa mas com lead aberto pela diretoria: quem
-                                atende é o responsável do lead. Leva ao lead na tela de Leads.
-                            -->
-                            <Link
-                                v-if="! conta.atendimento.length && conta.leadAberto"
-                                :href="route('leads.index', { busca: conta.leadAberto.nome })"
-                                class="inline-flex max-w-[7rem] items-center gap-1 truncate rounded border border-amber bg-amber/10 px-1 py-0.5 text-[0.7rem] text-amber-dark hover:underline"
-                                :title="`Lead aberto com ${conta.leadAberto.responsavel} (${ROTULOS_ETAPA_LEAD[conta.leadAberto.etapa] ?? conta.leadAberto.etapa}) — abrir em Leads`"
-                            >Lead · {{ conta.leadAberto.responsavel }}</Link>
-                            <div v-else-if="conta.atendimento.length" class="flex flex-wrap items-center justify-center gap-0.5">
+                            <div
+                                v-if="conta.atendimento.length || conta.leads.length"
+                                class="flex flex-wrap items-center justify-center gap-0.5"
+                            >
+                                <!--
+                                    Leads ligados à rede: o aberto pela diretoria e os da
+                                    prospecção. O chip abre /leads?conta_alvo=, e a contagem
+                                    é a mesma definição da lista (`Lead::ligadoAConta`).
+                                -->
+                                <Link
+                                    v-if="conta.leads.length"
+                                    :href="route('leads.index', { conta_alvo: conta.id })"
+                                    class="inline-flex max-w-[7rem] items-center gap-1 truncate rounded border border-amber bg-amber/10 px-1 py-0.5 text-[0.7rem] text-amber-dark hover:underline"
+                                    :title="tituloLeads(conta.leads)"
+                                >{{ conta.leads.length === 1 ? `Lead · ${conta.leads[0].responsavel}` : `${conta.leads.length} leads` }}</Link>
                                 <Link
                                     v-for="v in conta.atendimento.slice(0, VENDEDORES_VISIVEIS)"
                                     :key="v.codVendedor"
@@ -183,7 +194,7 @@ async function alternar(conta) {
                         <td class="tbl-td tbl-td-acoes" @click.stop>
                             <div class="tbl-acoes">
                                 <button
-                                    v-if="conta.status === 'lead' && ! conta.leadAberto"
+                                    v-if="conta.status === 'lead' && ! conta.leads.length"
                                     type="button"
                                     class="tbl-acao tbl-acao-amber"
                                     title="Gerar lead com responsável"

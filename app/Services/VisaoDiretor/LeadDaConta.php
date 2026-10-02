@@ -61,16 +61,12 @@ class LeadDaConta
     }
 
     /**
-     * O lead aberto desta conta, se houver. Lead excluído não conta: a conta volta a
-     * oferecer o botão.
+     * Um lead já ligado a esta conta, se houver — aberto aqui ou trazido pela prospecção
+     * (`ContaDoLead`). Lead excluído não conta: a conta volta a oferecer o botão.
      */
     public function leadAberto(ContaEstrategica $conta): ?Lead
     {
-        if (! $conta->lead_id) {
-            return null;
-        }
-
-        return Lead::query()->visivel()->find($conta->lead_id);
+        return $conta->leads()->visivel()->oldest('id')->first();
     }
 
     public function gerar(ContaEstrategica $conta, User $responsavel, User $autor, ?string $recado = null): Lead
@@ -131,7 +127,10 @@ class LeadDaConta
                 'mensagem' => $this->contexto($conta, $recado),
             ]);
 
-            $conta->forceFill(['lead_id' => $lead->id])->save();
+            $lead->forceFill([
+                'conta_estrategica_id' => $conta->id,
+                'conta_vinculo' => Lead::CONTA_CONFIRMADA,
+            ])->save();
 
             return $lead;
         });

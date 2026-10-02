@@ -19,6 +19,7 @@ import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import ResumoSegmentosCard from '@/Components/VisaoDiretor/ResumoSegmentosCard.vue';
 import ContasSegmentoTabela from '@/Components/VisaoDiretor/ContasSegmentoTabela.vue';
+import SugestoesLeadsCard from '@/Components/VisaoDiretor/SugestoesLeadsCard.vue';
 import ContaEstrategicaModal from '@/Components/VisaoDiretor/ContaEstrategicaModal.vue';
 import GerarLeadContaModal from '@/Components/VisaoDiretor/GerarLeadContaModal.vue';
 import HistoricoObservacaoConta from '@/Components/VisaoDiretor/HistoricoObservacaoConta.vue';
@@ -36,6 +37,17 @@ const props = defineProps({
     filtros: { type: Object, required: true },
     segmentosDisponiveis: { type: Array, default: () => [] },
     responsaveisLead: { type: Array, default: () => [] },
+    sugestoesLeads: { type: Array, default: () => [] },
+});
+
+/*
+ * Na aba de um segmento, só as sugestões dele; no Resumo, todas. Recorte local, como a
+ * troca de aba — o payload já traz tudo.
+ */
+const sugestoesDaAba = computed(() => {
+    const nome = props.dados.segmentos.find((s) => s.codigo === filtros.segmento)?.nome;
+
+    return nome ? props.sugestoesLeads.filter((s) => s.segmento === nome) : props.sugestoesLeads;
 });
 
 const filtros = reactive({
@@ -239,6 +251,8 @@ async function excluir(conta) {
                     >+ Nova conta</button>
                 </div>
             </div>
+
+            <SugestoesLeadsCard v-if="sugestoesDaAba.length" :sugestoes="sugestoesDaAba" />
 
             <ResumoSegmentosCard
                 v-if="! abaAtiva"

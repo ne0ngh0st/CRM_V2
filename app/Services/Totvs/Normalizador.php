@@ -248,6 +248,20 @@ class Normalizador
         return $ddd !== '' ? "({$ddd}) {$telefone}" : $telefone;
     }
 
+    /**
+     * Só os dígitos do CNPJ, com o zero à esquerda devolvido quando o Excel o comeu
+     * (CNPJ gravado como número sai com 12 ou 13 dígitos). Fora disso, devolve os dígitos
+     * como vieram — CPF continua com 11.
+     */
+    public static function digitosCnpj(mixed $bruto): string
+    {
+        $digitos = preg_replace('/\D/', '', (string) $bruto);
+
+        return in_array(strlen($digitos), [12, 13], true)
+            ? str_pad($digitos, 14, '0', STR_PAD_LEFT)
+            : $digitos;
+    }
+
     /** CNPJ/CPF chega só com dígitos; a base guarda formatado. */
     public static function documento(mixed $bruto): ?string
     {

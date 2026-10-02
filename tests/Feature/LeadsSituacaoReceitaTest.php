@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Console\Commands\ImportLeadsTotvs;
 use App\Models\User;
 use App\Services\Receita\SituacaoCadastral;
 use Database\Seeders\RoleSeeder;
@@ -38,6 +39,10 @@ class LeadsSituacaoReceitaTest extends TestCase
         parent::setUp();
         $this->prepararRelatorios();
         Http::preventStrayRequests();
+        DB::table('segmentos')->insert([
+            ['codigo' => '101', 'nome' => 'SUPERMERCADISTA'],
+            ['codigo' => '109', 'nome' => 'DROGARIAS'],
+        ]);
     }
 
     protected function tearDown(): void
@@ -59,6 +64,129 @@ class LeadsSituacaoReceitaTest extends TestCase
         $this->artisan('totvs:import-leads')->assertSuccessful();
 
         $this->assertSame([self::ATIVA], $this->cnpjsNoCrm());
+    }
+
+    public function test_cnpj_que_ja_e_cliente_nao_entra_como_lead(): void
+    {
+        $this->situacao(self::ATIVA, 'ATIVA');
+        $this->situacao(self::BAIXADA, 'ATIVA');
+        DB::table('clientes')->insert([
+            'cod_cliente' => '000123', 'loja' => '02', 'razao_social' => 'JA CLIENTE',
+            'cnpj' => $this->mascara(self::BAIXADA), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->escreverBase([self::ATIVA, self::BAIXADA]);
+
+        $this->artisan('totvs:import-leads')
+            ->expectsOutputToContain('barrados (CNPJ já é cliente na carteira): 1')
+            ->assertSuccessful();
+
+        $this->assertSame([self::ATIVA], $this->cnpjsNoCrm());
+    }
+
+    public function test_lead_que_virou_cliente_nao_e_atualizado_pelo_csv(): void
+    {
+        $this->situacao(self::BAIXADA, 'ATIVA');
+        $id = $this->lead(self::BAIXADA);
+        DB::table('clientes')->insert([
+            'cod_cliente' => '000123', 'loja' => '01', 'razao_social' => 'VIROU CLIENTE',
+            'cnpj' => $this->mascara(self::BAIXADA), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->escreverBase([self::BAIXADA]);
+
+        $this->artisan('totvs:import-leads')
+            ->expectsOutputToContain('leads já no CRM cujo CNPJ hoje é cliente (não mexidos): 1')
+            ->assertSuccessful();
+
+        $this->assertSame('EMPRESA '.self::BAIXADA, DB::table('leads')->where('id', $id)->value('razao_social'));
+        $this->assertSame('sistema', DB::table('leads')->where('id', $id)->value('origem'));
+    }
+
+    public function test_cnpj_sem_o_zero_a_esquerda_e_reconhecido(): void
+    {
+        $cnpj = '06666666000166';
+        $this->situacao($cnpj, 'ATIVA');
+        $this->escreverBase([$cnpj], semMascara: true);
+
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+
+        $this->assertSame([$cnpj], $this->cnpjsNoCrm());
+    }
+
+    public function test_le_todos_os_csvs_da_pasta_e_nao_duplica_cnpj_entre_eles(): void
+    {
+        $this->situacao(self::ATIVA, 'ATIVA');
+        $this->situacao(self::BAIXADA, 'ATIVA');
+        $this->escreverBase([self::ATIVA], arquivo: 'Leads - Supermercados.csv');
+        $this->escreverBase([self::ATIVA, self::BAIXADA], arquivo: 'Leads - Drogarias.csv');
+
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+
+        $this->assertSame([self::ATIVA, self::BAIXADA], $this->cnpjsNoCrm());
+    }
+
+    public function test_segmento_aceita_codigo_ou_nome_e_grava_o_nome_oficial(): void
+    {
+        $this->situacao(self::ATIVA, 'ATIVA');
+        $this->situacao(self::BAIXADA, 'ATIVA');
+        $this->escreverLinhas([
+            ['cnpj' => self::ATIVA, 'razao_social' => 'A', 'segmento' => '109'],
+            ['cnpj' => self::BAIXADA, 'razao_social' => 'B', 'segmento' => 'supermercadista'],
+        ]);
+
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+
+        $this->assertEquals(['DROGARIAS', 'SUPERMERCADISTA'],
+            DB::table('leads')->orderBy('segmento')->pluck('segmento')->all());
+    }
+
+    public function test_linha_fora_do_padrao_e_recusada_com_arquivo_e_linha(): void
+    {
+        $this->situacao(self::ATIVA, 'ATIVA');
+        $this->escreverLinhas([
+            ['cnpj' => self::ATIVA, 'razao_social' => 'OK', 'segmento' => '101'],
+            ['cnpj' => '123', 'razao_social' => 'CNPJ CURTO', 'segmento' => '101'],
+            ['cnpj' => self::INAPTA, 'razao_social' => 'X', 'segmento' => 'PADARIA'],
+        ], 'Leads - x.csv');
+
+        $this->artisan('totvs:import-leads')
+            ->expectsOutputToContain('Leads - x.csv:3 — CNPJ inválido')
+            ->expectsOutputToContain("Leads - x.csv:4 — segmento desconhecido ('PADARIA')")
+            ->assertSuccessful();
+
+        $this->assertSame([self::ATIVA], $this->cnpjsNoCrm());
+    }
+
+    public function test_cabecalho_diferente_do_template_para_o_import(): void
+    {
+        $this->escreverLinhas([['cnpj' => self::ATIVA]], colunas: ['cnpj', 'RAZAO SOCIAL']);
+
+        $this->expectException(\RuntimeException::class);
+        $this->artisan('totvs:import-leads');
+    }
+
+    public function test_sem_vendedor_vai_para_o_padrao_e_em_lead_existente_nao_apaga_o_dono(): void
+    {
+        config(['totvs.arquivos.leads.vendedor_padrao' => '10617']);
+        $this->situacao(self::ATIVA, 'ATIVA');
+        $existente = $this->lead(self::BAIXADA);
+        DB::table('leads')->where('id', $existente)->update(['cod_vendedor' => '000197']);
+        $this->escreverLinhas([
+            ['cnpj' => self::ATIVA, 'razao_social' => 'NOVO', 'segmento' => '101'],
+            ['cnpj' => self::BAIXADA, 'razao_social' => 'EXISTENTE', 'segmento' => '101'],
+        ]);
+
+        $this->artisan('totvs:import-leads')->assertSuccessful();
+
+        $this->assertSame('010617', DB::table('leads')->where('razao_social', 'NOVO')->value('cod_vendedor'));
+        $this->assertSame('000197', DB::table('leads')->where('id', $existente)->value('cod_vendedor'));
+        $this->assertSame('EXISTENTE', DB::table('leads')->where('id', $existente)->value('razao_social'));
+    }
+
+    public function test_template_do_repositorio_tem_o_cabecalho_do_import(): void
+    {
+        $cabecalho = trim(preg_replace('/^\xEF\xBB\xBF/', '', strtok(file_get_contents(base_path('docs/leads-template.csv')), "\n")));
+
+        $this->assertSame(ImportLeadsTotvs::COLUNAS, explode(';', $cabecalho));
     }
 
     public function test_lead_novo_de_situacao_desconhecida_entra_depois_da_carga(): void
@@ -269,23 +397,35 @@ class LeadsSituacaoReceitaTest extends TestCase
     }
 
     /** @param list<string> $cnpjs */
-    private function escreverBase(array $cnpjs): void
+    private function escreverBase(array $cnpjs, bool $semMascara = false, string $arquivo = 'Leads - teste.csv'): void
     {
-        $colunas = [
-            'cnpj', 'RAZAO SOCIAL', 'NOME FANTASIA', 'nome final', 'E-mail',
-            'Telefone Principal (FINAL)', 'endereçoCNPJJA', 'CIDADE (arrumada)', 'CIDADE',
-            'UF', 'Codigo Vendedor', 'projeção R$ (mês)', 'MARCAÇÃO PROSPECT',
-        ];
-        $linhas = [implode(';', $colunas)];
+        $this->escreverLinhas(array_map(fn ($cnpj) => [
+            // Sem máscara: como o Excel grava CNPJ salvo como número, sem o zero da frente.
+            'cnpj' => $semMascara ? ltrim($cnpj, '0') : $this->mascara($cnpj),
+            'razao_social' => 'EMPRESA '.$cnpj,
+            'segmento' => 'SUPERMERCADISTA',
+            'cod_vendedor' => '010617',
+            'cidade' => 'SAO PAULO',
+            'uf' => 'SP',
+        ], $cnpjs), $arquivo);
+    }
 
-        foreach ($cnpjs as $cnpj) {
-            $linhas[] = implode(';', [
-                $this->mascara($cnpj), 'EMPRESA '.$cnpj, '', 'EMPRESA '.$cnpj, '', '', '', 'SAO PAULO', '',
-                'SP', '010617', '', 'SAI PROSPECT',
-            ]);
+    /**
+     * Escreve um CSV no layout do template; coluna ausente sai em branco.
+     *
+     * @param  list<array<string, string>>  $linhas
+     */
+    private function escreverLinhas(array $linhas, string $arquivo = 'Leads - teste.csv', ?array $colunas = null): void
+    {
+        $colunas ??= ImportLeadsTotvs::COLUNAS;
+        $saida = [implode(';', $colunas)];
+
+        foreach ($linhas as $linha) {
+            $saida[] = implode(';', array_map(fn ($c) => $linha[$c] ?? '', $colunas));
         }
 
-        file_put_contents($this->diretorioTotvs.'/CSV/base_marco - SQL.csv', implode("\n", $linhas)."\n");
+        @mkdir($this->diretorioTotvs.'/Leads', 0777, true);
+        file_put_contents($this->diretorioTotvs.'/Leads/'.$arquivo, implode("\n", $saida)."\n");
     }
 
     private function linhaReceita(string $cnpj, string $codigo, string $data): string

@@ -107,7 +107,8 @@ class LeadDaContaTest extends TestCase
         $this->assertSame('DROGARIAS', $lead->segmento);
         $this->assertNotNull($lead->etapa_alterada_em);
 
-        $this->assertSame($lead->id, $conta->fresh()->lead_id);
+        $this->assertSame($conta->id, $lead->fresh()->conta_estrategica_id);
+        $this->assertSame(Lead::CONTA_CONFIRMADA, $lead->fresh()->conta_vinculo);
     }
 
     /**
@@ -175,7 +176,7 @@ class LeadDaContaTest extends TestCase
         $this->gerar($conta, $this->inaya)->assertSessionHasNoErrors();
 
         $this->assertSame(2, Lead::count());
-        $this->assertSame(Lead::visivel()->sole()->id, $conta->fresh()->lead_id);
+        $this->assertSame([Lead::visivel()->sole()->id], $conta->fresh()->leads()->visivel()->pluck('id')->all());
     }
 
     public function test_conta_com_cliente_na_carteira_nao_vira_lead(): void
@@ -224,13 +225,13 @@ class LeadDaContaTest extends TestCase
     public function test_linha_da_conta_mostra_o_lead_aberto(): void
     {
         $conta = $this->conta();
-        $this->assertNull(app(MaioresPorSegmentoResolver::class)->linhas()->firstWhere('id', $conta->id)['leadAberto']);
+        $this->assertSame([], app(MaioresPorSegmentoResolver::class)->linhas()->firstWhere('id', $conta->id)['leads']);
 
         $this->gerar($conta, $this->inaya);
 
         $linha = app(MaioresPorSegmentoResolver::class)->linhas()->firstWhere('id', $conta->id);
-        $this->assertSame('Inaya', $linha['leadAberto']['responsavel']);
-        $this->assertSame(Lead::ETAPA_NOVO, $linha['leadAberto']['etapa']);
+        $this->assertSame('Inaya', $linha['leads'][0]['responsavel']);
+        $this->assertSame(Lead::ETAPA_NOVO, $linha['leads'][0]['etapa']);
         // Lead aberto não é loja nossa: a conta continua "lead".
         $this->assertSame('lead', $linha['status']);
     }

@@ -86,12 +86,16 @@ class ContaEstrategica extends Model
     }
 
     /**
-     * O lead que a diretoria abriu para esta conta (`LeadDaConta`). ⚠️ Fora do
-     * `$fillable` de propósito: só o serviço grava, e é ele que impede o lead duplicado.
+     * Os leads LIGADOS a esta rede — o aberto pelo botão "Gerar lead" (`LeadDaConta`) e os
+     * que a prospecção trouxe (`ContaDoLead`). Só a ligação confirmada conta: sugestão
+     * ainda não é verdade, e recusada é o contrário dela.
+     *
+     * ⚠️ Até 2026-10-02 era um lead só, em `contas_estrategicas.lead_id`. A prospecção traz
+     * vários CNPJs da mesma rede, então a ligação passou para o lado do lead.
      */
-    public function lead(): BelongsTo
+    public function leads(): HasMany
     {
-        return $this->belongsTo(Lead::class);
+        return $this->hasMany(Lead::class, 'conta_estrategica_id')->ligadoAConta();
     }
 
     public function segmento(): BelongsTo

@@ -2816,6 +2816,48 @@ setembro.
 - A regra de idade mora em `SituacaoCadastral::idadeDaBase()` (`DIAS_ATENCAO` 45,
   `DIAS_ALARME` 60). ⚠️ O 60 está escrito também no script do alarme — mudar os dois.
 
+### Leads de prospecção: pasta `Leads/`, template fixo, cliente não entra — 2026-10-02
+
+A base de prospecção deixou de ser o arquivo único `CSV/base_marco - SQL.csv`. Agora o
+`totvs:import-leads` lê **todos os CSVs de `RELATORIOS TOTVS/Leads/`** (um por segmento,
+montados pelo Marcos no SharePoint), no layout de **`docs/leads-template.csv`**
+(`ImportLeadsTotvs::COLUNAS`; há teste travando os dois iguais). O modelo com exemplos e o
+LEIA-ME ficam em `Leads/_MODELO/`. Subpasta não é lida (o glob é `Leads/*.csv`).
+
+- **CNPJ que já é cliente não entra** (`clientes.cnpj_digitos`, qualquer filial).
+- Continua valendo a regra da Receita (só ATIVA entra; desconhecido é segurado).
+- **Cabeçalho diferente PARA o import**; linha ruim (CNPJ ≠ 14 dígitos, sem razão social,
+  segmento fora de `segmentos`) é recusada e listada como `arquivo:linha`.
+- Segmento aceita código ou nome; grava o nome oficial.
+- `cod_vendedor` vazio: lead NOVO vai para `totvs.arquivos.leads.vendedor_padrao` (010617).
+  Em lead existente, **campo vazio no CSV nunca apaga** o que o CRM tem.
+- `Normalizador::digitosCnpj()` devolve o zero que o Excel come (12-13 dígitos → 14). É
+  usado pelo import E pela carga da Receita, que também passou a ler todos os CSVs.
+- Os scripts de envio sobem `Leads/*.csv` para o S3. ⚠️ O `totvs:sincronizar-s3` não apaga
+  no servidor arquivo removido da pasta; como tudo é deduplicado por CNPJ, um arquivo
+  renomeado não duplica lead, mas um arquivo apagado continua sendo lido.
+- Os ~17 mil leads do `base_marco` continuam no CRM; aparecem só como "sumiram da base".
+- Fluxo para subir leads novos: CSV na pasta → `totvs:import-leads --dry-run` → se houver
+  segurados, `receita:importar-situacoes --forcar` → `totvs:import-leads`.
+- **Origem `prospeccao`** ("Prospecção"), não `sistema` (que segue sendo a base antiga).
+  `Lead::ORIGENS_IMPORTADAS` (as duas) é o que a Receita fiscaliza e o import adota pelo
+  CNPJ; lead `sistema` que reaparece num CSV vira `prospeccao`. CNPJ que já é lead manual
+  ou do site é ignorado. No BI sai como `PROSPECCAO`.
+- **Mescla com a Maiores por Segmento** (`ContaDoLead`), só nos 6 segmentos das abas:
+  coluna `rede` que bate liga o lead à conta; que não bate CRIA a conta no fim da aba;
+  vazia vira SUGESTÃO pelo nome (mesma heurística de `SugestaoDeVinculo`), confirmada ou
+  recusada no card da Visão Diretor. Sem `rede` e sem sugestão, não vira conta.
+- ⚠️ **Vários leads por conta**: a ligação mora em `leads.conta_estrategica_id` +
+  `conta_vinculo` (`sugerido`/`confirmado`/`recusado`). O `contas_estrategicas.lead_id`
+  antigo foi migrado e dropado. "Leads desta conta" = `Lead::scopeLigadoAConta()`, usado
+  pela coluna Atendimento E pelo filtro `/leads?conta_alvo=` (gate da Visão Diretor).
+  Recusada guarda a conta para o import não sugerir de novo.
+- **Filial de cliente** (decisão do Tony, 2026-10-02, opção "deixar como está"): a
+  conferência de cliente é por CNPJ EXATO. Outra filial de uma rede que já compra
+  (ex.: uma loja da Drogaria São Paulo que ainda não é cliente) entra como lead de quem a
+  planilha indicar.
+- Lead que JÁ estava no CRM e virou cliente não é atualizado pelo CSV nem ligado a rede.
+
 ### Situação na Receita evidenciada na Carteira — 2026-10-01
 
 A Carteira continua só leitura (Regra nº 4): o CRM evidencia e PEDE; quem inativa é o

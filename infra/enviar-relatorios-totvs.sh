@@ -59,6 +59,7 @@ aws s3 sync "$ORIGEM" "$BUCKET" $DRY_RUN \
   --exclude "*" \
   --include "CSV/*.csv" \
   --include "Pedidos emitidos/*.csv" \
+  --include "Leads/*.csv" \
   --exclude "CSV/etc/*" \
   --exclude "CSV/META VENDA*" \
   --delete

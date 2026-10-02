@@ -15,12 +15,39 @@ class Lead extends Model
 
     public const ORIGEM_WORDPRESS = 'wordpress';
 
+    /** CSVs de prospecção da pasta `Leads/` (`totvs:import-leads`, desde 2026-10-02). */
+    public const ORIGEM_PROSPECCAO = 'prospeccao';
+
     /** @var list<string> */
     public const ORIGENS = [
         self::ORIGEM_SISTEMA,
         self::ORIGEM_MANUAL,
         self::ORIGEM_WORDPRESS,
+        self::ORIGEM_PROSPECCAO,
     ];
+
+    /**
+     * As bases IMPORTADAS em massa: a antiga (`base_marco`, `sistema`) e a de prospecção.
+     * São estas que a situação na Receita tira e devolve, e que o import adota pelo CNPJ.
+     * ⚠️ Manual e site ficam de fora: são decisão de quem cadastrou.
+     *
+     * @var list<string>
+     */
+    public const ORIGENS_IMPORTADAS = [
+        self::ORIGEM_SISTEMA,
+        self::ORIGEM_PROSPECCAO,
+    ];
+
+    /*
+     * Ligação com a conta-alvo da Visão Diretor (`conta_estrategica_id`). Só CONFIRMADO
+     * aparece na Maiores por Segmento; SUGERIDO espera alguém decidir; RECUSADO guarda a
+     * conta para o import não voltar a sugerir a mesma.
+     */
+    public const CONTA_SUGERIDA = 'sugerido';
+
+    public const CONTA_CONFIRMADA = 'confirmado';
+
+    public const CONTA_RECUSADA = 'recusado';
 
     /*
      * ETAPAS DO FUNIL — a ordem desta lista É a regra de negócio.
@@ -152,8 +179,26 @@ class Lead extends Model
         return match ($origem) {
             self::ORIGEM_MANUAL => 'Manual',
             self::ORIGEM_WORDPRESS => 'WordPress',
+            self::ORIGEM_PROSPECCAO => 'Prospecção',
             default => 'Sistema',
         };
+    }
+
+    /** A conta-alvo da Visão Diretor. Ver `CONTA_*` — só a confirmada conta como ligação. */
+    public function contaEstrategica(): BelongsTo
+    {
+        return $this->belongsTo(ContaEstrategica::class);
+    }
+
+    /**
+     * "Os leads desta conta" — UMA definição para a coluna da Maiores por Segmento
+     * (`ContaEstrategica::leads()`) e para o filtro `?conta_alvo=` de /leads que o clique
+     * abre. É o que faz o número clicado bater com a lista.
+     */
+    public function scopeLigadoAConta(\Illuminate\Database\Eloquent\Builder $query, ?int $contaId = null): void
+    {
+        $query->where('conta_vinculo', self::CONTA_CONFIRMADA)
+            ->when($contaId !== null, fn ($q) => $q->where('conta_estrategica_id', $contaId));
     }
 
     /**

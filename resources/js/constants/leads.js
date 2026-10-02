@@ -82,14 +82,21 @@ export function proximaDaEsteira(etapa) {
     return i === -1 ? null : ETAPAS_ESTEIRA[i + 1] ?? null;
 }
 
+/*
+ * ⚠️ Espelho de `Lead::rotuloOrigem()` e `Lead::ORIGENS`. Esta lista também monta as
+ * opções do filtro "Origem" da tela de Leads — origem nova entra aqui e lá.
+ * `prospeccao` = CSVs da pasta Leads/ (desde 2026-10-02); `sistema` = a base antiga.
+ */
 export const ROTULOS_ORIGEM_LEAD = {
     sistema: 'Sistema',
+    prospeccao: 'Prospecção',
     manual: 'Manual',
     wordpress: 'WordPress',
 };
 
 export const TONS_ORIGEM_LEAD = {
     sistema: 'neutral',
+    prospeccao: 'neutral',
     manual: 'warn',
     wordpress: 'ok',
 };

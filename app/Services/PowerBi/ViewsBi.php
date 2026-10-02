@@ -443,8 +443,9 @@ class ViewsBi
      * Multilinha" conta. CNPJ que existe na carteira ganha o status da última compra
      * (mesma régua da `vw_bi_dim_cliente`); o que não existe é `prospect`.
      *
-     * - `origem`: BASE (import do TOTVS/legado), MANUAL (cadastro do vendedor), SITE
-     *   (formulário do site — não existia no legado);
+     * - `origem`: BASE (import do TOTVS/legado), PROSPECCAO (CSVs da pasta Leads/, desde
+     *   2026-10-02), MANUAL (cadastro do vendedor), SITE (formulário do site — não existia
+     *   no legado);
      * - `faturamento_bruto_2024`: só os leads manuais têm valor (o estimado), como no
      *   legado; a base importada não trouxe a coluna;
      * - última venda: data e soma do dia da última compra do CNPJ.
@@ -453,7 +454,7 @@ class ViewsBi
     {
         return "
             SELECT
-                CASE l.origem WHEN 'sistema' THEN 'BASE' WHEN 'manual' THEN 'MANUAL' ELSE 'SITE' END AS origem,
+                CASE l.origem WHEN 'sistema' THEN 'BASE' WHEN 'prospeccao' THEN 'PROSPECCAO' WHEN 'manual' THEN 'MANUAL' ELSE 'SITE' END AS origem,
                 ".self::digitos('l.cnpj').' AS cnpj,
                 LEFT('.self::digitos('l.cnpj').", 8) AS raiz_cnpj,
                 l.razao_social,

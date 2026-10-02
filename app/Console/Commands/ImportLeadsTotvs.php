@@ -2,14 +2,30 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Lead;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\Normalizador;
+use App\Services\VisaoDiretor\ContaDoLead;
 use App\Services\Totvs\Relatorios;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Importa a base de prospecção (base_marco) direto do arquivo.
+ * Importa a base de prospecção: TODOS os CSVs da pasta `Leads/` (um por segmento,
+ * gerados pelo time de prospecção no modelo `docs/leads-template.csv`).
+ *
+ * ⚠️ O LAYOUT É O DO TEMPLATE, com cabeçalho exato (`COLUNAS`). Arquivo fora do padrão
+ * para o import inteiro com a lista do que faltou — melhor que importar meia planilha.
+ * Linha sem CNPJ, sem razão social ou com segmento desconhecido é recusada e listada
+ * com arquivo:linha, para quem gerou corrigir na origem.
+ *
+ * ⚠️ Até 2026-10-02 a fonte era um arquivo único (`CSV/base_marco - SQL.csv`, com o
+ * filtro `MARCAÇÃO PROSPECT = SAI PROSPECT`). Os leads que vieram de lá continuam no CRM;
+ * como não estão nos CSVs novos, aparecem só como "sumiram da base" (nunca apagados).
+ *
+ * ⚠️ `cod_vendedor` em branco: o lead NOVO vai para `config('totvs.arquivos.leads.
+ * vendedor_padrao')` — sem dono, `LeadController::scopeQuery` não o mostra a ninguém.
+ * Em lead que já existe, campo em branco no CSV nunca apaga o que está no CRM.
  *
  * Difere do `legado:import-leads` em três pontos, e todos são correção de defeito, não
  * preferência:
@@ -31,9 +47,6 @@ use Illuminate\Support\Facades\DB;
  *    voltava para "ativo" a cada importação, porque o comando antigo recriava tudo com
  *    status fixo. Aqui o status só é definido no cadastro novo.
  *
- * ⚠️ Mantém o filtro `MARCAÇÃO PROSPECT = 'SAI PROSPECT'` do comando antigo. Sem ele
- * entram 2.002 linhas marcadas "OK", que não são prospect e inundariam a tela.
- *
  * ⚠️ Lead que SUMIU da base não é apagado, de propósito. Apagar anularia as observações
  * que apontam para ele (SET NULL) e o histórico do vendedor sumiria sem deixar rastro.
  * O comando conta e informa quantos são; o que fazer com eles é decisão de negócio.
@@ -46,52 +59,93 @@ use Illuminate\Support\Facades\DB;
  * conhecido como não ativo vira `excluido` (não é apagado; ver
  * `SituacaoCadastral::sincronizarLeads`), e volta sozinho se o CNPJ for regularizado.
  *
+ * ⚠️ CNPJ QUE JÁ É CLIENTE NÃO ENTRA COMO LEAD (decisão do Tony, 2026-10-02): se o CNPJ
+ * está em `clientes` (qualquer filial, qualquer vendedor), o vendedor que pegasse o lead
+ * estaria prospectando cliente de outro. Compara pelos 14 dígitos (`clientes.cnpj_digitos`,
+ * indexada). Lead que JÁ estava no CRM e virou cliente não é mexido — só contado.
+ *
+ * ⚠️ CNPJ com 12 ou 13 dígitos ganha zero à esquerda: é o Excel comendo o zero de CNPJ
+ * gravado como número (mesmo defeito do código de vendedor em 2026-09-17).
+ *
  * ⚠️ `origem = manual` e `origem = wordpress` nunca são tocados: um é cadastro do
- * vendedor pela tela, o outro vem do formulário do site.
+ * vendedor pela tela, o outro vem do formulário do site. CNPJ que já existe como lead
+ * de uma dessas origens é ignorado (não duplica).
+ *
+ * Lead novo nasce `origem = prospeccao` ("Prospecção" na tela). Lead da base antiga
+ * (`sistema`) que reaparece num CSV é adotado pelo CNPJ e passa a ser `prospeccao`.
+ *
+ * Colunas `rede` e `filiais_rede` (opcionais): ligam o lead a uma conta-alvo da Visão
+ * Diretor → Maiores por Segmento — ver `ContaDoLead`.
  */
 class ImportLeadsTotvs extends Command
 {
-    private const MARCACAO_PROSPECT = 'SAI PROSPECT';
+    /** Cabeçalho do template, na ordem. Mudou aqui, muda `docs/leads-template.csv`. */
+    public const COLUNAS = [
+        'cnpj', 'razao_social', 'nome_fantasia', 'segmento', 'cod_vendedor',
+        'telefone', 'email', 'endereco', 'cidade', 'uf', 'valor_estimado',
+        'rede', 'filiais_rede',
+    ];
+
+    /**
+     * Campos do registro que NÃO são colunas de `leads`: viajam junto do lead até a
+     * ligação com a conta-alvo (`ContaDoLead`) e são tirados antes de gravar.
+     */
+    private const SO_PARA_CONTA = ['_rede', '_filiais_rede', '_codigo_segmento'];
 
     protected $signature = 'totvs:import-leads
         {--chunk=1000 : tamanho do lote}
         {--dry-run : lê e conta, sem escrever nada}';
 
-    protected $description = 'Importa a base de prospecção do arquivo, deduplicando por CNPJ e preservando os ids';
+    protected $description = 'Importa os CSVs de prospecção da pasta Leads/, deduplicando por CNPJ e preservando os ids';
 
     public function handle(): int
     {
         $chunk = (int) $this->option('chunk');
         $dryRun = (bool) $this->option('dry-run');
 
-        $leitor = Relatorios::abrir('leads');
-        $leitor->exigirColunas([
-            'cnpj', 'RAZAO SOCIAL', 'NOME FANTASIA', 'nome final', 'E-mail',
-            'Telefone Principal (FINAL)', 'endereçoCNPJJA', 'CIDADE (arrumada)', 'CIDADE',
-            'UF', 'Codigo Vendedor', 'projeção R$ (mês)', 'MARCAÇÃO PROSPECT',
-        ]);
+        $arquivos = Relatorios::todos('leads');
+        if ($arquivos === []) {
+            $this->error('Nenhum CSV de leads encontrado (padrões em config/totvs.php, domínio "leads").');
 
-        [$porCnpj, $lidas, $foraDoFiltro, $semCnpj, $semNome] = $this->lerBase($leitor);
+            return self::FAILURE;
+        }
+
+        $segmentos = $this->segmentosConhecidos();
+        $porCnpj = [];
+        $preenchimento = [];
+        $recusadas = [];
+        $lidas = 0;
+
+        foreach ($arquivos as $arquivo) {
+            $leitor = Relatorios::abrirArquivo($arquivo, 'leads');
+            $leitor->exigirColunas(self::COLUNAS);
+            $lidas += $this->lerArquivo($leitor, basename($arquivo), $segmentos, $porCnpj, $preenchimento, $recusadas);
+        }
 
         $this->line(sprintf(
-            'base_marco: %s linhas, %s marcadas "%s", %s CNPJs distintos.',
+            '%d arquivo(s) em Leads/: %s linhas, %s CNPJs distintos.',
+            count($arquivos),
             number_format($lidas, 0, ',', '.'),
-            number_format($lidas - $foraDoFiltro, 0, ',', '.'),
-            self::MARCACAO_PROSPECT,
             number_format(count($porCnpj), 0, ',', '.')
         ));
 
-        $existentes = DB::table('leads')->where('origem', 'sistema')
-            ->select('id', 'cnpj')->orderBy('id')->cursor()
-            ->reduce(function (array $mapa, $l) {
-                $digitos = preg_replace('/\D/', '', (string) $l->cnpj);
-                // Primeiro id vence: os 13 CNPJs duplicados que o import antigo criou
-                // ficam apontando para a linha mais antiga, que é a que as observações
-                // provavelmente referenciam.
-                $mapa[$digitos] ??= $l->id;
+        if ($recusadas !== []) {
+            $this->warn('  linhas recusadas: '.number_format(count($recusadas), 0, ',', '.'));
+            foreach (array_slice($recusadas, 0, 20) as $motivo) {
+                $this->line('    '.$motivo);
+            }
+            if (count($recusadas) > 20) {
+                $this->line('    … e mais '.(count($recusadas) - 20).'.');
+            }
+        }
 
-                return $mapa;
-            }, []);
+        // Adota pelo CNPJ qualquer lead das bases importadas — inclusive os da base antiga
+        // (`sistema`), que passam a ser da prospecção quando aparecem nos CSVs novos.
+        $existentes = $this->leadsPorCnpj(fn ($q) => $q->whereIn('origem', Lead::ORIGENS_IMPORTADAS));
+
+        // O mesmo CNPJ já cadastrado à mão ou vindo do site: criar outro duplicaria a
+        // empresa na tela, e mexer nele passaria por cima de quem cadastrou.
+        $deOutraOrigem = $this->leadsPorCnpj(fn ($q) => $q->whereNotIn('origem', Lead::ORIGENS_IMPORTADAS)->where('status', '!=', 'excluido'));
 
         $situacao = app(SituacaoCadastral::class);
 
@@ -99,12 +153,35 @@ class ImportLeadsTotvs extends Command
         $adotados = array_intersect_key($porCnpj, $existentes);
         $sumiram = count(array_diff_key($existentes, $porCnpj));
 
+        $novosDeOutraOrigem = count(array_intersect_key($novos, $deOutraOrigem));
+        $novos = array_diff_key($novos, $deOutraOrigem);
+
+        $jaClientes = $this->cnpjsDeClientes(array_keys($porCnpj));
+        $novosJaClientes = count(array_intersect_key($novos, $jaClientes));
+        $adotadosJaClientes = count(array_intersect_key($adotados, $jaClientes));
+        $novos = array_diff_key($novos, $jaClientes);
+        // Lead que virou cliente fica como está: nem atualizado pelo CSV, nem ligado a uma
+        // rede da Visão Diretor. Quem cuida dele agora é a Carteira.
+        $adotados = array_diff_key($adotados, $jaClientes);
+
         [$novos, $barrados, $semSituacao] = $this->filtrarPelaReceita(
             $novos, $situacao->situacoes(array_map('strval', array_keys($novos)))
         );
 
         $this->line('  já no CRM (atualiza, mantendo o id): '.number_format(count($adotados), 0, ',', '.'));
         $this->line('  cadastros novos: '.number_format(count($novos), 0, ',', '.'));
+
+        if ($novosJaClientes > 0) {
+            $this->line('  barrados (CNPJ já é cliente na carteira): '.number_format($novosJaClientes, 0, ',', '.'));
+        }
+
+        if ($novosDeOutraOrigem > 0) {
+            $this->line('  ignorados (já existe como lead manual ou do site): '.number_format($novosDeOutraOrigem, 0, ',', '.'));
+        }
+
+        if ($adotadosJaClientes > 0) {
+            $this->warn('  leads já no CRM cujo CNPJ hoje é cliente (não mexidos): '.number_format($adotadosJaClientes, 0, ',', '.'));
+        }
 
         if ($barrados !== []) {
             $this->line('  barrados (CNPJ não ativo na Receita): '.number_format(array_sum($barrados), 0, ',', '.')
@@ -122,6 +199,14 @@ class ImportLeadsTotvs extends Command
         }
 
         if ($dryRun) {
+            // Lead novo ainda não tem id: um negativo por CNPJ basta para contar as ligações.
+            $ids = $existentes;
+            $provisorio = 0;
+            foreach (array_keys($novos) as $cnpj) {
+                $ids[$cnpj] = --$provisorio;
+            }
+            $this->relatarContas(app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids), true));
+
             $this->info('[dry-run] nada foi escrito.');
         } else {
             DB::transaction(function () use ($novos, $adotados, $existentes, $chunk) {
@@ -130,6 +215,9 @@ class ImportLeadsTotvs extends Command
             });
 
             $this->info('Leads gravados: '.number_format(count($novos) + count($adotados), 0, ',', '.'));
+
+            $ids = $this->leadsPorCnpj(fn ($q) => $q->whereIn('origem', Lead::ORIGENS_IMPORTADAS));
+            $this->relatarContas(app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids)));
 
             $sincronia = $situacao->sincronizarLeads();
             if ($sincronia['excluidos'] !== []) {
@@ -140,70 +228,142 @@ class ImportLeadsTotvs extends Command
             }
         }
 
-        if ($semCnpj > 0) {
-            $this->warn("Ignorados (sem CNPJ): {$semCnpj}");
-        }
-
-        if ($semNome > 0) {
-            $this->warn("Ignorados (sem razão social nem nome): {$semNome}");
-        }
-
         return self::SUCCESS;
     }
 
     /**
-     * @return array{0: array<string, array<string, mixed>>, 1: int, 2: int, 3: int, 4: int}
+     * CNPJ (14 dígitos) → id do lead, para os leads que o filtro devolver. Primeiro id
+     * vence: os 13 CNPJs duplicados que o import antigo criou ficam apontando para a
+     * linha mais antiga, que é a que as observações provavelmente referenciam.
+     *
+     * @param  callable(\Illuminate\Database\Query\Builder): mixed  $filtro
+     * @return array<string, int>
      */
-    private function lerBase(\App\Services\Totvs\LeitorRelatorio $leitor): array
+    private function leadsPorCnpj(callable $filtro): array
     {
-        $porCnpj = [];
-        $preenchimento = [];
-        $lidas = $foraDoFiltro = $semCnpj = $semNome = 0;
+        $query = DB::table('leads')->whereNotNull('cnpj')->select('id', 'cnpj')->orderBy('id');
+        $filtro($query);
+
+        return $query->cursor()->reduce(function (array $mapa, $l) {
+            $mapa[preg_replace('/\D/', '', (string) $l->cnpj)] ??= $l->id;
+
+            return $mapa;
+        }, []);
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $registros
+     * @param  array<string, int>  $ids
+     * @return list<array{lead_id: int, segmento: ?string, rede: ?string, filiais: ?int, uf: ?string, nome: string, nomes: list<string>}>
+     */
+    private function itensParaConta(array $registros, array $ids): array
+    {
+        $itens = [];
+
+        foreach ($registros as $cnpj => $r) {
+            if (! isset($ids[$cnpj])) {
+                continue; // barrado pela Receita ou por já ser cliente
+            }
+
+            $itens[] = [
+                'lead_id' => $ids[$cnpj],
+                'segmento' => $r['_codigo_segmento'],
+                'rede' => $r['_rede'],
+                'filiais' => $r['_filiais_rede'],
+                'uf' => $r['estado'],
+                'nome' => $r['razao_social'],
+                'nomes' => array_values(array_filter([$r['razao_social'], $r['nome_fantasia']])),
+            ];
+        }
+
+        return $itens;
+    }
+
+    /** @param  array{criadas: int, confirmados: int, sugeridos: int, ambiguos: int, foraDasAbas: int}  $s */
+    private function relatarContas(array $s): void
+    {
+        $this->line('  Maiores por Segmento:');
+        $this->line("    contas novas criadas pela coluna `rede`: {$s['criadas']}");
+        $this->line("    leads ligados a uma conta: {$s['confirmados']}");
+        $this->line("    sugestões para confirmar na Visão Diretor: {$s['sugeridos']}");
+
+        if ($s['ambiguos'] > 0) {
+            $this->warn("    sem sugestão (o nome casa com mais de uma conta): {$s['ambiguos']}");
+        }
+        if ($s['foraDasAbas'] > 0) {
+            $this->warn("    `rede` preenchida fora dos 6 segmentos da Visão Diretor (ignorada): {$s['foraDasAbas']}");
+        }
+    }
+
+    /**
+     * Lê um CSV do template para `$porCnpj`. Devolve quantas linhas leu.
+     *
+     * @param  array<string, string>  $segmentos  chave normalizada (código ou nome) => nome oficial
+     * @param  array<string, array<string, mixed>>  $porCnpj
+     * @param  array<string, int>  $preenchimento
+     * @param  list<string>  $recusadas
+     */
+    private function lerArquivo(
+        \App\Services\Totvs\LeitorRelatorio $leitor,
+        string $nomeArquivo,
+        array $segmentos,
+        array &$porCnpj,
+        array &$preenchimento,
+        array &$recusadas,
+    ): int {
+        $lidas = 0;
 
         foreach ($leitor->linhas() as $linha) {
             $lidas++;
+            // Linha 1 é o cabeçalho: é o número que o Excel mostra para quem corrige.
+            $onde = "{$nomeArquivo}:".($lidas + 1);
 
-            if (strtoupper(trim($linha['MARCAÇÃO PROSPECT'])) !== self::MARCACAO_PROSPECT) {
-                $foraDoFiltro++;
+            if (implode('', array_map('trim', $linha)) === '') {
+                continue; // linha em branco no fim da planilha
+            }
+
+            $digitos = Normalizador::digitosCnpj($linha['cnpj']);
+            if (strlen($digitos) !== 14) {
+                $recusadas[] = "{$onde} — CNPJ inválido ('{$linha['cnpj']}')";
 
                 continue;
             }
 
-            $digitos = preg_replace('/\D/', '', $linha['cnpj']);
-            if ($digitos === '') {
-                $semCnpj++;
-
-                continue;
-            }
-
-            $razaoSocial = Normalizador::valorOuNull($linha['RAZAO SOCIAL'])
-                ?? Normalizador::valorOuNull($linha['nome final']);
-
+            $razaoSocial = Normalizador::valorOuNull($linha['razao_social']);
             if ($razaoSocial === null) {
-                $semNome++;
+                $recusadas[] = "{$onde} — sem razão social";
 
                 continue;
             }
+
+            $segmento = $segmentos[$this->chaveSegmento($linha['segmento'])] ?? null;
+            if ($segmento === null) {
+                $recusadas[] = "{$onde} — segmento desconhecido ('{$linha['segmento']}')";
+
+                continue;
+            }
+
+            $fantasia = Normalizador::valorOuNull($linha['nome_fantasia']);
 
             $registro = [
-                'cod_vendedor' => Normalizador::codigoVendedor($linha['Codigo Vendedor']),
-                'nome' => Normalizador::valorOuNull($linha['nome final']) ?? $razaoSocial,
+                'cod_vendedor' => Normalizador::codigoVendedor($linha['cod_vendedor']),
+                'nome' => $fantasia ?? $razaoSocial,
                 'razao_social' => $razaoSocial,
-                'nome_fantasia' => Normalizador::valorOuNull($linha['NOME FANTASIA']),
-                'cnpj' => Normalizador::documento($linha['cnpj']),
-                'email' => Normalizador::email($linha['E-mail']),
-                'telefone' => Normalizador::valorOuNull($linha['Telefone Principal (FINAL)']),
-                'endereco' => Normalizador::valorOuNull($linha['endereçoCNPJJA']),
-                'cidade' => Normalizador::valorOuNull($linha['CIDADE (arrumada)'])
-                    ?? Normalizador::valorOuNull($linha['CIDADE']),
-                'estado' => Normalizador::valorOuNull($linha['UF']),
-                // Sem de-para de segmento para lead na fonte — não inventar (decisão do Tony).
-                'segmento' => null,
-                'valor_estimado' => $this->valorPositivoOuNull($linha['projeção R$ (mês)']),
+                'nome_fantasia' => $fantasia,
+                'cnpj' => Normalizador::documento($digitos),
+                'email' => Normalizador::email($linha['email']),
+                'telefone' => Normalizador::valorOuNull($linha['telefone']),
+                'endereco' => Normalizador::valorOuNull($linha['endereco']),
+                'cidade' => Normalizador::valorOuNull($linha['cidade']),
+                'estado' => Normalizador::uf($linha['uf']),
+                'segmento' => $segmento['nome'],
+                'valor_estimado' => $this->valorPositivoOuNull($linha['valor_estimado']),
+                '_codigo_segmento' => $segmento['codigo'],
+                '_rede' => Normalizador::valorOuNull($linha['rede']),
+                '_filiais_rede' => ($f = (int) Normalizador::numero($linha['filiais_rede'])) > 0 ? $f : null,
             ];
 
-            // Duas linhas do mesmo CNPJ: fica a mais completa. Quase sempre a diferença
-            // é uma das cópias vir com a razão social em branco.
+            // Mesmo CNPJ em duas linhas (ou dois arquivos): fica a mais completa.
             $preenchidos = count(array_filter($registro, fn ($v) => $v !== null && $v !== ''));
 
             if (! isset($porCnpj[$digitos]) || $preenchidos > $preenchimento[$digitos]) {
@@ -212,7 +372,56 @@ class ImportLeadsTotvs extends Command
             }
         }
 
-        return [$porCnpj, $lidas, $foraDoFiltro, $semCnpj, $semNome];
+        return $lidas;
+    }
+
+    /**
+     * Segmento aceito pelo código do TOTVS (101) ou pelo nome (SUPERMERCADISTA), sem
+     * diferença de caixa ou acento. Grava sempre o nome oficial de `segmentos`, para o
+     * filtro da tela de Leads não ganhar "Supermercadista" e "SUPERMERCADISTA" separados.
+     *
+     * O código vai junto porque é por ele que a Visão Diretor sabe em que aba o lead cai.
+     *
+     * @return array<string, array{codigo: string, nome: string}>
+     */
+    private function segmentosConhecidos(): array
+    {
+        $mapa = [];
+
+        foreach (DB::table('segmentos')->get(['codigo', 'nome']) as $s) {
+            $segmento = ['codigo' => (string) $s->codigo, 'nome' => $s->nome];
+            $mapa[$this->chaveSegmento($s->codigo)] = $segmento;
+            $mapa[$this->chaveSegmento($s->nome)] = $segmento;
+        }
+
+        return $mapa;
+    }
+
+    private function chaveSegmento(mixed $valor): string
+    {
+        $valor = strtoupper(\Illuminate\Support\Str::ascii(trim((string) $valor)));
+
+        return ctype_digit($valor) ? (string) (int) $valor : preg_replace('/\s+/', ' ', $valor);
+    }
+
+    /**
+     * CNPJs (14 dígitos) da lista que já existem em `clientes`.
+     *
+     * @param  list<int|string>  $cnpjs
+     * @return array<string, true>
+     */
+    private function cnpjsDeClientes(array $cnpjs): array
+    {
+        $achados = [];
+
+        foreach (array_chunk(array_map('strval', $cnpjs), 1000) as $lote) {
+            DB::table('clientes')->whereIn('cnpj_digitos', $lote)->distinct()
+                ->pluck('cnpj_digitos')->each(function ($c) use (&$achados) {
+                    $achados[(string) $c] = true;
+                });
+        }
+
+        return $achados;
     }
 
     /**
@@ -252,10 +461,13 @@ class ImportLeadsTotvs extends Command
     {
         $agora = now();
         $lote = [];
+        $padrao = Normalizador::codigoVendedor(config('totvs.arquivos.leads.vendedor_padrao'));
 
         foreach ($novos as $registro) {
+            $registro = array_diff_key($registro, array_flip(self::SO_PARA_CONTA));
+            $registro['cod_vendedor'] ??= $padrao;
             $lote[] = $registro + [
-                'origem' => 'sistema',
+                'origem' => Lead::ORIGEM_PROSPECCAO,
                 'user_id' => null,
                 // Só no cadastro NOVO: em lead que já existe, o status é do CRM.
                 'status' => 'ativo',
@@ -283,8 +495,13 @@ class ImportLeadsTotvs extends Command
         $agora = now();
 
         foreach ($adotados as $digitos => $registro) {
+            // Campo em branco no CSV não apaga o que o CRM já tem — em especial o
+            // `cod_vendedor`, senão o lead trocaria de dono só por vir sem a coluna.
+            $registro = array_filter(array_diff_key($registro, array_flip(self::SO_PARA_CONTA)), fn ($v) => $v !== null);
+
+            // Lead da base antiga que reaparece num CSV de prospecção passa a ser dela.
             DB::table('leads')->where('id', $existentes[$digitos])
-                ->update($registro + ['updated_at' => $agora]);
+                ->update($registro + ['origem' => Lead::ORIGEM_PROSPECCAO, 'updated_at' => $agora]);
         }
     }
 

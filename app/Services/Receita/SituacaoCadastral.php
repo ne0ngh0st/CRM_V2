@@ -177,7 +177,8 @@ class SituacaoCadastral
      * ⚠️ Marca `excluido` em vez de apagar: `observacoes.lead_id` e
      * `agendamentos_ligacoes.lead_id` são ON DELETE SET NULL, e apagar soltaria o
      * histórico do vendedor em silêncio. `Lead::visivel()` já esconde excluído em todas
-     * as telas. Só `origem = sistema`: manual e site são decisão de quem cadastrou.
+     * as telas. Só as bases importadas (`Lead::ORIGENS_IMPORTADAS`: a antiga e a da
+     * prospecção): manual e site são decisão de quem cadastrou.
      *
      * ⚠️ Situação DESCONHECIDA não mexe em nada, em nenhum dos sentidos.
      *
@@ -185,7 +186,7 @@ class SituacaoCadastral
      */
     public function sincronizarLeads(): array
     {
-        $leads = DB::table('leads')->where('origem', 'sistema')
+        $leads = DB::table('leads')->whereIn('origem', \App\Models\Lead::ORIGENS_IMPORTADAS)
             ->where(fn ($q) => $q->where('status', '!=', 'excluido')->orWhereNotNull('excluido_pela_receita_em'))
             ->whereNotNull('cnpj')
             ->get(['id', 'cnpj', 'status', 'excluido_pela_receita_em'])

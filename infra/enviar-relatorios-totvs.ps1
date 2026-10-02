@@ -84,6 +84,7 @@ $Filtros = @(
     '--exclude', '*',
     '--include', 'CSV/*.csv',
     '--include', 'Pedidos emitidos/*.csv',
+    '--include', 'Leads/*.csv',
     '--exclude', 'CSV/etc/*',
     '--exclude', 'CSV/META VENDA*'
 )
@@ -93,7 +94,7 @@ $Filtros = @(
 $corte = (Get-Date).AddMinutes(-$MinutosParaAssentar)
 $aguardando = @()
 
-foreach ($sub in @('CSV', 'Pedidos emitidos')) {
+foreach ($sub in @('CSV', 'Pedidos emitidos', 'Leads')) {
     $pasta = Join-Path $Origem $sub
     if (-not (Test-Path $pasta)) { continue }
 

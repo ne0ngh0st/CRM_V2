@@ -8,12 +8,14 @@ use App\Models\Cliente;
 use App\Models\ContaEstrategica;
 use App\Models\ContaEstrategicaVinculo;
 use App\Models\GrupoCliente;
+use App\Models\Lead;
 use App\Models\Segmento;
 use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Vendedores\NomeVendedorResolver;
 use App\Services\VisaoDiretor\BuscaDeVinculo;
 use App\Services\VisaoDiretor\ClientesDaConta;
+use App\Services\VisaoDiretor\ContaDoLead;
 use App\Services\VisaoDiretor\LeadDaConta;
 use App\Services\VisaoDiretor\MaioresPorSegmentoResolver;
 use Illuminate\Http\JsonResponse;
@@ -46,7 +48,7 @@ class MaioresPorSegmentoController extends Controller
     ) {
     }
 
-    public function index(Request $request, LeadDaConta $leadDaConta): Response
+    public function index(Request $request, LeadDaConta $leadDaConta, ContaDoLead $contaDoLead): Response
     {
         $filtros = $this->filtros($request);
 
@@ -60,8 +62,24 @@ class MaioresPorSegmentoController extends Controller
             'filtros' => $filtros,
             // Quem pode receber o lead de uma conta-alvo (botão "Gerar lead").
             'responsaveisLead' => $leadDaConta->responsaveis(),
+            // Leads da prospecção que o import achou parecidos com uma rede. Esperam decisão.
+            'sugestoesLeads' => $contaDoLead->sugestoesPendentes(),
             'segmentosDisponiveis' => Segmento::query()->orderBy('nome')->get(['id', 'codigo', 'nome']),
         ]);
+    }
+
+    public function confirmarSugestao(Lead $lead, ContaDoLead $contaDoLead): RedirectResponse
+    {
+        $contaDoLead->confirmar($lead);
+
+        return back();
+    }
+
+    public function recusarSugestao(Lead $lead, ContaDoLead $contaDoLead): RedirectResponse
+    {
+        $contaDoLead->recusar($lead);
+
+        return back();
     }
 
     public function exportar(Request $request): RedirectResponse

@@ -105,10 +105,16 @@ return [
             'coluna_data' => 'DT_EMISSAO',
         ],
 
+        // Não é relatório do TOTVS: são os CSVs de prospecção, um por segmento, no layout
+        // de `docs/leads-template.csv`. TODOS os arquivos da pasta são lidos juntos.
+        // (Até 2026-10-02 era um arquivo só, `CSV/base_marco - SQL.csv`, em outro layout.)
         'leads' => [
-            'arquivo' => ['CSV/base_marco - SQL.csv'],
-            'rlt' => null, // não é relatório do TOTVS: é a base de prospecção (ABRAS)
+            'arquivo' => ['Leads/*.csv'],
+            'rlt' => null,
             'periodo' => 'completo',
+            // Dono do lead NOVO que vem com `cod_vendedor` em branco — o mesmo da venda
+            // interna, que já recebe os leads do site. Sem dono, ninguém vê o lead.
+            'vendedor_padrao' => env('LEADS_VENDEDOR_PADRAO', '010617'),
         ],
 
         /*

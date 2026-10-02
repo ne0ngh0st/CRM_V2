@@ -118,10 +118,11 @@ class MaioresPorSegmentoResolver
             // Subconsulta na MESMA query: não mexe no teto de queries da página.
             ->withCount('observacoes')
             /*
-             * O lead aberto pela diretoria (`LeadDaConta`). Excluído não conta: a conta
-             * volta a oferecer o botão. Duas consultas para o conjunto, não por conta.
+             * Os leads ligados à conta: o aberto pela diretoria (`LeadDaConta`) e os da
+             * prospecção (`ContaDoLead`). Só ligação confirmada; excluído não conta (a conta
+             * volta a oferecer "Gerar lead"). Duas consultas para o conjunto, não por conta.
              */
-            ->with(['lead' => fn ($q) => $q->visivel()->select('id', 'user_id', 'cod_vendedor', 'etapa', 'nome'), 'lead.user:id,name,display_name'])
+            ->with(['leads' => fn ($q) => $q->visivel()->orderBy('id')->select('id', 'conta_estrategica_id', 'user_id', 'cod_vendedor', 'etapa', 'nome'), 'leads.user:id,name,display_name'])
             ->get();
 
         if ($contas->isEmpty()) {
@@ -158,8 +159,11 @@ class MaioresPorSegmentoResolver
 
         $vinculos = $this->vinculosComNome();
 
+        // Lead da prospecção não tem `user_id`: o responsável sai do código de vendedor.
         $nomes = $this->nomeVendedor->porCodigo(
-            $porVendedor->flatten(1)->pluck('cod_vendedor')->filter()->unique()
+            $porVendedor->flatten(1)->pluck('cod_vendedor')
+                ->concat($contas->flatMap->leads->pluck('cod_vendedor'))
+                ->filter()->unique()
         );
 
         $hoje = Carbon::now();
@@ -204,12 +208,13 @@ class MaioresPorSegmentoResolver
                         ->values()
                         ->all(),
                     'vinculos' => $vinculos->get($conta->id, collect())->values()->all(),
-                    'leadAberto' => $conta->lead ? [
-                        'id' => $conta->lead->id,
-                        'nome' => $conta->lead->nome,
-                        'etapa' => $conta->lead->etapa,
-                        'responsavel' => $conta->lead->user?->display_name ?: $conta->lead->user?->name ?: $conta->lead->cod_vendedor,
-                    ] : null,
+                    'leads' => $conta->leads->map(fn ($lead) => [
+                        'id' => $lead->id,
+                        'nome' => $lead->nome,
+                        'etapa' => $lead->etapa,
+                        'responsavel' => $lead->user?->display_name ?: $lead->user?->name
+                            ?: ($nomes[$lead->cod_vendedor] ?? $lead->cod_vendedor),
+                    ])->values()->all(),
                     'temSugestao' => $vinculos->get($conta->id, collect())->contains('origem', ContaEstrategicaVinculo::ORIGEM_SUGESTAO),
                     'segmento' => [
                         'id' => $conta->segmento->id,
