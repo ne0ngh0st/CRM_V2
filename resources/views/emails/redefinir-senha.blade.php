@@ -40,6 +40,9 @@
                             @else
                                 <span style="color:#ffffff; font-size:20px; font-weight:bold; letter-spacing:1px;">AUTOPEL SOLUÇÕES</span>
                             @endif
+                            @if (! empty($logoPalma))
+                                <img src="{{ $message->embed($logoPalma) }}" alt="PALMA" width="84" style="display:block; width:84px; height:auto; border:0; margin:14px auto 0;">
+                            @endif
                         </td>
                     </tr>
 

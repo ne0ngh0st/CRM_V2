@@ -42,6 +42,7 @@ class RedefinirSenhaMail extends Mailable
                 'nome' => $this->nome,
                 'minutos' => $this->minutos,
                 'logo' => $this->logoBranco(),
+                'logoPalma' => file_exists($p = public_path('images/palma/palma-logo-compacto-branco.png')) ? $p : null,
             ],
         );
     }

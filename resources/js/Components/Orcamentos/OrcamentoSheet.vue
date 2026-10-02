@@ -125,7 +125,10 @@ const numeroFormatado = () => (props.orcamentoId ? String(props.orcamentoId).pad
                 <span>Autopel Soluções · CNPJ 06.698.091/0005-90 · Orçamento nº {{ numeroFormatado() }}</span>
                 <span v-if="vendedor?.nome">Vendedor: {{ vendedor.nome }}</span>
             </div>
-            <p class="mt-0.5">Documento gerado pelo sistema PALMA em {{ emitidoEm }} — sem valor fiscal.</p>
+            <p class="mt-0.5 flex items-center gap-1">
+                <img src="/images/palma/palma-simbolo.svg" alt="" class="h-3 w-auto" />
+                Documento gerado pelo sistema PALMA em {{ emitidoEm }} — sem valor fiscal.
+            </p>
         </footer>
     </article>
 </template>
