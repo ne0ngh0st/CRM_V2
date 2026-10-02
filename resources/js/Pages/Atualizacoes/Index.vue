@@ -44,11 +44,12 @@ function ajustarPoll(ativo) {
     if (!ativo) return;
 
     timer = setInterval(() => {
-        router.reload({ only: ['rodadas', 'emAndamento', 'frescor'] });
+        router.reload({ only: ['rodadas', 'emAndamento', 'frescor', 'leadsProspeccao'] });
     }, POLL_MS);
 }
 
-watch(() => props.emAndamento, ajustarPoll, { immediate: true });
+// Acompanha as duas filas: a corrente do TOTVS e a rodada de leads (botão do card).
+watch(() => props.emAndamento || Boolean(props.leadsProspeccao?.emAndamento), ajustarPoll, { immediate: true });
 onBeforeUnmount(pararPoll);
 
 const enviando = ref(false);
@@ -362,7 +363,7 @@ const numero = (n) => (n ?? 0).toLocaleString('pt-BR');
 
                 <!-- Última rodada do import de leads (CSVs da pasta Leads/) -->
                 <div v-if="leadsProspeccao" class="lg:col-span-3">
-                    <ImportacaoProspeccaoCard :importacao="leadsProspeccao" />
+                    <ImportacaoProspeccaoCard :dados="leadsProspeccao" />
                 </div>
 
                 <!-- Inventário do S3 -->

@@ -1,16 +1,17 @@
 <script setup>
 /**
- * /atualizacoes → "Leads da prospecção": a última rodada do `totvs:import-leads`.
+ * /atualizacoes → "Leads da prospecção": os botões que rodam o `totvs:import-leads` e a
+ * última rodada dele.
  *
  * O que interessa aqui é sobretudo o que NÃO entrou e por quê — quem monta a planilha
  * precisa saber que 300 CNPJs eram clientes, ou que 40 estão baixados na Receita, para
  * não procurar o lead na tela à toa.
  *
- * ⚠️ Os números vêm prontos do comando (`leads_importacoes.resultado`); as chaves lidas
- * aqui são o contrato com `ImportLeadsTotvs`. Esta tela não recalcula nada.
+ * ⚠️ Os números da rodada vêm prontos do comando (`leads_importacoes.resultado`); as
+ * chaves lidas aqui são o contrato com `ImportLeadsTotvs`. Esta tela não recalcula nada.
  */
-import { computed } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { Link, router } from '@inertiajs/vue3';
 import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import StatusPill from '@/Components/StatusPill.vue';
@@ -18,18 +19,35 @@ import { ROTULOS_SITUACAO_RECEITA } from '@/constants/receita.js';
 import { dataHora, formatInteiro } from '@/utils/formato';
 
 const props = defineProps({
-    importacao: { type: Object, required: true },
+    dados: { type: Object, required: true },
 });
 
-const r = computed(() => props.importacao.resultado ?? {});
+const ultima = computed(() => props.dados.ultima);
+const r = computed(() => ultima.value?.resultado ?? {});
 const contas = computed(() => r.value.contas ?? {});
 const naReceita = computed(() => Object.values(r.value.receitaPorSituacao ?? {}).reduce((a, b) => a + b, 0));
+const terminou = computed(() => ultima.value && ['sucesso', 'falhou', 'travada'].includes(ultima.value.status));
+const temResultado = computed(() => ultima.value?.status === 'sucesso' && ultima.value.resultado);
 
 const subtitulo = computed(() => {
-    const quando = dataHora(props.importacao.em);
+    if (props.dados.emAndamento) return 'Rodando agora…';
+    if (!ultima.value) return 'Nenhuma importação ainda';
 
-    return props.importacao.simulacao ? `Simulação de ${quando} — nada foi gravado` : `Importação de ${quando}`;
+    const quando = dataHora(ultima.value.em);
+    const quem = ultima.value.por ? ` por ${ultima.value.por}` : '';
+
+    return ultima.value.simulacao ? `Simulação de ${quando}${quem} — nada foi gravado` : `Importação de ${quando}${quem}`;
 });
+
+const enviando = ref(false);
+
+function rodar(simulacao) {
+    enviando.value = true;
+    router.post(route('atualizacoes.leads'), { simulacao }, {
+        preserveScroll: true,
+        onFinish: () => { enviando.value = false; },
+    });
+}
 </script>
 
 <template>
@@ -42,25 +60,58 @@ const subtitulo = computed(() => {
         </template>
 
         <template #actions>
-            <StatusPill v-if="importacao.status === 'falhou'" tone="danger" size="sm">Falhou</StatusPill>
-            <StatusPill v-else-if="importacao.simulacao" tone="warn" size="sm">Simulação</StatusPill>
-            <StatusPill v-else tone="ok" size="sm">Importado</StatusPill>
+            <div class="flex items-center gap-2">
+                <button
+                    type="button"
+                    class="inline-flex min-h-8 items-center rounded border border-white/40 px-3 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
+                    :disabled="enviando || dados.emAndamento"
+                    title="Lê os CSVs e mostra o que entraria, sem gravar nada"
+                    @click="rodar(true)"
+                >Simular</button>
+                <button
+                    type="button"
+                    class="inline-flex min-h-8 items-center rounded bg-teal px-3 text-xs font-semibold text-white transition hover:bg-navy disabled:opacity-50"
+                    :disabled="enviando || dados.emAndamento"
+                    title="Baixa os CSVs da pasta Leads e importa"
+                    @click="rodar(false)"
+                >{{ dados.emAndamento ? 'Importando…' : 'Importar leads' }}</button>
+            </div>
         </template>
 
         <div class="space-y-4">
-            <p v-if="importacao.status === 'falhou'" class="rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {{ importacao.erro }}
+            <p v-if="dados.emAndamento" class="rounded border border-amber/60 bg-amber/10 px-3 py-2 text-xs text-gray-700">
+                Baixando os CSVs do S3 e importando. A tela se atualiza sozinha.
             </p>
 
-            <p v-if="importacao.simulacao" class="text-xs text-gray-500">
-                Última importação de verdade:
-                <strong>{{ importacao.ultimaReal ? dataHora(importacao.ultimaReal) : 'nenhuma ainda' }}</strong>.
+            <p v-else-if="!ultima" class="text-sm text-gray-500">
+                Quando o time de prospecção salvar os CSVs na pasta <strong>Leads</strong>, use
+                <strong>Simular</strong> para conferir e <strong>Importar leads</strong> para gravar.
             </p>
 
-            <template v-if="importacao.status !== 'falhou'">
+            <template v-if="ultima && terminou">
+                <div class="flex flex-wrap items-center gap-2">
+                    <StatusPill v-if="ultima.status === 'falhou'" tone="danger" size="sm">Falhou</StatusPill>
+                    <StatusPill v-else-if="ultima.status === 'travada'" tone="danger" size="sm">Interrompida</StatusPill>
+                    <StatusPill v-else-if="ultima.simulacao" tone="warn" size="sm">Simulação</StatusPill>
+                    <StatusPill v-else tone="ok" size="sm">Importado</StatusPill>
+                    <span v-if="ultima.simulacao" class="text-xs text-gray-500">
+                        Última importação de verdade:
+                        <strong>{{ dados.ultimaReal ? dataHora(dados.ultimaReal) : 'nenhuma ainda' }}</strong>.
+                    </span>
+                </div>
+
+                <p v-if="ultima.status === 'falhou' && ultima.erro" class="rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {{ ultima.erro }}
+                </p>
+                <p v-if="ultima.status === 'travada'" class="rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    A rodada não terminou (o processo foi interrompido). Pode rodar de novo.
+                </p>
+            </template>
+
+            <template v-if="temResultado">
                 <div>
                     <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                        Lido · {{ importacao.arquivos.length }} arquivo{{ importacao.arquivos.length === 1 ? '' : 's' }}
+                        Lido · {{ ultima.arquivos.length }} arquivo{{ ultima.arquivos.length === 1 ? '' : 's' }}
                     </p>
                     <div class="flex flex-wrap gap-2">
                         <KpiTile :value="formatInteiro(r.linhas)" label="Linhas" compact />
@@ -73,19 +124,7 @@ const subtitulo = computed(() => {
                     <div class="flex flex-wrap gap-2">
                         <KpiTile :value="formatInteiro(r.novos)" label="Leads novos" tone="ok" compact />
                         <KpiTile :value="formatInteiro(r.atualizados)" label="Já no CRM, atualizados" compact />
-                        <!-- Estado de AGORA: some quando o código for preenchido e reimportado. -->
-                        <KpiTile
-                            :value="formatInteiro(importacao.semVendedor)"
-                            label="Sem vendedor (atribuir)"
-                            :tone="importacao.semVendedor ? 'warn' : 'default'"
-                            :href="importacao.semVendedor ? route('leads.index', { origem: 'prospeccao', sem_vendedor: 1 }) : null"
-                            compact
-                        />
                     </div>
-                    <p v-if="importacao.semVendedor" class="mt-1 text-[0.7rem] text-gray-500">
-                        Lead sem vendedor só aparece para admin e diretor. Para atribuir, preencha o
-                        <code>cod_vendedor</code> no CSV e importe de novo.
-                    </p>
                 </div>
 
                 <div>
@@ -118,43 +157,63 @@ const subtitulo = computed(() => {
                     <div class="flex flex-wrap gap-2">
                         <KpiTile :value="formatInteiro(contas.criadas ?? 0)" label="Redes criadas" compact />
                         <KpiTile :value="formatInteiro(contas.confirmados ?? 0)" label="Leads ligados a rede" compact />
-                        <KpiTile
-                            :value="formatInteiro(importacao.sugestoesPendentes)"
-                            label="Sugestões para confirmar (agora)"
-                            :tone="importacao.sugestoesPendentes ? 'warn' : 'default'"
-                            :href="importacao.sugestoesPendentes ? route('visao-diretor.maiores.index') : null"
-                            compact
-                        />
                     </div>
                 </div>
-
-                <p class="border-t border-gray-200 pt-3 text-xs text-gray-500">
-                    <Link :href="route('leads.index', { origem: 'prospeccao' })" class="font-medium text-teal hover:underline">
-                        {{ formatInteiro(importacao.prospeccaoNoCrm) }} leads da prospecção no CRM hoje
-                    </Link>
-                    <span v-if="r.sumiram"> · {{ formatInteiro(r.sumiram) }} da base antiga não estão nos CSVs (mantidos)</span>
-                </p>
             </template>
 
-            <details v-if="importacao.arquivos.length" class="text-xs">
+            <!-- Estado de AGORA (não da rodada): muda quando alguém atribui ou confirma. -->
+            <div v-if="dados.prospeccaoNoCrm || dados.sugestoesPendentes" class="border-t border-gray-200 pt-3">
+                <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Agora no CRM</p>
+                <div class="flex flex-wrap gap-2">
+                    <KpiTile
+                        :value="formatInteiro(dados.prospeccaoNoCrm)"
+                        label="Leads da prospecção"
+                        :href="route('leads.index', { origem: 'prospeccao' })"
+                        compact
+                    />
+                    <KpiTile
+                        :value="formatInteiro(dados.semVendedor)"
+                        label="Sem vendedor (atribuir)"
+                        :tone="dados.semVendedor ? 'warn' : 'default'"
+                        :href="dados.semVendedor ? route('leads.index', { origem: 'prospeccao', sem_vendedor: 1 }) : null"
+                        compact
+                    />
+                    <KpiTile
+                        :value="formatInteiro(dados.sugestoesPendentes)"
+                        label="Redes para confirmar"
+                        :tone="dados.sugestoesPendentes ? 'warn' : 'default'"
+                        :href="dados.sugestoesPendentes ? route('visao-diretor.maiores.index') : null"
+                        compact
+                    />
+                </div>
+                <p v-if="dados.semVendedor" class="mt-1 text-[0.7rem] text-gray-500">
+                    Lead sem vendedor só aparece para admin e diretor. Para atribuir, preencha o
+                    <code>cod_vendedor</code> no CSV e importe de novo.
+                </p>
+                <p v-if="temResultado && r.sumiram" class="mt-1 text-[0.7rem] text-gray-500">
+                    {{ formatInteiro(r.sumiram) }} leads da base antiga não estão nos CSVs (mantidos).
+                </p>
+            </div>
+
+            <details v-if="temResultado && ultima.arquivos.length" class="text-xs">
                 <summary class="cursor-pointer font-medium text-gray-600">Arquivos lidos</summary>
                 <ul class="mt-1 divide-y divide-gray-100">
-                    <li v-for="a in importacao.arquivos" :key="a.nome" class="flex justify-between gap-2 py-1">
+                    <li v-for="a in ultima.arquivos" :key="a.nome" class="flex justify-between gap-2 py-1">
                         <span class="truncate text-gray-700">{{ a.nome }}</span>
                         <span class="shrink-0 tabular-nums text-gray-500">{{ formatInteiro(a.linhas) }} linhas</span>
                     </li>
                 </ul>
             </details>
 
-            <details v-if="importacao.recusadas.length" class="text-xs" open>
+            <details v-if="temResultado && ultima.recusadas.length" class="text-xs" open>
                 <summary class="cursor-pointer font-medium text-red-700">
-                    Linhas fora do padrão ({{ formatInteiro(r.recusadas ?? importacao.recusadas.length) }}) — corrigir na planilha
+                    Linhas fora do padrão ({{ formatInteiro(r.recusadas ?? ultima.recusadas.length) }}) — corrigir na planilha
                 </summary>
                 <ul class="mt-1 max-h-60 divide-y divide-gray-100 overflow-y-auto">
-                    <li v-for="(linha, i) in importacao.recusadas" :key="i" class="py-1 text-gray-700">{{ linha }}</li>
+                    <li v-for="(linha, i) in ultima.recusadas" :key="i" class="py-1 text-gray-700">{{ linha }}</li>
                 </ul>
-                <p v-if="(r.recusadas ?? 0) > importacao.recusadas.length" class="mt-1 text-gray-500">
-                    Mostrando as {{ importacao.recusadas.length }} primeiras.
+                <p v-if="(r.recusadas ?? 0) > ultima.recusadas.length" class="mt-1 text-gray-500">
+                    Mostrando as {{ ultima.recusadas.length }} primeiras.
                 </p>
             </details>
         </div>

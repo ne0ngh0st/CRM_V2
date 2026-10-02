@@ -267,9 +267,10 @@ class LeadsDaProspeccaoTest extends TestCase
 
         $this->actingAs($admin)->get(route('atualizacoes.index'))
             ->assertInertia(fn (Assert $p) => $p
-                ->where('leadsProspeccao.resultado.jaClientes', 1)
+                ->where('leadsProspeccao.ultima.resultado.jaClientes', 1)
                 ->where('leadsProspeccao.prospeccaoNoCrm', 1)
-                ->where('leadsProspeccao.simulacao', false));
+                ->where('leadsProspeccao.ultima.simulacao', false)
+                ->where('leadsProspeccao.emAndamento', false));
     }
 
     public function test_simulacao_e_falha_tambem_ficam_registradas(): void
@@ -290,7 +291,79 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->assertStringContainsString('razao_social', $falha->erro);
     }
 
+    public function test_botao_cria_a_rodada_executando_e_manda_para_a_fila(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        $admin = $this->admin();
+
+        $this->actingAs($admin)->post(route('atualizacoes.leads'), ['simulacao' => true])
+            ->assertRedirect()->assertSessionHas('sucesso');
+
+        $rodada = \App\Models\LeadImportacao::sole();
+        $this->assertSame('executando', $rodada->status);
+        $this->assertTrue($rodada->simulacao);
+        $this->assertSame($admin->id, $rodada->user_id);
+        \Illuminate\Support\Facades\Queue::assertPushed(
+            \App\Jobs\ImportarLeadsProspeccaoJob::class,
+            fn ($job) => $job->rodadaId === $rodada->id && $job->simulacao === true,
+        );
+
+        // A tela já entra em modo de acompanhamento.
+        $this->actingAs($admin)->get(route('atualizacoes.index'))
+            ->assertInertia(fn (Assert $p) => $p->where('leadsProspeccao.emAndamento', true));
+    }
+
+    public function test_botao_recusa_segunda_rodada_mas_nao_fica_preso_na_travada(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        $admin = $this->admin();
+        $this->actingAs($admin)->post(route('atualizacoes.leads'));
+
+        $this->actingAs($admin)->post(route('atualizacoes.leads'))->assertSessionHas('erro');
+        $this->assertSame(1, \App\Models\LeadImportacao::count());
+
+        // Worker morreu no meio: depois do corte, a rodada não segura mais o botão.
+        \App\Models\LeadImportacao::query()->update(['iniciada_em' => now()->subHour()]);
+        $this->actingAs($admin)->post(route('atualizacoes.leads'))->assertSessionHas('sucesso');
+        $this->assertSame(2, \App\Models\LeadImportacao::count());
+    }
+
+    public function test_so_admin_dispara(): void
+    {
+        $this->actingAs($this->diretor())->post(route('atualizacoes.leads'))->assertForbidden();
+    }
+
+    public function test_comando_com_rodada_preenche_a_linha_do_botao(): void
+    {
+        $this->escrever([$this->linha('11111111000111', 'NOVO', '101')]);
+        $rodada = \App\Models\LeadImportacao::create(['simulacao' => false, 'status' => 'executando', 'iniciada_em' => now()]);
+
+        $this->artisan('totvs:import-leads', ['--rodada' => $rodada->id])->assertSuccessful();
+
+        $this->assertSame(1, \App\Models\LeadImportacao::count(), 'usa a linha do botão, não cria outra');
+        $this->assertSame('sucesso', $rodada->fresh()->status);
+        $this->assertSame(1, $rodada->fresh()->resultado['novos']);
+    }
+
+    public function test_job_que_quebra_fora_do_comando_fecha_a_rodada(): void
+    {
+        $rodada = \App\Models\LeadImportacao::create(['simulacao' => false, 'status' => 'executando', 'iniciada_em' => now()]);
+
+        (new \App\Jobs\ImportarLeadsProspeccaoJob($rodada->id, false))->failed(new \RuntimeException('S3 fora do ar'));
+
+        $this->assertSame('falhou', $rodada->fresh()->status);
+        $this->assertSame('S3 fora do ar', $rodada->fresh()->erro);
+    }
+
     // ---------------------------------------------------------------------------------
+
+    private function admin(): User
+    {
+        $u = User::factory()->create(['is_active' => true]);
+        $u->assignRole('admin');
+
+        return $u;
+    }
 
     /** @param list<array<string, string>> $linhas */
     private function importar(array $linhas): void

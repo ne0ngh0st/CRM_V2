@@ -100,7 +100,8 @@ class ImportLeadsTotvs extends Command
 
     protected $signature = 'totvs:import-leads
         {--chunk=1000 : tamanho do lote}
-        {--dry-run : lê e conta, sem escrever nada}';
+        {--dry-run : lê e conta, sem escrever nada}
+        {--rodada= : id em leads_importacoes já criado pela /atualizacoes (uso interno)}';
 
     protected $description = 'Importa os CSVs de prospecção da pasta Leads/, deduplicando por CNPJ e preservando os ids';
 
@@ -110,8 +111,15 @@ class ImportLeadsTotvs extends Command
      */
     public function handle(): int
     {
-        $registro = LeadImportacao::query()->create([
+        // `--rodada` é a linha que o botão da /atualizacoes já criou (`executando`) no
+        // clique. Pelo terminal, a linha nasce aqui.
+        $registro = ($id = $this->option('rodada')) !== null
+            ? LeadImportacao::query()->find((int) $id)
+            : null;
+
+        $registro ??= LeadImportacao::query()->create([
             'simulacao' => (bool) $this->option('dry-run'),
+            'status' => 'executando',
             'iniciada_em' => now(),
         ]);
 
@@ -123,7 +131,10 @@ class ImportLeadsTotvs extends Command
             throw $e;
         }
 
-        $registro->update(['concluida_em' => now()]);
+        $registro->update([
+            'status' => $codigo === self::SUCCESS ? 'sucesso' : 'falhou',
+            'concluida_em' => now(),
+        ]);
 
         return $codigo;
     }

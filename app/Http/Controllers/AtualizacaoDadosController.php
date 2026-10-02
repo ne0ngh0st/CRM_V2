@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\AtualizarDadosTotvsJob;
+use App\Jobs\ImportarLeadsProspeccaoJob;
 use App\Models\Lead;
 use App\Models\LeadImportacao;
 use App\Models\TotvsImportacao;
@@ -97,42 +98,75 @@ class AtualizacaoDadosController extends Controller
     }
 
     /**
-     * A última rodada do `totvs:import-leads` (os CSVs da pasta Leads/): o que entrou e,
-     * principalmente, o que ficou de fora e por quê. Os números são os que o próprio
-     * comando gravou — esta tela não recalcula nada.
+     * O card "Leads da prospecção": a última rodada do `totvs:import-leads` (os CSVs da
+     * pasta Leads/) e o estado de agora. O que interessa é sobretudo o que ficou de fora
+     * e por quê. Os números da rodada são os que o próprio comando gravou — esta tela não
+     * recalcula nada.
+     *
+     * Existe mesmo sem rodada nenhuma: é onde mora o botão que faz a primeira.
      *
      * Se a última foi simulação, `ultimaReal` diz quando os leads entraram de verdade:
      * sem isso, um dry-run de hoje esconderia que a importação real é de semanas atrás.
      *
-     * @return array<string, mixed>|null
+     * @return array<string, mixed>
      */
-    private function leadsProspeccao(): ?array
+    private function leadsProspeccao(): array
     {
-        $ultima = LeadImportacao::query()->latest('id')->first();
+        $ultima = LeadImportacao::query()->with('user:id,name,display_name')->latest('id')->first();
 
-        if ($ultima === null) {
-            return null;
-        }
-
-        $ultimaReal = $ultima->simulacao
+        $ultimaReal = $ultima?->simulacao
             ? LeadImportacao::query()->where('simulacao', false)->where('status', 'sucesso')->latest('id')->value('concluida_em')
-            : $ultima->concluida_em;
+            : $ultima?->concluida_em;
 
         return [
-            'simulacao' => $ultima->simulacao,
-            'status' => $ultima->status,
-            'erro' => $ultima->erro,
-            'em' => ($ultima->concluida_em ?? $ultima->iniciada_em)?->toIso8601String(),
+            'emAndamento' => LeadImportacao::query()->emAndamento()->exists(),
+            'ultima' => $ultima === null ? null : [
+                'simulacao' => $ultima->simulacao,
+                // A órfã (worker morreu no meio) aparece como travada, não "executando" para sempre.
+                'status' => $ultima->travou() ? 'travada' : $ultima->status,
+                'erro' => $ultima->erro,
+                'em' => ($ultima->concluida_em ?? $ultima->iniciada_em)?->toIso8601String(),
+                'por' => $ultima->user?->display_name ?: $ultima->user?->name,
+                'arquivos' => $ultima->arquivos ?? [],
+                'resultado' => $ultima->resultado,
+                'recusadas' => $ultima->recusadas ?? [],
+            ],
             'ultimaReal' => $ultimaReal ? Carbon::parse($ultimaReal)->toIso8601String() : null,
-            'arquivos' => $ultima->arquivos ?? [],
-            'resultado' => $ultima->resultado,
-            'recusadas' => $ultima->recusadas ?? [],
             // Estado de AGORA, não da rodada: alguém pode ter decidido depois dela.
             'sugestoesPendentes' => Lead::query()->visivel()->where('conta_vinculo', Lead::CONTA_SUGERIDA)->count(),
             'prospeccaoNoCrm' => Lead::query()->visivel()->where('origem', Lead::ORIGEM_PROSPECCAO)->count(),
             // Mesmo recorte do link (/leads?origem=prospeccao&sem_vendedor=1), para o número bater.
             'semVendedor' => Lead::query()->visivel()->where('origem', Lead::ORIGEM_PROSPECCAO)->whereNull('cod_vendedor')->count(),
         ];
+    }
+
+    /**
+     * Botões "Simular" e "Importar leads" do card. Mesmo desenho do `disparar()`: a linha
+     * nasce `executando` AQUI, no request — a tela entra em acompanhamento no redirect e
+     * o guarda de "já existe uma em andamento" vale antes de o worker pegar o job.
+     */
+    public function importarLeads(Request $request): RedirectResponse
+    {
+        $this->autorizarAdmin($request);
+
+        if (LeadImportacao::query()->emAndamento()->exists()) {
+            return back()->with('erro', 'Já existe uma importação de leads em andamento.');
+        }
+
+        $simulacao = $request->boolean('simulacao');
+
+        $rodada = LeadImportacao::query()->create([
+            'simulacao' => $simulacao,
+            'user_id' => $request->user()->id,
+            'status' => 'executando',
+            'iniciada_em' => now(),
+        ]);
+
+        ImportarLeadsProspeccaoJob::dispatch($rodada->id, $simulacao);
+
+        return back()->with('sucesso', $simulacao
+            ? 'Simulação dos leads enviada para a fila — nada será gravado.'
+            : 'Importação dos leads enviada para a fila.');
     }
 
     public function disparar(Request $request): RedirectResponse
