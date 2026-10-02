@@ -12,7 +12,8 @@ const HEIGHT = ROWS * CELL;
 const HOVER_RADIUS = 165;
 
 // As cores do logo PALMA, da mesma fonte que o gerador da marca usa — o fundo do login
-// "conversa" com a mão. O âmbar é raro aqui pelo mesmo motivo que é único na mão: é acento.
+// "conversa" com a mão. ⚠️ Sem o âmbar: testado em 2026-10-02 e recusado pelo Tony
+// ("os triângulos laranja ficaram feios"). O âmbar fica só na mão.
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const PALETTE = [
     rgb(MARCA.navy),      // 0
@@ -20,9 +21,8 @@ const PALETTE = [
     rgb(MARCA.tealClaro), // 2
     rgb(MARCA.tealMedio), // 3
     rgb(MARCA.cyan),      // 4
-    rgb(MARCA.ambar),     // 5 (raro)
 ];
-const HOVER_COLOR = rgb(MARCA.ambar);
+const HOVER_COLOR = [243, 226, 192]; // creme — o rastro do mouse, não uma cor da marca
 const CYAN = rgb(MARCA.cyan);
 
 function lerpColor(a, b, t) {
@@ -38,13 +38,11 @@ function pickColor(t) {
     // a mesma progressão da mão (cyan nos dedos de fora, navy na base).
     const r = Math.random();
     if (t < 0.35) {
-        if (r < 0.05) return PALETTE[5];
         if (r < 0.6) return PALETTE[4];
         if (r < 0.85) return PALETTE[3];
         return PALETTE[2];
     }
     if (t < 0.7) {
-        if (r < 0.03) return PALETTE[5];
         if (r < 0.25) return PALETTE[4];
         if (r < 0.5) return PALETTE[3];
         if (r < 0.78) return PALETTE[2];

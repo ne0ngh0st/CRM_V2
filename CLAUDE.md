@@ -202,7 +202,7 @@ Centralizar cria dependência de **ordem** e de **cascata**, que não existia qu
   Variantes: `palma-logo` (com "por Autopel", a partir de ~48px de altura), `-compacto`
   (só PALMA, para navbar/e-mail pequeno), sufixo `-branco` (fundo escuro) / `-preto`.
   As cores moram em `resources/js/constants/marca-palma.json`, lido também pelo
-  `TriangleMosaic` do login (o mosaico segue a paleta do logo).
+  `TriangleMosaic` do login (o mosaico segue a paleta do logo, SEM o âmbar — recusado). Login no celular: só o painel com o logo, sem o texto de boas-vindas.
   ⚠️ **Fundo escuro (navbar preta, painel azul do login) = logo BRANCO.** A mão colorida
   some ali (dedos navy), e a saída com filete branco em volta das peças foi testada e
   recusada pelo Tony em 2026-10-02 — não tentar de novo. Ícone do app e favicon: mão
