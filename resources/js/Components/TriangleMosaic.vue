@@ -1,4 +1,5 @@
 <script setup>
+import MARCA from '@/constants/marca-palma.json';
 import { onMounted, onUnmounted, ref } from 'vue';
 
 const svg = ref(null);
@@ -10,18 +11,19 @@ const WIDTH = COLS * CELL;
 const HEIGHT = ROWS * CELL;
 const HOVER_RADIUS = 165;
 
-// Paleta oficial da marca (Tema.json): navy, teal, cyan + tints e um creme raro.
+// As cores do logo PALMA, da mesma fonte que o gerador da marca usa — o fundo do login
+// "conversa" com a mão. ⚠️ Sem o âmbar: testado em 2026-10-02 e recusado pelo Tony
+// ("os triângulos laranja ficaram feios"). O âmbar fica só na mão.
+const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const PALETTE = [
-    [15, 58, 105],   // navy  #0F3A69
-    [0, 90, 111],    // teal  #005A6F
-    [16, 84, 122],   // navy-teal mix
-    [0, 138, 170],   // cyan escuro
-    [0, 169, 206],   // cyan  #00A9CE
-    [130, 205, 228], // cyan claro
-    [243, 226, 192], // creme (raro)
+    rgb(MARCA.navy),      // 0
+    rgb(MARCA.teal),      // 1
+    rgb(MARCA.tealClaro), // 2
+    rgb(MARCA.tealMedio), // 3
+    rgb(MARCA.cyan),      // 4
 ];
-const HOVER_COLOR = [243, 226, 192]; // creme
-const CYAN = [0, 169, 206];
+const HOVER_COLOR = [243, 226, 192]; // creme — o rastro do mouse, não uma cor da marca
+const CYAN = rgb(MARCA.cyan);
 
 function lerpColor(a, b, t) {
     return [
@@ -32,17 +34,15 @@ function lerpColor(a, b, t) {
 }
 
 function pickColor(t) {
-    // t = 0 no canto âncora (superior direito), 1 no extremo oposto.
+    // t = 0 no canto âncora (superior direito), 1 no extremo oposto: claro → escuro,
+    // a mesma progressão da mão (cyan nos dedos de fora, navy na base).
     const r = Math.random();
     if (t < 0.35) {
-        if (r < 0.06) return PALETTE[6];
-        if (r < 0.45) return PALETTE[5];
-        if (r < 0.75) return PALETTE[4];
-        if (r < 0.9) return PALETTE[3];
+        if (r < 0.6) return PALETTE[4];
+        if (r < 0.85) return PALETTE[3];
         return PALETTE[2];
     }
     if (t < 0.7) {
-        if (r < 0.03) return PALETTE[6];
         if (r < 0.25) return PALETTE[4];
         if (r < 0.5) return PALETTE[3];
         if (r < 0.78) return PALETTE[2];

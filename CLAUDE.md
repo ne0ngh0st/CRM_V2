@@ -188,7 +188,28 @@ Valor que **varia por caso de uso** não é decisão repetida: `min-w-[1000px]` 
 Centralizar cria dependência de **ordem** e de **cascata**, que não existia quando tudo era cópia. Caso real: no `app.css`, `.tbl-acao:disabled:hover` e `.tbl-acao-verde:hover` têm a mesma especificidade — quem ganha é o que vier por último no arquivo. Reordenar o CSS "pra organizar" quebra o estado desabilitado sem erro nenhum. Quando extrair algo, **comentar no próprio arquivo o que não pode ser reordenado/removido**.
 
 ## Marca Autopel
-- **Logos:** em `public/images/` (`autopel-logo-white.png` = versão branca pra fundo escuro; `autopel-logo.png` = colorido). Originais em `C:\Users\antonio.barbosa\OneDrive - autopel.com\Documentos\Arte` (VETOR-03 = branco, VETOR-01 = cor).
+- **No sistema, só a marca PALMA (decisão do Tony, 2026-10-02).** Navbar, login, ícone do
+  app/favicon e e-mails do sistema (senha, resumo diário) usam o PALMA sozinho — testamos
+  Autopel + PALMA lado a lado e ficou ruim ("dois logos não tá dando certo"); não voltar a
+  juntar os dois. O "por Autopel" do próprio logo é quem carrega a empresa. **Documento que
+  vai para o CLIENTE continua Autopel** (cabeçalho do orçamento, fichas de bobina/etiqueta,
+  relatórios); no orçamento a mão aparece só discreta no rodapé, ao lado de "gerado pelo
+  sistema PALMA".
+- **Marca PALMA = `scripts/gerar-marca-palma.py`.** A mão vetorizada (13 polígonos), as
+  cores e a composição "PALMA / por Autopel" moram nesse script; `public/images/palma/*`,
+  `public/images/pwa/*` e `public/favicon.ico` são SAÍDA dele — não editar à mão, mudar o
+  script e rodar no host (`pip install pillow fonttools`). Texto do SVG sai em curvas (Inter).
+  Variantes: `palma-logo` (com "por Autopel", a partir de ~48px de altura), `-compacto`
+  (só PALMA, para navbar/e-mail pequeno), sufixo `-branco` (fundo escuro) / `-preto`.
+  As cores moram em `resources/js/constants/marca-palma.json`, lido também pelo
+  `TriangleMosaic` do login (o mosaico segue a paleta do logo, SEM o âmbar — recusado). Login no celular: só o painel com o logo, sem o texto de boas-vindas.
+  ⚠️ **Fundo escuro (navbar preta, painel azul do login) = logo BRANCO.** A mão colorida
+  some ali (dedos navy), e a saída com filete branco em volta das peças foi testada e
+  recusada pelo Tony em 2026-10-02 — não tentar de novo. Ícone do app e favicon: mão
+  colorida, transparente. ⚠️ Exceções: `icon-512-maskable` e `apple-touch-icon` têm fundo
+  branco porque Android/iOS pintam de PRETO o que for transparente nesses dois.
+  (a folha de especificação de lá tem hex inválidos — `#CY6FFF` — não usar como fonte).
+- **Logos Autopel:** em `public/images/` (`autopel-logo-white.png` = versão branca pra fundo escuro; `autopel-logo.png` = colorido). Originais em `C:\Users\antonio.barbosa\OneDrive - autopel.com\Documentos\Arte` (VETOR-03 = branco, VETOR-01 = cor).
 - **Cores oficiais** (de `Arte\Tema.json`): teal `#005A6F`, cyan `#00A9CE`, navy `#0F3A69`, cinza `#C8C9C7`. Secundária/acento âmbar `#ff8f00`. (O token azul `#0f4c75` que aparece por aí é próximo mas não idêntico ao navy oficial.)
 - **Gotcha técnico:** `<style scoped>` do Vue NÃO alcança elementos SVG criados via `document.createElementNS` no JS (não recebem o `data-v-*`) → fill/animação por classe scoped não aplicam e o SVG vira preto. Solução: setar fill/opacity/animation inline no JS; deixar só `@keyframes` num `<style>` global. (Aprendido no `resources/js/Components/TriangleMosaic.vue`.)
 

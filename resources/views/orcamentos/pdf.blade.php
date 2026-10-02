@@ -17,6 +17,9 @@
 @php
     $fontes = public_path('fonts/inter');
     $logo = public_path('images/autopel-logo.png');
+    // PNG e não SVG: o suporte a SVG do dompdf é parcial. Assinatura discreta do sistema no rodapé —
+    // o documento é da Autopel, o cabeçalho continua só com a marca dela.
+    $logoPalma = public_path('images/palma/palma-simbolo.png');
     $ehProduto = $orcamento->tipo_produto_servico === 'produto';
     $vendedor = $orcamento->user->display_name ?: $orcamento->user->name;
     $contatoVendedor = collect([$orcamento->user->telefone, $orcamento->user->email])->filter()->implode(' · ');
@@ -377,7 +380,7 @@
             <td class="dir">Página <span class="pagenum"></span></td>
         </tr>
     </table>
-    <p style="margin-top: 3px;">Documento gerado pelo sistema PALMA em {{ now()->format('d/m/Y \à\s H:i') }} — sem valor fiscal.</p>
+    <p style="margin-top: 3px;">@if (file_exists($logoPalma))<img src="{{ $logoPalma }}" alt="" style="height: 9px; vertical-align: -1px; margin-right: 3px;">@endif Documento gerado pelo sistema PALMA em {{ now()->format('d/m/Y \à\s H:i') }} — sem valor fiscal.</p>
 </footer>
 
 </body>

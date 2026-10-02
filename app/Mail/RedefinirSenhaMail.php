@@ -59,7 +59,7 @@ class RedefinirSenhaMail extends Mailable
      */
     private function logoBranco(): ?string
     {
-        $branco = public_path('images/autopel-logo-white.png');
+        $branco = public_path('images/palma/palma-logo-branco.png');
 
         return file_exists($branco) ? $branco : null;
     }

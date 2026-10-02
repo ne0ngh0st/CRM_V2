@@ -74,7 +74,7 @@ const itensDoUsuario = computed(() => menuUsuario(perfil.value));
                         <div class="flex min-w-0">
                             <div class="flex shrink-0 items-center">
                                 <Link :href="route('dashboard')" class="inline-flex min-h-11 items-center">
-                                    <img src="/images/autopel-logo-white.png" alt="Autopel" class="h-8 w-auto" />
+                                    <img src="/images/palma/palma-logo-compacto-branco.svg" alt="PALMA" class="h-9 w-auto" />
                                 </Link>
                             </div>
 

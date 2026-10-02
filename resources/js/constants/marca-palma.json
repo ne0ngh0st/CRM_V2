@@ -1,0 +1,9 @@
+{
+    "_doc": "Paleta da marca PALMA. Fonte única: lida por scripts/gerar-marca-palma.py (logos) e por Components/TriangleMosaic.vue (fundo do login). Mudou aqui, rodar o gerador de novo.",
+    "navy": "#0F3A69",
+    "teal": "#005A6F",
+    "tealClaro": "#0A6479",
+    "tealMedio": "#0B7E93",
+    "cyan": "#00A9CE",
+    "ambar": "#FF8F00"
+}
