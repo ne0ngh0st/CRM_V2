@@ -64,17 +64,15 @@ TXT_X = SIMBOLO_L * ESC_MAO + 30      # respiro entre a mão e o texto (16 ficav
 NOME, NOME_CAP, NOME_BASE, NOME_TRACK = 'PALMA', 48, 72, 0.02
 SUB, SUB_CAP, SUB_BASE = 'por Autopel', 14, 100
 
-# Variantes: (mão, PALMA, por Autopel, filete). Mão None = colorida.
-# Filete = o contorno branco entre os triângulos, como na arte original. Só a variante
-# `-escuro` precisa dele: em fundo claro o vão transparente já É o filete, mas em fundo
-# navy os dedos navy sumiriam sem ele.
+# Variantes: (mão, PALMA, por Autopel). Mão None = colorida.
+# ⚠️ Não existe variante colorida para fundo escuro, de propósito: os dedos navy somem no
+# azul/preto. Testado em 2026-10-02 com um filete branco em volta das peças e recusado
+# pelo Tony ("borda branca feiona"). Fundo escuro = `-branco`.
 VARIANTES = {
-    '': (None, NAVY, '#6B7280', None),                         # fundo claro
-    '-escuro': (None, BRANCO, (255, 255, 255, 191), BRANCO),   # colorido em fundo escuro
-    '-branco': (BRANCO, BRANCO, (255, 255, 255, 191), None),   # monocromático em fundo escuro
-    '-preto': (PRETO, PRETO, '#4B5563', None),                 # impressão monocromática
+    '': (None, NAVY, '#6B7280'),                          # fundo claro
+    '-branco': (BRANCO, BRANCO, (255, 255, 255, 191)),    # fundo escuro (navbar, login, e-mail)
+    '-preto': (PRETO, PRETO, '#4B5563'),                  # impressão monocromática
 }
-FILETE = 10  # largura do filete, em unidades da mão (o vão da arte tem ~8)
 
 
 class Fonte:
@@ -130,16 +128,8 @@ def rgba(cor):
     return tuple(int(cor[i:i + 2], 16) for i in (1, 3, 5)) + (255,)
 
 
-def poligonos_svg(cor, k=1.0, filete=None):
+def poligonos_svg(cor, k=1.0):
     out = []
-    if filete:
-        # Primeiro o filete (contorno grosso), depois as cores por cima: sobra a borda
-        # externa e o vão entre as peças, exatamente o desenho da arte.
-        pts = ' '.join
-        out.append(f'  <g fill="{filete}" stroke="{filete}" stroke-width="{FILETE * k:.2f}" stroke-linejoin="round">')
-        for p_, _ in MAO:
-            out.append('    <polygon points="' + pts(f'{x * k:.2f},{y * k:.2f}' for x, y in p_) + '"/>')
-        out.append('  </g>')
     for pts, c in MAO:
         p = ' '.join(f'{x * k:.2f},{y * k:.2f}' for x, y in pts)
         out.append(f'  <polygon points="{p}" fill="{cor or c}"/>')
@@ -152,15 +142,15 @@ def escrever(nome, linhas):
 
 
 def svgs():
-    for suf, (mao, nome, sub, filete) in VARIANTES.items():
+    for suf, (mao, nome, sub) in VARIANTES.items():
         escrever(f'palma-simbolo{suf}.svg', [
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {SIMBOLO_L} {SIMBOLO_A}" role="img" aria-label="PALMA">',
-            *poligonos_svg(mao, filete=filete),
+            *poligonos_svg(mao),
             '</svg>',
         ])
         escrever(f'palma-logo{suf}.svg', [
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {LOGO_L:.2f} {LOGO_A}" role="img" aria-label="PALMA por Autopel">',
-            *poligonos_svg(mao, ESC_MAO, filete),
+            *poligonos_svg(mao, ESC_MAO),
             f'  <path fill="{css(nome)}" d="{BOLD.caminho_svg(NOME, NOME_CAP, TXT_X, NOME_BASE, NOME_TRACK)}"/>',
             f'  <path fill="{css(sub)}" d="{REG.caminho_svg(SUB, SUB_CAP, SUB_X, SUB_BASE)}"/>',
             '</svg>',
@@ -169,7 +159,7 @@ def svgs():
         # a 40px de altura o subtítulo teria 5px e viraria um risco cinza.
         escrever(f'palma-logo-compacto{suf}.svg', [
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {LOGO_L:.2f} {LOGO_A}" role="img" aria-label="PALMA">',
-            *poligonos_svg(mao, ESC_MAO, filete),
+            *poligonos_svg(mao, ESC_MAO),
             f'  <path fill="{css(nome)}" d="{BOLD.caminho_svg(NOME, NOME_CAP, TXT_X, (LOGO_A + NOME_CAP) / 2, NOME_TRACK)}"/>',
             '</svg>',
         ])
@@ -178,17 +168,7 @@ def svgs():
 SS = 4  # superamostragem: desenha 4x maior e reduz, para borda suave
 
 
-def desenhar_mao(d, cor, k, dx, dy, filete=None):
-    if filete:
-        for pts, _ in MAO:
-            xy = [(dx + x * k, dy + y * k) for x, y in pts]
-            d.polygon(xy, fill=rgba(filete))
-            # Aresta a aresta: o `width` do d.polygon não engrossa o contorno quando há fill.
-            for (ax, ay), (bx, by) in zip(xy, xy[1:] + xy[:1]):
-                d.line((ax, ay, bx, by), fill=rgba(filete), width=max(1, round(FILETE * k)))
-            for px, py in xy:  # cantos arredondados, como o stroke-linejoin do SVG
-                r = FILETE * k / 2
-                d.ellipse((px - r, py - r, px + r, py + r), fill=rgba(filete))
+def desenhar_mao(d, cor, k, dx, dy):
     for pts, c in MAO:
         d.polygon([(dx + x * k, dy + y * k) for x, y in pts], fill=rgba(cor or c))
 
@@ -205,10 +185,10 @@ def desenhar_texto(img, fonte, texto, cap, x0, base, track, cor, k):
 
 
 def png_logo(arquivo, suf, largura, compacto=False):
-    mao, nome, sub, filete = VARIANTES[suf]
+    mao, nome, sub = VARIANTES[suf]
     k = largura * SS / LOGO_L
     img = Image.new('RGBA', (round(LOGO_L * k), round(LOGO_A * k)), (0, 0, 0, 0))
-    desenhar_mao(ImageDraw.Draw(img), mao, ESC_MAO * k, 0, 0, filete)
+    desenhar_mao(ImageDraw.Draw(img), mao, ESC_MAO * k, 0, 0)
     if compacto:
         desenhar_texto(img, BOLD, NOME, NOME_CAP, TXT_X, (LOGO_A + NOME_CAP) / 2, NOME_TRACK, nome, k)
     else:
@@ -217,7 +197,7 @@ def png_logo(arquivo, suf, largura, compacto=False):
     img.resize((largura, round(LOGO_A * largura / LOGO_L)), Image.LANCZOS).save(os.path.join(SAIDA, arquivo), optimize=True)
 
 
-def icone(lado, ocupacao, fundo, raio=0.0, cor=None, filete=None):
+def icone(lado, ocupacao, fundo, raio=0.0, cor=None):
     """Mão centrada num quadrado. `ocupacao` = fração do lado que a mão ocupa."""
     S = lado * SS
     img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
@@ -225,7 +205,7 @@ def icone(lado, ocupacao, fundo, raio=0.0, cor=None, filete=None):
     if fundo:
         d.rounded_rectangle((0, 0, S - 1, S - 1), radius=round(S * raio), fill=rgba(fundo))
     k = S * ocupacao / max(SIMBOLO_L, SIMBOLO_A)
-    desenhar_mao(d, cor, k, (S - SIMBOLO_L * k) / 2, (S - SIMBOLO_A * k) / 2, filete)
+    desenhar_mao(d, cor, k, (S - SIMBOLO_L * k) / 2, (S - SIMBOLO_A * k) / 2)
     return img.resize((lado, lado), Image.LANCZOS)
 
 
@@ -236,13 +216,11 @@ def pngs():
         png_logo(f'palma-logo-compacto{suf}.png', suf, 480, compacto=True)
     icone(512, 0.92, None).save(os.path.join(SAIDA, 'palma-simbolo.png'), optimize=True)
 
-    # Ícones: a mão SOZINHA, fundo transparente (pedido do Tony, "tipo os da Google"), com
-    # o filete branco da arte — é ele que mantém os dedos navy visíveis numa aba escura
-    # ou num papel de parede escuro.
+    # Ícones: a mão SOZINHA, fundo transparente (pedido do Tony, "tipo os da Google").
     for lado, nome in ((512, 'icon-512.png'), (192, 'icon-192.png')):
-        icone(lado, 0.92, None, filete=BRANCO).save(os.path.join(PWA, nome), optimize=True)
-    icone(32, 0.98, None, filete=BRANCO).save(os.path.join(PWA, 'favicon-32.png'), optimize=True)
-    icone(256, 0.98, None, filete=BRANCO).save(
+        icone(lado, 0.92, None).save(os.path.join(PWA, nome), optimize=True)
+    icone(32, 0.98, None).save(os.path.join(PWA, 'favicon-32.png'), optimize=True)
+    icone(256, 0.98, None).save(
         os.path.join(RAIZ, 'public', 'favicon.ico'), sizes=[(16, 16), (32, 32), (48, 48)])
 
     # ⚠️ Os dois abaixo NÃO podem ser transparentes, por regra das plataformas: o Android

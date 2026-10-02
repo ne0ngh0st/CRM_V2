@@ -15,10 +15,9 @@ import { Link } from '@inertiajs/vue3';
         >
             <TriangleMosaic />
 
-            <!-- Variante "escuro": colorida, com o filete branco que deixa os dedos navy visíveis no azul. -->
             <Link href="/" class="relative z-10 self-start">
                 <img
-                    src="/images/palma/palma-logo-escuro.svg"
+                    src="/images/palma/palma-logo-branco.svg"
                     alt="PALMA por Autopel"
                     class="h-12 w-auto md:h-16"
                 />

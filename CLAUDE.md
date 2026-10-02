@@ -200,13 +200,14 @@ Centralizar cria dependência de **ordem** e de **cascata**, que não existia qu
   `public/images/pwa/*` e `public/favicon.ico` são SAÍDA dele — não editar à mão, mudar o
   script e rodar no host (`pip install pillow fonttools`). Texto do SVG sai em curvas (Inter).
   Variantes: `palma-logo` (com "por Autopel", a partir de ~48px de altura), `-compacto`
-  (só PALMA, para navbar/e-mail pequeno), sufixo `-escuro` (COLORIDO para fundo escuro:
-  navbar e login), `-branco` (monocromático) / `-preto`. As cores moram em
-  `resources/js/constants/marca-palma.json`, lido também pelo `TriangleMosaic` do login.
-  ⚠️ **Mão colorida em fundo escuro só com o filete branco** (variante `-escuro`): sem ele
-  os dedos navy somem. Ícones do app e favicon: mão transparente com filete (pedido do
-  Tony). ⚠️ Exceções: `icon-512-maskable` e `apple-touch-icon` têm fundo branco porque
-  Android/iOS pintam de PRETO o que for transparente nesses dois. Arte original em `Arte\LOGOS PALMA`
+  (só PALMA, para navbar/e-mail pequeno), sufixo `-branco` (fundo escuro) / `-preto`.
+  As cores moram em `resources/js/constants/marca-palma.json`, lido também pelo
+  `TriangleMosaic` do login (o mosaico segue a paleta do logo).
+  ⚠️ **Fundo escuro (navbar preta, painel azul do login) = logo BRANCO.** A mão colorida
+  some ali (dedos navy), e a saída com filete branco em volta das peças foi testada e
+  recusada pelo Tony em 2026-10-02 — não tentar de novo. Ícone do app e favicon: mão
+  colorida, transparente. ⚠️ Exceções: `icon-512-maskable` e `apple-touch-icon` têm fundo
+  branco porque Android/iOS pintam de PRETO o que for transparente nesses dois.
   (a folha de especificação de lá tem hex inválidos — `#CY6FFF` — não usar como fonte).
 - **Logos Autopel:** em `public/images/` (`autopel-logo-white.png` = versão branca pra fundo escuro; `autopel-logo.png` = colorido). Originais em `C:\Users\antonio.barbosa\OneDrive - autopel.com\Documentos\Arte` (VETOR-03 = branco, VETOR-01 = cor).
 - **Cores oficiais** (de `Arte\Tema.json`): teal `#005A6F`, cyan `#00A9CE`, navy `#0F3A69`, cinza `#C8C9C7`. Secundária/acento âmbar `#ff8f00`. (O token azul `#0f4c75` que aparece por aí é próximo mas não idêntico ao navy oficial.)
