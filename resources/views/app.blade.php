@@ -10,10 +10,11 @@
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-title" content="PALMA">
         <meta name="apple-mobile-web-app-status-bar-style" content="black">
+        {{-- `?v=`: o navegador guarda o ícone da aba quase para sempre. Trocou o ícone (scripts/gerar-marca-palma.py), troca o valor. --}}
         <link rel="manifest" href="/manifest.json">
-        <link rel="icon" type="image/png" sizes="32x32" href="/images/pwa/favicon-32.png">
-        <link rel="icon" type="image/png" sizes="192x192" href="/images/pwa/icon-192.png">
-        <link rel="apple-touch-icon" href="/images/pwa/apple-touch-icon.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="/images/pwa/favicon-32.png?v=palma">
+        <link rel="icon" type="image/png" sizes="192x192" href="/images/pwa/icon-192.png?v=palma">
+        <link rel="apple-touch-icon" href="/images/pwa/apple-touch-icon.png?v=palma">
 
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
