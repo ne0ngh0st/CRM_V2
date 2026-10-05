@@ -262,8 +262,6 @@ async function excluir(conta) {
                     :ativo="filtros.status === t.status"
                     @click="filtrarStatus(filtros.status === t.status ? '' : t.status)"
                 />
-                <KpiTile :value="formatInteiro(kpis.filiaisMercado)" label="Filiais no mercado" />
-                <KpiTile :value="formatInteiro(kpis.clientes)" label="Clientes" tone="info" />
             </div>
 
             <div class="flex flex-wrap items-center justify-end gap-2">
