@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Http\Controllers\SimulacaoController;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -37,6 +38,19 @@ class ContaEstrategica extends Model
         'ordem' => 'integer',
         'vinculos_versao' => 'integer',
     ];
+
+    /**
+     * Nome sempre em CAIXA ALTA (com acento), como a planilha da diretoria. São três
+     * caminhos que gravam o nome (tela, carga da planilha e a coluna `rede` da prospecção);
+     * no model nenhum deles fica de fora. Até 2026-10-05 a prospecção gravava "Rede Soma
+     * Drogarias" no meio de uma aba em maiúsculas.
+     */
+    protected function nome(): Attribute
+    {
+        return Attribute::make(
+            set: fn (?string $valor) => $valor === null ? null : mb_strtoupper(trim($valor)),
+        );
+    }
 
     /**
      * Toda mudança de observação vira uma versão no histórico — criar, editar, apagar,

@@ -108,6 +108,13 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->assertNull(Lead::sole()->conta_estrategica_id);
     }
 
+    public function test_conta_nova_nasce_em_caixa_alta_com_acento(): void
+    {
+        $this->importar([$this->linha('11111111000191', 'X LTDA', '109', rede: '  Farmácias Preço Justo ')]);
+
+        $this->assertSame('FARMÁCIAS PREÇO JUSTO', ContaEstrategica::sole()->nome);
+    }
+
     public function test_filiais_com_separador_de_milhar(): void
     {
         $this->importar([
@@ -115,8 +122,8 @@ class LeadsDaProspeccaoTest extends TestCase
             $this->linha('22222222000191', 'FARMA X LTDA', '109', rede: 'Farma X', filiais: '2,347'),
         ]);
 
-        $this->assertSame(1600, ContaEstrategica::where('nome', 'Grupo DPSP')->sole()->filiais_mercado);
-        $this->assertSame(2347, ContaEstrategica::where('nome', 'Farma X')->sole()->filiais_mercado);
+        $this->assertSame(1600, ContaEstrategica::where('nome', 'GRUPO DPSP')->sole()->filiais_mercado);
+        $this->assertSame(2347, ContaEstrategica::where('nome', 'FARMA X')->sole()->filiais_mercado);
     }
 
     public function test_rede_que_nao_existe_vira_conta_nova_uma_so_para_varios_cnpjs(): void
