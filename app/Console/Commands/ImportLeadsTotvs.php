@@ -480,7 +480,7 @@ class ImportLeadsTotvs extends Command
                 'valor_estimado' => $this->valorPositivoOuNull($linha['valor_estimado']),
                 '_codigo_segmento' => $segmento['codigo'],
                 '_rede' => Normalizador::valorOuNull($linha['rede']),
-                '_filiais_rede' => ($f = (int) Normalizador::numero($linha['filiais_rede'])) > 0 ? $f : null,
+                '_filiais_rede' => $this->filiais($linha['filiais_rede']),
             ];
 
             // Mesmo CNPJ em duas linhas (ou dois arquivos): fica a mais completa.
@@ -689,6 +689,18 @@ class ImportLeadsTotvs extends Command
         $codigo = Normalizador::codigoVendedor($valor);
 
         return $codigo === null || preg_match('/^0+$/', $codigo) ? null : $codigo;
+    }
+
+    /**
+     * Número de filiais é sempre inteiro, então ponto e vírgula são separador de milhar:
+     * "1.600" é mil e seiscentas. Passando por `Normalizador::numero()` virava 1,6 → 1, e a
+     * carga de drogarias de 02/10 gravou a DPSP com uma filial.
+     */
+    private function filiais(mixed $valor): ?int
+    {
+        $digitos = preg_replace('/\D/', '', (string) $valor);
+
+        return $digitos !== '' && (int) $digitos > 0 ? (int) $digitos : null;
     }
 
     private function valorPositivoOuNull(mixed $valor): ?float

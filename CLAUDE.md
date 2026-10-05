@@ -2873,6 +2873,13 @@ LEIA-ME ficam em `Leads/_MODELO/`. Subpasta não é lida (o glob é `Leads/*.csv
   coluna `rede` que bate liga o lead à conta; que não bate CRIA a conta no fim da aba;
   vazia vira SUGESTÃO pelo nome (mesma heurística de `SugestaoDeVinculo`), confirmada ou
   recusada no card da Visão Diretor. Sem `rede` e sem sugestão, não vira conta.
+- ⚠️ **"Bate" = `SugestaoDeVinculo::chaveDeNome()`**: ignora palavra de tipo (Rede, Grupo,
+  Farmácias, Drogaria…) e a ordem das palavras — "Farmácias São João" = SÃO JOÃO
+  FARMACIAS. FARMA/DROGA/SUPER NÃO são ignoradas (são marca). Até 2026-10-05 era só o
+  nome compactado e a carga de drogarias de 02/10 criou 8 contas duplicadas. `rede` que
+  bate com DUAS contas não liga nem cria (conta como ambíguo). `filiais_rede` lê ponto e
+  vírgula como milhar ("1.600" chegou a gravar 1 filial). ⚠️ Nome de grupo controlador
+  ("Grupo DPSP") nenhuma regra pega — conferir as redes criadas no relatório da rodada.
 - ⚠️ **Vários leads por conta**: a ligação mora em `leads.conta_estrategica_id` +
   `conta_vinculo` (`sugerido`/`confirmado`/`recusado`). O `contas_estrategicas.lead_id`
   antigo foi migrado e dropado. "Leads desta conta" = `Lead::scopeLigadoAConta()`, usado

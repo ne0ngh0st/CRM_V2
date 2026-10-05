@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
  * | coluna `rede` do CSV          | o que acontece                                         |
  * |-------------------------------|--------------------------------------------------------|
  * | bate com conta do segmento    | lead ligado a ela, CONFIRMADO                          |
+ * | bate com DUAS ou mais contas  | nada: conta como ambíguo, para alguém desempatar       |
  * | preenchida e não bate         | conta NOVA criada na aba, lead ligado, CONFIRMADO      |
  * | vazia                         | SUGESTÃO pelo nome (mesma heurística da carga da       |
  * |                               | planilha), esperando alguém confirmar na tela          |
@@ -72,10 +73,16 @@ class ContaDoLead
             ->get(['id', 'segmento_id', 'nome', 'filiais_mercado', 'ordem']);
         $codigoDoSegmento = $segmentoId->flip();
 
-        /** @var array<string, ContaEstrategica|int> "seg|chave" → conta (ou id provisório no dry-run) */
+        /**
+         * "seg|chave" → contas com essa chave (ou id provisório no dry-run). Lista, não
+         * conta única: duas contas podem empatar na chave, e aí a `rede` é AMBÍGUA — não
+         * liga a nenhuma e não cria outra (criar seria a terceira duplicata).
+         *
+         * @var array<string, list<ContaEstrategica|int>>
+         */
         $porNome = [];
         foreach ($contas as $c) {
-            $porNome[$codigoDoSegmento[$c->segmento_id].'|'.$this->sugestao->chaveDeNome($c->nome)] = $c;
+            $porNome[$codigoDoSegmento[$c->segmento_id].'|'.$this->sugestao->chaveDeNome($c->nome)][] = $c;
         }
 
         $estado = DB::table('leads')->whereIn('id', $itens->pluck('lead_id'))
@@ -94,12 +101,21 @@ class ContaDoLead
             }
 
             $chave = $i['segmento'].'|'.$this->sugestao->chaveDeNome($i['rede']);
-            $conta = $porNome[$chave] ?? null;
+            $candidatas = $porNome[$chave] ?? [];
+
+            if (count($candidatas) > 1) {
+                $stats['ambiguos']++;
+
+                continue;
+            }
+
+            $conta = $candidatas[0] ?? null;
 
             if ($conta === null) {
                 $stats['criadas']++;
                 $stats['detalhe']['redesCriadas'][] = trim($i['rede']);
-                $conta = $porNome[$chave] = $dryRun ? -$stats['criadas'] : $this->criarConta($segmentoId[$i['segmento']], $i);
+                $conta = $dryRun ? -$stats['criadas'] : $this->criarConta($segmentoId[$i['segmento']], $i);
+                $porNome[$chave] = [$conta];
             } elseif (! $dryRun && $conta->filiais_mercado === null && $i['filiais']) {
                 // Conta sem o número de filiais aprende com o CSV; número já digitado nunca é sobrescrito.
                 $conta->forceFill(['filiais_mercado' => $i['filiais']])->save();

@@ -65,6 +65,19 @@ class SugestaoDeVinculo
         'EMPRESA', 'ADMINISTRADORA', 'SOCIEDADE',
     ];
 
+    /**
+     * O que `chaveDeNome()` ignora: tipo de estabelecimento, agrupador e sufixo societário.
+     * Mais curta que `GENERICOS` de propósito — FARMA, DROGA, SUPER e CENTER fazem parte
+     * da marca ("Rede Farma Total" não é "DROGARIA TOTAL").
+     */
+    private const PALAVRAS_DE_TIPO = [
+        'REDE', 'GRUPO', 'LOJA', 'LOJAS', 'POSTO', 'POSTOS',
+        'DROGARIA', 'DROGARIAS', 'FARMACIA', 'FARMACIAS',
+        'SUPERMERCADO', 'SUPERMERCADOS', 'ESTACIONAMENTO', 'ESTACIONAMENTOS',
+        'DO', 'DA', 'DE', 'DOS', 'DAS', 'E',
+        'SA', 'S', 'A', 'LTDA', 'ME', 'EIRELI',
+    ];
+
     /** Curto demais ou nome demais comum: sozinho não casa; concatenado com o vizinho, sim ("SAO"+"JOAO"). */
     private const FRACOS = ['SAO', 'JOAO', 'PAULO', 'MARIA', 'JOSE', 'SANTA', 'SANTO', 'NORTE', 'SUL'];
 
@@ -132,12 +145,29 @@ class SugestaoDeVinculo
     }
 
     /**
-     * Chave para "é o MESMO nome?" (sem acento, caixa, pontuação nem espaço). É o que a
-     * coluna `rede` da prospecção usa para achar a conta digitada.
+     * Chave para "é a MESMA rede?" — é o que a coluna `rede` da prospecção usa para achar
+     * a conta digitada. Sem acento, caixa e pontuação, sem as palavras de `PALAVRAS_DE_TIPO`
+     * e com as palavras em ordem alfabética: "Farmácias São João" e "SÃO JOÃO FARMACIAS"
+     * dão a mesma chave, assim como "Rede Augefarma" e "AUGEFARMA".
+     *
+     * ⚠️ Até 2026-10-05 a chave era só o nome compactado, e a carga de drogarias de 02/10
+     * criou contas duplicadas ("Rede Biodrogas" ao lado de BIODROGAS) por causa disso.
+     *
+     * ⚠️ Duas contas do mesmo segmento podem cair na mesma chave ("DROGARIA SÃO PAULO" e
+     * "FARMACIAS SÃO PAULO"). Quem usa a chave tem que tratar o empate, nunca escolher uma.
      */
     public function chaveDeNome(string $nome): string
     {
-        return $this->compacto($nome);
+        $marca = array_values(array_diff($this->tokensTodos($nome), self::PALAVRAS_DE_TIPO));
+
+        // Nome feito só de palavra de tipo ("REDE FARMACIAS") não pode virar chave vazia.
+        if ($marca === []) {
+            return $this->compacto($nome);
+        }
+
+        sort($marca);
+
+        return implode(' ', $marca);
     }
 
     /**

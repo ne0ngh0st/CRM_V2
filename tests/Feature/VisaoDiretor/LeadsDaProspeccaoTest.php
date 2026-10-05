@@ -67,6 +67,58 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->assertSame(Lead::CONTA_CONFIRMADA, $lead->conta_vinculo);
     }
 
+    /** Os casos reais da carga de drogarias de 02/10, que viraram contas duplicadas. */
+    public function test_rede_com_palavra_de_tipo_ou_ordem_diferente_liga_na_conta_existente(): void
+    {
+        $saoJoao = $this->conta('SÃO JOÃO FARMACIAS', ordem: 1);
+        $auge = $this->conta('AUGEFARMA', ordem: 2);
+        $total = $this->conta('DROGARIA TOTAL', ordem: 3);
+
+        $this->importar([
+            $this->linha('11111111000191', 'COMERCIO BRAIR LTDA', '109', rede: 'Farmácias São João'),
+            $this->linha('22222222000191', 'BROKER AUGEFARMA LTDA', '109', rede: 'Rede Augefarma'),
+            $this->linha('33333333000191', 'GRUPO TOTAL LTDA', '109', rede: 'Grupo Total'),
+        ]);
+
+        $this->assertSame(3, ContaEstrategica::count(), 'nenhuma conta nova');
+        $this->assertSame($saoJoao->id, Lead::where('cnpj', 'like', '11.111.111%')->sole()->conta_estrategica_id);
+        $this->assertSame($auge->id, Lead::where('cnpj', 'like', '22.222.222%')->sole()->conta_estrategica_id);
+        $this->assertSame($total->id, Lead::where('cnpj', 'like', '33.333.333%')->sole()->conta_estrategica_id);
+    }
+
+    /** FARMA faz parte da marca: "Rede Farma Total" não é a DROGARIA TOTAL. */
+    public function test_palavra_que_e_marca_nao_e_ignorada(): void
+    {
+        $total = $this->conta('DROGARIA TOTAL');
+
+        $this->importar([$this->linha('11111111000191', 'FARMA TOTAL LTDA', '109', rede: 'Rede Farma Total')]);
+
+        $this->assertSame(2, ContaEstrategica::count());
+        $this->assertNotSame($total->id, Lead::sole()->conta_estrategica_id);
+    }
+
+    public function test_rede_que_bate_com_duas_contas_nao_liga_nem_cria_outra(): void
+    {
+        $this->conta('DROGARIA SÃO PAULO', ordem: 1);
+        $this->conta('FARMACIAS SÃO PAULO', ordem: 2);
+
+        $this->importar([$this->linha('11111111000191', 'DROGARIA SAO PAULO S/A', '109', rede: 'Drogarias São Paulo')]);
+
+        $this->assertSame(2, ContaEstrategica::count());
+        $this->assertNull(Lead::sole()->conta_estrategica_id);
+    }
+
+    public function test_filiais_com_separador_de_milhar(): void
+    {
+        $this->importar([
+            $this->linha('11111111000191', 'DROGARIAS PACHECO S.A.', '109', rede: 'Grupo DPSP', filiais: '1.600'),
+            $this->linha('22222222000191', 'FARMA X LTDA', '109', rede: 'Farma X', filiais: '2,347'),
+        ]);
+
+        $this->assertSame(1600, ContaEstrategica::where('nome', 'Grupo DPSP')->sole()->filiais_mercado);
+        $this->assertSame(2347, ContaEstrategica::where('nome', 'Farma X')->sole()->filiais_mercado);
+    }
+
     public function test_rede_que_nao_existe_vira_conta_nova_uma_so_para_varios_cnpjs(): void
     {
         $this->conta('RAIA DROGASIL', ordem: 7);
