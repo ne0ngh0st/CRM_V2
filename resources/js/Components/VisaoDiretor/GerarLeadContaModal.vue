@@ -25,6 +25,9 @@ const emit = defineEmits(['close']);
 
 const form = useForm({ responsavel_id: '', recado: '', cnpj: '' });
 
+// A conta já tem lead da prospecção (sem dono): o modal atribui aquele em vez de criar.
+const atribuindo = computed(() => (props.conta?.leads?.length ?? 0) > 0);
+
 const especialistaElegivel = computed(() => {
     const id = props.segmento?.especialista?.id;
 
@@ -53,7 +56,7 @@ const rotulo = 'text-xs font-semibold uppercase tracking-wide text-gray-400';
 </script>
 
 <template>
-    <ModalPadrao :show="show" titulo="Gerar lead" :subtitulo="conta?.nome ?? ''" max-width="lg" @close="emit('close')">
+    <ModalPadrao :show="show" :titulo="atribuindo ? 'Atribuir lead' : 'Gerar lead'" :subtitulo="conta?.nome ?? ''" max-width="lg" @close="emit('close')">
         <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5">
                 <circle cx="9" cy="8" r="3.5" />
@@ -63,7 +66,11 @@ const rotulo = 'text-xs font-semibold uppercase tracking-wide text-gray-400';
         </template>
 
         <form id="form-gerar-lead" class="flex flex-col gap-3" @submit.prevent="gerar">
-            <p class="text-sm text-gray-600">
+            <p v-if="atribuindo" class="text-sm text-gray-600">
+                A prospecção já trouxe esta rede como lead, <strong>sem dono</strong>. Ele passa para quem você
+                escolher, que é avisado pelo sino. Segmento, UF, site e filiais vão junto numa observação.
+            </p>
+            <p v-else class="text-sm text-gray-600">
                 A rede entra no funil de leads como <strong>Novo</strong>, na carteira de quem você escolher, e a pessoa é
                 avisada pelo sino. Segmento, UF, site e filiais vão junto numa observação.
                 Se a rede já estiver em Leads sem dono, aquele lead é atribuído — não nasce outro.
@@ -91,7 +98,7 @@ const rotulo = 'text-xs font-semibold uppercase tracking-wide text-gray-400';
                 O CNPJ é o que impede o lead duplicado: se a prospecção já trouxe a empresa
                 (sem dono), o servidor reaproveita aquele lead em vez de criar outro.
             -->
-            <div>
+            <div v-if="! atribuindo">
                 <label :class="rotulo" for="lead_cnpj">CNPJ da matriz <span class="normal-case">(opcional, evita lead duplicado)</span></label>
                 <input id="lead_cnpj" v-model="form.cnpj" type="text" inputmode="numeric" maxlength="18" :class="campo" placeholder="00.000.000/0000-00" />
                 <InputError :message="form.errors.cnpj" class="mt-1" />
@@ -107,7 +114,7 @@ const rotulo = 'text-xs font-semibold uppercase tracking-wide text-gray-400';
         <template #footer>
             <SecondaryButton type="button" @click="emit('close')">Cancelar</SecondaryButton>
             <PrimaryButton type="submit" form="form-gerar-lead" :disabled="form.processing || ! form.responsavel_id">
-                {{ form.processing ? 'Gerando…' : 'Gerar lead' }}
+                {{ form.processing ? 'Salvando…' : (atribuindo ? 'Atribuir lead' : 'Gerar lead') }}
             </PrimaryButton>
         </template>
     </ModalPadrao>

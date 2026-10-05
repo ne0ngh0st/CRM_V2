@@ -297,6 +297,21 @@ class LeadDaContaTest extends TestCase
         $this->assertSame(1, Lead::count());
     }
 
+    /** A tela só oferece "Atribuir lead" quando o lead da conta não tem dono. */
+    public function test_linha_marca_lead_sem_dono_ate_ser_atribuido(): void
+    {
+        $conta = $this->conta();
+        $this->leadSemDono($conta);
+        $linha = fn () => app(MaioresPorSegmentoResolver::class)->linhas()->firstWhere('id', $conta->id);
+
+        $this->assertTrue($linha()['leads'][0]['semDono']);
+
+        $this->gerar($conta, $this->inaya)->assertSessionHasNoErrors();
+
+        $this->assertFalse($linha()['leads'][0]['semDono']);
+        $this->assertSame('Inaya', $linha()['leads'][0]['responsavel']);
+    }
+
     public function test_linha_da_conta_mostra_o_lead_aberto(): void
     {
         $conta = $this->conta();

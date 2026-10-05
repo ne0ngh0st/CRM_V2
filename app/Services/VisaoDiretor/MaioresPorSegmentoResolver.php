@@ -248,6 +248,8 @@ class MaioresPorSegmentoResolver
                         'etapa' => $lead->etapa,
                         'responsavel' => $lead->user?->display_name ?: $lead->user?->name
                             ?: ($nomes[$lead->cod_vendedor] ?? $lead->cod_vendedor),
+                        // Sem código ninguém vê o lead (só admin/diretor): é o que a tela oferece para atribuir.
+                        'semDono' => blank($lead->cod_vendedor),
                     ])->values()->all(),
                     'temSugestao' => $vinculos->get($conta->id, collect())->contains('origem', ContaEstrategicaVinculo::ORIGEM_SUGESTAO),
                     'segmento' => [

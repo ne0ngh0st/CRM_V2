@@ -21,6 +21,15 @@ const props = defineProps({
 
 const emit = defineEmits(['editar', 'excluir', 'historico', 'gerar-lead']);
 
+/**
+ * Conta sem loja nossa pode receber responsável quando NENHUM lead dela tem dono: sem
+ * lead, o botão cria; com lead da prospecção sem dono, ele atribui aquele (o servidor
+ * decide — `LeadDaConta`). Lead com dono não troca de mão: transferência é fora de escopo.
+ */
+function podeAtribuir(conta) {
+    return conta.status === 'lead' && conta.leads.every((l) => l.semDono);
+}
+
 /*
  * A lista expandida é guardada por conta para não refazer a requisição a cada abre-fecha.
  * ⚠️ Esvaziada sempre que as contas chegam de novo do servidor (salvou, filtrou): um
@@ -35,7 +44,7 @@ const VENDEDORES_VISIVEIS = 1;
 
 /** Tooltip do chip de leads: cada lead com responsável e etapa, e para onde o clique leva. */
 function tituloLeads(leads) {
-    const linhas = leads.map((l) => `${l.nome} — ${l.responsavel} (${ROTULOS_ETAPA_LEAD[l.etapa] ?? l.etapa})`);
+    const linhas = leads.map((l) => `${l.nome} — ${l.semDono ? 'sem dono' : l.responsavel} (${ROTULOS_ETAPA_LEAD[l.etapa] ?? l.etapa})`);
 
     return [...linhas, 'Abrir em Leads'].join('\n');
 }
@@ -157,7 +166,7 @@ async function alternar(conta) {
                                     :href="route('leads.index', { conta_alvo: conta.id })"
                                     class="inline-flex max-w-[7rem] items-center gap-1 truncate rounded border border-amber bg-amber/10 px-1 py-0.5 text-[0.7rem] text-amber-dark hover:underline"
                                     :title="tituloLeads(conta.leads)"
-                                >{{ conta.leads.length === 1 ? `Lead · ${conta.leads[0].responsavel}` : `${conta.leads.length} leads` }}</Link>
+                                >{{ conta.leads.length === 1 ? `Lead · ${conta.leads[0].semDono ? 'sem dono' : conta.leads[0].responsavel}` : `${conta.leads.length} leads` }}</Link>
                                 <Link
                                     v-for="v in conta.atendimento.slice(0, VENDEDORES_VISIVEIS)"
                                     :key="v.codVendedor"
@@ -195,10 +204,10 @@ async function alternar(conta) {
                         <td class="tbl-td tbl-td-acoes" @click.stop>
                             <div class="tbl-acoes">
                                 <button
-                                    v-if="conta.status === 'lead' && ! conta.leads.length"
+                                    v-if="podeAtribuir(conta)"
                                     type="button"
                                     class="tbl-acao tbl-acao-amber"
-                                    title="Gerar lead com responsável"
+                                    :title="conta.leads.length ? 'Atribuir o lead a um responsável' : 'Gerar lead com responsável'"
                                     @click="emit('gerar-lead', conta)"
                                 >
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
