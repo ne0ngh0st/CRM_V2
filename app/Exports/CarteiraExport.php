@@ -7,6 +7,7 @@ use App\Models\GrupoCliente;
 use App\Models\Segmento;
 use App\Models\SegmentoVendedor;
 use App\Services\Carteira\ClienteStatusResolver;
+use App\Services\Receita\PorteEmpresa;
 use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -56,12 +57,12 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
          */
         return (clone $this->query)
             ->leftJoin('cnpj_situacoes as rf_export', 'rf_export.cnpj', '=', 'clientes.cnpj_digitos')
-            ->addSelect('rf_export.situacao as situacao_receita');
+            ->addSelect('rf_export.situacao as situacao_receita', 'rf_export.capital_social as capital_receita', 'rf_export.porte as porte_receita');
     }
 
     public function headings(): array
     {
-        return ['Cliente', 'CNPJ', 'Telefone', 'E-mail', 'Grupo', 'Vendedor', 'Estado', 'Segmento', 'Status', 'Aderência', 'Última Compra', 'Situação Receita'];
+        return ['Cliente', 'CNPJ', 'Telefone', 'E-mail', 'Grupo', 'Vendedor', 'Estado', 'Segmento', 'Status', 'Aderência', 'Última Compra', 'Situação Receita', 'Capital social', 'Porte'];
     }
 
     /** @param  Cliente  $cliente */
@@ -95,6 +96,9 @@ class CarteiraExport implements FromQuery, WithHeadings, WithMapping, WithChunkR
             optional($cliente->data_ultima_compra)->format('d/m/Y'),
             // Vazio = CNPJ nunca verificado (ou CPF). Mesmos nomes da Receita.
             $cliente->situacao_receita,
+            // Número, não texto formatado: quem abre no Excel quer somar e ordenar.
+            $cliente->capital_receita !== null ? (float) $cliente->capital_receita : null,
+            PorteEmpresa::rotulo($cliente->porte_receita),
         ];
     }
 

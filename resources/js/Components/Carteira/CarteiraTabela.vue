@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { router, Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import CnpjReceita from '@/Components/Receita/CnpjReceita.vue';
+import CapitalPorte from '@/Components/Receita/CapitalPorte.vue';
 import SortableTh from '@/Components/Tabela/SortableTh.vue';
 import BotoesContato from '@/Components/Contato/BotoesContato.vue';
 import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
@@ -33,7 +34,7 @@ const erro = ref(null);
  */
 const filiaisPorCliente = ref({});
 
-const colunas = computed(() => (props.agrupado ? 10 : 9));
+const colunas = computed(() => (props.agrupado ? 11 : 10));
 
 /*
  * Só cliente com mais de uma loja expande — 87,7% da base tem uma só, e para esses a
@@ -109,16 +110,16 @@ function criarOrcamento(cliente) {
 
 <template>
     <div class="tbl-wrap">
-        <!-- 1200px, não 1000: entraram a coluna "Último contato" e mais dois botões de
-             ação. Com 1000 a coluna Ações espremia e os 7 botões empilhavam um por
-             linha, triplicando a altura da linha em tela média.
+        <!-- 1300px: 1200 desde a coluna "Último contato" e os dois botões de contato
+             (com 1000 a coluna Ações espremia e os 7 botões empilhavam um por linha,
+             triplicando a altura da linha em tela média), mais 100 para "Capital / Porte".
 
-             ⚠️ `sm:min-w-[1200px]`, nunca `min-w-[1200px]`: abaixo de 640px o
-             `.tbl-cartoes` desmonta a tabela em cartões, e uma largura mínima de 1200px
+             ⚠️ `sm:min-w-[1300px]`, nunca `min-w-[1300px]`: abaixo de 640px o
+             `.tbl-cartoes` desmonta a tabela em cartões, e uma largura mínima de 1300px
              continuaria valendo (utility vence o `@layer components`, independentemente
              de especificidade). O sintoma seria o cartão certo dentro de uma página que
-             rola 1200px na horizontal — ou seja, o problema que a conversão resolve. -->
-        <table class="tbl tbl-cartoes sm:min-w-[1200px]">
+             rola 1300px na horizontal — ou seja, o problema que a conversão resolve. -->
+        <table class="tbl tbl-cartoes sm:min-w-[1300px]">
             <thead>
                 <tr class="tbl-head-row">
                     <!-- Coluna do chevron, como em PedidosTabela. Só existe agrupado. -->
@@ -131,6 +132,7 @@ function criarOrcamento(cliente) {
                     <SortableTh campo="vendedor" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('vendedor') }}</SortableTh>
                     <SortableTh campo="estado" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('estado') }}</SortableTh>
                     <th class="tbl-th">Segmento</th>
+                    <th class="tbl-th">Capital / Porte</th>
                     <SortableTh campo="status" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('status') }}</SortableTh>
                     <SortableTh campo="ultima_compra" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('ultima_compra') }}</SortableTh>
                     <SortableTh campo="ultimo_contato" :ordenar="ordenar" @ordenar="emit('ordenar', $event)">{{ rotuloOrdenacao('ultimo_contato') }}</SortableTh>
@@ -186,6 +188,7 @@ function criarOrcamento(cliente) {
                         </span>
                     </td>
                     <td class="tbl-td" data-rotulo="Segmento">{{ cliente.segmento ?? '—' }}</td>
+                    <td class="tbl-td" data-rotulo="Capital / Porte"><CapitalPorte :receita="cliente.receita" /></td>
                     <td class="tbl-td" data-rotulo="Status">
                         <button
                             v-if="cliente.status === 'inativo'"

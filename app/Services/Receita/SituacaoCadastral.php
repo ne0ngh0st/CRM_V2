@@ -106,10 +106,11 @@ class SituacaoCadastral
     }
 
     /**
-     * Situação e data de cada CNPJ, para exibir. Só os conhecidos.
+     * Situação, data, capital social e porte de cada CNPJ, para exibir. Só os conhecidos.
+     * `porte` sai como rótulo pronto ("Pequeno porte"), nunca o código.
      *
      * @param  iterable<string>  $cnpjs  14 dígitos
-     * @return array<string, array{situacao: string, data: ?string}>
+     * @return array<string, array{situacao: string, data: ?string, capitalSocial: ?float, porte: ?string}>
      */
     public function detalhes(iterable $cnpjs): array
     {
@@ -117,9 +118,14 @@ class SituacaoCadastral
 
         foreach (array_chunk(array_values(array_filter(array_unique([...$cnpjs]))), 2000) as $lote) {
             DB::table('cnpj_situacoes')->whereIn('cnpj', array_map('strval', $lote))
-                ->get(['cnpj', 'situacao', 'data_situacao'])
+                ->get(['cnpj', 'situacao', 'data_situacao', 'capital_social', 'porte'])
                 ->each(function ($l) use (&$resultado) {
-                    $resultado[$l->cnpj] = ['situacao' => $l->situacao, 'data' => $l->data_situacao];
+                    $resultado[$l->cnpj] = [
+                        'situacao' => $l->situacao,
+                        'data' => $l->data_situacao,
+                        'capitalSocial' => $l->capital_social !== null ? (float) $l->capital_social : null,
+                        'porte' => PorteEmpresa::rotulo($l->porte),
+                    ];
                 });
         }
 
@@ -199,20 +205,42 @@ class SituacaoCadastral
         ];
     }
 
-    public function registrarDoCartao(string $cnpj, ?string $situacao, string $fonte, ?string $dataSituacao = null): void
-    {
+    /**
+     * Capital e porte só são gravados quando o cartão os traz: fonte que não informa não
+     * apaga o que a carga mensal já tinha.
+     */
+    public function registrarDoCartao(
+        string $cnpj,
+        ?string $situacao,
+        string $fonte,
+        ?string $dataSituacao = null,
+        ?float $capitalSocial = null,
+        ?string $porte = null,
+    ): void {
         if (strlen($cnpj) !== 14 || blank($situacao)) {
             return;
         }
 
-        DB::table('cnpj_situacoes')->upsert([[
+        $linha = [
             'cnpj' => $cnpj,
             'situacao' => $situacao,
             'data_situacao' => self::data($dataSituacao),
             'fonte' => $fonte,
             'referencia' => null,
             'atualizado_em' => now(),
-        ]], ['cnpj'], ['situacao', 'data_situacao', 'fonte', 'referencia', 'atualizado_em']);
+            'capital_social' => $capitalSocial,
+            'porte' => $porte,
+        ];
+
+        $atualizar = ['situacao', 'data_situacao', 'fonte', 'referencia', 'atualizado_em'];
+        if ($capitalSocial !== null) {
+            $atualizar[] = 'capital_social';
+        }
+        if ($porte !== null) {
+            $atualizar[] = 'porte';
+        }
+
+        DB::table('cnpj_situacoes')->upsert([$linha], ['cnpj'], $atualizar);
     }
 
     /**

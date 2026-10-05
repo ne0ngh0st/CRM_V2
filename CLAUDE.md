@@ -2954,6 +2954,47 @@ em cópia**. Regra em `App\Services\Receita\PedidoDeInativacao`; botão em
 - Testes: `CarteiraPedidoInativacaoTest` (7) com `Mail::fake()`. Mutações mordidas: sem
   conferir a situação, sem bloquear repetição, sem a cópia, sem o escopo.
 
+### Capital social e porte na Carteira e nos Leads — 2026-10-05
+
+Coluna **"Capital / Porte"** nas duas tabelas e no Excel das duas: capital social da
+Receita em cima (curto, "R$ 1,2 mi"; valor exato no tooltip), porte embaixo
+("Microempresa", "Pequeno porte", "Demais portes"). Sem cor nem pill: é dado de contexto,
+não alerta. Célula em `Components/Receita/CapitalPorte.vue`.
+
+- **Fonte: os 10 zips de EMPRESAS da base aberta**, lidos pela mesma
+  `receita:importar-situacoes`, logo depois dos de Estabelecimentos. Custo zero em
+  dinheiro; ~1,4 GB a mais de download por carga (563 MB no maior). Medido em dev com a
+  base 2026-09 (script equivalente): ~17 min para baixar, varrer e gravar os 10 zips;
+  81 mil CNPJs preenchidos — 48 mil "Demais", 20 mil ME, 12 mil EPP, 10 sem dado.
+- ⚠️ **Capital zero sai em CINZA** (`CapitalPorte.vue`): carteira de órgão público é
+  "R$ 0" linha após linha, e em negrito poluía a coluna.
+- 🚨 **Na Receita, capital e porte são da EMPRESA (raiz de 8 dígitos), não da filial.** A
+  raiz é calculada EM MEMÓRIA durante a carga e o valor é gravado repetido em cada CNPJ
+  de 14 dígitos de `cnpj_situacoes` (`capital_social`, `porte`). Nenhuma coluna de raiz
+  é armazenada (Regra de ouro nº 3).
+- **`PorteEmpresa`** é o único lugar que traduz o código da base (`01`/`03`/`05`; `00` =
+  não informado → null) e o texto das APIs do cartão para `ME`/`EPP`/`DEMAIS`, e dá o
+  rótulo. O front não tem mapa: `SituacaoCadastral::detalhes()` já devolve o rótulo.
+- ⚠️ **"Demais portes", nunca "Grande"**: DEMAIS é tudo que não é micro nem pequena,
+  inclusive quem nunca se enquadrou.
+- ⚠️ **Capital 0 é valor real** (empresário individual, associação, empresa antiga);
+  nulo é "não sabemos". A tela mostra "R$ 0" para um e "—" para o outro.
+- ⚠️ **`--arquivo` sem `--empresas` NÃO toca capital/porte** (o upsert só inclui as
+  colunas quando a etapa de Empresas rodou). Sem isso, todo reprocessamento de teste
+  apagaria o capital da base inteira.
+- **O cartão CNPJ também grava** capital e porte, mas só o que a fonte trouxe: fonte sem
+  porte não apaga o que a carga mensal tinha.
+- ⚠️ **Não é ordenável nem filtrável**, de propósito: o valor mora em outra tabela, e
+  ordenar por ele é o mesmo filesort que tirou grupo/segmento da whitelist em 29/08. Um
+  filtro por faixa de capital é barato (join pelo `cnpj_digitos` indexado), se pedirem.
+- Leads: o CNPJ pode vir com máscara, então a busca é por página
+  (`SituacaoCadastral::detalhes`); no Excel dos leads, uma consulta por lote de 1.000
+  (`LeadExport::prepareRows`). A Carteira junta pelo `clientes.cnpj_digitos`.
+- Tabelas ficaram mais largas: Carteira `sm:min-w-[1300px]`, Leads `sm:min-w-[1100px]`.
+- Testes: `CapitalSocialReceitaTest` (8). Mutações mordidas: gravar pela chave errada
+  (CNPJ inteiro em vez da raiz), carga sem Empresas apagando capital, cartão sem capital
+  apagando o da carga, código no lugar do rótulo.
+
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão

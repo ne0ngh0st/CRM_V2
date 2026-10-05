@@ -14,6 +14,7 @@ use App\Services\Marketing\WpLeadCapturaStatus;
 use App\Services\Marketing\WpLeadIngestor;
 use App\Services\Marketing\WpLeadPayloadParser;
 use App\Services\Receita\CartaoCnpjService;
+use App\Services\Receita\SituacaoCadastral;
 use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -102,6 +103,11 @@ class LeadController extends Controller
 
         $nomesPorCod = $this->nomeVendedor->porCodigo($leads->getCollection()->pluck('cod_vendedor'));
 
+        // Capital social e porte na Receita: uma consulta por página, como na Carteira.
+        // O CNPJ do lead pode vir com ou sem máscara.
+        $digitos = fn (Lead $lead) => preg_replace('/\D/', '', (string) $lead->cnpj);
+        $receitaPorCnpj = app(SituacaoCadastral::class)->detalhes($leads->getCollection()->map($digitos));
+
         $leads->through(fn (Lead $lead) => [
             'id' => $lead->id,
             'origem' => $lead->origem,
@@ -125,6 +131,10 @@ class LeadController extends Controller
             'atualizadoEm' => $lead->updated_at?->format('d/m/Y'),
             'formularioNome' => $lead->stagingWordpress?->formulario?->nome,
             'temCaptura' => $lead->stagingWordpress !== null,
+            'receita' => [
+                'capitalSocial' => $receitaPorCnpj[$digitos($lead)]['capitalSocial'] ?? null,
+                'porte' => $receitaPorCnpj[$digitos($lead)]['porte'] ?? null,
+            ],
         ]);
 
         return Inertia::render('Leads/Index', [

@@ -3,6 +3,7 @@ import { router } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import BotoesContato from '@/Components/Contato/BotoesContato.vue';
 import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
+import CapitalPorte from '@/Components/Receita/CapitalPorte.vue';
 import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao.js';
 import { ROTULOS_ETAPA_LEAD, TONS_ETAPA_LEAD, ROTULOS_ORIGEM_LEAD, TONS_ORIGEM_LEAD } from '@/constants/leads.js';
@@ -60,14 +61,16 @@ async function excluir(lead) {
     <div class="tbl-wrap">
         <!-- `sm:min-w-`, nunca `min-w-`: abaixo de 640px o `.tbl-cartoes` desmonta a tabela
              em cartões, e a largura mínima continuaria valendo (utility vence o
-             `@layer components`), deixando a PÁGINA rolando 1000px na horizontal. -->
-        <table class="tbl tbl-cartoes sm:min-w-[1000px]">
+             `@layer components`), deixando a PÁGINA rolando 1100px na horizontal.
+             1100 e não 1000 desde a coluna "Capital / Porte". -->
+        <table class="tbl tbl-cartoes sm:min-w-[1100px]">
             <thead>
                 <tr class="tbl-head-row">
                     <th class="tbl-th">Lead</th>
                     <th class="tbl-th">Vendedor</th>
                     <th class="tbl-th">UF / Cidade</th>
                     <th class="tbl-th">Segmento</th>
+                    <th class="tbl-th">Capital / Porte</th>
                     <th class="tbl-th">Origem</th>
                     <th class="tbl-th">Status</th>
                     <th class="tbl-th">Valor est.</th>
@@ -101,6 +104,7 @@ async function excluir(lead) {
                         <span v-else>—</span>
                     </td>
                     <td class="tbl-td" data-rotulo="Segmento">{{ lead.segmento || '—' }}</td>
+                    <td class="tbl-td" data-rotulo="Capital / Porte"><CapitalPorte :receita="lead.receita" /></td>
                     <td class="tbl-td" data-rotulo="Origem">
                         <StatusPill :tone="TONS_ORIGEM_LEAD[lead.origem] || 'neutral'" size="sm">
                             {{ ROTULOS_ORIGEM_LEAD[lead.origem] || lead.origem }}

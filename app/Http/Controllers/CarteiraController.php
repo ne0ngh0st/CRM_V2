@@ -329,6 +329,9 @@ class CarteiraController extends Controller
                     'data' => $receitaPorCnpj[$cliente->cnpj_digitos]['data'] ?? null,
                     'irregular' => SituacaoCadastral::irregular($receitaPorCnpj[$cliente->cnpj_digitos]['situacao'] ?? null),
                     'irregulares' => isset($cliente->filiais_irregulares) ? (int) $cliente->filiais_irregulares : null,
+                    // Da EMPRESA na Receita (raiz do CNPJ), lido do CNPJ desta linha.
+                    'capitalSocial' => $receitaPorCnpj[$cliente->cnpj_digitos]['capitalSocial'] ?? null,
+                    'porte' => $receitaPorCnpj[$cliente->cnpj_digitos]['porte'] ?? null,
                 ],
                 // Pedido de inativação já enviado ao Cadastro (`{em, por}`), ou null.
                 'inativacao' => $inativacoes[$cliente->id] ?? null,

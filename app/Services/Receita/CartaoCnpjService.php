@@ -70,7 +70,8 @@ class CartaoCnpjService
 
                 // A situação também vale para o filtro de leads, que lê só de lá.
                 app(SituacaoCadastral::class)->registrarDoCartao(
-                    $cnpj, $resultado['situacao'], $fonte, $resultado['dataSituacao'] ?? null
+                    $cnpj, $resultado['situacao'], $fonte, $resultado['dataSituacao'] ?? null,
+                    $resultado['capitalSocial'] ?? null, PorteEmpresa::deTexto($resultado['porte'] ?? null),
                 );
 
                 return ['status' => 'ok', 'consulta' => $consulta, 'desatualizado' => false];

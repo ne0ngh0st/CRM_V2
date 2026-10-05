@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Receita\PorteEmpresa;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\Normalizador;
 use App\Services\Totvs\Relatorios;
@@ -28,6 +29,11 @@ use ZipArchive;
  * por isso a marcação só acontece se a varredura terminou inteira. Uma carga que caiu
  * no meio do arquivo 7 não pode concluir que tudo que estava nos 8, 9 e 10 não existe.
  *
+ * Depois varre os 10 zips de EMPRESAS (~1,4 GB no total, 563 MB no maior) para o capital
+ * social e o porte, que na Receita são da empresa — os 8 primeiros dígitos do CNPJ. A raiz
+ * é calculada em memória e o valor é gravado em cada CNPJ de 14 dígitos: nenhuma coluna de
+ * raiz é armazenada (Regra de ouro nº 3).
+ *
  * Termina chamando `sincronizarLeads()`: lead que já estava no CRM e cuja situação
  * passou a ser conhecida como não ativa sai na hora, sem esperar o próximo import.
  */
@@ -35,7 +41,8 @@ class ImportarSituacoesReceita extends Command
 {
     protected $signature = 'receita:importar-situacoes
         {--referencia= : mês da base (AAAA-MM); padrão = o mais recente publicado}
-        {--arquivo=* : zips já baixados (pula o download; uso em teste e reprocessamento)}
+        {--arquivo=* : zips de Estabelecimentos já baixados (pula o download; uso em teste e reprocessamento)}
+        {--empresas=* : zips de Empresas já baixados (só junto de --arquivo; sem eles, capital e porte não mudam)}
         {--forcar : recarrega mesmo se este mês já foi carregado}
         {--dry-run : varre e conta, sem gravar nada}';
 
@@ -75,6 +82,17 @@ class ImportarSituacoesReceita extends Command
                 number_format(count($achados), 0, ',', '.'), microtime(true) - $inicio));
         }
 
+        /*
+         * Capital e porte. Com --arquivo e sem --empresas (teste, reprocessamento) a etapa
+         * não roda e as colunas ficam como estão — gravar nulo ali seria apagar.
+         */
+        $empresas = null;
+        $locaisEmpresas = (array) $this->option('empresas');
+
+        if ($locais === [] || $locaisEmpresas !== []) {
+            $empresas = $this->capitalEPorte($achados, $locaisEmpresas !== [] ? $locaisEmpresas : null, $referencia);
+        }
+
         // Só chega aqui com a varredura inteira: o que não apareceu, não existe.
         $inexistentes = array_diff_key($interesse, $achados);
         $contagem = array_count_values(array_column($achados, 0));
@@ -91,7 +109,7 @@ class ImportarSituacoesReceita extends Command
             return self::SUCCESS;
         }
 
-        $this->gravar($achados, $inexistentes, $referencia);
+        $this->gravar($achados, $inexistentes, $referencia, $empresas);
 
         $leads = $situacoes->sincronizarLeads();
         $this->info('Leads da base de prospecção tirados do CRM (CNPJ não ativo): '.array_sum($leads['excluidos']));
@@ -185,6 +203,95 @@ class ImportarSituacoesReceita extends Command
         return $linhas;
     }
 
+    /**
+     * Capital e porte das empresas dos CNPJs achados, indexados pela raiz (8 dígitos) —
+     * em memória, só durante a carga.
+     *
+     * @param  array<string, mixed>  $achados
+     * @param  list<string>|null  $locais  zips já baixados; null = baixar os 10
+     * @return array<string, array{0: ?string, 1: ?string}>  raiz => [capital, porte]
+     */
+    private function capitalEPorte(array $achados, ?array $locais, ?string $referencia): array
+    {
+        $raizes = [];
+        foreach (array_keys($achados) as $cnpj) {
+            $raizes[substr((string) $cnpj, 0, 8)] = true;
+        }
+
+        $empresas = [];
+        $arquivos = $locais ?? range(0, (int) config('receita.base.arquivos') - 1);
+
+        foreach ($arquivos as $arquivo) {
+            $inicio = microtime(true);
+            $caminho = is_int($arquivo) ? $this->baixar($referencia, $arquivo, 'Empresas') : $arquivo;
+
+            try {
+                $linhas = $this->varrerEmpresas($caminho, $raizes, $empresas);
+            } finally {
+                if (is_int($arquivo)) {
+                    @unlink($caminho);
+                }
+            }
+
+            $this->line(sprintf('  %s: %s linhas, %s empresas achadas (%.0f s)',
+                basename($caminho), number_format($linhas, 0, ',', '.'),
+                number_format(count($empresas), 0, ',', '.'), microtime(true) - $inicio));
+        }
+
+        return $empresas;
+    }
+
+    /**
+     * Varre um zip de Empresas. Layout (sem cabeçalho, `;`, aspas, latin1):
+     * 0 cnpj_basico · 1 razão social · 2 natureza · 3 qualificação · 4 capital social
+     * ("1000,00") · 5 porte ("01", "03", "05"; "00" = não informado) · 6 ente federativo.
+     *
+     * @param  array<string, true>  $raizes
+     * @param  array<string, array{0: ?string, 1: ?string}>  $empresas
+     */
+    private function varrerEmpresas(string $caminho, array $raizes, array &$empresas): int
+    {
+        $zip = new ZipArchive;
+        if ($zip->open($caminho) !== true || $zip->numFiles < 1) {
+            throw new RuntimeException("Não consegui abrir o zip da Receita: {$caminho}");
+        }
+
+        $stream = $zip->getStream($zip->getNameIndex(0));
+        if ($stream === false) {
+            throw new RuntimeException("Zip da Receita sem conteúdo legível: {$caminho}");
+        }
+
+        $linhas = 0;
+
+        try {
+            while (($linha = fgets($stream)) !== false) {
+                $linhas++;
+
+                $raiz = $linha[0] === '"' && ($linha[9] ?? '') === '"'
+                    ? substr($linha, 1, 8)
+                    : str_pad(str_getcsv($linha, ';', '"', '')[0] ?? '', 8, '0', STR_PAD_LEFT);
+
+                if (! isset($raizes[$raiz])) {
+                    continue;
+                }
+
+                $campos = str_getcsv($linha, ';', '"', '');
+                $capital = trim((string) ($campos[4] ?? ''));
+
+                $empresas[$raiz] = [
+                    // "1.234,50" ou "1234,50" → "1234.50"
+                    $capital === '' ? null : number_format((float) str_replace(['.', ','], ['', '.'], $capital), 2, '.', ''),
+                    PorteEmpresa::deCodigo($campos[5] ?? null),
+                ];
+            }
+        } finally {
+            fclose($stream);
+            $zip->close();
+        }
+
+        return $linhas;
+    }
+
     private function cnpjPorCsv(string $linha): string
     {
         $c = str_getcsv($linha, ';', '"', '');
@@ -197,8 +304,10 @@ class ImportarSituacoesReceita extends Command
     /**
      * @param  array<string, array{0: string, 1: ?string}>  $achados
      * @param  array<string, true>  $inexistentes
+     * @param  array<string, array{0: ?string, 1: ?string}>|null  $empresas  raiz => [capital,
+     *         porte]; null = a etapa de Empresas não rodou, e capital/porte não são tocados
      */
-    private function gravar(array $achados, array $inexistentes, ?string $referencia): void
+    private function gravar(array $achados, array $inexistentes, ?string $referencia, ?array $empresas): void
     {
         $agora = now();
         $linhas = [];
@@ -210,15 +319,28 @@ class ImportarSituacoesReceita extends Command
             $linhas[] = [(string) $cnpj, SituacaoCadastral::INEXISTENTE, null];
         }
 
+        $atualizar = ['situacao', 'data_situacao', 'fonte', 'referencia', 'atualizado_em'];
+        if ($empresas !== null) {
+            $atualizar = [...$atualizar, 'capital_social', 'porte'];
+        }
+
         foreach (array_chunk($linhas, 2000) as $lote) {
-            DB::table('cnpj_situacoes')->upsert(array_map(fn ($l) => [
-                'cnpj' => $l[0],
-                'situacao' => $l[1],
-                'data_situacao' => $l[2],
-                'fonte' => SituacaoCadastral::FONTE_BASE,
-                'referencia' => $referencia,
-                'atualizado_em' => $agora,
-            ], $lote), ['cnpj'], ['situacao', 'data_situacao', 'fonte', 'referencia', 'atualizado_em']);
+            DB::table('cnpj_situacoes')->upsert(array_map(function ($l) use ($referencia, $agora, $empresas) {
+                $linha = [
+                    'cnpj' => $l[0],
+                    'situacao' => $l[1],
+                    'data_situacao' => $l[2],
+                    'fonte' => SituacaoCadastral::FONTE_BASE,
+                    'referencia' => $referencia,
+                    'atualizado_em' => $agora,
+                ];
+
+                if ($empresas !== null) {
+                    [$linha['capital_social'], $linha['porte']] = $empresas[substr($l[0], 0, 8)] ?? [null, null];
+                }
+
+                return $linha;
+            }, $lote), ['cnpj'], $atualizar);
         }
     }
 
@@ -244,12 +366,12 @@ class ImportarSituacoesReceita extends Command
         return end($m[1]);
     }
 
-    private function baixar(string $referencia, int $indice): string
+    private function baixar(string $referencia, int $indice, string $tipo = 'Estabelecimentos'): string
     {
         $pasta = config('receita.base.diretorio');
         @mkdir($pasta, 0775, true);
-        $destino = "{$pasta}/Estabelecimentos{$indice}.zip";
-        $url = config('receita.base.webdav')."/{$referencia}/Estabelecimentos{$indice}.zip";
+        $destino = "{$pasta}/{$tipo}{$indice}.zip";
+        $url = config('receita.base.webdav')."/{$referencia}/{$tipo}{$indice}.zip";
 
         try {
             $this->webdav()->timeout(3600)->withOptions(['sink' => $destino])->get($url)->throw();
