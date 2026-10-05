@@ -2963,9 +2963,11 @@ não alerta. Célula em `Components/Receita/CapitalPorte.vue`.
 
 - **Fonte: os 10 zips de EMPRESAS da base aberta**, lidos pela mesma
   `receita:importar-situacoes`, logo depois dos de Estabelecimentos. Custo zero em
-  dinheiro; ~1,4 GB a mais de download por carga (563 MB no maior). Medido em dev com a
-  base 2026-09 (script equivalente): ~17 min para baixar, varrer e gravar os 10 zips;
-  81 mil CNPJs preenchidos — 48 mil "Demais", 20 mil ME, 12 mil EPP, 10 sem dado.
+  dinheiro; ~1,4 GB a mais de download por carga (563 MB no maior). **Em produção
+  (app-2, 2026-10-05, base 2026-09) a etapa de Empresas levou ~4 min** (95 s no
+  Empresas0, ~15 s nos outros), contra ~15 min dos Estabelecimentos. 80.874 de 81.075
+  CNPJs com capital: 48 mil "Demais", 20 mil ME, 12 mil EPP; os 201 sem dado são
+  sobretudo INEXISTENTE.
 - ⚠️ **Capital zero sai em CINZA** (`CapitalPorte.vue`): carteira de órgão público é
   "R$ 0" linha após linha, e em negrito poluía a coluna.
 - 🚨 **Na Receita, capital e porte são da EMPRESA (raiz de 8 dígitos), não da filial.** A
