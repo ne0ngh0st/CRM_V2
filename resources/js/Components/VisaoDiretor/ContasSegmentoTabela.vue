@@ -107,8 +107,9 @@ async function alternar(conta) {
                             </svg>
                         </td>
                         <td class="tbl-td tbl-td-titulo">
-                            <span class="tbl-main sm:max-w-[240px]" :title="conta.nome">
-                                {{ conta.nome }}
+                            <span class="tbl-main sm:max-w-[260px]" :title="conta.nome">
+                                <!-- Posição no segmento (ordem da planilha). Não muda com filtro. -->
+                                <span class="mr-1 tabular-nums text-gray-400">{{ conta.posicao }}.</span>{{ conta.nome }}
                                 <span
                                     v-if="conta.temSugestao"
                                     class="ml-1 inline-block h-2 w-2 rounded-full bg-amber align-middle"

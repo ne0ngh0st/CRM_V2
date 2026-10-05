@@ -102,6 +102,18 @@ function filtrarSegmento(codigo) {
     trocarAba(codigo);
 }
 
+const TILES_STATUS = [
+    { status: 'ativo', tom: 'ok' },
+    { status: 'inativando', tom: 'warn' },
+    { status: 'inativo', tom: 'danger' },
+    { status: 'lead', tom: 'default' },
+];
+
+function filtrarStatus(status) {
+    filtros.status = status;
+    aplicarFiltros();
+}
+
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, ['status', 'uf']));
 const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '' || filtros.segmento !== '');
 
@@ -233,11 +245,23 @@ async function excluir(conta) {
                 >{{ s.nome }}</button>
             </div>
 
+            <!--
+                Os tiles de status SÃO o filtro de status: clicar aplica, clicar de novo
+                remove ("Contas-alvo" também remove). Os números ignoram o próprio filtro
+                (o servidor calcula sem ele), senão os vizinhos zerariam a cada clique.
+            -->
             <div class="flex flex-wrap gap-2">
-                <KpiTile :value="kpis.contas" label="Contas-alvo" />
-                <KpiTile :value="kpis.ativo" :label="ROTULOS_STATUS_CONTA.ativo" tone="ok" />
-                <KpiTile :value="kpis.inativando" :label="ROTULOS_STATUS_CONTA.inativando" tone="warn" />
-                <KpiTile :value="kpis.inativo + kpis.lead" label="A trabalhar + lead" tone="danger" />
+                <KpiTile :value="kpis.contas" label="Contas-alvo" botao @click="filtrarStatus('')" />
+                <KpiTile
+                    v-for="t in TILES_STATUS"
+                    :key="t.status"
+                    :value="kpis[t.status]"
+                    :label="ROTULOS_STATUS_CONTA[t.status]"
+                    :tone="t.tom"
+                    botao
+                    :ativo="filtros.status === t.status"
+                    @click="filtrarStatus(filtros.status === t.status ? '' : t.status)"
+                />
                 <KpiTile :value="formatInteiro(kpis.filiaisMercado)" label="Filiais no mercado" />
                 <KpiTile :value="formatInteiro(kpis.clientes)" label="Clientes" tone="info" />
             </div>
@@ -277,7 +301,7 @@ async function excluir(conta) {
             <DarkCard
                 v-else
                 :title="abaAtiva.nome"
-                :subtitle="`${abaAtiva.resumo.contas} contas · ${formatInteiro(abaAtiva.resumo.filiaisMercado)} filiais no mercado`"
+                :subtitle="`${abaAtiva.contas.length === abaAtiva.resumo.contas ? '' : `${abaAtiva.contas.length} de `}${abaAtiva.resumo.contas} contas · ${formatInteiro(abaAtiva.resumo.filiaisMercado)} filiais no mercado`"
             >
                 <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
@@ -305,7 +329,7 @@ async function excluir(conta) {
                 </template>
 
                 <p v-if="! abaAtiva.contas.length" class="px-3 py-10 text-center text-sm text-gray-400">
-                    Nenhuma conta neste segmento.
+                    {{ abaAtiva.resumo.contas ? 'Nenhuma conta neste segmento com os filtros aplicados.' : 'Nenhuma conta neste segmento.' }}
                 </p>
                 <ContasSegmentoTabela
                     v-else

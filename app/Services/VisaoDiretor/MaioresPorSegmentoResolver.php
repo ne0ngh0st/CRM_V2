@@ -47,7 +47,16 @@ class MaioresPorSegmentoResolver
         $linhas = $this->linhas();
 
         $semSegmento = $this->filtrar($linhas, [...$filtros, 'segmento' => '']);
-        $filtradas = $this->filtrar($linhas, $filtros);
+
+        /*
+         * Os números de status (KPIs do topo, resumo de cada aba) IGNORAM o filtro de
+         * status: os tiles são o próprio filtro, e um filtro não se aplica à faceta que
+         * ele controla (mesma regra do card da Carteira, 2026-09-15). Sem isso, clicar em
+         * "Ativo" zeraria os vizinhos e o tile só diria "N ativos entre os ativos".
+         * A TABELA continua recortada.
+         */
+        $semStatus = $this->filtrar($linhas, [...$filtros, 'segmento' => '', 'status' => '']);
+        $contasPorSegmento = $semSegmento->groupBy('segmento.codigo');
 
         /*
          * A tela é uma aba por segmento, igual à planilha: as seis abas existem mesmo
@@ -56,12 +65,15 @@ class MaioresPorSegmentoResolver
          * exporta a aba aberta.
          */
         $todasAsAbas = $this->completarAbasDaPlanilha(
-            $semSegmento
+            $semStatus
                 ->groupBy('segmento.codigo')
-                ->map(fn (Collection $contas) => [
+                ->map(fn (Collection $contas, $codigo) => [
                     ...$contas->first()['segmento'],
                     'resumo' => $this->resumir($contas),
-                    'contas' => $contas->map(fn (array $l) => collect($l)->except('segmento')->all())->values()->all(),
+                    'contas' => $contasPorSegmento->get($codigo, collect())
+                        ->map(fn (array $l) => collect($l)->except('segmento')->all())
+                        ->values()
+                        ->all(),
                 ])
         );
 
@@ -86,7 +98,7 @@ class MaioresPorSegmentoResolver
 
         return [
             'segmentos' => $segmentos->all(),
-            'kpis' => $this->resumir($filtradas),
+            'kpis' => $this->resumir($this->filtrar($linhas, [...$filtros, 'status' => ''])),
             /*
              * O quadro-resumo DESENHA a quebra por segmento, então ignora o filtro de
              * segmento (mesma regra das facetas do card da Carteira): filtrado, ele viraria
@@ -168,9 +180,18 @@ class MaioresPorSegmentoResolver
 
         $hoje = Carbon::now();
 
+        /*
+         * Posição da conta DENTRO do segmento, na ordem da planilha (a maior rede é a 1).
+         * Calculada aqui, antes de qualquer filtro: filtrar por status ou UF não pode
+         * renumerar — "a 4ª maior rede" continua sendo a 4ª.
+         */
+        $posicoes = [];
+
         return $contas
             ->sortBy([['ordem', 'asc'], ['id', 'asc']])
-            ->map(function (ContaEstrategica $conta) use ($porVendedor, $porConta, $vinculos, $nomes, $hoje) {
+            ->map(function (ContaEstrategica $conta) use ($porVendedor, $porConta, $vinculos, $nomes, $hoje, &$posicoes) {
+                $posicoes[$conta->segmento_id] = ($posicoes[$conta->segmento_id] ?? 0) + 1;
+
                 $vendedores = $porVendedor->get($conta->id, collect());
                 $agregado = $porConta->get($conta->id);
 
@@ -179,6 +200,7 @@ class MaioresPorSegmentoResolver
 
                 return [
                     'id' => $conta->id,
+                    'posicao' => $posicoes[$conta->segmento_id],
                     'nome' => $conta->nome,
                     'uf' => $conta->uf,
                     'site' => $conta->site,

@@ -326,6 +326,39 @@ class MaioresPorSegmentoTest extends TestCase
     }
 
     /**
+     * Os tiles de status são o filtro: os números ignoram o filtro de status (senão
+     * clicar em "Ativo" zeraria os vizinhos), e só a tabela é recortada.
+     */
+    public function test_filtro_de_status_recorta_a_tabela_mas_nao_os_numeros(): void
+    {
+        $this->conta('RAIA', [['grupo', '100']]); // ativo
+        $this->conta('PERDENDO', [['cliente', '000003']]); // inativando
+        $this->conta('SEM VINCULO'); // lead
+
+        $dados = app(MaioresPorSegmentoResolver::class)->resolver(['status' => 'ativo']);
+
+        $this->assertSame(3, $dados['kpis']['contas']);
+        $this->assertSame(1, $dados['kpis']['inativando']);
+        $this->assertSame(1, $dados['kpis']['lead']);
+        $this->assertSame(3, $dados['segmentos'][0]['resumo']['contas']);
+        $this->assertSame(['RAIA'], array_column($dados['segmentos'][0]['contas'], 'nome'));
+    }
+
+    /** A posição é a da planilha dentro do segmento, e filtrar não renumera. */
+    public function test_posicao_da_conta_nao_muda_com_filtro(): void
+    {
+        $this->conta('PRIMEIRA');
+        $this->conta('SEGUNDA');
+        $this->conta('TERCEIRA', [['grupo', '100']]);
+
+        $todas = app(MaioresPorSegmentoResolver::class)->resolver()['segmentos'][0]['contas'];
+        $this->assertSame([1, 2, 3], array_column($todas, 'posicao'));
+
+        $ativas = app(MaioresPorSegmentoResolver::class)->resolver(['status' => 'ativo'])['segmentos'][0]['contas'];
+        $this->assertSame([3], array_column($ativas, 'posicao'));
+    }
+
+    /**
      * Sem conta nenhuma a tela ainda tem as abas da planilha — senão o diretor abre e
      * não tem o que clicar, e parece que a feature não existe.
      */
