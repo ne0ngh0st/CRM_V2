@@ -7,6 +7,7 @@ use App\Models\Lead;
 use App\Models\Observacao;
 use App\Models\User;
 use App\Services\Notificacao\NotificacaoService;
+use App\Services\Totvs\Normalizador;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -69,7 +70,22 @@ class LeadDaConta
         return $conta->leads()->visivel()->oldest('id')->first();
     }
 
-    public function gerar(ContaEstrategica $conta, User $responsavel, User $autor, ?string $recado = null): Lead
+    /**
+     * ⚠️ Nunca cria o segundo lead da mesma empresa. Antes de criar, reaproveita:
+     *
+     * | já existe                                   | o que acontece                         |
+     * |---------------------------------------------|----------------------------------------|
+     * | lead ligado à conta, SEM dono (prospecção)  | é atribuído ao responsável             |
+     * | lead ligado à conta, COM dono               | recusa ("já tem lead aberto com X")    |
+     * | lead com o CNPJ informado, sem dono         | é ligado à conta e atribuído           |
+     * | lead com o CNPJ informado, com dono         | recusa — não existe transferência      |
+     * | cliente com o CNPJ informado                | recusa — trabalhar pela Carteira       |
+     *
+     * Atribuir lead SEM dono não é transferência (cortada em 2026-08-10): ninguém o via.
+     *
+     * Devolve o lead; `wasRecentlyCreated` diz se nasceu agora ou foi reaproveitado.
+     */
+    public function gerar(ContaEstrategica $conta, User $responsavel, User $autor, ?string $recado = null, ?string $cnpj = null): Lead
     {
         $codVendedor = $responsavel->vendedorPerfil?->cod_vendedor;
 
@@ -89,16 +105,46 @@ class LeadDaConta
             ]);
         }
 
-        $lead = DB::transaction(function () use ($conta, $responsavel, $autor, $codVendedor, $recado) {
+        $cnpjFormatado = $this->validarCnpj($cnpj);
+
+        $lead = DB::transaction(function () use ($conta, $responsavel, $autor, $codVendedor, $recado, $cnpjFormatado) {
             // Trava a linha: dois cliques quase simultâneos não podem gerar dois leads.
             $conta = ContaEstrategica::query()->lockForUpdate()->with('segmento:id,nome')->findOrFail($conta->id);
 
             if ($aberto = $this->leadAberto($conta)) {
-                $dono = $aberto->user?->display_name ?: $aberto->user?->name ?: $aberto->cod_vendedor;
+                if (filled($aberto->cod_vendedor)) {
+                    $dono = $aberto->user?->display_name ?: $aberto->user?->name ?: $aberto->cod_vendedor;
 
-                throw ValidationException::withMessages([
-                    'responsavel_id' => "Esta conta já tem um lead aberto com {$dono}.",
-                ]);
+                    throw ValidationException::withMessages([
+                        'responsavel_id' => "Esta conta já tem um lead aberto com {$dono}.",
+                    ]);
+                }
+
+                if ($cnpjFormatado && filled($aberto->cnpj) && $aberto->cnpj !== $cnpjFormatado) {
+                    throw ValidationException::withMessages([
+                        'cnpj' => "Esta conta já tem um lead sem dono com outro CNPJ ({$aberto->cnpj}). Deixe o campo vazio para atribuí-lo.",
+                    ]);
+                }
+
+                return $this->atribuir($aberto, $conta, $responsavel, $autor, $codVendedor, $recado, $cnpjFormatado);
+            }
+
+            if ($cnpjFormatado && ($existente = $this->leadPorCnpj($cnpjFormatado))) {
+                if (filled($existente->cod_vendedor)) {
+                    $dono = $existente->user?->display_name ?: $existente->user?->name ?: $existente->cod_vendedor;
+
+                    throw ValidationException::withMessages([
+                        'cnpj' => "Este CNPJ já é lead de {$dono} (\"{$existente->nome}\").",
+                    ]);
+                }
+
+                if ($existente->conta_vinculo === Lead::CONTA_CONFIRMADA && (int) $existente->conta_estrategica_id !== $conta->id) {
+                    throw ValidationException::withMessages([
+                        'cnpj' => 'Este CNPJ já é lead de outra conta-alvo.',
+                    ]);
+                }
+
+                return $this->atribuir($existente, $conta, $responsavel, $autor, $codVendedor, $recado, null);
             }
 
             $lead = Lead::query()->create([
@@ -107,6 +153,7 @@ class LeadDaConta
                 'cod_vendedor' => $codVendedor,
                 'nome' => $conta->nome,
                 'razao_social' => $conta->nome,
+                'cnpj' => $cnpjFormatado,
                 'estado' => $conta->uf,
                 'segmento' => $conta->segmento?->nome,
                 'status' => 'ativo',
@@ -114,18 +161,7 @@ class LeadDaConta
                 'etapa_alterada_em' => now(),
             ]);
 
-            /*
-             * O contexto vai como observação, não em coluna: é o que o vendedor abre ao
-             * pegar o lead, e o lead não tem campo para site nem filiais. O autor é quem
-             * abriu o lead (a diretoria), não o responsável.
-             */
-            Observacao::query()->create([
-                'user_id' => $autor->id,
-                'lead_id' => $lead->id,
-                // Coluna NOT NULL desde a origem; lead de conta-alvo não tem CNPJ.
-                'cnpj' => '',
-                'mensagem' => $this->contexto($conta, $recado),
-            ]);
+            $this->registrarContexto($lead, $conta, $autor, $recado);
 
             $lead->forceFill([
                 'conta_estrategica_id' => $conta->id,
@@ -138,6 +174,67 @@ class LeadDaConta
         $this->avisar($responsavel, $lead, $autor);
 
         return $lead;
+    }
+
+    /** O lead que já existia passa a ser do responsável e fica ligado à conta. */
+    private function atribuir(Lead $lead, ContaEstrategica $conta, User $responsavel, User $autor, string $codVendedor, ?string $recado, ?string $cnpj): Lead
+    {
+        $lead->forceFill(array_filter([
+            'user_id' => $responsavel->id,
+            'cod_vendedor' => $codVendedor,
+            'cnpj' => blank($lead->cnpj) ? $cnpj : null,
+            'conta_estrategica_id' => $conta->id,
+            'conta_vinculo' => Lead::CONTA_CONFIRMADA,
+        ], fn ($v) => $v !== null))->save();
+
+        $this->registrarContexto($lead, $conta, $autor, $recado);
+
+        return $lead;
+    }
+
+    /**
+     * O contexto vai como observação, não em coluna: é o que o vendedor abre ao pegar o
+     * lead, e o lead não tem campo para site nem filiais. O autor é quem abriu o lead (a
+     * diretoria), não o responsável.
+     */
+    private function registrarContexto(Lead $lead, ContaEstrategica $conta, User $autor, ?string $recado): void
+    {
+        Observacao::query()->create([
+            'user_id' => $autor->id,
+            'lead_id' => $lead->id,
+            // Coluna NOT NULL desde a origem.
+            'cnpj' => (string) ($lead->cnpj ?? ''),
+            'mensagem' => $this->contexto($conta, $recado),
+        ]);
+    }
+
+    /** @return ?string o CNPJ mascarado, ou null quando não foi informado */
+    private function validarCnpj(?string $cnpj): ?string
+    {
+        if (blank($cnpj)) {
+            return null;
+        }
+
+        $digitos = Normalizador::digitosCnpj($cnpj);
+
+        if (! Normalizador::cnpjValido($digitos)) {
+            throw ValidationException::withMessages(['cnpj' => 'CNPJ inválido — confira os dígitos.']);
+        }
+
+        $cliente = DB::table('clientes')->where('cnpj_digitos', $digitos)->first(['razao_social']);
+
+        if ($cliente) {
+            throw ValidationException::withMessages([
+                'cnpj' => "Este CNPJ já é cliente na carteira ({$cliente->razao_social}). Trabalhe pela Carteira.",
+            ]);
+        }
+
+        return Normalizador::documento($digitos);
+    }
+
+    private function leadPorCnpj(string $cnpjFormatado): ?Lead
+    {
+        return Lead::query()->visivel()->where('cnpj', $cnpjFormatado)->with('user:id,name,display_name')->oldest('id')->first();
     }
 
     private function contexto(ContaEstrategica $conta, ?string $recado): string

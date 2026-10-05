@@ -272,6 +272,69 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->assertSame(Lead::ORIGEM_MANUAL, Lead::sole()->origem);
     }
 
+    /**
+     * O caso real de 2026-10-05: a diretoria abriu o lead da rede (sem CNPJ, com dono) e
+     * depois a prospecção trouxe a mesma rede com CNPJ. Vira UM lead: o da diretoria, que
+     * herda o CNPJ e o que apontava para o outro — e não renasce no import seguinte.
+     */
+    public function test_lead_da_diretoria_e_da_prospeccao_da_mesma_conta_viram_um_so(): void
+    {
+        $conta = $this->conta('AGAFARMA');
+        $dono = User::factory()->create(['is_active' => true]);
+        $daDiretoria = Lead::create([
+            'origem' => Lead::ORIGEM_MANUAL, 'user_id' => $dono->id, 'cod_vendedor' => '010755',
+            'nome' => 'AGAFARMA', 'razao_social' => 'AGAFARMA', 'status' => 'ativo', 'etapa' => Lead::ETAPA_NOVO,
+        ]);
+        $daDiretoria->forceFill(['conta_estrategica_id' => $conta->id, 'conta_vinculo' => Lead::CONTA_CONFIRMADA])->save();
+
+        $linha = [...$this->linha('11111111000191', 'AGAFARMA COMERCIO LTDA', '109', rede: 'Agafarma'), 'cod_vendedor' => ''];
+        $this->importar([$linha]);
+
+        $lead = Lead::sole();
+        $this->assertSame($daDiretoria->id, $lead->id);
+        $this->assertSame('11.111.111/0001-91', $lead->cnpj);
+        $this->assertSame('AGAFARMA COMERCIO LTDA', $lead->razao_social);
+        $this->assertSame('010755', $lead->cod_vendedor);
+        $this->assertSame(Lead::ORIGEM_MANUAL, $lead->origem);
+        $this->assertSame($conta->id, $lead->conta_estrategica_id);
+
+        $this->importar([$linha]);
+
+        $this->assertSame(1, Lead::count());
+    }
+
+    /** O que já apontava para o lead que sai passa para o que fica. */
+    public function test_juntar_leva_o_historico_do_lead_que_sai(): void
+    {
+        $conta = $this->conta('AGAFARMA');
+        $fica = Lead::create(['origem' => Lead::ORIGEM_MANUAL, 'cod_vendedor' => '010755', 'nome' => 'AGAFARMA', 'razao_social' => 'AGAFARMA', 'status' => 'ativo', 'etapa' => Lead::ETAPA_NOVO]);
+        $sai = Lead::create(['origem' => Lead::ORIGEM_PROSPECCAO, 'nome' => 'Agafarma', 'razao_social' => 'AGAFARMA LTDA', 'cnpj' => '11.111.111/0001-91', 'cidade' => 'Porto Alegre', 'status' => 'ativo', 'etapa' => Lead::ETAPA_NOVO]);
+        foreach ([$fica, $sai] as $l) {
+            $l->forceFill(['conta_estrategica_id' => $conta->id, 'conta_vinculo' => Lead::CONTA_CONFIRMADA])->save();
+        }
+        $obs = \App\Models\Observacao::create(['lead_id' => $sai->id, 'cnpj' => '', 'mensagem' => 'liguei']);
+
+        $this->artisan('visao-diretor:juntar-leads')->assertSuccessful();
+
+        $this->assertSame([$fica->id], Lead::pluck('id')->all());
+        $this->assertSame($fica->id, $obs->fresh()->lead_id);
+        $this->assertSame('Porto Alegre', $fica->fresh()->cidade);
+    }
+
+    /** Dois CNPJs diferentes na mesma conta são duas empresas, não duplicata. */
+    public function test_dois_cnpjs_na_mesma_conta_nao_sao_juntados(): void
+    {
+        $conta = $this->conta('AGAFARMA');
+        foreach (['11.111.111/0001-91', '22.222.222/0001-91'] as $cnpj) {
+            Lead::create(['origem' => Lead::ORIGEM_PROSPECCAO, 'nome' => 'X', 'razao_social' => 'X', 'cnpj' => $cnpj, 'status' => 'ativo', 'etapa' => Lead::ETAPA_NOVO])
+                ->forceFill(['conta_estrategica_id' => $conta->id, 'conta_vinculo' => Lead::CONTA_CONFIRMADA])->save();
+        }
+
+        $this->artisan('visao-diretor:juntar-leads')->assertSuccessful();
+
+        $this->assertSame(2, Lead::count());
+    }
+
     public function test_receita_tambem_tira_lead_da_prospeccao(): void
     {
         $this->importar([$this->linha('11111111000191', 'EMPRESA A', '101')]);

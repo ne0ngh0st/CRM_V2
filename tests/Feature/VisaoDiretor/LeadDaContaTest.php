@@ -79,14 +79,89 @@ class LeadDaContaTest extends TestCase
         return $conta;
     }
 
-    private function gerar(ContaEstrategica $conta, User $responsavel, ?User $como = null, ?string $recado = null)
+    private function gerar(ContaEstrategica $conta, User $responsavel, ?User $como = null, ?string $recado = null, ?string $cnpj = null)
     {
         return $this->actingAs($como ?? $this->admin)
             ->from(route('visao-diretor.maiores.index'))
             ->post(route('visao-diretor.maiores.gerar-lead', $conta), [
                 'responsavel_id' => $responsavel->id,
                 'recado' => $recado,
+                'cnpj' => $cnpj,
             ]);
+    }
+
+    private function leadSemDono(?ContaEstrategica $ligadoA = null, string $cnpj = '11.111.111/0001-91', ?string $codVendedor = null): Lead
+    {
+        $lead = Lead::create([
+            'origem' => Lead::ORIGEM_PROSPECCAO, 'nome' => 'Drogasil', 'razao_social' => 'DROGASIL S/A', 'cnpj' => $cnpj,
+            'cod_vendedor' => $codVendedor, 'status' => 'ativo', 'etapa' => Lead::ETAPA_NOVO,
+        ]);
+
+        if ($ligadoA) {
+            $lead->forceFill(['conta_estrategica_id' => $ligadoA->id, 'conta_vinculo' => Lead::CONTA_CONFIRMADA])->save();
+        }
+
+        return $lead;
+    }
+
+    // ─── Nunca o segundo lead da mesma empresa ───────────────────────────────────
+
+    public function test_conta_com_lead_sem_dono_atribui_em_vez_de_criar(): void
+    {
+        $conta = $this->conta();
+        $existente = $this->leadSemDono($conta);
+
+        $this->gerar($conta, $this->inaya)->assertSessionHasNoErrors();
+
+        $this->assertSame([$existente->id], Lead::pluck('id')->all());
+        $this->assertSame('010755', $existente->fresh()->cod_vendedor);
+        $this->assertSame($this->inaya->id, $existente->fresh()->user_id);
+        $this->assertSame(1, Observacao::where('lead_id', $existente->id)->count());
+    }
+
+    public function test_cnpj_de_lead_sem_dono_liga_e_atribui(): void
+    {
+        $conta = $this->conta();
+        $existente = $this->leadSemDono();
+
+        $this->gerar($conta, $this->inaya, cnpj: '11111111000191')->assertSessionHasNoErrors();
+
+        $this->assertSame([$existente->id], Lead::pluck('id')->all());
+        $this->assertSame($conta->id, $existente->fresh()->conta_estrategica_id);
+        $this->assertSame('010755', $existente->fresh()->cod_vendedor);
+    }
+
+    public function test_cnpj_de_lead_com_dono_e_recusado(): void
+    {
+        $conta = $this->conta();
+        $this->leadSemDono(codVendedor: '020001');
+
+        $this->gerar($conta, $this->inaya, cnpj: '11.111.111/0001-91')->assertSessionHasErrors('cnpj');
+
+        $this->assertSame(1, Lead::count());
+    }
+
+    public function test_cnpj_de_cliente_e_recusado(): void
+    {
+        Cliente::create([
+            'cod_cliente' => '000009', 'loja' => '01', 'cnpj' => '11.111.111/0001-91',
+            'razao_social' => 'DROGASIL', 'cod_vendedor' => '010755', 'cod_segmento' => '109', 'estado' => 'SP',
+        ]);
+
+        $this->gerar($this->conta(), $this->inaya, cnpj: '11111111000191')->assertSessionHasErrors('cnpj');
+
+        $this->assertSame(0, Lead::count());
+    }
+
+    public function test_cnpj_invalido_e_recusado_e_cnpj_novo_e_gravado(): void
+    {
+        $conta = $this->conta();
+
+        $this->gerar($conta, $this->inaya, cnpj: '11111111000199')->assertSessionHasErrors('cnpj');
+        $this->gerar($conta, $this->inaya, cnpj: '11111111000191')->assertSessionHasNoErrors();
+
+        $this->assertSame('11.111.111/0001-91', Lead::sole()->cnpj);
+        $this->assertSame(Lead::ORIGEM_MANUAL, Lead::sole()->origem);
     }
 
     public function test_lead_nasce_na_carteira_do_responsavel(): void

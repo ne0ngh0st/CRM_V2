@@ -174,6 +174,23 @@ fim lista as 284 contas sem vínculo e as divergências Excel × CRM — é a li
 
 Depois da carga, a planilha morre: tudo se edita na tela.
 
+### Uma conta, um lead (2026-10-05)
+
+Achado em produção: 8 contas com DOIS leads — o que a diretoria abriu pelo "Gerar lead"
+(manual, **sem CNPJ**, com dono) e o que a prospecção trouxe depois para a mesma rede
+(com CNPJ, sem dono). Regras hoje:
+
+- **`FusaoDeLeads`**: conta com o par vira UM lead. **Fica o da diretoria** (dono,
+  observação de contexto, aviso no sino), que herda CNPJ, razão social legal e campos
+  vazios; contatos, agendamentos, observações, orçamentos e captura do site passam para
+  ele; o outro é apagado. Roda no fim de todo `totvs:import-leads` e pelo comando
+  `visao-diretor:juntar-leads [--dry-run]`. Continua `manual` de propósito: o import
+  ignora CNPJ de lead manual, então a duplicata não renasce e a planilha não troca o dono.
+- ⚠️ Dois leads com CNPJs DIFERENTES na mesma conta não são juntados — são duas empresas.
+- **"Gerar lead" não cria o segundo**: conta com lead sem dono → atribui aquele; CNPJ
+  informado (campo opcional do modal) que já é lead sem dono → liga e atribui; já é lead
+  com dono ou é cliente → recusa. Atribuir lead SEM dono não é transferência.
+
 ## 3. Rollup de faturamento — `faturamento_cliente_mensal`
 
 A página Maiores por Segmento **não lê** esta tabela (saiu da tela em 18/09). O rollup

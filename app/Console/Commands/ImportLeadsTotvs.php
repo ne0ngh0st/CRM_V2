@@ -394,6 +394,9 @@ class ImportLeadsTotvs extends Command
         $this->line("    contas novas criadas pela coluna `rede`: {$s['criadas']}");
         $this->line("    leads ligados a uma conta: {$s['confirmados']}");
         $this->line("    sugestões para confirmar na Visão Diretor: {$s['sugeridos']}");
+        if (($s['fundidos'] ?? 0) > 0) {
+            $this->line("    juntados ao lead que a diretoria já tinha aberto para a rede: {$s['fundidos']}");
+        }
 
         if ($s['ambiguos'] > 0) {
             $this->warn("    sem sugestão (o nome casa com mais de uma conta): {$s['ambiguos']}");

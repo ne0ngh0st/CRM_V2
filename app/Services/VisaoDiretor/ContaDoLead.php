@@ -37,19 +37,20 @@ class ContaDoLead
 {
     public function __construct(
         private readonly SugestaoDeVinculo $sugestao,
+        private readonly FusaoDeLeads $fusao,
     ) {
     }
 
     /**
      * @param  list<array{lead_id: int, segmento: ?string, rede: ?string, filiais: ?int, uf: ?string, nome: string}>  $itens
-     * @return array{criadas: int, confirmados: int, sugeridos: int, ambiguos: int, foraDasAbas: int, detalhe: array{redesCriadas: list<string>, ligados: array<int, string>}}
+     * @return array{criadas: int, confirmados: int, sugeridos: int, ambiguos: int, foraDasAbas: int, fundidos: int, detalhe: array{redesCriadas: list<string>, ligados: array<int, string>}}
      *
      * `detalhe` é o que a /atualizacoes lista no clique: as redes criadas e, por lead
      * (id), o nome da rede a que ele foi ligado nesta rodada.
      */
     public function vincularDaProspeccao(array $itens, bool $dryRun = false): array
     {
-        $stats = ['criadas' => 0, 'confirmados' => 0, 'sugeridos' => 0, 'ambiguos' => 0, 'foraDasAbas' => 0,
+        $stats = ['criadas' => 0, 'confirmados' => 0, 'sugeridos' => 0, 'ambiguos' => 0, 'foraDasAbas' => 0, 'fundidos' => 0,
             'detalhe' => ['redesCriadas' => [], 'ligados' => []]];
 
         $abas = AbasDaPlanilha::codigos();
@@ -149,6 +150,21 @@ class ContaDoLead
                 DB::table('leads')->where('id', $leadId)
                     ->update(['conta_estrategica_id' => $contaId, 'conta_vinculo' => $vinculo]);
             }
+
+            /*
+             * Conta que a diretoria já tinha transformado em lead (sem CNPJ) e agora ganhou
+             * o lead da prospecção: vira UM lead só. Ver `FusaoDeLeads`.
+             */
+            $stats['fundidos'] = count($this->fusao->fundirDuplicadosDasContas());
+        } else {
+            $contasDaDiretoria = Lead::query()->visivel()
+                ->where('origem', Lead::ORIGEM_MANUAL)->where(fn ($q) => $q->whereNull('cnpj')->orWhere('cnpj', ''))
+                ->where('conta_vinculo', Lead::CONTA_CONFIRMADA)
+                ->pluck('conta_estrategica_id')->flip();
+
+            $stats['fundidos'] = collect($ligar)
+                ->filter(fn (array $l) => $l[2] === Lead::CONTA_CONFIRMADA && is_int($l[1]) && $contasDaDiretoria->has($l[1]))
+                ->count();
         }
 
         return $stats;

@@ -212,16 +212,19 @@ class MaioresPorSegmentoController extends Controller
         $dados = $request->validate([
             'responsavel_id' => ['required', 'integer', Rule::exists('users', 'id')],
             'recado' => ['nullable', 'string', 'max:2000'],
+            'cnpj' => ['nullable', 'string', 'max:20'],
         ], [
             'responsavel_id.required' => 'Escolha quem vai trabalhar este lead.',
         ]);
 
         $responsavel = User::query()->with('vendedorPerfil')->findOrFail($dados['responsavel_id']);
-        $lead = $leadDaConta->gerar($conta, $responsavel, $request->user(), $dados['recado'] ?? null);
+        $lead = $leadDaConta->gerar($conta, $responsavel, $request->user(), $dados['recado'] ?? null, $dados['cnpj'] ?? null);
 
         $nome = $responsavel->display_name ?: $responsavel->name;
 
-        return back()->with('success', "Lead \"{$lead->nome}\" aberto com {$nome}.");
+        return back()->with('success', $lead->wasRecentlyCreated
+            ? "Lead \"{$lead->nome}\" aberto com {$nome}."
+            : "O lead \"{$lead->nome}\" já existia sem dono — agora é de {$nome}.");
     }
 
     public function destroy(ContaEstrategica $conta): RedirectResponse

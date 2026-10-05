@@ -23,7 +23,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const form = useForm({ responsavel_id: '', recado: '' });
+const form = useForm({ responsavel_id: '', recado: '', cnpj: '' });
 
 const especialistaElegivel = computed(() => {
     const id = props.segmento?.especialista?.id;
@@ -37,6 +37,7 @@ watch(() => props.show, (aberto) => {
     form.clearErrors();
     form.responsavel_id = especialistaElegivel.value ?? '';
     form.recado = '';
+    form.cnpj = '';
 });
 
 function gerar() {
@@ -65,6 +66,7 @@ const rotulo = 'text-xs font-semibold uppercase tracking-wide text-gray-400';
             <p class="text-sm text-gray-600">
                 A rede entra no funil de leads como <strong>Novo</strong>, na carteira de quem você escolher, e a pessoa é
                 avisada pelo sino. Segmento, UF, site e filiais vão junto numa observação.
+                Se a rede já estiver em Leads sem dono, aquele lead é atribuído — não nasce outro.
             </p>
 
             <div v-if="conta" class="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
@@ -83,6 +85,16 @@ const rotulo = 'text-xs font-semibold uppercase tracking-wide text-gray-400';
                     </option>
                 </select>
                 <InputError :message="form.errors.responsavel_id" class="mt-1" />
+            </div>
+
+            <!--
+                O CNPJ é o que impede o lead duplicado: se a prospecção já trouxe a empresa
+                (sem dono), o servidor reaproveita aquele lead em vez de criar outro.
+            -->
+            <div>
+                <label :class="rotulo" for="lead_cnpj">CNPJ da matriz <span class="normal-case">(opcional, evita lead duplicado)</span></label>
+                <input id="lead_cnpj" v-model="form.cnpj" type="text" inputmode="numeric" maxlength="18" :class="campo" placeholder="00.000.000/0000-00" />
+                <InputError :message="form.errors.cnpj" class="mt-1" />
             </div>
 
             <div>
