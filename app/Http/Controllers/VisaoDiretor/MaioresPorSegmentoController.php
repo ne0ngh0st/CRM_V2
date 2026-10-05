@@ -242,7 +242,7 @@ class MaioresPorSegmentoController extends Controller
         return [
             'segmento' => (string) $request->string('segmento'),
             // Whitelist: valor desconhecido vira "sem filtro" em vez de tela vazia.
-            'status' => in_array($status, MaioresPorSegmentoResolver::STATUS, true) ? $status : '',
+            'status' => array_key_exists($status, MaioresPorSegmentoResolver::FILTROS_STATUS) ? $status : '',
             'uf' => mb_strtoupper(substr((string) $request->string('uf'), 0, 2)),
             'busca' => trim((string) $request->string('busca')),
         ];

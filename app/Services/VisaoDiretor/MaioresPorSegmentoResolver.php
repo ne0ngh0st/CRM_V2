@@ -31,6 +31,18 @@ class MaioresPorSegmentoResolver
     /** Status que a página conhece. `lead` = nenhuma loja nossa (era o "LEAD" da planilha). */
     public const STATUS = ['ativo', 'inativando', 'inativo', 'lead'];
 
+    /**
+     * Valores aceitos no filtro `?status=`: cada status, mais o tile "A trabalhar + lead",
+     * que filtra os dois de uma vez (é o mesmo número que o tile mostra).
+     */
+    public const FILTROS_STATUS = [
+        'ativo' => ['ativo'],
+        'inativando' => ['inativando'],
+        'inativo' => ['inativo'],
+        'lead' => ['lead'],
+        'a_trabalhar' => ['inativo', 'lead'],
+    ];
+
     public function __construct(
         private readonly ClientesDaConta $clientesDaConta,
         private readonly ClienteStatusResolver $statusResolver,
@@ -296,7 +308,7 @@ class MaioresPorSegmentoResolver
 
         return $linhas
             ->when($segmento !== '', fn ($c) => $c->where('segmento.codigo', $segmento))
-            ->when($status !== '', fn ($c) => $c->where('status', $status))
+            ->when($status !== '', fn ($c) => $c->whereIn('status', self::FILTROS_STATUS[$status] ?? [$status]))
             ->when($uf !== '', fn ($c) => $c->where('uf', $uf))
             ->when($busca !== '', fn ($c) => $c->filter(fn (array $l) => str_contains(mb_strtoupper($l['nome']), $busca)))
             ->values();

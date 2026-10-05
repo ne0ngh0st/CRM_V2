@@ -221,7 +221,8 @@ class CatalogoDeExportacoes
         return new PlanoDeExportacao(
             new MaioresPorSegmentoExport($dados['segmentos']),
             'maiores-por-segmento',
-            $dados['kpis']['contas'],
+            // Linhas da planilha = contas das abas. Não `kpis.contas`: os KPIs ignoram o filtro de status.
+            collect($dados['segmentos'])->sum(fn (array $s) => count($s['contas'])),
         );
     }
 

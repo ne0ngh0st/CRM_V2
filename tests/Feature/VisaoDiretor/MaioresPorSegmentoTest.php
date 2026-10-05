@@ -344,6 +344,23 @@ class MaioresPorSegmentoTest extends TestCase
         $this->assertSame(['RAIA'], array_column($dados['segmentos'][0]['contas'], 'nome'));
     }
 
+    /** O tile "A trabalhar + lead" filtra as duas situações, e bate com o número dele. */
+    public function test_filtro_a_trabalhar_traz_inativo_e_lead(): void
+    {
+        $this->conta('RAIA', [['grupo', '100']]); // ativo
+        $this->conta('A TRABALHAR', [['cliente', '000002']]); // inativo
+        $this->conta('SEM VINCULO'); // lead
+
+        $dados = app(MaioresPorSegmentoResolver::class)->resolver(['status' => 'a_trabalhar']);
+
+        $this->assertSame(['A TRABALHAR', 'SEM VINCULO'], array_column($dados['segmentos'][0]['contas'], 'nome'));
+        $this->assertSame(2, $dados['kpis']['inativo'] + $dados['kpis']['lead']);
+
+        $this->actingAs($this->admin)
+            ->get(route('visao-diretor.maiores.index', ['status' => 'a_trabalhar']))
+            ->assertInertia(fn (Assert $p) => $p->where('filtros.status', 'a_trabalhar'));
+    }
+
     /** A posição é a da planilha dentro do segmento, e filtrar não renumera. */
     public function test_posicao_da_conta_nao_muda_com_filtro(): void
     {

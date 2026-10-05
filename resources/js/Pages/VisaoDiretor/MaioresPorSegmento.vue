@@ -103,10 +103,10 @@ function filtrarSegmento(codigo) {
 }
 
 const TILES_STATUS = [
-    { status: 'ativo', tom: 'ok' },
-    { status: 'inativando', tom: 'warn' },
-    { status: 'inativo', tom: 'danger' },
-    { status: 'lead', tom: 'default' },
+    { status: 'ativo', tom: 'ok', rotulo: ROTULOS_STATUS_CONTA.ativo, valor: (k) => k.ativo },
+    { status: 'inativando', tom: 'warn', rotulo: ROTULOS_STATUS_CONTA.inativando, valor: (k) => k.inativando },
+    // Um tile só para as duas: filtra `a_trabalhar` (inativo + lead) no servidor.
+    { status: 'a_trabalhar', tom: 'danger', rotulo: 'A trabalhar + lead', valor: (k) => k.inativo + k.lead },
 ];
 
 function filtrarStatus(status) {
@@ -211,6 +211,7 @@ async function excluir(conta) {
                     <FilterField v-model="filtros.status" label="Status" @update:model-value="aplicarFiltros">
                         <option value="">Todos</option>
                         <option v-for="s in STATUS_CONTA" :key="s" :value="s">{{ ROTULOS_STATUS_CONTA[s] }}</option>
+                        <option value="a_trabalhar">A trabalhar + lead</option>
                     </FilterField>
                     <FilterField v-model="filtros.uf" label="UF" @update:model-value="aplicarFiltros">
                         <option value="">Todas</option>
@@ -255,8 +256,8 @@ async function excluir(conta) {
                 <KpiTile
                     v-for="t in TILES_STATUS"
                     :key="t.status"
-                    :value="kpis[t.status]"
-                    :label="ROTULOS_STATUS_CONTA[t.status]"
+                    :value="t.valor(kpis)"
+                    :label="t.rotulo"
                     :tone="t.tom"
                     botao
                     :ativo="filtros.status === t.status"
