@@ -1,0 +1,257 @@
+<?php
+
+namespace App\Services\VisaoDiretor;
+
+use App\Models\ContaEstrategicaVinculo;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Sugestão de vínculo conta → clientes pelo NOME DOS CLIENTES (fantasia e razão social),
+ * e não pelo nome do grupo do TOTVS como faz `SugestaoDeVinculo`.
+ *
+ * Por que existe (medido em produção em 06/10/2026): só 110 das 404 contas tinham vínculo.
+ * O nome do grupo costuma não ser o da marca ("BRASIL PARK" mora num grupo de outro nome)
+ * e um terço da base está no 9998, sem grupo nenhum (C VALE, NORMATEL, REDE FURNAS,
+ * ENGEPARK). O nome fantasia da filial, ao contrário, quase sempre é a marca.
+ *
+ * As travas, cada uma contra um falso positivo visto na base real:
+ *
+ * 1. **Começo do nome, com fronteira de palavra.** "DROGARIA ARAUJO" NÃO casa "DROGARIA
+ *    MODENA & ARAUJO" nem "BRASIL PARK" casa "SANTA LOLLA - BRASIL PARK SHOPPING".
+ *    Compara as palavras de marca (`SugestaoDeVinculo::marca()`): o lado mais curto tem
+ *    que ser o começo do mais longo — "ENGEPARK VALLET E PARKING" casa "ENGEPARK VALLET".
+ * 2. **O lado curto tem que identificar alguma coisa**: 4+ letras e, se for uma palavra
+ *    só, não genérica ("BRASIL", "FARMA", "CENTER").
+ * 3. **Filial avulsa só no segmento da conta.** "REDE FURNAS" (posto) não leva FURNAS
+ *    CENTRAIS ELÉTRICAS.
+ * 4. **Grupo só se a MAIORIA das filiais dele casar pelo nome** (e ao menos uma no segmento
+ *    da conta). É o que traz as filiais com nome diferente da mesma rede ("AUTO BRASIL
+ *    ESTAC") sem trazer o grupo de outra empresa que tem uma loja com nome parecido.
+ * 5. **Código avulso, idem**: só se a maioria das filiais do código casar. Um código como
+ *    o 000800 (centenas de escolas) não entra por causa de uma filial.
+ * 6. **9998 nunca vira grupo** (`GRUPOS_PROIBIDOS`); as filiais dele entram como código.
+ *
+ * Grupo ou código que casa com DUAS contas é descartado pelo comando, nunca escolhido.
+ */
+class VinculoPorCliente
+{
+    private const MINIMO_COMPACTO = 4;
+
+    private const MINIMO_PALAVRA_UNICA = 6;
+
+    /** Acima disto a conta é ambígua (nome comum demais): não sugere nada. */
+    public const MAXIMO_CODIGOS = 80;
+
+    public function __construct(private readonly SugestaoDeVinculo $nomes)
+    {
+    }
+
+    /**
+     * Os clientes em memória, UMA vez por rodada (92 k filiais).
+     *
+     * @return array{filiais: list<array>, indice: array<string, list<array{0: int, 1: list<string>}>>, porGrupo: array<string, int>, porCodigo: array<string, int>}
+     */
+    public function catalogo(): array
+    {
+        $filiais = [];
+        $indice = [];
+        $porGrupo = [];
+        $porCodigo = [];
+
+        $linhas = DB::table('clientes')
+            ->select('cod_cliente', 'loja', 'cod_grupo', 'cod_segmento', 'razao_social', 'nome_fantasia')
+            ->orderBy('id')
+            ->cursor();
+
+        foreach ($linhas as $c) {
+            $i = count($filiais);
+            $grupo = (string) $c->cod_grupo;
+            $codigo = (string) $c->cod_cliente;
+
+            $filiais[] = [
+                'codigo' => $codigo,
+                'grupo' => $grupo,
+                'segmento' => (string) $c->cod_segmento,
+                'nome' => (string) ($c->nome_fantasia ?: $c->razao_social),
+            ];
+            $porGrupo[$grupo] = ($porGrupo[$grupo] ?? 0) + 1;
+            $porCodigo[$codigo] = ($porCodigo[$codigo] ?? 0) + 1;
+
+            $vistos = [];
+            foreach ([$c->nome_fantasia, $c->razao_social] as $nome) {
+                $marca = $this->nomes->marca((string) $nome);
+                $compacto = implode('', $marca);
+
+                if (strlen($compacto) < self::MINIMO_COMPACTO || isset($vistos[$compacto])) {
+                    continue;
+                }
+
+                $vistos[$compacto] = true;
+                $indice[substr($compacto, 0, 3)][] = [$i, $marca];
+            }
+        }
+
+        return ['filiais' => $filiais, 'indice' => $indice, 'porGrupo' => $porGrupo, 'porCodigo' => $porCodigo];
+    }
+
+    /**
+     * @return array{grupos: list<string>, clientes: list<string>, ambiguo: bool, exemplos: list<string>}
+     */
+    public function sugerir(string $nomeConta, string $codigoSegmento, array $catalogo): array
+    {
+        $casadas = [];
+
+        foreach ($this->alternativas($nomeConta) as $alvo) {
+            foreach ($catalogo['indice'][substr(implode('', $alvo), 0, 3)] ?? [] as [$i, $marca]) {
+                if (! isset($casadas[$i]) && $this->casa($alvo, $marca)) {
+                    $casadas[$i] = true;
+                }
+            }
+        }
+
+        $filiais = $catalogo['filiais'];
+        $casadasPorGrupo = [];
+        $grupoComSegmento = [];
+
+        foreach (array_keys($casadas) as $i) {
+            $f = $filiais[$i];
+            $casadasPorGrupo[$f['grupo']] = ($casadasPorGrupo[$f['grupo']] ?? 0) + 1;
+
+            if ($f['segmento'] === $codigoSegmento) {
+                $grupoComSegmento[$f['grupo']] = true;
+            }
+        }
+
+        $grupos = [];
+        foreach ($casadasPorGrupo as $grupo => $n) {
+            if (in_array((string) $grupo, ContaEstrategicaVinculo::GRUPOS_PROIBIDOS, true) || ! isset($grupoComSegmento[$grupo])) {
+                continue;
+            }
+
+            if ($n * 2 >= $catalogo['porGrupo'][$grupo]) {
+                $grupos[] = (string) $grupo;
+            }
+        }
+
+        $casadasPorCodigo = [];
+        $exemplos = [];
+        foreach (array_keys($casadas) as $i) {
+            $f = $filiais[$i];
+
+            if (in_array($f['grupo'], $grupos, true)) {
+                $exemplos[] = $f['nome'];
+
+                continue;
+            }
+
+            if ($f['segmento'] === $codigoSegmento) {
+                $casadasPorCodigo[$f['codigo']] = ($casadasPorCodigo[$f['codigo']] ?? 0) + 1;
+                $exemplos[] = $f['nome'];
+            }
+        }
+
+        $clientes = [];
+        foreach ($casadasPorCodigo as $codigo => $n) {
+            if ($n * 2 >= $catalogo['porCodigo'][$codigo]) {
+                $clientes[] = (string) $codigo;
+            }
+        }
+
+        if (count($clientes) > self::MAXIMO_CODIGOS || count($grupos) > SugestaoDeVinculo::MAXIMO_GRUPOS) {
+            return ['grupos' => [], 'clientes' => [], 'ambiguo' => true, 'exemplos' => []];
+        }
+
+        sort($grupos);
+        sort($clientes);
+
+        return [
+            'grupos' => $grupos,
+            'clientes' => $clientes,
+            'ambiguo' => false,
+            'exemplos' => array_values(array_slice(array_unique($exemplos), 0, 3)),
+        ];
+    }
+
+    /**
+     * "ASFAR / DESCONTO FACIL" são duas marcas da mesma conta; cada uma é procurada.
+     *
+     * @return list<list<string>>
+     */
+    private function alternativas(string $nome): array
+    {
+        $saida = [];
+
+        foreach (preg_split('/[\/()]/', $nome) as $parte) {
+            $marca = $this->nomes->marca($parte);
+
+            if ($this->identifica($marca)) {
+                $saida[] = $marca;
+            }
+        }
+
+        return $saida;
+    }
+
+    /** @param  list<string>  $marca */
+    private function identifica(array $marca): bool
+    {
+        if (strlen(implode('', $marca)) < self::MINIMO_COMPACTO) {
+            return false;
+        }
+
+        return ! (count($marca) === 1 && $this->nomes->palavraGenerica($marca[0]));
+    }
+
+    /**
+     * O nome mais curto é o começo do mais longo, com fronteira de palavra no longo.
+     * Compara o compacto: "SERVI PARK" casa "SERVIPARK" e "D 1000" casa "D1000".
+     *
+     * ⚠️ Quando o nome do CLIENTE é o curto, uma palavra só não basta: "POSTO DO PARQUE"
+     * (marca PARQUE) casava a conta "Posto Parque Dez". Nome de filial curto e genérico é
+     * comum; nome de conta curto não — a conta foi escrita pela diretoria.
+     *
+     * @param  list<string>  $conta
+     * @param  list<string>  $cliente
+     */
+    private function casa(array $conta, array $cliente): bool
+    {
+        $clienteECurto = strlen(implode('', $cliente)) < strlen(implode('', $conta));
+        [$curto, $longo] = $clienteECurto ? [$cliente, $conta] : [$conta, $cliente];
+
+        if ($clienteECurto && count($cliente) === 1) {
+            return false;
+        }
+
+        if (! $this->identifica($curto)) {
+            return false;
+        }
+
+        $alvo = implode('', $curto);
+
+        if (! str_starts_with(implode('', $longo), $alvo)) {
+            return false;
+        }
+
+        // Uma palavra só, casando o começo de um nome mais longo, precisa ser comprida:
+        // "MINHA" pegava "MINHA DROGARIA" e "LOJA ELETRICA" pegava "ELETRICA NICOLUCCI".
+        // Nome IGUAL ("DROGARIA VIDA" = "VIDA FARMACIAS") continua valendo com 4 letras.
+        if (count($curto) === 1 && $alvo !== implode('', $longo) && strlen($alvo) < self::MINIMO_PALAVRA_UNICA) {
+            return false;
+        }
+
+        $acumulado = '';
+        foreach ($longo as $palavra) {
+            $acumulado .= $palavra;
+
+            if ($acumulado === $alvo) {
+                return true;
+            }
+
+            if (strlen($acumulado) > strlen($alvo)) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+}

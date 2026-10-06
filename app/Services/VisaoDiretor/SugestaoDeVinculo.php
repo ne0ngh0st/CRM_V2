@@ -171,6 +171,31 @@ class SugestaoDeVinculo
     }
 
     /**
+     * As palavras de MARCA do nome, na ordem em que aparecem: sem acento, caixa e
+     * pontuação, e sem as palavras de `PALAVRAS_DE_TIPO`. "Rede Farma Ponte" → [FARMA,
+     * PONTE]. É a mesma limpeza de `chaveDeNome()`, sem a ordenação — quem usa isto
+     * compara pelo COMEÇO do nome (`VinculoPorCliente`), e lá a ordem importa.
+     *
+     * @return list<string>
+     */
+    public function marca(string $nome): array
+    {
+        return array_values(array_diff($this->tokensTodos($nome), self::PALAVRAS_DE_TIPO));
+    }
+
+    /** Palavra que sozinha não identifica marca nenhuma (FARMA, CENTER, SAO, PARK…). */
+    public function palavraGenerica(string $palavra): bool
+    {
+        return in_array($palavra, self::GENERICOS, true)
+            || in_array($palavra, self::RESTOS_GENERICOS, true)
+            || in_array($palavra, self::FRACOS, true)
+            || in_array($palavra, [
+                'PARK', 'PARKING', 'AUTO', 'MIX', 'MAIS', 'POPULAR', 'PHARMA', 'ELETRICA', 'MODERNA',
+                'NOSSA', 'NOSSO', 'TRABALHADOR', 'INDEPENDENTE', 'UNIAO', 'NACIONAL', 'ECONOMICA',
+            ], true);
+    }
+
+    /**
      * @param  Collection<int, array{codigo: string, nome: string, compacto: string, tokensTodos: list<string>, tokensDistintivos: list<string>, total: int, porSeg: array<string, int>}>  $catalogo
      * @return array{grupos: Collection<int, array{codigo: string, nome: string}>, ambiguo: bool}
      */

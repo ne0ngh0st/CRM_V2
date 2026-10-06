@@ -174,6 +174,32 @@ fim lista as 284 contas sem vínculo e as divergências Excel × CRM — é a li
 
 Depois da carga, a planilha morre: tudo se edita na tela.
 
+### Sugestão pelo nome dos clientes (2026-10-06)
+
+```bash
+php artisan visao-diretor:sugerir-vinculos --dry-run --detalhe
+```
+
+A carga inicial só comparava o nome da conta com o nome do **grupo** do TOTVS, e em
+produção só 110 das 404 contas tinham vínculo: o grupo costuma ter outro nome (BRASIL
+PARK) e um terço da base está no 9998, sem grupo (C VALE, NORMATEL, REDE FURNAS).
+`VinculoPorCliente` compara com o **nome fantasia e a razão social de cada filial**.
+
+- Casa pelo COMEÇO do nome, com fronteira de palavra, ignorando palavras de tipo
+  (`SugestaoDeVinculo::marca()`). "BRASIL PARK" casa "BRASIL PARK JABAQUARA", não
+  "SANTA LOLLA - BRASIL PARK SHOP".
+- Filial avulsa só entra no segmento da conta; grupo, se a **maioria** das filiais dele
+  casar (e traz as de outro nome, como "AUTO BRASIL ESTAC"); código avulso, idem — o
+  000800 não entra por uma escola.
+- Uma palavra só casando o começo de um nome maior precisa de 6+ letras ("MINHA" pegava
+  "MINHA DROGARIA"); nome de filial mais curto que o da conta precisa de 2+ palavras
+  ("POSTO DO PARQUE" casava "Posto Parque Dez").
+- Grava como **sugestão**, só ACRESCENTA, não toca conta com vínculo manual; grupo ou
+  código que casa com duas contas fica fora das duas (vai para o relatório).
+- Dry-run em dev (06/10): 84 das 284 contas sem vínculo ganham vínculo (17 grupos, 382
+  códigos). As outras, em boa parte, não são clientes — continuam Lead, que é o certo.
+- Testes: `VinculoPorClienteTest` (11).
+
 ### Uma conta, um lead (2026-10-05)
 
 Achado em produção: 8 contas com DOIS leads — o que a diretoria abriu pelo "Gerar lead"
