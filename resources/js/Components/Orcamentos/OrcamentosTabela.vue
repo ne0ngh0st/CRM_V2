@@ -8,6 +8,7 @@ import {
     ROTULOS_VALIDADE_ORCAMENTO,
     TONS_VALIDADE_ORCAMENTO,
 } from '@/constants/orcamentos.js';
+import { podeCompartilharArquivo, baixarComoArquivo, compartilharArquivo } from '@/utils/compartilhar.js';
 
 const props = defineProps({
     orcamentos: { type: Array, required: true },
@@ -40,6 +41,37 @@ function formatQuantidade(valor) {
 
 function pdfUrl(orcamento, download) {
     return route('orcamentos.pdf', orcamento.id) + (download ? '?download=1' : '');
+}
+
+// Compartilhar o PDF pelo menu do aparelho (WhatsApp, e-mail…). Só aparece onde o
+// navegador sabe compartilhar arquivo — na prática, celular.
+const compartilhaArquivo = podeCompartilharArquivo();
+const compartilhando = ref(null);
+// Arquivo já baixado à espera do segundo toque (o iOS recusa o share depois do fetch).
+const prontoParaCompartilhar = ref(null);
+
+async function compartilharPdf(orcamento) {
+    const titulo = `Orçamento ${orcamento.id} — ${orcamento.clienteNome}`;
+    try {
+        let arquivo = prontoParaCompartilhar.value?.id === orcamento.id
+            ? prontoParaCompartilhar.value.arquivo
+            : null;
+
+        if (! arquivo) {
+            compartilhando.value = orcamento.id;
+            arquivo = await baixarComoArquivo(pdfUrl(orcamento, true), `orcamento-${orcamento.id}.pdf`);
+        }
+
+        const resultado = await compartilharArquivo(arquivo, titulo);
+        prontoParaCompartilhar.value = resultado === 'precisa-toque'
+            ? { id: orcamento.id, arquivo }
+            : null;
+    } catch {
+        prontoParaCompartilhar.value = null;
+        window.open(pdfUrl(orcamento), '_blank');
+    } finally {
+        compartilhando.value = null;
+    }
 }
 </script>
 
@@ -138,6 +170,22 @@ function pdfUrl(orcamento, download) {
                                         <path d="M14 3v4h4" stroke-linecap="round" stroke-linejoin="round" />
                                     </svg>
                                 </a>
+                                <button
+                                    v-if="compartilhaArquivo"
+                                    type="button"
+                                    :title="prontoParaCompartilhar?.id === orcamento.id ? 'PDF pronto — toque para compartilhar' : 'Compartilhar PDF com o cliente'"
+                                    class="tbl-acao tbl-acao-navy"
+                                    :class="{ 'animate-pulse ring-2 ring-cyan': prontoParaCompartilhar?.id === orcamento.id }"
+                                    :disabled="compartilhando === orcamento.id"
+                                    @click="compartilharPdf(orcamento)"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <circle cx="18" cy="5" r="2.5" />
+                                        <circle cx="6" cy="12" r="2.5" />
+                                        <circle cx="18" cy="19" r="2.5" />
+                                        <path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4" stroke-linecap="round" />
+                                    </svg>
+                                </button>
                                 <button
                                     v-if="orcamento.podeEditar"
                                     type="button"
