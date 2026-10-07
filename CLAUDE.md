@@ -3029,8 +3029,9 @@ não alerta. Célula em `Components/Receita/CapitalPorte.vue`.
   valendo nas duas versões.
 - 🟡 **Integração "orçamento vira pedido" no Portal Autopel — CONSTRUÍDA (2026-09-10),
   HOMOLOGADA (2026-09-14), DE-PARA ELIMINADO (2026-09-25), ADAPTADA À API NOVA (2026-09-30:
-  data de entrega/frete/transportadora, §4.10; homologado com o pedido 1133). Falta
-  URL/token de PRODUÇÃO para ligar.** **Análise, payload atual e armadilhas em `docs/integracao-portal-pedidos.md`**
+  data de entrega/frete/transportadora, §4.10; homologado com o pedido 1133).
+  URL (`https://api-sic.autopel.com`) e token de PRODUÇÃO já no `.env` dos dois nós desde
+  2026-10-07 (§4.13); falta só decidir ligar `PORTAL_PEDIDOS_HABILITADO`.** **Análise, payload atual e armadilhas em `docs/integracao-portal-pedidos.md`**
   (§4.9 e §4.10 são o estado de hoje; ler de lá antes de encostar). O PDF original está em
   `docs/API-Pedidos-Autopel.pdf`.
   - 🟢 **2026-09-25: a API passou a aceitar chave de negócio** (`sellerCode`/`clientCode`+

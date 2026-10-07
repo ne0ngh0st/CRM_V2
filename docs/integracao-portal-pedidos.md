@@ -994,6 +994,21 @@ No caminho, a API de homolog ficou inalcançável pela rede do escritório (o 5G
 as 3 tentativas falharam, o orçamento ficou "resultado incerto" e o reenvio pelo botão
 usou a mesma chave — exatamente o caminho desenhado em §4.10.
 
+## 4.13 Produção configurada, ainda DESLIGADA — 2026-10-07
+
+O time do Portal confirmou que a parte do SIC está em produção e mandou endereço e token.
+
+- **Base de produção: `https://api-sic.autopel.com`** (o link que veio terminava em
+  `/v1/users/signin`, a tela de login de usuário; o CRM usa `POST /v1/api/orders` com o
+  token no `Authorization: Bearer`). Conferido do app-1 só com GET: sem token, 401; com o
+  token, "Cannot GET" (a rota só aceita POST); com token inventado, 401. Nada criado.
+- **`PORTAL_PEDIDOS_URL` e `PORTAL_PEDIDOS_TOKEN` estão no `.env` dos dois nós**, fora do
+  Git (backup do `.env` anterior em `~/env-backups/`, também fora do repositório). O token
+  veio por WhatsApp, pedido explícito deles: **nunca versionar**.
+- ⚠️ **`PORTAL_PEDIDOS_HABILITADO` continua ausente (= desligado).** Ligar é decisão à
+  parte: a partir daí o primeiro clique cria pedido de verdade no SIC de produção. Ao
+  ligar, os três passos de sempre: `config:cache`, `reload php8.3-fpm`, `queue:restart`.
+
 ## 5. Lacunas de schema — medidas, não estimadas
 
 Números tirados do `palma_v2` de desenvolvimento em 2026-09-09 (1.864 orçamentos,
