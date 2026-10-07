@@ -1009,6 +1009,14 @@ O time do Portal confirmou que a parte do SIC está em produção e mandou ender
   parte: a partir daí o primeiro clique cria pedido de verdade no SIC de produção. Ao
   ligar, os três passos de sempre: `config:cache`, `reload php8.3-fpm`, `queue:restart`.
 
+### 🟢 LIGADO em produção, só para admin — 2026-10-07
+
+`PORTAL_PEDIDOS_HABILITADO=true` nos dois nós (backup em `~/env-backups/`), com config
+cacheado, FPM recarregado e worker reiniciado. O app-2 (fila) alcança `api-sic`. A trava
+continua em `OrcamentoController::podeEnviarAoPortal()`: orçamento **aprovado** e usuário
+**admin**. Próximo passo: o Tony transforma um orçamento real e o time do Portal valida o
+pedido no SIC; só depois liberar para o dono do orçamento (linha comentada na função).
+
 ## 5. Lacunas de schema — medidas, não estimadas
 
 Números tirados do `palma_v2` de desenvolvimento em 2026-09-09 (1.864 orçamentos,
