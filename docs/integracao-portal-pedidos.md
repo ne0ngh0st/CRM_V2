@@ -1017,6 +1017,29 @@ continua em `OrcamentoController::podeEnviarAoPortal()`: orçamento **aprovado**
 **admin**. Próximo passo: o Tony transforma um orçamento real e o time do Portal valida o
 pedido no SIC; só depois liberar para o dono do orçamento (linha comentada na função).
 
+### Primeiro pedido real em produção — 2026-10-07 (orçamento #2880)
+
+Três recusas seguidas, todas do lado do Portal/ERP e todas sem gravar nada:
+1. **"Vendedor não encontrado"** (010779, Fernanda) — o SIC de produção não tinha a
+   vendedora; o time cadastrou.
+2. **"A data de entrega desejada no pedido é inválida. A próxima data válida seria
+   2026-10-26."** — primeira validação de data pelo Protheus REAL (o homolog usa mock).
+   A primeira chamada não respondeu em 20 s; o retry com a mesma chave trouxe a recusa,
+   o que também prova que a primeira não criou pedido.
+3. **"Nota fiscal no tipo serviço só é aceito para produtos do grupo 3"** — o orçamento
+   está como tipo de venda Serviço com produtos de outro grupo.
+
+O que mudou por causa disso:
+- **Entrega limitada a 3 meses** (`config('portal.entrega_max_meses')`), na validação do
+  envio e no `max` do seletor do modal.
+- **Recusa de data explicada**: o aviso do sino diz a data pedida e a sugerida ("O
+  Protheus não aceita entrega em 17/10/2026. A primeira data possível é 26/10/2026…"), e
+  o modal, ao reabrir, mostra a recusa em vermelho e já vem com a data sugerida.
+  `portal_erro` continua guardando a frase LITERAL do ERP, porque é dela que
+  `GeradorDePedidoNoPortal::dataSugeridaNaRecusa()` tira a data.
+- **Resultado vai para quem clicou** (recusa/sem resposta só para ele; pedido criado para
+  ele e para o dono).
+
 ## 5. Lacunas de schema — medidas, não estimadas
 
 Números tirados do `palma_v2` de desenvolvimento em 2026-09-09 (1.864 orçamentos,

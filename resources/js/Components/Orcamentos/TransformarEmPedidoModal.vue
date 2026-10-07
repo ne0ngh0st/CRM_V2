@@ -28,6 +28,8 @@ const props = defineProps({
     show: { type: Boolean, default: false },
     orcamento: { type: Object, default: null },
     condicoes: { type: Array, default: () => [] },
+    // Teto do seletor (Y-m-d): o servidor recusa entrega mais de 3 meses à frente.
+    entregaMaxima: { type: String, default: '' },
 });
 
 const emit = defineEmits(['close']);
@@ -52,6 +54,12 @@ const amanha = computed(() => {
 });
 
 const brl = (v) => Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const dataBr = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
+
+// A última tentativa foi recusada pelo Portal: quem abre o modal de novo precisa ver o
+// porquê ANTES de clicar — o aviso do sino pode já ter sido lido e esquecido.
+const recusaAnterior = computed(() => (!reenvio.value ? props.orcamento?.portalErro || '' : ''));
+const dataSugerida = computed(() => props.orcamento?.portalDataSugerida || '');
 
 const mensagem = computed(() => {
     if (!props.orcamento) return '';
@@ -77,6 +85,8 @@ watch(() => props.show, (aberto) => {
         form.reset();
         form.clearErrors();
         form.condicao_pagamento_codigo = props.orcamento?.condicaoPagamentoSugerida ?? '';
+        // A data que o ERP disse que aceita já vem preenchida; a pessoa só confirma.
+        form.data_entrega = dataSugerida.value;
     }
 });
 
@@ -120,6 +130,16 @@ function enviar() {
         @confirmar="enviar"
         @close="fechar"
     >
+        <div
+            v-if="recusaAnterior && !semFrete"
+            class="mt-3 rounded border border-transparent border-l-2 border-l-red-500 bg-red-50 px-3 py-2 text-xs leading-snug text-red-800"
+        >
+            <span class="font-semibold">A última tentativa foi recusada pelo Portal:</span> {{ recusaAnterior }}
+            <span v-if="dataSugerida" class="mt-1 block">
+                A data sugerida pelo Protheus, <strong>{{ dataBr(dataSugerida) }}</strong>, já está preenchida abaixo.
+            </span>
+        </div>
+
         <div v-if="!reenvio && !semFrete" class="mt-4 grid gap-3 sm:grid-cols-2">
             <label class="block">
                 <span class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Entrega desejada</span>
@@ -127,9 +147,11 @@ function enviar() {
                     v-model="form.data_entrega"
                     type="date"
                     :min="amanha"
+                    :max="entregaMaxima || undefined"
                     required
                     class="mt-1 block w-full rounded border-gray-300 py-1.5 text-sm focus:border-cyan focus:ring-cyan"
                 />
+                <span v-if="entregaMaxima" class="mt-1 block text-[0.65rem] leading-3 text-gray-400">Até {{ dataBr(entregaMaxima) }} (3 meses).</span>
                 <InputError :message="form.errors.data_entrega" class="mt-1" />
             </label>
 

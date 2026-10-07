@@ -36,6 +36,16 @@ return [
 
     /*
     |---------------------------------------------------------------------------
+    | Prazo máximo da data de entrega desejada
+    |---------------------------------------------------------------------------
+    | Decisão do Tony (2026-10-07): pedido com entrega mais de 3 meses à frente é
+    | bloqueado no CRM, antes de ir ao Portal. Vale para o seletor de data do
+    | modal (atributo max) e para a validação do servidor — os dois leem daqui.
+    */
+    'entrega_max_meses' => 3,
+
+    /*
+    |---------------------------------------------------------------------------
     | O IPI vai embutido no unitPrice?
     |---------------------------------------------------------------------------
     | ✅ RESPONDIDO pelo time do Portal em 14/09/2026: **"o preço deve vir já com

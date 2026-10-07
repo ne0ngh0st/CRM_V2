@@ -110,7 +110,7 @@ class GeradorDePedidoNoPortal
                 'portal_idempotency_key' => null,
             ])->save();
 
-            $this->avisar($orcamento, sucesso: false, detalhe: $e->getMessage(), solicitante: $solicitante);
+            $this->avisar($orcamento, sucesso: false, detalhe: $this->explicarRecusa($e->getMessage(), $corpo), solicitante: $solicitante);
 
             return;
         }
@@ -185,6 +185,45 @@ class GeradorDePedidoNoPortal
         }
 
         return implode(' ', $partes);
+    }
+
+    /**
+     * A data que o ERP sugere quando recusa a pedida ("A data de entrega desejada no
+     * pedido é inválida. A próxima data válida seria 2026-10-26."), ou null se a recusa
+     * não foi de data. Lida da mensagem LITERAL guardada em `portal_erro` — é o único
+     * lugar onde a API devolve essa data.
+     */
+    public static function dataSugeridaNaRecusa(?string $erro): ?string
+    {
+        if ($erro === null || ! str_contains(mb_strtolower($erro), 'data de entrega')) {
+            return null;
+        }
+
+        return preg_match('/(\d{4}-\d{2}-\d{2})/', $erro, $m) ? $m[1] : null;
+    }
+
+    /**
+     * O aviso de recusa de data diz o que aconteceu com as datas do próprio pedido, em
+     * vez de repetir a frase do ERP: quem lê precisa saber que a data que ELE digitou
+     * não vale e qual vale. As outras recusas seguem literais — a mensagem do Portal
+     * ("Vendedor não encontrado") diz mais do que qualquer tradução nossa.
+     *
+     * @param  array<string, mixed>  $corpo
+     */
+    private function explicarRecusa(string $mensagem, array $corpo): string
+    {
+        $sugerida = $this->dataBr(self::dataSugeridaNaRecusa($mensagem));
+
+        if ($sugerida === null) {
+            return $mensagem;
+        }
+
+        $pedida = $this->dataBr($corpo['deliveryTime'] ?? null);
+
+        return ($pedida !== null
+            ? "O Protheus não aceita entrega em {$pedida}."
+            : 'O Protheus não aceitou a data de entrega.')
+            ." A primeira data possível é {$sugerida}: abra o orçamento e transforme em pedido de novo com ela.";
     }
 
     private function dataBr(mixed $data): ?string

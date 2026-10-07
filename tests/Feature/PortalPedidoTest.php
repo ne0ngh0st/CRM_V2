@@ -736,4 +736,81 @@ class PortalPedidoTest extends TestCase
         $this->assertSame(1, Notificacao::where('user_id', $admin->id)->where('tipo', 'portal_pedido_erro')->count());
         $this->assertSame(0, Notificacao::where('user_id', $vendedor->id)->count());
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Data de entrega — 2026-10-07, primeiro pedido real em produção
+    |--------------------------------------------------------------------------
+    | O Protheus recusou 17/10 e sugeriu 26/10. Quem enviou precisa saber que a data
+    | digitada não vale, e entrega mais de 3 meses à frente é barrada no CRM.
+    */
+
+    public function test_entrega_alem_de_tres_meses_e_bloqueada(): void
+    {
+        Bus::fake();
+        [, $orcamento] = $this->cenario();
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio([
+                'data_entrega' => now()->addMonthsNoOverflow(3)->addDay()->toDateString(),
+            ]))
+            ->assertSessionHasErrors('data_entrega');
+
+        Bus::assertNotDispatched(EnviarPedidoAoPortalJob::class);
+    }
+
+    public function test_entrega_no_limite_de_tres_meses_passa(): void
+    {
+        Bus::fake();
+        [, $orcamento] = $this->cenario();
+
+        $this->actingAs($this->admin())
+            ->post(route('orcamentos.portal', $orcamento->id), $this->envio([
+                'data_entrega' => now()->addMonthsNoOverflow(3)->toDateString(),
+            ]))
+            ->assertSessionHasNoErrors();
+
+        Bus::assertDispatched(EnviarPedidoAoPortalJob::class);
+    }
+
+    public function test_recusa_de_data_explica_a_data_pedida_e_a_sugerida(): void
+    {
+        $doErp = 'A data de entrega desejada no pedido é inválida. A próxima data válida seria 2026-10-26.';
+        Http::fake(['*/v1/api/orders' => Http::response(['message' => $doErp], 400)]);
+        [, $orcamento] = $this->cenario();
+        $admin = $this->admin();
+        $gerador = app(GeradorDePedidoNoPortal::class);
+
+        $gerador->preparar($orcamento, '2026-10-17');
+        $gerador->enviar($orcamento->fresh(), $admin);
+
+        $aviso = Notificacao::where('user_id', $admin->id)->value('mensagem');
+        $this->assertStringContainsString('17/10/2026', $aviso);
+        $this->assertStringContainsString('26/10/2026', $aviso);
+        // A mensagem do ERP fica literal no orçamento: é dela que a tela lê a sugestão.
+        $this->assertSame($doErp, $orcamento->fresh()->portal_erro);
+    }
+
+    public function test_listagem_leva_a_data_sugerida_para_o_modal(): void
+    {
+        [, $orcamento] = $this->cenario();
+        $orcamento->forceFill([
+            'portal_erro' => 'A data de entrega desejada no pedido é inválida. A próxima data válida seria 2026-10-26.',
+        ])->save();
+
+        $this->actingAs($this->admin())
+            ->get(route('orcamentos.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('orcamentos.data.0.portalDataSugerida', '2026-10-26')
+                ->where('portalEntregaMaxima', now()->addMonthsNoOverflow(3)->toDateString()));
+    }
+
+    public function test_recusa_que_nao_e_de_data_nao_inventa_sugestao(): void
+    {
+        $this->assertNull(GeradorDePedidoNoPortal::dataSugeridaNaRecusa('Vendedor não encontrado'));
+        $this->assertNull(GeradorDePedidoNoPortal::dataSugeridaNaRecusa(null));
+        $this->assertSame('2026-10-26', GeradorDePedidoNoPortal::dataSugeridaNaRecusa(
+            'A data de entrega desejada no pedido é inválida. A próxima data válida seria 2026-10-26.'
+        ));
+    }
 }

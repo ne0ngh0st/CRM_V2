@@ -160,6 +160,9 @@ class OrcamentoController extends Controller
                 && $this->podeVerBotaoDoPortal($user, $o),
             'portalPedidoId' => $o->portal_pedido_id,
             'portalErro' => $o->portal_erro,
+            // Data que o ERP sugeriu ao recusar a anterior: o modal mostra a recusa e já
+            // vem preenchido com ela.
+            'portalDataSugerida' => GeradorDePedidoNoPortal::dataSugeridaNaRecusa($o->portal_erro),
             'portalEnviadoEm' => optional($o->portal_enviado_em)->format('d/m/Y H:i'),
             // O que o ERP decidiu, não o que foi pedido (ver GeradorDePedidoNoPortal).
             'portalEntregaPrevista' => $o->portal_resposta['deliveryTime'] ?? null,
@@ -180,6 +183,8 @@ class OrcamentoController extends Controller
         return Inertia::render('Orcamentos/Index', [
             'role' => $role,
             'portalHabilitado' => $portalHabilitado,
+            // Teto do seletor de data do modal — a mesma data que o servidor valida.
+            'portalEntregaMaxima' => self::entregaMaxima(),
             // A lista inteira só vai quando o modal do Portal existe nesta tela.
             'condicoesPagamento' => $portalHabilitado ? CondicoesPagamento::opcoes() : [],
             'podeExcluir' => in_array($role, ['admin', 'diretor'], true),
@@ -535,13 +540,21 @@ class OrcamentoController extends Controller
         $pedeCondicao = ! $reenvio && $orcamento->condicao_pagamento_codigo === null;
 
         $dados = $request->validate([
-            'data_entrega' => [$reenvio ? 'nullable' : 'required', 'date_format:Y-m-d', 'after:today'],
+            'data_entrega' => [
+                $reenvio ? 'nullable' : 'required',
+                'date_format:Y-m-d',
+                'after:today',
+                'before_or_equal:'.self::entregaMaxima(),
+            ],
             'transportadora' => ['nullable', 'string', 'max:20', 'regex:/^[A-Za-z0-9]+$/'],
             'tipo_venda' => [$pedeTipoVenda ? 'required' : 'nullable', Rule::in(Orcamento::TIPOS_VENDA)],
             'condicao_pagamento_codigo' => [$pedeCondicao ? 'required' : 'nullable', Rule::exists('condicoes_pagamento', 'codigo')->where('ativo', true)],
         ], [
             'data_entrega.required' => 'Informe a data de entrega desejada.',
             'data_entrega.after' => 'A data de entrega precisa ser depois de hoje.',
+            'data_entrega.before_or_equal' => 'A data de entrega pode ser no máximo '
+                .config('portal.entrega_max_meses').' meses à frente (até '
+                .\Illuminate\Support\Carbon::parse(self::entregaMaxima())->format('d/m/Y').').',
             'transportadora.regex' => 'Use o código da transportadora no Protheus (só letras e números).',
             'tipo_venda.required' => 'Escolha o tipo de venda.',
             'condicao_pagamento_codigo.required' => 'Escolha a condição de pagamento.',
@@ -936,6 +949,15 @@ class OrcamentoController extends Controller
      * **Para liberar geral**: trocar o `=== 'admin'` pela linha comentada abaixo, que é
      * a regra definitiva — dono do orçamento, admin ou diretor.
      */
+    /**
+     * Última data de entrega aceita ao transformar em pedido (Y-m-d). Uma definição só,
+     * usada pela validação do envio e pelo `max` do seletor do modal.
+     */
+    private static function entregaMaxima(): string
+    {
+        return now()->addMonthsNoOverflow((int) config('portal.entrega_max_meses'))->toDateString();
+    }
+
     private function podeEnviarAoPortal(User $user, Orcamento $orcamento): bool
     {
         if ($orcamento->status_gestor !== 'aprovado') {
