@@ -67,3 +67,22 @@ export function formatDataCurta(iso) {
 
     return `${d}/${m}/${a}`;
 }
+
+/**
+ * "ROBERTO BARBOSA DA SILVA" → "Roberto Silva": primeiro e último nome, sem caixa alta.
+ * Para célula estreita, onde o nome completo em maiúsculas virava "ROBERTO BA…" e não
+ * identificava ninguém. Palavra de até 3 letras sem vogal (sigla: "VBF", "RS") fica como
+ * veio. O nome completo vai no `title`.
+ */
+export function nomeCurto(nome) {
+    const partes = String(nome ?? '').trim().split(/\s+/).filter(Boolean);
+    if (! partes.length) return '';
+
+    const caixa = (p) => (p.length <= 3 && ! /[AEIOUÁÉÍÓÚÂÊÔÃÕ]/i.test(p)
+        ? p.toUpperCase()
+        : p.charAt(0).toUpperCase() + p.slice(1).toLowerCase());
+
+    const escolhidas = partes.length > 1 ? [partes[0], partes[partes.length - 1]] : partes;
+
+    return escolhidas.map(caixa).join(' ');
+}
