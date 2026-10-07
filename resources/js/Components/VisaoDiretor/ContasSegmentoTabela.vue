@@ -49,11 +49,20 @@ function tituloVendedores(conta) {
     return [...linhas, 'Clique no nome para abrir a carteira dele nesta rede'].join('\n');
 }
 
-/** "Lead: Roberto Silva" · "Lead sem dono" · "3 leads". */
+/** 1ª linha da coluna Lead: o responsável, "Sem dono", ou "N leads" quando há mais de um. */
 function rotuloLeads(leads) {
     if (leads.length > 1) return `${leads.length} leads`;
 
-    return leads[0].semDono ? 'Lead sem dono' : `Lead: ${nomeCurto(leads[0].responsavel)}`;
+    return leads[0].semDono ? 'Sem dono' : nomeCurto(leads[0].responsavel);
+}
+
+/** 2ª linha: a etapa do funil (um lead) ou quantos estão sem dono (vários). */
+function subLeads(leads) {
+    if (leads.length === 1) return ROTULOS_ETAPA_LEAD[leads[0].etapa] ?? leads[0].etapa;
+
+    const semDono = leads.filter((l) => l.semDono).length;
+
+    return semDono ? `${semDono} sem dono` : '';
 }
 
 /** Tooltip do chip de leads: cada lead com responsável e etapa, e para onde o clique leva. */
@@ -102,7 +111,7 @@ async function alternar(conta) {
 
 <template>
     <div class="tbl-wrap">
-        <table class="tbl tbl-cartoes sm:min-w-[1080px]">
+        <table class="tbl tbl-cartoes sm:min-w-[1180px]">
             <thead>
                 <tr class="tbl-head-row">
                     <th class="tbl-th w-8" />
@@ -111,7 +120,8 @@ async function alternar(conta) {
                     <th class="tbl-th" title="Filiais que a rede tem no mercado">Filiais</th>
                     <th class="tbl-th" title="Clientes desta rede na nossa carteira">Clientes</th>
                     <th class="tbl-th">Status</th>
-                    <th class="tbl-th" title="Vendedor principal das lojas que já são clientes, e lead aberto para a rede">Atendimento</th>
+                    <th class="tbl-th" title="Quem atende as lojas desta rede que já são clientes (o de mais filiais primeiro)">Vendedor</th>
+                    <th class="tbl-th" title="Lead de prospecção aberto para a rede: responsável e etapa do funil">Lead</th>
                     <th class="tbl-th">Observação</th>
                     <th class="tbl-th">Última compra</th>
                     <th class="tbl-th">Ações</th>
@@ -165,48 +175,45 @@ async function alternar(conta) {
                                 {{ ROTULOS_STATUS_CONTA[conta.status] ?? conta.status }}
                             </StatusPill>
                         </td>
-                        <td class="tbl-td" data-rotulo="Atendimento" @click.stop>
-                            <!--
-                                Duas perguntas diferentes, cada uma numa linha:
-                                  1. quem atende as lojas que JÁ são clientes (vendedor
-                                     principal = o de mais lojas; os demais em "+N");
-                                  2. se há LEAD aberto para a rede (âmbar, abre /leads).
-                                Até 2026-10-07 os dois eram chips iguais lado a lado, com o
-                                nome em maiúsculas cortado ("ROBERTO BA…") e o "+N" quebrando
-                                linha — não dava para saber quem era nem o que era.
-                            -->
-                            <div
-                                v-if="conta.atendimento.length || conta.leads.length"
-                                class="flex flex-col items-center gap-0.5"
-                            >
-                                <template v-if="conta.atendimento.length">
-                                    <Link
-                                        :href="route('carteira.index', { conta_alvo: conta.id, visao_vendedor: conta.atendimento[0].codVendedor })"
-                                        class="tbl-main hover:text-teal hover:underline sm:max-w-[150px]"
-                                        :title="tituloVendedores(conta)"
-                                    >{{ nomeCurto(conta.atendimento[0].nome) }}</Link>
-                                    <!--
-                                        ⚠️ Sem contagem de lojas aqui: "lojas" são filiais
-                                        (2.819 na Raia) e ficariam ao lado da coluna Clientes
-                                        (87, cod_cliente distinto) — dois números para "quantos".
-                                        A divisão por vendedor fica no tooltip.
-                                    -->
-                                    <span v-if="conta.atendimento.length > 1" class="tbl-sub" :title="tituloVendedores(conta)">
-                                        +{{ conta.atendimento.length - 1 }} {{ conta.atendimento.length === 2 ? 'vendedor' : 'vendedores' }}
-                                    </span>
-                                </template>
-                                <!--
-                                    Leads ligados à rede: o aberto pela diretoria e os da
-                                    prospecção. O chip abre /leads?conta_alvo=, e a contagem
-                                    é a mesma definição da lista (`Lead::ligadoAConta`).
-                                -->
+                        <!--
+                            Duas perguntas, duas colunas (até 2026-10-07 eram uma célula só, e
+                            57 contas mostravam duas pessoas lado a lado sem dizer quem era o quê):
+                              Vendedor → quem atende as lojas que JÁ compram (o de mais filiais;
+                                         os demais em "+N"). Abre a carteira dele nesta rede.
+                              Lead     → a prospecção da rede: responsável e etapa. Abre /leads.
+                        -->
+                        <td class="tbl-td" data-rotulo="Vendedor" @click.stop>
+                            <template v-if="conta.atendimento.length">
                                 <Link
-                                    v-if="conta.leads.length"
-                                    :href="route('leads.index', { conta_alvo: conta.id })"
-                                    class="max-w-[150px] truncate rounded border border-amber bg-amber/10 px-1 py-0.5 text-[0.65rem] leading-3 text-amber-dark hover:underline"
-                                    :title="tituloLeads(conta.leads)"
-                                >{{ rotuloLeads(conta.leads) }}</Link>
-                            </div>
+                                    :href="route('carteira.index', { conta_alvo: conta.id, visao_vendedor: conta.atendimento[0].codVendedor })"
+                                    class="tbl-main hover:text-teal hover:underline sm:max-w-[150px]"
+                                    :title="tituloVendedores(conta)"
+                                >{{ nomeCurto(conta.atendimento[0].nome) }}</Link>
+                                <!--
+                                    ⚠️ Sem contagem de lojas aqui: "lojas" são filiais (2.819 na
+                                    Raia) e ficariam ao lado da coluna Clientes (87, cod_cliente
+                                    distinto) — dois números para "quantos". Fica no tooltip.
+                                -->
+                                <span v-if="conta.atendimento.length > 1" class="tbl-sub" :title="tituloVendedores(conta)">
+                                    +{{ conta.atendimento.length - 1 }} {{ conta.atendimento.length === 2 ? 'vendedor' : 'vendedores' }}
+                                </span>
+                            </template>
+                            <span v-else class="text-gray-400">—</span>
+                        </td>
+                        <td class="tbl-td" data-rotulo="Lead" @click.stop>
+                            <!-- A contagem é a mesma definição da lista de /leads (`Lead::ligadoAConta`). -->
+                            <Link
+                                v-if="conta.leads.length"
+                                :href="route('leads.index', { conta_alvo: conta.id })"
+                                class="group block"
+                                :title="tituloLeads(conta.leads)"
+                            >
+                                <span
+                                    class="tbl-main group-hover:underline sm:max-w-[150px]"
+                                    :class="conta.leads.length === 1 && conta.leads[0].semDono ? 'italic text-amber-dark' : 'group-hover:text-teal'"
+                                >{{ rotuloLeads(conta.leads) }}</span>
+                                <span v-if="subLeads(conta.leads)" class="tbl-sub">{{ subLeads(conta.leads) }}</span>
+                            </Link>
                             <span v-else class="text-gray-400">—</span>
                         </td>
                         <td class="tbl-td" data-rotulo="Observação" @click.stop>
@@ -259,7 +266,7 @@ async function alternar(conta) {
                     </tr>
 
                     <tr v-if="expandida === conta.id">
-                        <td colspan="10" class="tbl-td tbl-td-expansao bg-gray-50/60">
+                        <td colspan="11" class="tbl-td tbl-td-expansao bg-gray-50/60">
                             <p v-if="carregando === conta.id" class="py-3 text-xs text-gray-400">Carregando clientes…</p>
                             <p v-else-if="erro === conta.id" class="py-3 text-xs text-red-700">Não foi possível carregar os clientes.</p>
                             <p v-else-if="! conta.vinculos.length" class="py-3 text-xs text-gray-500">
