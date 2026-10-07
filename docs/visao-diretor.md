@@ -142,8 +142,9 @@ Segmento, UF, site e filiais vão numa observação assinada por quem abriu o le
   libera a conta para gerar de novo.
 - **Conta com cliente na carteira não gera lead**: a rede já tem vendedor na Carteira.
 - ⚠️ **O lead NÃO muda o status da conta.** Ela continua "Lead" até virar cliente no TOTVS
-  e ser vinculada — o status é derivado dos vínculos. Na coluna Atendimento aparece o
-  selo "Lead · Fulano", que abre o lead em /leads.
+  e ser vinculada — o status é derivado dos vínculos. ⚠️ O responsável pelo lead **não
+  aparece na tabela** (decisão da diretoria, 2026-10-07): ao lado do vendedor eram duas
+  pessoas na mesma linha sem dizer quem era o quê. O lead se vê em `/leads?conta_alvo=`.
 - Testes: `tests/Feature/VisaoDiretor/LeadDaContaTest.php` (12), 4 mutações mordidas.
 
 ### Derivados
@@ -152,7 +153,10 @@ Segmento, UF, site e filiais vão numa observação assinada por quem abriu o le
 |---|---|
 | Clientes | `cod_cliente` distintos das filiais casadas pelos vínculos |
 | Status | `MAX(data_ultima_compra)` → `ClienteStatusResolver` (mesmo corte da Carteira). **Sem vínculo = Lead** |
-| Atendimento | vendedores distintos dessas filiais |
+| Vendedor | vendedores distintos dessas filiais — o de mais filiais por extenso, os demais em "+N" (tooltip com todos). Só quem atende no sistema, nunca o dono do lead |
+
+Linha expandida: os clientes da conta, com **UF** = todas as UFs das filiais do cliente
+(a da âncora primeiro, "SP +2", lista no tooltip).
 
 ⚠️ **Invariante testada:** "Clientes" == total de `/carteira?conta_alvo=X` (agrupada).
 

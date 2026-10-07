@@ -432,6 +432,27 @@ class MaioresPorSegmentoTest extends TestCase
     }
 
     /**
+     * UF da linha expandida: TODAS as UFs das filiais do cliente, a da âncora (menor id)
+     * primeiro. Só a da âncora diria "RJ" para quem também está em MG e SP.
+     */
+    public function test_linha_expandida_traz_todas_as_ufs_do_cliente_com_a_da_ancora_primeiro(): void
+    {
+        Cliente::where('cod_cliente', '000001')->where('loja', '01')->update(['estado' => 'RJ']);
+        $this->cliente('000001', '03', '100', '001', null)->update(['estado' => 'MG']);
+        $this->cliente('000001', '04', '100', '001', null)->update(['estado' => '']);
+        $conta = $this->conta('RAIA', [['grupo', '100'], ['grupo', '101']]);
+
+        $clientes = collect($this->actingAs($this->admin)
+            ->getJson(route('visao-diretor.maiores.clientes', $conta))
+            ->assertOk()
+            ->json('clientes'))->keyBy('codCliente');
+
+        // Âncora em RJ; MG e SP em ordem alfabética; UF vazia não vira item.
+        $this->assertSame(['RJ', 'MG', 'SP'], $clientes['000001']['ufs']);
+        $this->assertSame(['SP'], $clientes['000002']['ufs']);
+    }
+
+    /**
      * O custo não pode crescer com o número de contas: a agregação é por conjunto, não
      * uma consulta por conta.
      */

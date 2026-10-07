@@ -1,8 +1,8 @@
 <script setup>
 /**
  * Leads da prospecção que o import achou parecidos com uma rede da lista, mas que vieram
- * sem a coluna `rede` preenchida (`ContaDoLead`). Sugestão não é verdade: só aparece na
- * coluna Atendimento depois de alguém confirmar aqui.
+ * sem a coluna `rede` preenchida (`ContaDoLead`). Sugestão não é verdade: só passa a contar
+ * como lead da conta (`/leads?conta_alvo=`) depois de alguém confirmar aqui.
  *
  * ⚠️ Recusar NÃO apaga a sugestão: o lead guarda a conta como recusada, e é isso que
  * impede o próximo import de sugerir a mesma de novo.

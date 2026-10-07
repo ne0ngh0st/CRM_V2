@@ -2883,7 +2883,9 @@ LEIA-ME ficam em `Leads/_MODELO/`. Subpasta não é lida (o glob é `Leads/*.csv
 - ⚠️ **Vários leads por conta**: a ligação mora em `leads.conta_estrategica_id` +
   `conta_vinculo` (`sugerido`/`confirmado`/`recusado`). O `contas_estrategicas.lead_id`
   antigo foi migrado e dropado. "Leads desta conta" = `Lead::scopeLigadoAConta()`, usado
-  pela coluna Atendimento E pelo filtro `/leads?conta_alvo=` (gate da Visão Diretor).
+  pelo botão de atribuir da Maiores por Segmento E pelo filtro `/leads?conta_alvo=`
+  (gate da Visão Diretor). A tabela não mostra o dono do lead desde 2026-10-07 (diretoria):
+  a coluna é só "Vendedor", quem atende no sistema.
   Recusada guarda a conta para o import não sugerir de novo.
 - **Filial de cliente** (decisão do Tony, 2026-10-02, opção "deixar como está"): a
   conferência de cliente é por CNPJ EXATO. Outra filial de uma rede que já compra

@@ -12,7 +12,6 @@ import { Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira';
 import { ROTULOS_STATUS_CONTA, TONS_STATUS_CONTA } from '@/constants/visaoDiretor';
-import { ROTULOS_ETAPA_LEAD } from '@/constants/leads';
 import { formatDataCurta, formatInteiro, nomeCurto } from '@/utils/formato';
 
 const props = defineProps({
@@ -47,29 +46,6 @@ function tituloVendedores(conta) {
     const linhas = conta.atendimento.map((v) => `${v.nome} — ${formatInteiro(v.lojas)} ${v.lojas === 1 ? 'filial' : 'filiais'}`);
 
     return [...linhas, 'Clique no nome para abrir a carteira dele nesta rede'].join('\n');
-}
-
-/** 1ª linha da coluna Lead: o responsável, "Sem dono", ou "N leads" quando há mais de um. */
-function rotuloLeads(leads) {
-    if (leads.length > 1) return `${leads.length} leads`;
-
-    return leads[0].semDono ? 'Sem dono' : nomeCurto(leads[0].responsavel);
-}
-
-/** 2ª linha: a etapa do funil (um lead) ou quantos estão sem dono (vários). */
-function subLeads(leads) {
-    if (leads.length === 1) return ROTULOS_ETAPA_LEAD[leads[0].etapa] ?? leads[0].etapa;
-
-    const semDono = leads.filter((l) => l.semDono).length;
-
-    return semDono ? `${semDono} sem dono` : '';
-}
-
-/** Tooltip do chip de leads: cada lead com responsável e etapa, e para onde o clique leva. */
-function tituloLeads(leads) {
-    const linhas = leads.map((l) => `${l.nome} — ${l.semDono ? 'sem dono' : l.responsavel} (${ROTULOS_ETAPA_LEAD[l.etapa] ?? l.etapa})`);
-
-    return [...linhas, 'Abrir em Leads'].join('\n');
 }
 
 const expandida = ref(null);
@@ -111,7 +87,7 @@ async function alternar(conta) {
 
 <template>
     <div class="tbl-wrap">
-        <table class="tbl tbl-cartoes sm:min-w-[1180px]">
+        <table class="tbl tbl-cartoes sm:min-w-[1080px]">
             <thead>
                 <tr class="tbl-head-row">
                     <th class="tbl-th w-8" />
@@ -121,7 +97,6 @@ async function alternar(conta) {
                     <th class="tbl-th" title="Clientes desta rede na nossa carteira">Clientes</th>
                     <th class="tbl-th">Status</th>
                     <th class="tbl-th" title="Quem atende as lojas desta rede que já são clientes (o de mais filiais primeiro)">Vendedor</th>
-                    <th class="tbl-th" title="Lead de prospecção aberto para a rede: responsável e etapa do funil">Lead</th>
                     <th class="tbl-th">Observação</th>
                     <th class="tbl-th">Última compra</th>
                     <th class="tbl-th">Ações</th>
@@ -176,11 +151,11 @@ async function alternar(conta) {
                             </StatusPill>
                         </td>
                         <!--
-                            Duas perguntas, duas colunas (até 2026-10-07 eram uma célula só, e
-                            57 contas mostravam duas pessoas lado a lado sem dizer quem era o quê):
-                              Vendedor → quem atende as lojas que JÁ compram (o de mais filiais;
-                                         os demais em "+N"). Abre a carteira dele nesta rede.
-                              Lead     → a prospecção da rede: responsável e etapa. Abre /leads.
+                            Só quem atende no sistema: o vendedor das lojas que JÁ compram (o de
+                            mais filiais; os demais em "+N"). Abre a carteira dele nesta rede.
+                            ⚠️ O responsável pelo LEAD da rede não entra aqui (decisão da
+                            diretoria, 2026-10-07): ao lado do vendedor, eram duas pessoas na
+                            mesma linha sem dizer quem era o quê. O lead continua em /leads.
                         -->
                         <td class="tbl-td" data-rotulo="Vendedor" @click.stop>
                             <template v-if="conta.atendimento.length">
@@ -198,22 +173,6 @@ async function alternar(conta) {
                                     +{{ conta.atendimento.length - 1 }} {{ conta.atendimento.length === 2 ? 'vendedor' : 'vendedores' }}
                                 </span>
                             </template>
-                            <span v-else class="text-gray-400">—</span>
-                        </td>
-                        <td class="tbl-td" data-rotulo="Lead" @click.stop>
-                            <!-- A contagem é a mesma definição da lista de /leads (`Lead::ligadoAConta`). -->
-                            <Link
-                                v-if="conta.leads.length"
-                                :href="route('leads.index', { conta_alvo: conta.id })"
-                                class="group block"
-                                :title="tituloLeads(conta.leads)"
-                            >
-                                <span
-                                    class="tbl-main group-hover:underline sm:max-w-[150px]"
-                                    :class="conta.leads.length === 1 && conta.leads[0].semDono ? 'italic text-amber-dark' : 'group-hover:text-teal'"
-                                >{{ rotuloLeads(conta.leads) }}</span>
-                                <span v-if="subLeads(conta.leads)" class="tbl-sub">{{ subLeads(conta.leads) }}</span>
-                            </Link>
                             <span v-else class="text-gray-400">—</span>
                         </td>
                         <td class="tbl-td" data-rotulo="Observação" @click.stop>
@@ -266,7 +225,7 @@ async function alternar(conta) {
                     </tr>
 
                     <tr v-if="expandida === conta.id">
-                        <td colspan="11" class="tbl-td tbl-td-expansao bg-gray-50/60">
+                        <td colspan="10" class="tbl-td tbl-td-expansao bg-gray-50/60">
                             <p v-if="carregando === conta.id" class="py-3 text-xs text-gray-400">Carregando clientes…</p>
                             <p v-else-if="erro === conta.id" class="py-3 text-xs text-red-700">Não foi possível carregar os clientes.</p>
                             <p v-else-if="! conta.vinculos.length" class="py-3 text-xs text-gray-500">
@@ -280,11 +239,12 @@ async function alternar(conta) {
                                 </p>
                                 <template v-else>
                                     <div class="overflow-x-auto">
-                                        <table class="tbl-itens min-w-[760px]">
+                                        <table class="tbl-itens min-w-[820px]">
                                             <thead>
                                                 <tr class="tbl-itens-head-row">
                                                     <th class="tbl-itens-th">Cliente</th>
                                                     <th class="tbl-itens-th">Código</th>
+                                                    <th class="tbl-itens-th">UF</th>
                                                     <th class="tbl-itens-th">Grupo</th>
                                                     <th class="tbl-itens-th">Vendedor</th>
                                                     <th class="tbl-itens-th">Lojas</th>
@@ -300,6 +260,9 @@ async function alternar(conta) {
                                                         </Link>
                                                     </td>
                                                     <td class="tbl-itens-td tabular-nums">{{ c.codCliente }}</td>
+                                                    <td class="tbl-itens-td" :title="c.ufs.length > 1 ? `Filiais em ${c.ufs.join(', ')}` : null">
+                                                        {{ c.ufs[0] || '—' }}<span v-if="c.ufs.length > 1" class="text-gray-400"> +{{ c.ufs.length - 1 }}</span>
+                                                    </td>
                                                     <td class="tbl-itens-td">{{ c.grupo || '—' }}</td>
                                                     <td class="tbl-itens-td">{{ c.vendedor || '—' }}</td>
                                                     <td class="tbl-itens-td tabular-nums">{{ c.lojas }}</td>

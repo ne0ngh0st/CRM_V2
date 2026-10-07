@@ -110,6 +110,9 @@ class MaioresPorSegmentoController extends Controller
             ->selectRaw('COUNT(*) as lojas')
             ->selectRaw('MAX(clientes.data_ultima_compra) as uc')
             ->selectRaw('MIN(clientes.id) as ancora_id')
+            // Um cliente de rede costuma ter filiais em mais de um estado: a UF da âncora
+            // sozinha diria "SP" para quem também está no RJ (o caso "SP +1" da Carteira).
+            ->selectRaw("GROUP_CONCAT(DISTINCT NULLIF(clientes.estado, '') ORDER BY clientes.estado SEPARATOR ',') as ufs")
             ->groupBy('clientes.cod_cliente');
 
         $total = DB::query()->fromSub($grupos, 'g')->count();
@@ -141,6 +144,9 @@ class MaioresPorSegmentoController extends Controller
                     'nome' => $a?->nome_fantasia ?: $a?->razao_social,
                     'razaoSocial' => $a?->razao_social,
                     'estado' => $a?->estado,
+                    // Todas as UFs das filiais, a da âncora primeiro (é a que a célula mostra).
+                    'ufs' => collect(explode(',', (string) $g->ufs))->filter()
+                        ->sortBy(fn ($uf) => $uf === $a?->estado ? 0 : 1)->values()->all(),
                     'grupo' => $a?->cod_grupo ? ($grupoNomes[$a->cod_grupo] ?? $a->cod_grupo) : null,
                     'vendedor' => $a?->cod_vendedor ? ($nomes[$a->cod_vendedor] ?? $a->cod_vendedor) : null,
                     'lojas' => (int) $g->lojas,
