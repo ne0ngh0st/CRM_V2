@@ -3,6 +3,7 @@
 namespace App\Services\Portal;
 
 use App\Models\Orcamento;
+use App\Models\User;
 use App\Services\Notificacao\NotificacaoService;
 use Illuminate\Support\Str;
 
@@ -77,8 +78,11 @@ class GeradorDePedidoNoPortal
 
     /**
      * Envia o corpo já congelado. Só deve ser chamado depois de preparar().
+     *
+     * `$solicitante` é quem clicou em "Transformar em pedido" — quase sempre um admin, e
+     * quase nunca o dono do orçamento. Ver avisar() para quem recebe o quê.
      */
-    public function enviar(Orcamento $orcamento): void
+    public function enviar(Orcamento $orcamento, ?User $solicitante = null): void
     {
         $corpo = $orcamento->portal_payload;
         $chave = $orcamento->portal_idempotency_key;
@@ -106,7 +110,7 @@ class GeradorDePedidoNoPortal
                 'portal_idempotency_key' => null,
             ])->save();
 
-            $this->avisar($orcamento, sucesso: false, detalhe: $e->getMessage());
+            $this->avisar($orcamento, sucesso: false, detalhe: $e->getMessage(), solicitante: $solicitante);
 
             return;
         }
@@ -127,7 +131,7 @@ class GeradorDePedidoNoPortal
             ? 'O pedido já havia sido criado; o Portal devolveu o mesmo número.'
             : ''));
 
-        $this->avisar($orcamento, sucesso: true, detalhe: $detalhe !== '' ? $detalhe : null);
+        $this->avisar($orcamento, sucesso: true, detalhe: $detalhe !== '' ? $detalhe : null, solicitante: $solicitante);
     }
 
     /**
@@ -135,7 +139,7 @@ class GeradorDePedidoNoPortal
      * — por isso a chave e o corpo ficam como estão: clicar de novo reenvia a mesma
      * requisição, e a idempotência deles devolve o pedido se ele existir.
      */
-    public function registrarFalhaDeRede(Orcamento $orcamento): void
+    public function registrarFalhaDeRede(Orcamento $orcamento, ?User $solicitante = null): void
     {
         if ($orcamento->foiEnviadoAoPortal()) {
             return;
@@ -146,7 +150,7 @@ class GeradorDePedidoNoPortal
 
         $orcamento->forceFill(['portal_erro' => $mensagem])->save();
 
-        $this->avisar($orcamento, sucesso: false, detalhe: $mensagem);
+        $this->avisar($orcamento, sucesso: false, detalhe: $mensagem, solicitante: $solicitante);
     }
 
     /**
@@ -192,11 +196,44 @@ class GeradorDePedidoNoPortal
         return substr($data, 8, 2).'/'.substr($data, 5, 2).'/'.substr($data, 0, 4);
     }
 
-    private function avisar(Orcamento $orcamento, bool $sucesso, ?string $detalhe): void
+    /**
+     * Quem recebe o quê (2026-10-07, depois do primeiro envio real em produção):
+     *
+     *  - **Pedido criado** → o dono do orçamento E quem clicou. O vendedor precisa saber
+     *    que o orçamento dele virou pedido; quem clicou precisa do número.
+     *  - **Recusa ou sem resposta** → só quem clicou: é quem pode corrigir e reenviar. No
+     *    primeiro envio real o admin clicou, o Portal recusou ("Vendedor não encontrado"),
+     *    e o aviso de erro foi parar no sino da VENDEDORA — que não tinha feito nada —,
+     *    enquanto o admin ficou sem saber o resultado.
+     *  - **Sem solicitante** (job enfileirado antes deste parâmetro existir) → o dono,
+     *    como era antes.
+     */
+    private function avisar(Orcamento $orcamento, bool $sucesso, ?string $detalhe, ?User $solicitante = null): void
     {
+        $destinatarios = match (true) {
+            $solicitante === null => [$orcamento->user],
+            $sucesso => [$orcamento->user, $solicitante],
+            default => [$solicitante],
+        };
+
+        foreach (collect($destinatarios)->filter()->unique('id') as $destinatario) {
+            $this->avisarUm($orcamento, $destinatario, $sucesso, $detalhe);
+        }
+    }
+
+    private function avisarUm(Orcamento $orcamento, User $destinatario, bool $sucesso, ?string $detalhe): void
+    {
+        /*
+         * Quem clicou em nome de outro vê de quem é o orçamento: "#2880" sozinho não diz
+         * nada a quem transforma orçamentos da equipe inteira.
+         */
+        $deOutro = $destinatario->id !== $orcamento->user_id && $orcamento->user !== null
+            ? ' ('.($orcamento->user->display_name ?: $orcamento->user->name).')'
+            : '';
+
         $titulo = $sucesso
-            ? "Orçamento #{$orcamento->id} virou pedido no Portal"
-            : "Orçamento #{$orcamento->id} não virou pedido";
+            ? "Orçamento #{$orcamento->id}{$deOutro} virou pedido no Portal"
+            : "Orçamento #{$orcamento->id}{$deOutro} não virou pedido";
 
         $mensagem = $sucesso
             ? trim("Pedido nº {$orcamento->portal_pedido_id} criado no Portal. ".($detalhe ?? ''))
@@ -211,7 +248,7 @@ class GeradorDePedidoNoPortal
          * precisa aparecer.
          */
         $this->notificacoes->notificar(
-            destinatario: $orcamento->user,
+            destinatario: $destinatario,
             tipo: $sucesso ? 'portal_pedido_criado' : 'portal_pedido_erro',
             titulo: $titulo,
             mensagem: $mensagem,

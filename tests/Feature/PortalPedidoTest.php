@@ -658,4 +658,82 @@ class PortalPedidoTest extends TestCase
 
         $this->assertSame('028', $orcamento->fresh()->portal_payload['paymentConditionCode']);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Quem recebe o resultado — 2026-10-07, primeiro envio real em produção
+    |--------------------------------------------------------------------------
+    | O admin clicou, o Portal recusou, e o aviso de erro foi para o sino da
+    | VENDEDORA, enquanto o admin ficou sem saber de nada.
+    */
+
+    public function test_o_clique_leva_quem_clicou_para_a_fila(): void
+    {
+        Bus::fake();
+        [, $orcamento] = $this->cenario();
+        $admin = $this->admin();
+
+        $this->actingAs($admin)->post(route('orcamentos.portal', $orcamento->id), $this->envio());
+
+        Bus::assertDispatched(EnviarPedidoAoPortalJob::class, fn ($job) => $job->solicitanteId === $admin->id);
+    }
+
+    public function test_recusa_avisa_quem_clicou_e_nao_o_dono(): void
+    {
+        Http::fake(['*/v1/api/orders' => Http::response(['message' => 'Vendedor não encontrado'], 404)]);
+        [$vendedor, $orcamento] = $this->cenario();
+        $admin = $this->admin();
+        $gerador = app(GeradorDePedidoNoPortal::class);
+
+        $gerador->preparar($orcamento, '2026-10-15');
+        $gerador->enviar($orcamento->fresh(), $admin);
+
+        $aviso = Notificacao::where('user_id', $admin->id)->where('tipo', 'portal_pedido_erro')->first();
+        $this->assertNotNull($aviso);
+        $this->assertSame('Vendedor não encontrado', $aviso->mensagem);
+        // Orçamento de outra pessoa: o título diz de quem é.
+        $this->assertStringContainsString($vendedor->display_name ?: $vendedor->name, $aviso->titulo);
+
+        $this->assertSame(0, Notificacao::where('user_id', $vendedor->id)->count());
+    }
+
+    public function test_pedido_criado_avisa_o_dono_e_quem_clicou(): void
+    {
+        Http::fake(['*/v1/api/orders' => Http::response(['payload' => ['id' => 4512]], 201)]);
+        [$vendedor, $orcamento] = $this->cenario();
+        $admin = $this->admin();
+        $gerador = app(GeradorDePedidoNoPortal::class);
+
+        $gerador->preparar($orcamento, '2026-10-15');
+        $gerador->enviar($orcamento->fresh(), $admin);
+
+        $this->assertSame(1, Notificacao::where('user_id', $vendedor->id)->where('tipo', 'portal_pedido_criado')->count());
+        $this->assertSame(1, Notificacao::where('user_id', $admin->id)->where('tipo', 'portal_pedido_criado')->count());
+        // Para o dono, o título não repete o próprio nome.
+        $this->assertStringNotContainsString('(', Notificacao::where('user_id', $vendedor->id)->value('titulo'));
+    }
+
+    public function test_dono_que_clica_recebe_um_aviso_so(): void
+    {
+        Http::fake(['*/v1/api/orders' => Http::response(['payload' => ['id' => 4512]], 201)]);
+        [$vendedor, $orcamento] = $this->cenario();
+        $gerador = app(GeradorDePedidoNoPortal::class);
+
+        $gerador->preparar($orcamento, '2026-10-15');
+        $gerador->enviar($orcamento->fresh(), $vendedor);
+
+        $this->assertSame(1, Notificacao::where('user_id', $vendedor->id)->count());
+    }
+
+    public function test_sem_resposta_avisa_quem_clicou(): void
+    {
+        [$vendedor, $orcamento] = $this->cenario();
+        $admin = $this->admin();
+        app(GeradorDePedidoNoPortal::class)->preparar($orcamento, '2026-10-15');
+
+        (new EnviarPedidoAoPortalJob($orcamento->id, $admin->id))->failed(new \RuntimeException('timeout'));
+
+        $this->assertSame(1, Notificacao::where('user_id', $admin->id)->where('tipo', 'portal_pedido_erro')->count());
+        $this->assertSame(0, Notificacao::where('user_id', $vendedor->id)->count());
+    }
 }

@@ -574,7 +574,8 @@ class OrcamentoController extends Controller
             return back()->with('portalAviso', ['tipo' => 'erro', 'mensagem' => $e->getMessage()]);
         }
 
-        EnviarPedidoAoPortalJob::dispatch($orcamento->id);
+        // Quem clicou recebe o resultado pelo sino (ver GeradorDePedidoNoPortal::avisar).
+        EnviarPedidoAoPortalJob::dispatch($orcamento->id, $request->user()->id);
 
         return back()->with('portalAviso', [
             'tipo' => 'ok',

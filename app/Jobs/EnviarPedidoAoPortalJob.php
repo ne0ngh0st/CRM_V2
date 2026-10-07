@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Orcamento;
+use App\Models\User;
 use App\Services\Portal\GeradorDePedidoNoPortal;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -35,8 +36,14 @@ class EnviarPedidoAoPortalJob implements ShouldQueue
      * ⚠️ Carrega por ID, não pelo model serializado: entre o clique e o worker o
      * orçamento pode ter mudado, e o que vale é o estado do banco.
      */
-    public function __construct(public readonly int $orcamentoId)
-    {
+    public function __construct(
+        public readonly int $orcamentoId,
+        /*
+         * Quem clicou — recebe o resultado pelo sino. Opcional só para que um job já
+         * enfileirado antes deste parâmetro existir continue rodando depois do deploy.
+         */
+        public readonly ?int $solicitanteId = null,
+    ) {
     }
 
     public function handle(GeradorDePedidoNoPortal $gerador): void
@@ -56,7 +63,7 @@ class EnviarPedidoAoPortalJob implements ShouldQueue
             return;
         }
 
-        $gerador->enviar($orcamento);
+        $gerador->enviar($orcamento, $this->solicitante());
     }
 
     /**
@@ -68,7 +75,12 @@ class EnviarPedidoAoPortalJob implements ShouldQueue
         $orcamento = Orcamento::find($this->orcamentoId);
 
         if ($orcamento !== null) {
-            app(GeradorDePedidoNoPortal::class)->registrarFalhaDeRede($orcamento);
+            app(GeradorDePedidoNoPortal::class)->registrarFalhaDeRede($orcamento, $this->solicitante());
         }
+    }
+
+    private function solicitante(): ?User
+    {
+        return $this->solicitanteId !== null ? User::find($this->solicitanteId) : null;
     }
 }
