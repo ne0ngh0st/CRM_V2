@@ -1,5 +1,5 @@
 {
-  "fonte": "Ranking ABRAS 2026 — as 200 primeiras posições (posicao_2025 nulo = entrou no ranking este ano)",
+  "fonte": "Ranking ABRAS 2026 — as 200 primeiras posições (posicao_2025 nulo = entrou no ranking este ano). `razoes` = razões sociais conhecidas quando a ABRAS publica só a marca.",
   "ranking": [
     {
       "posicao": 1,
@@ -13,7 +13,10 @@
       "posicao_2025": 2,
       "razao_social": "ASSAÍ ATACADISTA",
       "nome": "ASSAÍ ATACADISTA",
-      "uf": "SP"
+      "uf": "SP",
+      "razoes": [
+        "SENDAS DISTRIBUIDORA S/A"
+      ]
     },
     {
       "posicao": 3,
@@ -34,7 +37,11 @@
       "posicao_2025": 5,
       "razao_social": "GPA",
       "nome": "GPA",
-      "uf": "SP"
+      "uf": "SP",
+      "razoes": [
+        "COMPANHIA BRASILEIRA DE DISTRIBUICAO",
+        "CIA BRASILEIRA DE DISTRIBUICAO"
+      ]
     },
     {
       "posicao": 6,

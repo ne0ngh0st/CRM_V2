@@ -220,6 +220,30 @@ class SupermercadistaAbrasTest extends TestCase
         $this->assertSame(0, $drogaria->vinculos()->count());
     }
 
+    /**
+     * A razão social é o vínculo forte: usa as `razoes` de quem a ABRAS publica só pela
+     * marca, e a sugestão por nome não soma ao que ela achou (o "mercadinho Savegnago" é
+     * homônimo).
+     *
+     * Mutação: tirar o `--so-sem-vinculo` da chamada da sugestão por nome.
+     */
+    public function test_razao_social_e_o_vinculo_forte(): void
+    {
+        $this->filial('000911', '101', 'PAO DE ACUCAR - LOJA 1314', 'CIA BRASILEIRA DE DISTRIBUICAO', '47508411000156');
+        $this->filial('000300', '101', 'SAVEGNAGO CENTRO', 'SAVEGNAGO SUPERMERCADOS LTDA', '71322150000130');
+        $this->filial('000301', '101', 'SAVEGNAGO MERCADINHO', 'MERCADINHO SAVEGNAGO DO BAIRRO LTDA', '99999999000191');
+        $this->ranking([
+            [5, 'GPA', 'GPA', 'SP', ['CIA BRASILEIRA DE DISTRIBUICAO']],
+            [17, 'SAVEGNAGO SUPERMERCADOS', 'SAVEGNAGO SUPERMERCADOS LTDA.', 'SP'],
+        ]);
+
+        $this->artisan('diretor:importar-ranking-abras', ['--arquivo' => $this->arquivo])->assertSuccessful();
+
+        $codigos = fn (string $nome) => ContaEstrategica::where('nome', $nome)->sole()->vinculos()->orderBy('codigo')->pluck('codigo')->all();
+        $this->assertSame(['000911'], $codigos('GPA'));
+        $this->assertSame(['000300'], $codigos('SAVEGNAGO SUPERMERCADOS'), 'o homônimo pelo nome não soma');
+    }
+
     // ---------------------------------------------------------------- apoio
 
     private function lead(string $cnpj, ?string $cnae = null, ?string $segmento = null, string $origem = 'sistema', ?string $razao = null): int
@@ -245,10 +269,11 @@ class SupermercadistaAbrasTest extends TestCase
         return DB::table('leads')->where('id', $id)->value('segmento');
     }
 
-    private function filial(string $codigo, string $segmento, string $fantasia, string $razao): void
+    private function filial(string $codigo, string $segmento, string $fantasia, string $razao, ?string $cnpj = null): void
     {
         Cliente::create([
             'cod_cliente' => $codigo, 'loja' => '0001', 'razao_social' => $razao, 'nome_fantasia' => $fantasia,
+            'cnpj' => $cnpj ? vsprintf('%s%s.%s%s%s.%s%s%s/%s%s%s%s-%s%s', str_split($cnpj)) : null,
             'cod_grupo' => '9998', 'cod_segmento' => $segmento, 'cod_vendedor' => '000001', 'estado' => 'SP',
         ]);
     }
@@ -261,6 +286,7 @@ class SupermercadistaAbrasTest extends TestCase
 
         file_put_contents(base_path($this->arquivo), json_encode(['ranking' => array_map(fn ($l) => [
             'posicao' => $l[0], 'posicao_2025' => null, 'nome' => $l[1], 'razao_social' => $l[2], 'uf' => $l[3],
+            'razoes' => $l[4] ?? [],
         ], $linhas)]));
     }
 }

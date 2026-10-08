@@ -3,9 +3,12 @@
 namespace App\Console\Commands;
 
 use App\Models\ContaEstrategica;
+use App\Models\ContaEstrategicaVinculo;
 use App\Models\Segmento;
+use App\Services\VisaoDiretor\ClientesDaConta;
 use App\Services\VisaoDiretor\ContaDoLead;
 use App\Services\VisaoDiretor\SugestaoDeVinculo;
+use App\Services\VisaoDiretor\VinculoPorRazaoSocial;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -24,9 +27,13 @@ use Throwable;
  * diretoria tirou faturamento desta página (18/09) e não quis de volta (08/10).
  *
  * Depois de criar as contas:
- *   1. `visao-diretor:sugerir-vinculos --segmento=101` liga os clientes pelo nome das
- *      filiais (sugestão, revisável no modal da conta);
- *   2. `ContaDoLead::sugerirParaLeadsSemConta()` sugere a rede dos leads já classificados.
+ *   1. `VinculoPorRazaoSocial` liga os clientes pela razão social (a da ABRAS e as do campo
+ *      `razoes`, para quem a ABRAS publica só a marca) + CNPJ raiz. É o vínculo forte, e
+ *      SUBSTITUI as sugestões que a conta tinha (manual nunca é tocado);
+ *   2. `visao-diretor:sugerir-vinculos --segmento=101 --so-sem-vinculo` tenta pelo nome
+ *      das filiais só as redes que não casaram pela razão social — o nome de marca é
+ *      fraco e puxa homônimo, então não pode somar ao vínculo forte;
+ *   3. `ContaDoLead::sugerirParaLeadsSemConta()` sugere a rede dos leads já classificados.
  *
  * ⚠️ Idempotente: a conta é achada pela mesma chave de nome da prospecção
  * (`SugestaoDeVinculo::chaveDeNome`), então rodar de novo — ou com o ranking do ano
@@ -47,7 +54,7 @@ class ImportarRankingAbras extends Command
 
     protected $description = 'Contas da aba Supermercadista (Visão Diretor) a partir do ranking da ABRAS';
 
-    public function handle(SugestaoDeVinculo $nomes, ContaDoLead $contaDoLead): int
+    public function handle(SugestaoDeVinculo $nomes, ContaDoLead $contaDoLead, VinculoPorRazaoSocial $porRazao, ClientesDaConta $clientesDaConta): int
     {
         $arquivo = base_path((string) $this->option('arquivo'));
         $limite = max(1, (int) $this->option('limite'));
@@ -110,7 +117,7 @@ class ImportarRankingAbras extends Command
                 }
                 $conta->save();
 
-                $doRanking[$conta->id] = true;
+                $doRanking[$conta->id] = $r;
             }
 
             // Quem não está no ranking vai para depois dele, sem trocar de ordem entre si.
@@ -131,9 +138,42 @@ class ImportarRankingAbras extends Command
                 }
             }
 
+            $catalogo = $porRazao->catalogo();
+            $pelaRazao = 0;
+            $codigosPelaRazao = 0;
+
+            foreach ($doRanking as $id => $r) {
+                $conta = ContaEstrategica::with('vinculos')->find($id);
+
+                if ($conta->vinculos->contains('origem', ContaEstrategicaVinculo::ORIGEM_MANUAL)) {
+                    continue;
+                }
+
+                $codigos = $porRazao->clientes([$r['razao_social'], ...($r['razoes'] ?? [])], $catalogo);
+
+                if ($codigos === []) {
+                    continue;
+                }
+
+                $clientesDaConta->sincronizarVinculos($conta, array_map(fn (string $c) => [
+                    'tipo' => ContaEstrategicaVinculo::TIPO_CLIENTE,
+                    'codigo' => $c,
+                    'origem' => ContaEstrategicaVinculo::ORIGEM_SUGESTAO,
+                ], $codigos));
+                $pelaRazao++;
+                $codigosPelaRazao += count($codigos);
+            }
+
             $this->newLine();
-            $this->info('Clientes pelo nome das filiais:');
-            $this->call('visao-diretor:sugerir-vinculos', ['--segmento' => $segmento->codigo, '--detalhe' => (bool) $this->option('detalhe')]);
+            $this->info("Clientes pela razão social + CNPJ raiz: {$pelaRazao} redes · {$codigosPelaRazao} códigos");
+
+            $this->newLine();
+            $this->info('Clientes pelo nome das filiais (só redes sem vínculo):');
+            $this->call('visao-diretor:sugerir-vinculos', [
+                '--segmento' => $segmento->codigo,
+                '--so-sem-vinculo' => true,
+                '--detalhe' => (bool) $this->option('detalhe'),
+            ]);
 
             $leads = $contaDoLead->sugerirParaLeadsSemConta();
             $this->newLine();
