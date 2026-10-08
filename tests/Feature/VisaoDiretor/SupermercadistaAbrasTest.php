@@ -50,11 +50,13 @@ class SupermercadistaAbrasTest extends TestCase
         $super = $this->lead('11111111000191', cnae: '4711302');
         $mini = $this->lead('22222222000191', cnae: '4712100');
         $hiper = $this->lead('33333333000191', cnae: '4711301');
+        $atacado = $this->lead('44444444000191', cnae: '4639701');
+        $hortifruti = $this->lead('55555555000191', cnae: '4724500');
 
         $r = app(SegmentoDosLeads::class)->classificar();
 
-        $this->assertSame(['SUPERMERCADISTA' => 3], $r['classificados']);
-        foreach ([$super, $mini, $hiper] as $id) {
+        $this->assertSame(['SUPERMERCADISTA' => 5], $r['classificados']);
+        foreach ([$super, $mini, $hiper, $atacado, $hortifruti] as $id) {
             $this->assertSame('SUPERMERCADISTA', $this->segmentoDo($id));
         }
     }

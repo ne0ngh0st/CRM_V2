@@ -29,13 +29,16 @@ class SegmentoDosLeads
     /**
      * CNAE principal (7 dígitos) → código do segmento no TOTVS (`segmentos.codigo`).
      *
-     * Decisão do Tony (2026-10-08): a base `sistema` é de supermercados. Atacadista de
-     * alimentos (4639-7/01) ficou de fora até alguém decidir.
+     * Decisão do Tony (2026-10-08): a base `sistema` é de supermercados; atacado de
+     * alimentos e hortifrúti entram junto. Atacado de mercadorias em geral (4691-5/00,
+     * 4693-1/00) ficou de fora.
      */
     public const MAPA = [
         '4711301' => Segmento::CODIGO_SUPERMERCADISTA, // hipermercados
         '4711302' => Segmento::CODIGO_SUPERMERCADISTA, // supermercados
         '4712100' => Segmento::CODIGO_SUPERMERCADISTA, // minimercados, mercearias e armazéns
+        '4639701' => Segmento::CODIGO_SUPERMERCADISTA, // atacado de produtos alimentícios em geral
+        '4724500' => Segmento::CODIGO_SUPERMERCADISTA, // hortifrutigranjeiros
     ];
 
     public static function segmentoDoCnae(?string $cnae): ?string

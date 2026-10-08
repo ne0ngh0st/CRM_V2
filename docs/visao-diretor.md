@@ -252,7 +252,8 @@ php artisan diretor:importar-ranking-abras --dry-run --detalhe
 **Os leads.** A base antiga (`origem = sistema`, ~14 mil em produção) não tinha segmento.
 `SegmentoDosLeads` preenche pelo **CNAE principal** da Receita (`cnpj_situacoes.cnae_principal`,
 lido pela carga mensal no campo 11 do Estabelecimentos e gravado também pelo cartão CNPJ):
-4711-3/01, 4711-3/02 e 4712-1/00 → SUPERMERCADISTA.
+4711-3/01, 4711-3/02, 4712-1/00, 4639-7/01 (atacado de alimentos) e 4724-5/00
+(hortifrúti) → SUPERMERCADISTA.
 
 - ⚠️ **Nem todo lead `sistema` é supermercado**: em produção (08/10), dois vendedores tinham
   ~3,7 mil leads de transportadora e calçados. CNAE fora do mapa deixa o lead **sem
@@ -261,7 +262,10 @@ lido pela carga mensal no campo 11 do Estabelecimentos e gravado também pelo ca
 - O lead classificado ganha **sugestão** da rede cujo nome casa (mesma regra da
   prospecção). O mercado pequeno que não é rede do ranking continua só como lead.
 - Roda sozinho no fim da carga da Receita, ou à mão: `php artisan leads:classificar-segmento --dry-run`.
-- ⚠️ Atacadista de alimentos (4639-7/01) ficou fora do mapa até alguém decidir.
+- Atacado de mercadorias em geral (4691-5/00, 4693-1/00) ficou fora do mapa.
+- Produção (08/10): 4.296 dos 14.101 leads `sistema` ativos eram supermercado/mercearia;
+  o resto é calçados, entrega e logística. Assaí, GPA e Sonda foram ligados à mão (grupos
+  60 e 10, códigos 000911 e 005507): o nome do ranking não bate com o do cliente.
 
 ## 3. Rollup de faturamento — `faturamento_cliente_mensal`
 
