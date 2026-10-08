@@ -38,6 +38,7 @@ class LeadsDaProspeccaoTest extends TestCase
 
         $this->drogarias = Segmento::create(['codigo' => '109', 'nome' => 'DROGARIAS']);
         Segmento::create(['codigo' => '101', 'nome' => 'SUPERMERCADISTA']);
+        Segmento::create(['codigo' => '103', 'nome' => 'ORGAO PUBLICO']);
     }
 
     protected function tearDown(): void
@@ -200,7 +201,8 @@ class LeadsDaProspeccaoTest extends TestCase
 
     public function test_segmento_fora_das_abas_fica_so_em_leads(): void
     {
-        $this->importar([$this->linha('11111111000191', 'MERCADO X', '101', rede: 'MERCADO X')]);
+        // 103 (órgão público) não é aba. Até 2026-10-08 o exemplo era o 101, que virou aba.
+        $this->importar([$this->linha('11111111000191', 'PREFEITURA X', '103', rede: 'PREFEITURA X')]);
 
         $this->assertSame(0, ContaEstrategica::count());
         $this->assertNull(Lead::sole()->conta_estrategica_id);

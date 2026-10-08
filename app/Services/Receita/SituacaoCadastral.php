@@ -206,8 +206,8 @@ class SituacaoCadastral
     }
 
     /**
-     * Capital e porte só são gravados quando o cartão os traz: fonte que não informa não
-     * apaga o que a carga mensal já tinha.
+     * Capital, porte e CNAE só são gravados quando o cartão os traz: fonte que não informa
+     * não apaga o que a carga mensal já tinha.
      */
     public function registrarDoCartao(
         string $cnpj,
@@ -216,6 +216,7 @@ class SituacaoCadastral
         ?string $dataSituacao = null,
         ?float $capitalSocial = null,
         ?string $porte = null,
+        ?string $cnae = null,
     ): void {
         if (strlen($cnpj) !== 14 || blank($situacao)) {
             return;
@@ -230,6 +231,7 @@ class SituacaoCadastral
             'atualizado_em' => now(),
             'capital_social' => $capitalSocial,
             'porte' => $porte,
+            'cnae_principal' => $cnae,
         ];
 
         $atualizar = ['situacao', 'data_situacao', 'fonte', 'referencia', 'atualizado_em'];
@@ -238,6 +240,9 @@ class SituacaoCadastral
         }
         if ($porte !== null) {
             $atualizar[] = 'porte';
+        }
+        if ($cnae !== null) {
+            $atualizar[] = 'cnae_principal';
         }
 
         DB::table('cnpj_situacoes')->upsert([$linha], ['cnpj'], $atualizar);

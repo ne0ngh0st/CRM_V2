@@ -13,7 +13,7 @@ página **Maiores por Segmento**, e fixa o padrão das que vierem depois.
 | Decisão | Onde mora | Por quê |
 |---|---|---|
 | Quem entra | Gate **`ver-visao-diretor`** (`AppServiceProvider`) = admin + diretor | Uma decisão só. As telas antigas copiam `hasAnyRole([...])` em cada controller; aqui o grupo de rotas inteiro passa pelo mesmo gate |
-| Quais segmentos | `AbasDaPlanilha` (as seis abas do Excel, na ordem dele) | Import, abas da tela e resumo vazio saem daqui. Mexeu numa, mexeu nas três |
+| Quais segmentos | `AbasDaPlanilha` (Supermercadista + as seis abas do Excel, na ordem dele) | Import, abas da tela e resumo vazio saem daqui. Mexeu numa, mexeu nas três |
 | Bloqueio | `->middleware('can:ver-visao-diretor')` no grupo de rotas → **403** | Página nova entra no grupo e já nasce protegida; esquecer a checagem no controller deixa de ser possível |
 | Rotas | prefixo `/visao-diretor/…`, nomes `visao-diretor.…` | O menu acende por `visao-diretor.*` |
 | Controllers | `app/Http/Controllers/VisaoDiretor/`, um por página | |
@@ -54,12 +54,14 @@ definição. O filtro:
 `/visao-diretor/maiores-por-segmento`
 
 Substitui a planilha `MAIORES POR SEGMENTO - CRM.xlsx`: as maiores redes do **mercado** em
-seis segmentos (Drogarias, Rede de Lojas, Alimentação, Postos, Material de Construção,
-Estacionamentos), com o número de filiais que cada uma tem no Brasil.
+sete segmentos (Supermercadista, Drogarias, Rede de Lojas, Alimentação, Postos, Material de
+Construção, Estacionamentos), com o número de filiais que cada uma tem no Brasil. É o
+retrato das maiores redes do país, **onde já atendemos e onde não** — a função da página.
 
-A tela é **uma aba por segmento**, na mesma ordem da planilha (Drogarias, Rede de Lojas,
-Alimentação, Postos, Construção, Estacionamentos), mais o **Resumo** no lugar da aba
-DASHBOARD. As seis abas existem mesmo sem conta cadastrada. A troca de aba é local —
+A tela é **uma aba por segmento**: Supermercadista primeiro (não existe na planilha, ver
+abaixo), depois a ordem da planilha (Drogarias, Rede de Lojas, Alimentação, Postos,
+Construção, Estacionamentos), mais o **Resumo** no lugar da aba DASHBOARD. As abas existem
+mesmo sem conta cadastrada. A troca de aba é local —
 o payload traz todas as tabelas, igual virar a folha no Excel.
 
 ⚠️ **É lista de ALVOS, não de faturamento.** Na planilha, "ATENDIMENTO" e "STATUS" eram
@@ -220,6 +222,46 @@ Achado em produção: 8 contas com DOIS leads — o que a diretoria abriu pelo "
 - **"Gerar lead" não cria o segundo**: conta com lead sem dono → atribui aquele; CNPJ
   informado (campo opcional do modal) que já é lead sem dono → liga e atribui; já é lead
   com dono ou é cliente → recusa. Atribuir lead SEM dono não é transferência.
+
+### Aba Supermercadista: ranking da ABRAS + leads pelo CNAE (2026-10-08)
+
+A aba não veio da planilha da diretoria. As contas são as **200 primeiras do ranking da
+ABRAS** (`database/data/visao-diretor/ranking-abras-2026.json`, extraído do PDF em
+`DOCS/CRM/ranking-abras-2026.pdf`), na ordem do ranking.
+
+```bash
+php artisan diretor:importar-ranking-abras --dry-run --detalhe
+```
+
+- O JSON guarda o **nome curto** de cada rede (o que aparece na tela e o que casa com o nome
+  das nossas filiais) ao lado da razão social da ABRAS. "S.S. COMÉRCIO DE ALIMENTOS" virou
+  "S.S. COMÉRCIO" porque, sem palavra de marca, o nome casava qualquer "Comércio de
+  Alimentos" da base. Ranking do ano seguinte: gerar outro JSON e rodar de novo.
+- ⚠️ **Sem faturamento** — nem na tela nem no arquivo (decisão do Tony, 2026-10-08).
+- Idempotente pela chave de nome da prospecção (`chaveDeNome`): rodar de novo atualiza a
+  posição (= `ordem`) e não duplica; nome, observação e UF já preenchidos não mudam. Conta
+  da aba fora do ranking vai para depois dele.
+- Depois de criar, chama `visao-diretor:sugerir-vinculos --segmento=101` (clientes pelo
+  nome das filiais, só nas contas da aba) e `ContaDoLead::sugerirParaLeadsSemConta()`.
+- ⚠️ **Nome comum puxa homônimo.** Dry-run em dev (08/10): 131 das 200 redes ganham
+  vínculo, e as grandes casam certo (Carrefour, Tatico = Centro Oeste, Joanin = Comercial
+  Oswaldo Cruz). Mas "Supermercado da Família" (PE) puxa a "Família Gaúcha" (RS), "Rede
+  Paraíba" puxa "Paraíba Papéis" e "Pague Menos" (SP) puxa mercados de mesmo nome em MG e
+  BA. Entram como SUGESTÃO, revisáveis no modal da conta.
+
+**Os leads.** A base antiga (`origem = sistema`, ~14 mil em produção) não tinha segmento.
+`SegmentoDosLeads` preenche pelo **CNAE principal** da Receita (`cnpj_situacoes.cnae_principal`,
+lido pela carga mensal no campo 11 do Estabelecimentos e gravado também pelo cartão CNPJ):
+4711-3/01, 4711-3/02 e 4712-1/00 → SUPERMERCADISTA.
+
+- ⚠️ **Nem todo lead `sistema` é supermercado**: em produção (08/10), dois vendedores tinham
+  ~3,7 mil leads de transportadora e calçados. CNAE fora do mapa deixa o lead **sem
+  segmento**; nunca chuta.
+- Só preenche (não sobrescreve) e só nas bases importadas; manual e site não são tocados.
+- O lead classificado ganha **sugestão** da rede cujo nome casa (mesma regra da
+  prospecção). O mercado pequeno que não é rede do ranking continua só como lead.
+- Roda sozinho no fim da carga da Receita, ou à mão: `php artisan leads:classificar-segmento --dry-run`.
+- ⚠️ Atacadista de alimentos (4639-7/01) ficou fora do mapa até alguém decidir.
 
 ## 3. Rollup de faturamento — `faturamento_cliente_mensal`
 

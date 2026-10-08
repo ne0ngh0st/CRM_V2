@@ -17,12 +17,18 @@ use Illuminate\Console\Command;
  * ⚠️ Grupo ou código que casa com duas contas fica de fora das duas (vai para o relatório).
  *
  * Seguro rodar de novo: o que já está gravado não muda.
+ *
+ * `--segmento=101` grava só nas contas daquele segmento (é o que a carga do ranking da
+ * ABRAS usa, para não acrescentar sugestão nas outras abas sem ninguém pedir). O conflito
+ * "casa com duas contas" continua sendo apurado contra TODAS as contas: senão um grupo da
+ * aba nova poderia ir também para uma conta de outra aba.
  */
 class SugerirVinculosPorCliente extends Command
 {
     protected $signature = 'visao-diretor:sugerir-vinculos
         {--dry-run : mostra o que seria vinculado, sem gravar}
-        {--detalhe : lista conta a conta, com exemplos de filiais casadas}';
+        {--detalhe : lista conta a conta, com exemplos de filiais casadas}
+        {--segmento= : só grava nas contas deste segmento (código TOTVS, ex.: 101)}';
 
     protected $description = 'Sugere vínculos conta-alvo → clientes pelo nome fantasia/razão das filiais';
 
@@ -70,9 +76,11 @@ class SugerirVinculosPorCliente extends Command
         $acrescentados = ['grupo' => 0, 'cliente' => 0];
         $linhas = [];
 
+        $soSegmento = $this->option('segmento');
+
         foreach ($contas as $conta) {
             $proposta = $propostas[$conta->id] ?? null;
-            if (! $proposta) {
+            if (! $proposta || ($soSegmento !== null && (string) $conta->segmento->codigo !== (string) $soSegmento)) {
                 continue;
             }
 

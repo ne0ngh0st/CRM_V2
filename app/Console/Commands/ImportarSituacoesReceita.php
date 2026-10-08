@@ -2,10 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Leads\SegmentoDosLeads;
 use App\Services\Receita\PorteEmpresa;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\Normalizador;
 use App\Services\Totvs\Relatorios;
+use App\Services\VisaoDiretor\ContaDoLead;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -34,8 +36,12 @@ use ZipArchive;
  * é calculada em memória e o valor é gravado em cada CNPJ de 14 dígitos: nenhuma coluna de
  * raiz é armazenada (Regra de ouro nº 3).
  *
+ * Do mesmo arquivo de Estabelecimentos sai o CNAE principal, que classifica o segmento
+ * dos leads da prospecção (`SegmentoDosLeads`).
+ *
  * Termina chamando `sincronizarLeads()`: lead que já estava no CRM e cuja situação
- * passou a ser conhecida como não ativa sai na hora, sem esperar o próximo import.
+ * passou a ser conhecida como não ativa sai na hora, sem esperar o próximo import. Depois,
+ * `SegmentoDosLeads::classificar()`: lead sem segmento ganha o do CNAE.
  */
 class ImportarSituacoesReceita extends Command
 {
@@ -48,7 +54,7 @@ class ImportarSituacoesReceita extends Command
 
     protected $description = 'Carrega a situação cadastral (Receita) dos CNPJs de leads e clientes';
 
-    public function handle(SituacaoCadastral $situacoes): int
+    public function handle(SituacaoCadastral $situacoes, SegmentoDosLeads $segmentos, ContaDoLead $contaDoLead): int
     {
         $locais = (array) $this->option('arquivo');
         $referencia = $this->option('referencia') ?: ($locais === [] ? $this->referenciaMaisRecente() : null);
@@ -118,6 +124,15 @@ class ImportarSituacoesReceita extends Command
         }
         $this->info('Leads que voltaram (CNPJ regularizado na Receita): '.$leads['reativados']);
 
+        $classificacao = $segmentos->classificar();
+        $this->info('Leads que ganharam segmento pelo CNAE: '.array_sum($classificacao['classificados']));
+        foreach ($classificacao['classificados'] as $segmento => $total) {
+            $this->line("  {$segmento}: {$total}");
+        }
+
+        $contas = $contaDoLead->sugerirParaLeadsSemConta();
+        $this->info("Leads sugeridos para uma rede da Maiores por Segmento: {$contas['sugeridos']}");
+
         return self::SUCCESS;
     }
 
@@ -154,13 +169,14 @@ class ImportarSituacoesReceita extends Command
     /**
      * Varre um zip de Estabelecimentos. Layout (sem cabeçalho, `;`, aspas, latin1):
      * 0 cnpj_basico · 1 cnpj_ordem · 2 cnpj_dv · 3 matriz/filial · 4 nome fantasia ·
-     * 5 situação cadastral · 6 data da situação · …
+     * 5 situação cadastral · 6 data da situação · 7 motivo · 8 cidade no exterior · 9 país ·
+     * 10 início de atividade · 11 CNAE principal ("4711302") · …
      *
      * São ~6,5 milhões de linhas por arquivo e o CRM quer ~0,2% delas: o CNPJ sai por
      * posição fixa e só a linha que interessa paga o `str_getcsv`.
      *
      * @param  array<string, true>  $interesse
-     * @param  array<string, array{0: string, 1: ?string}>  $achados
+     * @param  array<string, array{0: string, 1: ?string, 2: ?string}>  $achados
      */
     private function varrer(string $caminho, array $interesse, array &$achados): int
     {
@@ -193,6 +209,7 @@ class ImportarSituacoesReceita extends Command
                 $achados[$cnpj] = [
                     SituacaoCadastral::deCodigo($campos[5] ?? ''),
                     SituacaoCadastral::data($campos[6] ?? null),
+                    self::cnae($campos[11] ?? null),
                 ];
             }
         } finally {
@@ -292,6 +309,14 @@ class ImportarSituacoesReceita extends Command
         return $linhas;
     }
 
+    /** Só os 7 dígitos; qualquer outra coisa (vazio, "0", lixo) vira nulo. */
+    private static function cnae(?string $valor): ?string
+    {
+        $digitos = preg_replace('/\D/', '', (string) $valor);
+
+        return strlen($digitos) === 7 ? $digitos : null;
+    }
+
     private function cnpjPorCsv(string $linha): string
     {
         $c = str_getcsv($linha, ';', '"', '');
@@ -302,7 +327,7 @@ class ImportarSituacoesReceita extends Command
     }
 
     /**
-     * @param  array<string, array{0: string, 1: ?string}>  $achados
+     * @param  array<string, array{0: string, 1: ?string, 2: ?string}>  $achados
      * @param  array<string, true>  $inexistentes
      * @param  array<string, array{0: ?string, 1: ?string}>|null  $empresas  raiz => [capital,
      *         porte]; null = a etapa de Empresas não rodou, e capital/porte não são tocados
@@ -312,14 +337,15 @@ class ImportarSituacoesReceita extends Command
         $agora = now();
         $linhas = [];
 
-        foreach ($achados as $cnpj => [$situacao, $data]) {
-            $linhas[] = [(string) $cnpj, $situacao, $data];
+        foreach ($achados as $cnpj => [$situacao, $data, $cnae]) {
+            $linhas[] = [(string) $cnpj, $situacao, $data, $cnae];
         }
         foreach (array_keys($inexistentes) as $cnpj) {
-            $linhas[] = [(string) $cnpj, SituacaoCadastral::INEXISTENTE, null];
+            $linhas[] = [(string) $cnpj, SituacaoCadastral::INEXISTENTE, null, null];
         }
 
-        $atualizar = ['situacao', 'data_situacao', 'fonte', 'referencia', 'atualizado_em'];
+        // A varredura de Estabelecimentos sempre roda inteira: o CNAE é sempre regravado.
+        $atualizar = ['situacao', 'data_situacao', 'cnae_principal', 'fonte', 'referencia', 'atualizado_em'];
         if ($empresas !== null) {
             $atualizar = [...$atualizar, 'capital_social', 'porte'];
         }
@@ -330,6 +356,7 @@ class ImportarSituacoesReceita extends Command
                     'cnpj' => $l[0],
                     'situacao' => $l[1],
                     'data_situacao' => $l[2],
+                    'cnae_principal' => $l[3],
                     'fonte' => SituacaoCadastral::FONTE_BASE,
                     'referencia' => $referencia,
                     'atualizado_em' => $agora,

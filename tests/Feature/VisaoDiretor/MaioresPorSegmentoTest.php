@@ -399,14 +399,15 @@ class MaioresPorSegmentoTest extends TestCase
      */
     public function test_abas_da_planilha_existem_mesmo_sem_conta(): void
     {
-        foreach (['108' => 'REDE DE LOJAS', '112' => 'ALIMENTACAO', '113' => 'ESTACIONAMENTOS', '114' => 'POSTOS', '120' => 'CONSTRUCAO'] as $codigo => $nome) {
+        foreach (['101' => 'SUPERMERCADISTA', '108' => 'REDE DE LOJAS', '112' => 'ALIMENTACAO', '113' => 'ESTACIONAMENTOS', '114' => 'POSTOS', '120' => 'CONSTRUCAO'] as $codigo => $nome) {
             Segmento::create(['codigo' => $codigo, 'nome' => $nome]);
         }
 
         $dados = app(MaioresPorSegmentoResolver::class)->resolver();
 
         $this->assertSame(
-            ['109', '108', '112', '114', '120', '113'],
+            // Supermercadista primeiro (decisão do Tony, 2026-10-08), depois a ordem da planilha.
+            ['101', '109', '108', '112', '114', '120', '113'],
             array_column($dados['segmentos'], 'codigo'),
         );
         $this->assertSame(0, $dados['segmentos'][0]['resumo']['contas']);

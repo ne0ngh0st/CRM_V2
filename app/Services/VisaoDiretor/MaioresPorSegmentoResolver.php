@@ -71,7 +71,7 @@ class MaioresPorSegmentoResolver
         $contasPorSegmento = $semSegmento->groupBy('segmento.codigo');
 
         /*
-         * A tela é uma aba por segmento, igual à planilha: as seis abas existem mesmo
+         * A tela é uma aba por segmento, igual à planilha: todas as abas existem mesmo
          * sem conta (tabela vazia), e a troca de aba NÃO recorta o payload — o front
          * escolhe qual tabela mostrar. O filtro `segmento` só vale para o Excel, que
          * exporta a aba aberta.
@@ -101,7 +101,7 @@ class MaioresPorSegmentoResolver
 
         /*
          * `segmento` recorta só o Excel (a aba aberta). A página manda vazio de propósito:
-         * as seis tabelas viajam juntas e o front troca de aba sem ir ao servidor.
+         * as tabelas de todas as abas viajam juntas e o front troca de aba sem ir ao servidor.
          */
         $segmentos = $todasAsAbas;
         if (($filtros['segmento'] ?? '') !== '') {
@@ -317,11 +317,11 @@ class MaioresPorSegmentoResolver
     }
 
     /**
-     * Completa a lista com as seis abas da planilha, na ordem delas, mesmo quando a aba
+     * Completa a lista com as abas de `AbasDaPlanilha`, na ordem delas, mesmo quando a aba
      * ainda não tem conta. Sem isso a tela vazia (antes da carga) não teria o que clicar,
      * e um segmento da planilha sem rede cadastrada sumiria do menu.
      *
-     * Conta em segmento FORA das seis (alguém cadastrou na tela) entra no fim, para não
+     * Conta em segmento FORA das abas (alguém cadastrou na tela) entra no fim, para não
      * esconder dado — mas a ordem das abas originais não muda.
      *
      * @param  Collection<string, array>  $porCodigo

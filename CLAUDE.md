@@ -3008,6 +3008,24 @@ não alerta. Célula em `Components/Receita/CapitalPorte.vue`.
   (CNPJ inteiro em vez da raiz), carga sem Empresas apagando capital, cartão sem capital
   apagando o da carga, código no lugar do rótulo.
 
+### Aba Supermercadista na Maiores por Segmento — 2026-10-08
+
+Primeira aba da Visão Diretor → Maiores por Segmento. Detalhe em `docs/visao-diretor.md`
+("Aba Supermercadista"); aqui fica o que muda decisão.
+
+- **As contas vêm do ranking da ABRAS (200 primeiras), não dos leads** (Tony: a página é o
+  retrato das maiores redes do país, onde já atendemos e onde não). Dado versionado em
+  `database/data/visao-diretor/ranking-abras-2026.json`, com nome curto + razão social e
+  **sem faturamento** (decisão do Tony). Carga: `diretor:importar-ranking-abras`.
+- **Os leads `sistema` ganham segmento pelo CNAE da Receita** (`SegmentoDosLeads`,
+  `cnpj_situacoes.cnae_principal`). ⚠️ Nem todo lead `sistema` é supermercado (em produção,
+  ~3,7 mil são transportadora e calçados): CNAE fora do mapa fica sem segmento.
+- O mercado pequeno que não está no ranking **continua só como lead**; o lead que casa com
+  uma rede do ranking vira SUGESTÃO de vínculo, como na prospecção.
+- `AbasDaPlanilha::FORA_DA_PLANILHA` diz quais abas a carga da planilha da diretoria pula.
+- ⚠️ Nome comum de supermercado puxa homônimo nas sugestões de vínculo ("Supermercado da
+  Família" PE × "Família Gaúcha" RS). Revisar na tela.
+
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão

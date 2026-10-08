@@ -72,6 +72,7 @@ class CartaoCnpjService
                 app(SituacaoCadastral::class)->registrarDoCartao(
                     $cnpj, $resultado['situacao'], $fonte, $resultado['dataSituacao'] ?? null,
                     $resultado['capitalSocial'] ?? null, PorteEmpresa::deTexto($resultado['porte'] ?? null),
+                    self::digitosCnae($resultado['cnaePrincipal']['codigo'] ?? null),
                 );
 
                 return ['status' => 'ok', 'consulta' => $consulta, 'desatualizado' => false];
@@ -418,6 +419,14 @@ class CartaoCnpjService
     private function situacao(?string $texto): ?string
     {
         return $texto ? mb_strtoupper(Str::ascii(trim($texto))) : null;
+    }
+
+    /** "4711-3/02" → "4711302", o formato de `cnpj_situacoes.cnae_principal`. */
+    private static function digitosCnae(?string $codigo): ?string
+    {
+        $digitos = preg_replace('/\D/', '', (string) $codigo);
+
+        return strlen($digitos) === 7 ? $digitos : null;
     }
 
     private function formatarCnae(int|string|null $codigo): ?string

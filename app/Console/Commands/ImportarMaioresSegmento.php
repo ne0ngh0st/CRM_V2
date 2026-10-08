@@ -77,6 +77,10 @@ class ImportarMaioresSegmento extends Command
 
         try {
             foreach (AbasDaPlanilha::ABAS as $nomeAba => $codigoSegmento) {
+                if (in_array($nomeAba, AbasDaPlanilha::FORA_DA_PLANILHA, true)) {
+                    continue;
+                }
+
                 $aba = $abas->get($nomeAba);
 
                 if (! $aba) {
@@ -196,6 +200,10 @@ class ImportarMaioresSegmento extends Command
 
         try {
             foreach (AbasDaPlanilha::ABAS as $nomeAba => $codigoSegmento) {
+                if (in_array($nomeAba, AbasDaPlanilha::FORA_DA_PLANILHA, true)) {
+                    continue;
+                }
+
                 $aba = $abas->get($nomeAba);
                 $segmento = Segmento::where('codigo', $codigoSegmento)->first();
 

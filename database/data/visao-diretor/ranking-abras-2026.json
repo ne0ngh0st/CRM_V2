@@ -1,0 +1,1405 @@
+{
+  "fonte": "Ranking ABRAS 2026 — as 200 primeiras posições (posicao_2025 nulo = entrou no ranking este ano)",
+  "ranking": [
+    {
+      "posicao": 1,
+      "posicao_2025": 1,
+      "razao_social": "CARREFOUR COMÉRCIO E INDÚSTRIA LTDA.",
+      "nome": "CARREFOUR",
+      "uf": "SP"
+    },
+    {
+      "posicao": 2,
+      "posicao_2025": 2,
+      "razao_social": "ASSAÍ ATACADISTA",
+      "nome": "ASSAÍ ATACADISTA",
+      "uf": "SP"
+    },
+    {
+      "posicao": 3,
+      "posicao_2025": 3,
+      "razao_social": "MATEUS SUPERMERCADOS S.A.",
+      "nome": "MATEUS SUPERMERCADOS",
+      "uf": "MA"
+    },
+    {
+      "posicao": 4,
+      "posicao_2025": 4,
+      "razao_social": "SUPERMERCADOS BH COMÉRCIO DE ALIMENTOS S.A.",
+      "nome": "SUPERMERCADOS BH",
+      "uf": "MG"
+    },
+    {
+      "posicao": 5,
+      "posicao_2025": 5,
+      "razao_social": "GPA",
+      "nome": "GPA",
+      "uf": "SP"
+    },
+    {
+      "posicao": 6,
+      "posicao_2025": 6,
+      "razao_social": "IRMÃOS MUFFATO S.A",
+      "nome": "IRMÃOS MUFFATO",
+      "uf": "PR"
+    },
+    {
+      "posicao": 7,
+      "posicao_2025": 7,
+      "razao_social": "GRUPO PEREIRA",
+      "nome": "GRUPO PEREIRA",
+      "uf": "SP"
+    },
+    {
+      "posicao": 8,
+      "posicao_2025": 10,
+      "razao_social": "KOCH HIPERMERCADO S.A.",
+      "nome": "KOCH HIPERMERCADO",
+      "uf": "SC"
+    },
+    {
+      "posicao": 9,
+      "posicao_2025": 19,
+      "razao_social": "NOVO MATEUS S.A.",
+      "nome": "NOVO MATEUS",
+      "uf": "PE"
+    },
+    {
+      "posicao": 10,
+      "posicao_2025": 8,
+      "razao_social": "MART MINAS ATACADO E VAREJO & DOM ATACADISTA",
+      "nome": "MART MINAS ATACADO E VAREJO & DOM ATACADISTA",
+      "uf": "MG"
+    },
+    {
+      "posicao": 11,
+      "posicao_2025": null,
+      "razao_social": "REDE SMART SUPERMERCADOS",
+      "nome": "REDE SMART SUPERMERCADOS",
+      "uf": "MG"
+    },
+    {
+      "posicao": 12,
+      "posicao_2025": 9,
+      "razao_social": "CENCOSUD BRASIL COMERCIAL LTDA.",
+      "nome": "CENCOSUD BRASIL",
+      "uf": "SP"
+    },
+    {
+      "posicao": 13,
+      "posicao_2025": 11,
+      "razao_social": "PLURIX",
+      "nome": "PLURIX",
+      "uf": "SP"
+    },
+    {
+      "posicao": 14,
+      "posicao_2025": 13,
+      "razao_social": "DMA DISTRIBUIDORA S.A.",
+      "nome": "DMA DISTRIBUIDORA",
+      "uf": "MG"
+    },
+    {
+      "posicao": 15,
+      "posicao_2025": 12,
+      "razao_social": "COMPANHIA ZAFFARI COMÉRCIO E INDÚSTRIA",
+      "nome": "COMPANHIA ZAFFARI",
+      "uf": "RS"
+    },
+    {
+      "posicao": 16,
+      "posicao_2025": 14,
+      "razao_social": "TENDA ATACADO S.A.",
+      "nome": "TENDA ATACADO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 17,
+      "posicao_2025": 16,
+      "razao_social": "SAVEGNAGO SUPERMERCADOS LTDA.",
+      "nome": "SAVEGNAGO SUPERMERCADOS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 18,
+      "posicao_2025": 15,
+      "razao_social": "COSTA ATACADÃO/GRUPO JC",
+      "nome": "COSTA ATACADÃO/GRUPO JC",
+      "uf": "GO"
+    },
+    {
+      "posicao": 19,
+      "posicao_2025": 20,
+      "razao_social": "COMERCIAL ZAFFARI LTDA.",
+      "nome": "COMERCIAL ZAFFARI",
+      "uf": "RS"
+    },
+    {
+      "posicao": 20,
+      "posicao_2025": 17,
+      "razao_social": "ATACADÃO DIA A DIA S.A.",
+      "nome": "ATACADÃO DIA A DIA",
+      "uf": "DF"
+    },
+    {
+      "posicao": 21,
+      "posicao_2025": 22,
+      "razao_social": "ATAKAREJO DISTRIBUIDOR DE ALIMENTOS E BEBIDAS S.A.",
+      "nome": "ATAKAREJO",
+      "uf": "BA"
+    },
+    {
+      "posicao": 22,
+      "posicao_2025": 18,
+      "razao_social": "SONDA SUPERMERCADOS EXPORTAÇÃO E IMPORTAÇÃO S.A.",
+      "nome": "SONDA SUPERMERCADOS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 23,
+      "posicao_2025": 23,
+      "razao_social": "GRUPO ABC",
+      "nome": "GRUPO ABC",
+      "uf": "MG"
+    },
+    {
+      "posicao": 24,
+      "posicao_2025": 21,
+      "razao_social": "LÍDER COMÉRCIO E INDÚSTRIA LTDA.",
+      "nome": "LÍDER COMÉRCIO E INDÚSTRIA",
+      "uf": "PA"
+    },
+    {
+      "posicao": 25,
+      "posicao_2025": 24,
+      "razao_social": "GRUPO SUPERNOSSO",
+      "nome": "GRUPO SUPERNOSSO",
+      "uf": "MG"
+    },
+    {
+      "posicao": 26,
+      "posicao_2025": 27,
+      "razao_social": "GIASSI E CIA. LTDA.",
+      "nome": "GIASSI",
+      "uf": "SC"
+    },
+    {
+      "posicao": 27,
+      "posicao_2025": 25,
+      "razao_social": "SUPERMERCADO BAHAMAS S.A.",
+      "nome": "SUPERMERCADO BAHAMAS",
+      "uf": "MG"
+    },
+    {
+      "posicao": 28,
+      "posicao_2025": 29,
+      "razao_social": "PAGUE MENOS COM. DE PROD. ALIM. LTDA.",
+      "nome": "PAGUE MENOS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 29,
+      "posicao_2025": 239,
+      "razao_social": "ORGANIZAÇÃO MARINGA LTDA.",
+      "nome": "ORGANIZAÇÃO MARINGA",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 30,
+      "posicao_2025": 28,
+      "razao_social": "ROLDÃO AUTOSSERVICO COMÉRCIO DE ALIMENTOS LTDA.",
+      "nome": "ROLDÃO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 31,
+      "posicao_2025": 30,
+      "razao_social": "A. ANGELONI E CIA. LTDA.",
+      "nome": "A. ANGELONI",
+      "uf": "SC"
+    },
+    {
+      "posicao": 32,
+      "posicao_2025": 31,
+      "razao_social": "CEMA CENTRAL MINEIRA ATACADISTA LTDA. (VILLEFORT)",
+      "nome": "CEMA CENTRAL MINEIRA ATACADISTA (VILLEFORT)",
+      "uf": "MG"
+    },
+    {
+      "posicao": 33,
+      "posicao_2025": 32,
+      "razao_social": "TAUSTE SUPERMERCADOS LTDA.",
+      "nome": "TAUSTE SUPERMERCADOS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 34,
+      "posicao_2025": 33,
+      "razao_social": "CENTRO OESTE COMERCIAL DE ALIMENTOS LTDA.",
+      "nome": "CENTRO OESTE COMERCIAL DE ALIMENTOS",
+      "uf": "DF"
+    },
+    {
+      "posicao": 35,
+      "posicao_2025": null,
+      "razao_social": "MERCANTIL NOVA ERA LTDA.",
+      "nome": "MERCANTIL NOVA ERA",
+      "uf": "AM"
+    },
+    {
+      "posicao": 36,
+      "posicao_2025": 35,
+      "razao_social": "GRUPO COUTINHO",
+      "nome": "GRUPO COUTINHO",
+      "uf": "ES"
+    },
+    {
+      "posicao": 37,
+      "posicao_2025": 34,
+      "razao_social": "UNIDASUL DISTRIBUIDORA ALIMENTÍCIA S.A.",
+      "nome": "UNIDASUL",
+      "uf": "RS"
+    },
+    {
+      "posicao": 38,
+      "posicao_2025": 39,
+      "razao_social": "PASSARELA CENTER LTDA.",
+      "nome": "PASSARELA CENTER",
+      "uf": "SC"
+    },
+    {
+      "posicao": 39,
+      "posicao_2025": 36,
+      "razao_social": "MUNDIALMIX COMÉRCIO DE ALIMENTOS LTDA.",
+      "nome": "MUNDIALMIX",
+      "uf": "SC"
+    },
+    {
+      "posicao": 40,
+      "posicao_2025": 37,
+      "razao_social": "JAD ZOGHEIB E CIA. LTDA.",
+      "nome": "JAD ZOGHEIB",
+      "uf": "SP"
+    },
+    {
+      "posicao": 41,
+      "posicao_2025": 43,
+      "razao_social": "CIA. BEAL DE ALIMENTOS",
+      "nome": "BEAL",
+      "uf": "PR"
+    },
+    {
+      "posicao": 42,
+      "posicao_2025": 42,
+      "razao_social": "SILVA E BARBOSA COMÉRCIO DE ALIMENTOS LTDA.",
+      "nome": "SILVA E BARBOSA",
+      "uf": "SP"
+    },
+    {
+      "posicao": 43,
+      "posicao_2025": 40,
+      "razao_social": "SÃO CRISTOVÃO INVESTIMENTOS E PARTICIPAÇÕES S.A.",
+      "nome": "SÃO CRISTOVÃO PARTICIPAÇÕES",
+      "uf": "DF"
+    },
+    {
+      "posicao": 44,
+      "posicao_2025": 41,
+      "razao_social": "COOP COOPERATIVA DE CONSUMO",
+      "nome": "COOP COOPERATIVA DE CONSUMO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 45,
+      "posicao_2025": 44,
+      "razao_social": "SUPERMERCADO NORDESTÃO LTDA.",
+      "nome": "SUPERMERCADO NORDESTÃO",
+      "uf": "RN"
+    },
+    {
+      "posicao": 46,
+      "posicao_2025": 47,
+      "razao_social": "SUPERMERCADOS CAVICCHIOLLI LTDA.",
+      "nome": "SUPERMERCADOS CAVICCHIOLLI",
+      "uf": "SP"
+    },
+    {
+      "posicao": 47,
+      "posicao_2025": 45,
+      "razao_social": "AM PM COMESTÍVEIS LTDA.",
+      "nome": "AM PM COMESTÍVEIS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 48,
+      "posicao_2025": 50,
+      "razao_social": "COVABRA SUPERMERCADO LTDA.",
+      "nome": "COVABRA SUPERMERCADO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 49,
+      "posicao_2025": 46,
+      "razao_social": "TORRE E CIA. SUPERMERCADOS S.A.",
+      "nome": "TORRE SUPERMERCADOS",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 50,
+      "posicao_2025": 38,
+      "razao_social": "DIA BRASIL SOCIEDADE LTDA.",
+      "nome": "DIA BRASIL",
+      "uf": "SP"
+    },
+    {
+      "posicao": 51,
+      "posicao_2025": 49,
+      "razao_social": "SUPERMERCADOS ALVORADA LTDA.",
+      "nome": "SUPERMERCADOS ALVORADA",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 52,
+      "posicao_2025": 62,
+      "razao_social": "DEL MORO & DEL MORO LTDA.",
+      "nome": "DEL MORO & DEL MORO",
+      "uf": "MT"
+    },
+    {
+      "posicao": 53,
+      "posicao_2025": 56,
+      "razao_social": "SUPERMERCADO QUEIROZ LTDA.",
+      "nome": "SUPERMERCADO QUEIROZ",
+      "uf": "RN"
+    },
+    {
+      "posicao": 54,
+      "posicao_2025": 53,
+      "razao_social": "DISTRIBUIDORA DE ALIMENTOS FARTURA S.A.",
+      "nome": "FARTURA",
+      "uf": "CE"
+    },
+    {
+      "posicao": 55,
+      "posicao_2025": 51,
+      "razao_social": "COSTAZUL ALIMENTOS",
+      "nome": "COSTAZUL ALIMENTOS",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 56,
+      "posicao_2025": 48,
+      "razao_social": "IMPORTADORA E EXPORTADORA DE CEREAIS S.A.",
+      "nome": "IMPORTADORA E EXPORTADORA DE CEREAIS",
+      "uf": "RS"
+    },
+    {
+      "posicao": 57,
+      "posicao_2025": 52,
+      "razao_social": "SUPERMERCADOS IRMÃOS LOPES S.A.",
+      "nome": "SUPERMERCADOS IRMÃOS LOPES",
+      "uf": "SP"
+    },
+    {
+      "posicao": 58,
+      "posicao_2025": 61,
+      "razao_social": "ORGANIZACAO VERDEMAR LTDA.",
+      "nome": "ORGANIZACAO VERDEMAR",
+      "uf": "MG"
+    },
+    {
+      "posicao": 59,
+      "posicao_2025": 55,
+      "razao_social": "FORMOSA SUPERMERCADOS & MAGAZINE LTDA.",
+      "nome": "FORMOSA SUPERMERCADOS & MAGAZINE",
+      "uf": "PA"
+    },
+    {
+      "posicao": 60,
+      "posicao_2025": 60,
+      "razao_social": "SUPERMERCADO JACOMAR LTDA.",
+      "nome": "SUPERMERCADO JACOMAR",
+      "uf": "PR"
+    },
+    {
+      "posicao": 61,
+      "posicao_2025": 57,
+      "razao_social": "SUPERMERCADO COMETA EIRELE",
+      "nome": "SUPERMERCADO COMETA",
+      "uf": "CE"
+    },
+    {
+      "posicao": 62,
+      "posicao_2025": 59,
+      "razao_social": "LOPES SUPERMERCADOS LTDA.",
+      "nome": "LOPES SUPERMERCADOS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 63,
+      "posicao_2025": null,
+      "razao_social": "ÍTALO SUPERMERCADOS LTDA.",
+      "nome": "ÍTALO SUPERMERCADOS",
+      "uf": "PR"
+    },
+    {
+      "posicao": 64,
+      "posicao_2025": 58,
+      "razao_social": "RMC COMÉRCIO DE ALIMENTOS LTDA.",
+      "nome": "RMC",
+      "uf": "PI"
+    },
+    {
+      "posicao": 65,
+      "posicao_2025": 64,
+      "razao_social": "D´AVÓ SUPERMERCADOS LTDA.",
+      "nome": "D´AVÓ SUPERMERCADOS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 66,
+      "posicao_2025": 63,
+      "razao_social": "A.C.D.A IMPORTAÇÃO E EXPORTAÇÃO LTDA.",
+      "nome": "A.C.D.A",
+      "uf": "AC"
+    },
+    {
+      "posicao": 67,
+      "posicao_2025": 54,
+      "razao_social": "ASUN COMÉRCIO DE GÊNEROS ALIMENTÍCIOS LTDA.",
+      "nome": "ASUN",
+      "uf": "RS"
+    },
+    {
+      "posicao": 68,
+      "posicao_2025": 65,
+      "razao_social": "MASTER A.T.S. SUPERMERCADO LTDA.",
+      "nome": "MASTER A.T.S. SUPERMERCADO",
+      "uf": "RS"
+    },
+    {
+      "posicao": 69,
+      "posicao_2025": 67,
+      "razao_social": "GRUPO CHAMA DE DISTRIBUIÇÃO LTDA.",
+      "nome": "GRUPO CHAMA DE DISTRIBUIÇÃO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 70,
+      "posicao_2025": 70,
+      "razao_social": "NAOMI COMÉRCIO ALIMENTOS LTDA.",
+      "nome": "NAOMI ALIMENTOS",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 71,
+      "posicao_2025": 69,
+      "razao_social": "A.B.V. COM. DE ALIM. LTDA.",
+      "nome": "A.B.V. COMÉRCIO DE ALIMENTOS",
+      "uf": "MS"
+    },
+    {
+      "posicao": 72,
+      "posicao_2025": 72,
+      "razao_social": "BATISTA & IZEPE LTDA.",
+      "nome": "BATISTA & IZEPE",
+      "uf": "PR"
+    },
+    {
+      "posicao": 73,
+      "posicao_2025": 71,
+      "razao_social": "PERUZZO SUPERMERCADOS",
+      "nome": "PERUZZO SUPERMERCADOS",
+      "uf": "RS"
+    },
+    {
+      "posicao": 74,
+      "posicao_2025": 76,
+      "razao_social": "LIBRAGA BRANDÃO & CIA. LTDA.",
+      "nome": "LIBRAGA BRANDÃO",
+      "uf": "RS"
+    },
+    {
+      "posicao": 75,
+      "posicao_2025": 74,
+      "razao_social": "SUPERMERCADO DA FAMILIA S.A.",
+      "nome": "SUPERMERCADO DA FAMILIA",
+      "uf": "PE"
+    },
+    {
+      "posicao": 76,
+      "posicao_2025": 78,
+      "razao_social": "TRIMAIS SUPERMERCADOS LTDA.",
+      "nome": "TRIMAIS SUPERMERCADOS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 77,
+      "posicao_2025": 75,
+      "razao_social": "ÂNCORA DISTRIBUIDORA DE ALIMENTOS LTDA.",
+      "nome": "ÂNCORA",
+      "uf": "CE"
+    },
+    {
+      "posicao": 78,
+      "posicao_2025": 77,
+      "razao_social": "RMIX COMÉRCIO DE GÊNEROS ALIMENTICIOS LTDA.",
+      "nome": "RMIX",
+      "uf": "BA"
+    },
+    {
+      "posicao": 79,
+      "posicao_2025": 84,
+      "razao_social": "HIGA PRODUTOS ALIMENTÍCIOS LTDA.",
+      "nome": "HIGA",
+      "uf": "SP"
+    },
+    {
+      "posicao": 80,
+      "posicao_2025": 73,
+      "razao_social": "COMERCIAL DE GEN. ALIM. PREÇO BAIXO LTDA.",
+      "nome": "PREÇO BAIXO",
+      "uf": "PA"
+    },
+    {
+      "posicao": 81,
+      "posicao_2025": 82,
+      "razao_social": "GTOP DISTRIBUIÇÃO LTDA.",
+      "nome": "GTOP DISTRIBUIÇÃO",
+      "uf": "SC"
+    },
+    {
+      "posicao": 82,
+      "posicao_2025": 81,
+      "razao_social": "REDE DE DISTRIBUIÇÃO ZEFERINO LTDA.",
+      "nome": "REDE DE DISTRIBUIÇÃO ZEFERINO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 83,
+      "posicao_2025": 79,
+      "razao_social": "SUPERMERCADO SUPER LUNA S.A.",
+      "nome": "SUPERMERCADO SUPER LUNA",
+      "uf": "MG"
+    },
+    {
+      "posicao": 84,
+      "posicao_2025": 80,
+      "razao_social": "HIPERIDEAL EMPREENDIMENTOS LTDA.",
+      "nome": "HIPERIDEAL",
+      "uf": "BA"
+    },
+    {
+      "posicao": 85,
+      "posicao_2025": 88,
+      "razao_social": "SUPERMERCADO GUANABARA S.A.",
+      "nome": "SUPERMERCADO GUANABARA",
+      "uf": "RS"
+    },
+    {
+      "posicao": 86,
+      "posicao_2025": 93,
+      "razao_social": "S. PIRES COMÉRCIO DE ALIMENTOS LTDA.",
+      "nome": "S. PIRES",
+      "uf": "MS"
+    },
+    {
+      "posicao": 87,
+      "posicao_2025": 86,
+      "razao_social": "M.N. SUPERMERCADOS LTDA.",
+      "nome": "M.N. SUPERMERCADOS",
+      "uf": "MG"
+    },
+    {
+      "posicao": 88,
+      "posicao_2025": 97,
+      "razao_social": "NOSSO ATACAREJO COMÉRCIO DE GENEROS ALIMENTÍCIOS LTDA",
+      "nome": "NOSSO ATACAREJO",
+      "uf": "RN"
+    },
+    {
+      "posicao": 89,
+      "posicao_2025": 89,
+      "razao_social": "ANDORINHA SUPERMERCADO LTDA.",
+      "nome": "ANDORINHA SUPERMERCADO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 90,
+      "posicao_2025": 96,
+      "razao_social": "SUPERVIZA SUPERMERCADOS LTDA.",
+      "nome": "SUPERVIZA SUPERMERCADOS",
+      "uf": "SC"
+    },
+    {
+      "posicao": 91,
+      "posicao_2025": 101,
+      "razao_social": "OSMAR NICOLINI COMÉRCIO E DISTRIBUIÇÃO S.A.",
+      "nome": "OSMAR NICOLINI",
+      "uf": "RS"
+    },
+    {
+      "posicao": 92,
+      "posicao_2025": 102,
+      "razao_social": "GCA - DISTRIBUIDORA COMERCIAL DE ALIMENTOS LTDA.",
+      "nome": "GCA DISTRIBUIDORA",
+      "uf": "PR"
+    },
+    {
+      "posicao": 93,
+      "posicao_2025": 100,
+      "razao_social": "COMERCIAL REIS LTDA.",
+      "nome": "COMERCIAL REIS",
+      "uf": "GO"
+    },
+    {
+      "posicao": 94,
+      "posicao_2025": 126,
+      "razao_social": "MIX VALI COMÉRCIO DE PRODUTOS ALIMENTÍCIOS LTDA.",
+      "nome": "MIX VALI",
+      "uf": "SP"
+    },
+    {
+      "posicao": 95,
+      "posicao_2025": 92,
+      "razao_social": "SUPERMERCADO ARCHER S.A.",
+      "nome": "SUPERMERCADO ARCHER",
+      "uf": "SC"
+    },
+    {
+      "posicao": 96,
+      "posicao_2025": 95,
+      "razao_social": "SUPERMERCADO IQUEGAMI LTDA.",
+      "nome": "SUPERMERCADO IQUEGAMI",
+      "uf": "SP"
+    },
+    {
+      "posicao": 97,
+      "posicao_2025": 99,
+      "razao_social": "COMERCIAL OSWALDO CRUZ LTDA.",
+      "nome": "COMERCIAL OSWALDO CRUZ",
+      "uf": "SP"
+    },
+    {
+      "posicao": 98,
+      "posicao_2025": null,
+      "razao_social": "COOPERATIVA DALIA ALIMENTOS LTDA.",
+      "nome": "COOPERATIVA DALIA ALIMENTOS",
+      "uf": "RS"
+    },
+    {
+      "posicao": 99,
+      "posicao_2025": 91,
+      "razao_social": "SUPERMERCADO VIANENSE LTDA.",
+      "nome": "SUPERMERCADO VIANENSE",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 100,
+      "posicao_2025": 90,
+      "razao_social": "DISTRIBUIÇÃO DE ALIMENTOS VANGUARDA S.A.",
+      "nome": "DISTRIBUIÇÃO VANGUARDA",
+      "uf": "PI"
+    },
+    {
+      "posicao": 101,
+      "posicao_2025": 110,
+      "razao_social": "SUPERMERCADOS BAVARESCO LTDA.",
+      "nome": "SUPERMERCADOS BAVARESCO",
+      "uf": "PR"
+    },
+    {
+      "posicao": 102,
+      "posicao_2025": 105,
+      "razao_social": "SUPERMERCADO DELTA MAX LTDA.",
+      "nome": "SUPERMERCADO DELTA MAX",
+      "uf": "SP"
+    },
+    {
+      "posicao": 103,
+      "posicao_2025": null,
+      "razao_social": "AYUMI SUPERMERCADOS LTDA.",
+      "nome": "AYUMI SUPERMERCADOS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 104,
+      "posicao_2025": 87,
+      "razao_social": "GOMES PAIXÃO & CIA. LTDA.",
+      "nome": "GOMES PAIXÃO",
+      "uf": "PB"
+    },
+    {
+      "posicao": 105,
+      "posicao_2025": 83,
+      "razao_social": "LUIZ TONIN ATACADISTA E SUPERMERCADO S.A.",
+      "nome": "LUIZ TONIN ATACADISTA E SUPERMERCADO",
+      "uf": "MG"
+    },
+    {
+      "posicao": 106,
+      "posicao_2025": 94,
+      "razao_social": "COMERCIAL DE ALIMENTOS GILMAR LTDA.",
+      "nome": "COMERCIAL GILMAR",
+      "uf": "BA"
+    },
+    {
+      "posicao": 107,
+      "posicao_2025": 104,
+      "razao_social": "MAGLIONI RIBEIRO & CIA. LTDA.",
+      "nome": "MAGLIONI RIBEIRO",
+      "uf": "MG"
+    },
+    {
+      "posicao": 108,
+      "posicao_2025": 109,
+      "razao_social": "NOVO MIX ATACADO DE ALIMENTOS LTDA.",
+      "nome": "NOVO MIX ATACADO",
+      "uf": "BA"
+    },
+    {
+      "posicao": 109,
+      "posicao_2025": 116,
+      "razao_social": "CENTERBOX SUPERMERCADOS LTDA.",
+      "nome": "CENTERBOX SUPERMERCADOS",
+      "uf": "CE"
+    },
+    {
+      "posicao": 110,
+      "posicao_2025": 106,
+      "razao_social": "SANCHES & VECCHIATE LTDA.",
+      "nome": "SANCHES & VECCHIATE",
+      "uf": "PR"
+    },
+    {
+      "posicao": 111,
+      "posicao_2025": 107,
+      "razao_social": "BOM VIZINHO DISTRIBUIDORA DE ALIMENTOS LTDA.",
+      "nome": "BOM VIZINHO",
+      "uf": "CE"
+    },
+    {
+      "posicao": 112,
+      "posicao_2025": 117,
+      "razao_social": "SUPERMERCADOS IRANI LTDA.",
+      "nome": "SUPERMERCADOS IRANI",
+      "uf": "PR"
+    },
+    {
+      "posicao": 113,
+      "posicao_2025": 108,
+      "razao_social": "R.F. ATACADO DE ALIMENTOS S.A.",
+      "nome": "R.F. ATACADO",
+      "uf": "BA"
+    },
+    {
+      "posicao": 114,
+      "posicao_2025": 112,
+      "razao_social": "COFESA COMERCIAL FERREIRA SANTOS LTDA.",
+      "nome": "COFESA FERREIRA SANTOS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 115,
+      "posicao_2025": 111,
+      "razao_social": "COMERCIAL VILLA SIMPATIA LTDA.",
+      "nome": "VILLA SIMPATIA",
+      "uf": "SP"
+    },
+    {
+      "posicao": 116,
+      "posicao_2025": 113,
+      "razao_social": "UNICOMPRA SUPERMERCADOS LTDA.",
+      "nome": "UNICOMPRA SUPERMERCADOS",
+      "uf": "AL"
+    },
+    {
+      "posicao": 117,
+      "posicao_2025": 120,
+      "razao_social": "RIGHI COMÉRCIO DE GENEROS ALIMENTICIOS LTDA.",
+      "nome": "RIGHI",
+      "uf": "RS"
+    },
+    {
+      "posicao": 118,
+      "posicao_2025": 119,
+      "razao_social": "SUPERMERCADO BERNARDÃO LTDA.",
+      "nome": "SUPERMERCADO BERNARDÃO",
+      "uf": "MG"
+    },
+    {
+      "posicao": 119,
+      "posicao_2025": 125,
+      "razao_social": "BONANZA SUPERMERCADO LTDA.",
+      "nome": "BONANZA SUPERMERCADO",
+      "uf": "PE"
+    },
+    {
+      "posicao": 120,
+      "posicao_2025": 118,
+      "razao_social": "VRA COMÉRCIO LTDA.",
+      "nome": "VRA",
+      "uf": "MS"
+    },
+    {
+      "posicao": 121,
+      "posicao_2025": 124,
+      "razao_social": "SUPERMERCADO BAKLIZI LTDA.",
+      "nome": "SUPERMERCADO BAKLIZI",
+      "uf": "RS"
+    },
+    {
+      "posicao": 122,
+      "posicao_2025": 133,
+      "razao_social": "SUPERMERCADOS GRICKI LTDA.",
+      "nome": "SUPERMERCADOS GRICKI",
+      "uf": "SP"
+    },
+    {
+      "posicao": 123,
+      "posicao_2025": 121,
+      "razao_social": "GERMANS DISTRIBUIDORA COMESTIVEIS LTDA.",
+      "nome": "GERMANS DISTRIBUIDORA COMESTIVEIS",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 124,
+      "posicao_2025": 115,
+      "razao_social": "QUARTETTO SUPERMERCADOS LTDA.",
+      "nome": "QUARTETTO SUPERMERCADOS",
+      "uf": "TO"
+    },
+    {
+      "posicao": 125,
+      "posicao_2025": 123,
+      "razao_social": "C. VALE COOPERATIVA AGROINDUSTRIAL",
+      "nome": "C. VALE COOPERATIVA AGROINDUSTRIAL",
+      "uf": "PR"
+    },
+    {
+      "posicao": 126,
+      "posicao_2025": null,
+      "razao_social": "REDE GRAND MARCHÉ DE SUPERMERCADOS",
+      "nome": "REDE GRAND MARCHÉ DE SUPERMERCADOS",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 127,
+      "posicao_2025": 138,
+      "razao_social": "SUPERMERCADOS MIALICH LTDA.",
+      "nome": "SUPERMERCADOS MIALICH",
+      "uf": "SP"
+    },
+    {
+      "posicao": 128,
+      "posicao_2025": 128,
+      "razao_social": "FARIAS SUPERMERCADOS EIRELI",
+      "nome": "FARIAS SUPERMERCADOS",
+      "uf": "PB"
+    },
+    {
+      "posicao": 129,
+      "posicao_2025": 127,
+      "razao_social": "MWN COMERCIAL DE ALIM. LTDA.",
+      "nome": "MWN",
+      "uf": "CE"
+    },
+    {
+      "posicao": 130,
+      "posicao_2025": 130,
+      "razao_social": "SUPERMERCADO MORANGUINHO LTDA.",
+      "nome": "SUPERMERCADO MORANGUINHO",
+      "uf": "CE"
+    },
+    {
+      "posicao": 131,
+      "posicao_2025": 139,
+      "razao_social": "SERRANO AUTOSSERVICO LTDA.",
+      "nome": "SERRANO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 132,
+      "posicao_2025": 134,
+      "razao_social": "COTRIPAL AGROPECUÁRIA COOPERATIVA",
+      "nome": "COTRIPAL AGROPECUÁRIA COOPERATIVA",
+      "uf": "RS"
+    },
+    {
+      "posicao": 133,
+      "posicao_2025": 135,
+      "razao_social": "BIG MAIS SUPERMERCADO LTDA.",
+      "nome": "BIG MAIS SUPERMERCADO",
+      "uf": "MG"
+    },
+    {
+      "posicao": 134,
+      "posicao_2025": 136,
+      "razao_social": "AGRICER DISTRIBIDORA E COMERCIAL DE PROD. ALIM. LTDA.",
+      "nome": "AGRICER",
+      "uf": "PR"
+    },
+    {
+      "posicao": 135,
+      "posicao_2025": 131,
+      "razao_social": "CASA RENA S.A.",
+      "nome": "CASA RENA",
+      "uf": "MG"
+    },
+    {
+      "posicao": 136,
+      "posicao_2025": 129,
+      "razao_social": "DINIZ SUPERMERCADOS LIMITADA",
+      "nome": "DINIZ SUPERMERCADOS",
+      "uf": "CE"
+    },
+    {
+      "posicao": 137,
+      "posicao_2025": 132,
+      "razao_social": "REDE PLUS SUPERMERCADOS LTDA.",
+      "nome": "REDE PLUS SUPERMERCADOS",
+      "uf": "SP"
+    },
+    {
+      "posicao": 138,
+      "posicao_2025": 144,
+      "razao_social": "FORMENTON S.A.",
+      "nome": "FORMENTON",
+      "uf": "RS"
+    },
+    {
+      "posicao": 139,
+      "posicao_2025": null,
+      "razao_social": "REDE PARAÍBA DE SUPERMERCADOS",
+      "nome": "REDE PARAÍBA DE SUPERMERCADOS",
+      "uf": "PB"
+    },
+    {
+      "posicao": 140,
+      "posicao_2025": 137,
+      "razao_social": "PEDRO MARCIO DA FONSECA & CIA. LTDA.",
+      "nome": "PEDRO MARCIO DA FONSECA",
+      "uf": "SP"
+    },
+    {
+      "posicao": 141,
+      "posicao_2025": 155,
+      "razao_social": "SUPERMERCADO E RESTAURANTE JVA EIRELI",
+      "nome": "SUPERMERCADO E RESTAURANTE JVA",
+      "uf": "SP"
+    },
+    {
+      "posicao": 142,
+      "posicao_2025": null,
+      "razao_social": "DISTRIBUIDORA DE ALIMENTOS BEIRA RIO LAJEADO LTDA.",
+      "nome": "BEIRA RIO LAJEADO",
+      "uf": "RS"
+    },
+    {
+      "posicao": 143,
+      "posicao_2025": 140,
+      "razao_social": "SUPERMERCADO BELTRAME LTDA.",
+      "nome": "SUPERMERCADO BELTRAME",
+      "uf": "RS"
+    },
+    {
+      "posicao": 144,
+      "posicao_2025": 142,
+      "razao_social": "REDE SUPERMERCADO MAIS BARATO LTDA.",
+      "nome": "REDE SUPERMERCADO MAIS BARATO",
+      "uf": "PA"
+    },
+    {
+      "posicao": 145,
+      "posicao_2025": 156,
+      "razao_social": "SUPERMERCADOS BIG COMPRA LTDA.",
+      "nome": "SUPERMERCADOS BIG COMPRA",
+      "uf": "SP"
+    },
+    {
+      "posicao": 146,
+      "posicao_2025": 146,
+      "razao_social": "REDE MENOR PREÇO SUPERMERCADO LTDA.",
+      "nome": "REDE MENOR PREÇO SUPERMERCADO",
+      "uf": "PB"
+    },
+    {
+      "posicao": 147,
+      "posicao_2025": 161,
+      "razao_social": "COMERCIAL PRAIAS BELAS LTDA.",
+      "nome": "COMERCIAL PRAIAS BELAS",
+      "uf": "RN"
+    },
+    {
+      "posicao": 148,
+      "posicao_2025": 150,
+      "razao_social": "ARMAZÉM DO GRÃO LTDA.",
+      "nome": "ARMAZÉM DO GRÃO",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 149,
+      "posicao_2025": 141,
+      "razao_social": "COMERCIAL DE SECOS E MOLHADOS DAL POZZO LTDA.",
+      "nome": "DAL POZZO",
+      "uf": "PR"
+    },
+    {
+      "posicao": 150,
+      "posicao_2025": 152,
+      "razao_social": "SUPERMERCADO CAROL LTDA.",
+      "nome": "SUPERMERCADO CAROL",
+      "uf": "SC"
+    },
+    {
+      "posicao": 151,
+      "posicao_2025": null,
+      "razao_social": "QUEIROZ DISTRIBUIDORA LTDA.",
+      "nome": "QUEIROZ DISTRIBUIDORA",
+      "uf": "CE"
+    },
+    {
+      "posicao": 152,
+      "posicao_2025": 187,
+      "razao_social": "MEU PRATA SUPERMERCADOS LTDA.",
+      "nome": "MEU PRATA SUPERMERCADOS",
+      "uf": "MG"
+    },
+    {
+      "posicao": 153,
+      "posicao_2025": 153,
+      "razao_social": "SUPERMERCADO FENIX LTDA.",
+      "nome": "SUPERMERCADO FENIX",
+      "uf": "PE"
+    },
+    {
+      "posicao": 154,
+      "posicao_2025": 149,
+      "razao_social": "M. A. SILVA E SILVA LTDA.",
+      "nome": "M. A. SILVA E SILVA",
+      "uf": "AP"
+    },
+    {
+      "posicao": 155,
+      "posicao_2025": 222,
+      "razao_social": "CRESTANI & FILHOS LTDA.",
+      "nome": "CRESTANI & FILHOS",
+      "uf": "MT"
+    },
+    {
+      "posicao": 156,
+      "posicao_2025": 196,
+      "razao_social": "IRMÃOS ZAT LTDA.",
+      "nome": "IRMÃOS ZAT",
+      "uf": "SC"
+    },
+    {
+      "posicao": 157,
+      "posicao_2025": 159,
+      "razao_social": "SUPERVI DISTRIBUIDOR DE ALIMENTOS LTDA.",
+      "nome": "SUPERVI",
+      "uf": "GO"
+    },
+    {
+      "posicao": 158,
+      "posicao_2025": 151,
+      "razao_social": "J. MARTINS SUPERMERCADO PLANALTO LTDA.",
+      "nome": "J. MARTINS SUPERMERCADO PLANALTO",
+      "uf": "PR"
+    },
+    {
+      "posicao": 159,
+      "posicao_2025": 157,
+      "razao_social": "A. A. DE MELO & CIA. LTDA.",
+      "nome": "A. A. DE MELO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 160,
+      "posicao_2025": 154,
+      "razao_social": "ALLMAYER SUPERMERCADO LTDA.",
+      "nome": "ALLMAYER SUPERMERCADO",
+      "uf": "PR"
+    },
+    {
+      "posicao": 161,
+      "posicao_2025": null,
+      "razao_social": "ECONÔMICO COMÉRCIO DE ALIMENTOS LTDA.",
+      "nome": "ECONÔMICO COMÉRCIO DE ALIMENTOS",
+      "uf": "PE"
+    },
+    {
+      "posicao": 162,
+      "posicao_2025": 145,
+      "razao_social": "COMERCIAL ALIMENTOS ITA LTDA.",
+      "nome": "ALIMENTOS ITA",
+      "uf": "DF"
+    },
+    {
+      "posicao": 163,
+      "posicao_2025": 158,
+      "razao_social": "MIG ATACADO E VAREJO LTDA.",
+      "nome": "MIG ATACADO E VAREJO",
+      "uf": "PR"
+    },
+    {
+      "posicao": 164,
+      "posicao_2025": 163,
+      "razao_social": "NOVA ESTRELA COMÉRCIO DE ALIMENTOS S.A.",
+      "nome": "NOVA ESTRELA",
+      "uf": "MS"
+    },
+    {
+      "posicao": 165,
+      "posicao_2025": 184,
+      "razao_social": "LOCATELLI SUPERMERCADOS E SERVIÇOS LTDA.",
+      "nome": "LOCATELLI SUPERMERCADOS E SERVIÇOS",
+      "uf": "ES"
+    },
+    {
+      "posicao": 166,
+      "posicao_2025": 165,
+      "razao_social": "MACAMO ALIMENTOS EIRELI",
+      "nome": "MACAMO ALIMENTOS",
+      "uf": "RS"
+    },
+    {
+      "posicao": 167,
+      "posicao_2025": 160,
+      "razao_social": "LAR COOPERATIVA AGROINDUSTRIAL",
+      "nome": "LAR COOPERATIVA AGROINDUSTRIAL",
+      "uf": "PR"
+    },
+    {
+      "posicao": 168,
+      "posicao_2025": 173,
+      "razao_social": "JOSÉ CARLOS NORI & CIA. LTDA.",
+      "nome": "JOSÉ CARLOS NORI",
+      "uf": "SP"
+    },
+    {
+      "posicao": 169,
+      "posicao_2025": 143,
+      "razao_social": "PAX SUPERMERCADOS LTDA.",
+      "nome": "PAX SUPERMERCADOS",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 170,
+      "posicao_2025": null,
+      "razao_social": "MIXBAHIA S.A.",
+      "nome": "MIXBAHIA",
+      "uf": "BA"
+    },
+    {
+      "posicao": 171,
+      "posicao_2025": 177,
+      "razao_social": "SUPERMERCADO ESTRELA DE REGENTE FEIJÓ LTDA.",
+      "nome": "SUPERMERCADO ESTRELA DE REGENTE FEIJÓ",
+      "uf": "SP"
+    },
+    {
+      "posicao": 172,
+      "posicao_2025": 169,
+      "razao_social": "MAX CENTER CENTRO DE COMPRAS LTDA.",
+      "nome": "MAX CENTER CENTRO DE COMPRAS",
+      "uf": "RS"
+    },
+    {
+      "posicao": 173,
+      "posicao_2025": 170,
+      "razao_social": "CASA VISCARDI S.A. COMÉRCIO IMPORTAÇÃO",
+      "nome": "CASA VISCARDI",
+      "uf": "PR"
+    },
+    {
+      "posicao": 174,
+      "posicao_2025": 171,
+      "razao_social": "SUPERMERCADO ESKYNÃO LTDA.",
+      "nome": "SUPERMERCADO ESKYNÃO",
+      "uf": "MG"
+    },
+    {
+      "posicao": 175,
+      "posicao_2025": 162,
+      "razao_social": "TREICHEL MACROMERCADO LTDA.",
+      "nome": "TREICHEL MACROMERCADO",
+      "uf": "RS"
+    },
+    {
+      "posicao": 176,
+      "posicao_2025": 206,
+      "razao_social": "UNIMAR SUPERMERCADO E ATACADO LTDA.",
+      "nome": "UNIMAR SUPERMERCADO E ATACADO",
+      "uf": "BA"
+    },
+    {
+      "posicao": 177,
+      "posicao_2025": 189,
+      "razao_social": "COOPERATIVA DE CONSUMO POPULAR DE CERQUILHO",
+      "nome": "COOPERATIVA DE CONSUMO POPULAR DE CERQUILHO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 178,
+      "posicao_2025": 179,
+      "razao_social": "L&G ALIMENTOS DO BRASIL LTDA.",
+      "nome": "L&G ALIMENTOS DO BRASIL",
+      "uf": "AC"
+    },
+    {
+      "posicao": 179,
+      "posicao_2025": 174,
+      "razao_social": "SUPERMERCADO MANENTTI LTDA.",
+      "nome": "SUPERMERCADO MANENTTI",
+      "uf": "SC"
+    },
+    {
+      "posicao": 180,
+      "posicao_2025": null,
+      "razao_social": "SMARTSTORE COMÉRCIO E LICENCIAMENTO LTDA.",
+      "nome": "SMARTSTORE",
+      "uf": "SP"
+    },
+    {
+      "posicao": 181,
+      "posicao_2025": 183,
+      "razao_social": "COMERCIAL DE ALIMENTOS SUPERBOM LTDA.",
+      "nome": "SUPERBOM",
+      "uf": "DF"
+    },
+    {
+      "posicao": 182,
+      "posicao_2025": 175,
+      "razao_social": "DIAS PASTORINHO S.A. COMÉRCIO E INDÚSTRIA",
+      "nome": "DIAS PASTORINHO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 183,
+      "posicao_2025": 166,
+      "razao_social": "HIPER SELECT SUPERMERCADOS",
+      "nome": "HIPER SELECT SUPERMERCADOS",
+      "uf": "SC"
+    },
+    {
+      "posicao": 184,
+      "posicao_2025": 176,
+      "razao_social": "UNIBOX DINARDELLI COMÉRCIO E DISTRIBUIÇÃO LTDA.",
+      "nome": "UNIBOX DINARDELLI",
+      "uf": "SC"
+    },
+    {
+      "posicao": 185,
+      "posicao_2025": 178,
+      "razao_social": "SUPERMERCADO REAL DE NITERÓI LTDA.",
+      "nome": "SUPERMERCADO REAL DE NITERÓI",
+      "uf": "RJ"
+    },
+    {
+      "posicao": 186,
+      "posicao_2025": 182,
+      "razao_social": "BRASÃO SUPERMERCADO S.A.",
+      "nome": "BRASÃO SUPERMERCADO",
+      "uf": "SC"
+    },
+    {
+      "posicao": 187,
+      "posicao_2025": 198,
+      "razao_social": "JUBA SUPERMERCADO LTDA.",
+      "nome": "JUBA SUPERMERCADO",
+      "uf": "MT"
+    },
+    {
+      "posicao": 188,
+      "posicao_2025": 191,
+      "razao_social": "A.R. FILHO & CIA. LTDA.",
+      "nome": "A.R. FILHO",
+      "uf": "AP"
+    },
+    {
+      "posicao": 189,
+      "posicao_2025": 195,
+      "razao_social": "S.S. COMÉRCIO DE ALIMENTOS LTDA.",
+      "nome": "S.S. COMÉRCIO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 190,
+      "posicao_2025": 185,
+      "razao_social": "JORGE BATISTA & CIA. LTDA.",
+      "nome": "JORGE BATISTA",
+      "uf": "PI"
+    },
+    {
+      "posicao": 191,
+      "posicao_2025": 219,
+      "razao_social": "MEZZALIRA & CIA. LTDA.",
+      "nome": "MEZZALIRA",
+      "uf": "SC"
+    },
+    {
+      "posicao": 192,
+      "posicao_2025": 167,
+      "razao_social": "LEITE & PARANHOS LTDA.",
+      "nome": "LEITE & PARANHOS",
+      "uf": "AL"
+    },
+    {
+      "posicao": 193,
+      "posicao_2025": 192,
+      "razao_social": "J.L. DE MEDEIROS & ARAÚJO LTDA.",
+      "nome": "J.L. DE MEDEIROS & ARAÚJO",
+      "uf": "RN"
+    },
+    {
+      "posicao": 194,
+      "posicao_2025": null,
+      "razao_social": "SANTO COMÉRCIO E IMPORTAÇÃO DE PRODUTOS ALIMENTÍCIOS LTDA.",
+      "nome": "SANTO COMÉRCIO E IMPORTAÇÃO",
+      "uf": "SP"
+    },
+    {
+      "posicao": 195,
+      "posicao_2025": null,
+      "razao_social": "MARKET4U GESTÃO DE LICENCAS S.A.",
+      "nome": "MARKET4U GESTÃO DE LICENCAS",
+      "uf": "PR"
+    },
+    {
+      "posicao": 196,
+      "posicao_2025": 186,
+      "razao_social": "SUPERMERCADO PRO BRASIL LTDA.",
+      "nome": "SUPERMERCADO PRO BRASIL",
+      "uf": "GO"
+    },
+    {
+      "posicao": 197,
+      "posicao_2025": 181,
+      "razao_social": "F.M. FERREIRA DE SOUSA LTDA.",
+      "nome": "F.M. FERREIRA DE SOUSA",
+      "uf": "PI"
+    },
+    {
+      "posicao": 198,
+      "posicao_2025": 193,
+      "razao_social": "COPACOL COOPERATIVA AGROINDUSTRIAL CONSOLATA",
+      "nome": "COPACOL COOPERATIVA AGROINDUSTRIAL CONSOLATA",
+      "uf": "PR"
+    },
+    {
+      "posicao": 199,
+      "posicao_2025": 180,
+      "razao_social": "CASA SANTA LTDA.",
+      "nome": "CASA SANTA",
+      "uf": "PA"
+    },
+    {
+      "posicao": 200,
+      "posicao_2025": 201,
+      "razao_social": "EXAMINE SUPERMERCADOS LTDA.",
+      "nome": "EXAMINE SUPERMERCADOS",
+      "uf": "SP"
+    }
+  ]
+}

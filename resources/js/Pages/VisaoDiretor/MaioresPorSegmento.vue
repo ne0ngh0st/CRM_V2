@@ -81,7 +81,7 @@ function onBusca() {
 }
 
 /**
- * Troca de aba é local: as seis tabelas já vieram no payload. Ir ao servidor só
+ * Troca de aba é local: as tabelas de todas as abas já vieram no payload. Ir ao servidor só
  * para esconder cinco delas atrasaria o clique (Regra nº 9) e faria a tela parecer
  * o Excel com um loading no meio.
  *
@@ -222,7 +222,7 @@ async function excluir(conta) {
 
             <!--
                 Igual à planilha: uma aba por segmento, mais o Resumo (a aba DASHBOARD).
-                `overflow-x-auto` + nowrap para caber as seis no celular sem virar duas
+                `overflow-x-auto` + nowrap para caber as sete no celular sem virar duas
                 fileiras — no Excel as abas também rolam na horizontal.
             -->
             <div class="flex gap-1 overflow-x-auto border-b border-gray-300" role="tablist" aria-label="Segmentos">

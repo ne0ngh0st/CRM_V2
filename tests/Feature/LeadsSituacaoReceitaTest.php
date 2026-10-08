@@ -312,6 +312,9 @@ class LeadsSituacaoReceitaTest extends TestCase
 
         $this->assertSame('2023-01-02', DB::table('cnpj_situacoes')->where('cnpj', self::INAPTA)->value('data_situacao'));
         $this->assertSame('2026-09', DB::table('cnpj_situacoes')->where('cnpj', self::ATIVA)->value('referencia'));
+        // CNAE principal: campo 11 do Estabelecimentos. O inexistente não tem.
+        $this->assertSame('4761003', DB::table('cnpj_situacoes')->where('cnpj', self::ATIVA)->value('cnae_principal'));
+        $this->assertNull(DB::table('cnpj_situacoes')->where('cnpj', self::INEXISTENTE)->value('cnae_principal'));
         // O lead que já estava no CRM saiu na mesma rodada.
         $this->assertSame('excluido', DB::table('leads')->value('status'));
     }

@@ -191,6 +191,8 @@ class CartaoCnpjTest extends TestCase
         $this->assertSame('BAIXADA', CnpjConsulta::sole()->situacao);
         // O filtro de leads lê a situação de `cnpj_situacoes`, não do cartão.
         $this->assertSame('BAIXADA', \Illuminate\Support\Facades\DB::table('cnpj_situacoes')->value('situacao'));
+        // O CNAE vai junto, sem máscara: é o que classifica o segmento dos leads.
+        $this->assertSame('6422100', \Illuminate\Support\Facades\DB::table('cnpj_situacoes')->value('cnae_principal'));
     }
 
     public function test_consulta_vencida_vai_de_novo_a_receita(): void

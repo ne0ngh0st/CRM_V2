@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
  * Liga os leads da prospecção às contas-alvo da Maiores por Segmento — a "mescla" do que
  * a diretoria já tinha com o que o time de prospecção traz (decisão do Tony, 2026-10-02).
  *
- * Só vale para os seis segmentos da planilha (`AbasDaPlanilha`). Lead de outro segmento
+ * Só vale para os segmentos das abas da página (`AbasDaPlanilha`). Lead de outro segmento
  * fica só em /leads.
  *
  * | coluna `rede` do CSV          | o que acontece                                         |
@@ -168,6 +168,38 @@ class ContaDoLead
         }
 
         return $stats;
+    }
+
+    /**
+     * Sugestão de conta para os leads JÁ NO CRM que nunca tiveram ligação — os da base
+     * antiga (`sistema`), que não passam pelo import da prospecção, e qualquer lead que
+     * ganhou segmento depois (`SegmentoDosLeads`) ou cuja rede só agora virou conta (carga
+     * do ranking ABRAS). Mesma heurística e mesmos estados da prospecção: entra como
+     * SUGESTÃO, a diretoria confirma ou recusa na tela.
+     *
+     * @return array{criadas: int, confirmados: int, sugeridos: int, ambiguos: int, foraDasAbas: int, fundidos: int, detalhe: array}
+     */
+    public function sugerirParaLeadsSemConta(bool $dryRun = false): array
+    {
+        $codigoPorNome = Segmento::query()->whereIn('codigo', AbasDaPlanilha::codigos())->pluck('codigo', 'nome');
+
+        $itens = Lead::query()->visivel()
+            ->whereIn('origem', Lead::ORIGENS_IMPORTADAS)
+            ->whereNull('conta_vinculo')
+            ->whereIn('segmento', $codigoPorNome->keys())
+            ->get(['id', 'segmento', 'razao_social', 'nome_fantasia', 'estado'])
+            ->map(fn (Lead $l) => [
+                'lead_id' => $l->id,
+                'segmento' => (string) $codigoPorNome[$l->segmento],
+                'rede' => null,
+                'filiais' => null,
+                'uf' => $l->estado,
+                'nome' => $l->razao_social,
+                'nomes' => array_values(array_filter([$l->razao_social, $l->nome_fantasia])),
+            ])
+            ->all();
+
+        return $this->vincularDaProspeccao($itens, $dryRun);
     }
 
     /**
