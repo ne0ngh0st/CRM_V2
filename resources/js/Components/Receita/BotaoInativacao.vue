@@ -1,8 +1,8 @@
 <script setup>
 /*
- * "Solicitar inativação", no rodapé do Cartão CNPJ: e-mail ao Cadastro pedindo para
- * inativar no TOTVS um cliente (filial) com CNPJ irregular na Receita. Quem clica vai em
- * cópia. A regra mora no servidor (`PedidoDeInativacao`); aqui só o botão, a confirmação
+ * "Solicitar inativação", no rodapé do Cartão CNPJ: pede ao Cadastro para inativar no
+ * TOTVS um cliente (filial) com CNPJ irregular na Receita. O pedido vai numa lista diária
+ * (18h, dias úteis), com quem clicou em cópia. A regra mora no servidor (`PedidoDeInativacao`); aqui só o botão, a confirmação
  * e o estado.
  *
  * ⚠️ Mora DENTRO do modal do cartão, e só lá — o Tony recusou botão a mais na Carteira
@@ -24,6 +24,8 @@ const props = defineProps({
     situacao: { type: String, default: null },
     // Pedido já enviado (`{em, por}`) ou null.
     solicitada: { type: Object, default: null },
+    // Feature desligada no servidor (`receita.inativacao_habilitada`): botão desabilitado.
+    manutencao: { type: Boolean, default: false },
 });
 
 // Estado local: depois do pedido o botão muda sem recarregar o cartão.
@@ -64,23 +66,25 @@ async function enviar() {
     <button
         type="button"
         class="inline-flex items-center gap-1.5 rounded border px-4 py-2 text-xs font-semibold uppercase tracking-widest transition disabled:cursor-default"
-        :class="inativacao
+        :class="inativacao || manutencao
             ? 'border-gray-300 bg-gray-50 text-gray-500'
             : 'border-amber bg-amber/10 text-amber-dark hover:bg-amber/20'"
-        :disabled="!!inativacao"
-        :title="inativacao ? `Pedido enviado ao Cadastro em ${inativacao.em}${inativacao.por ? ` por ${inativacao.por}` : ''}` : 'E-mail ao Cadastro pedindo a inativação deste cliente no TOTVS'"
+        :disabled="!!inativacao || manutencao"
+        :title="inativacao
+            ? `Pedido registrado em ${inativacao.em}${inativacao.por ? ` por ${inativacao.por}` : ''}`
+            : manutencao ? 'Função temporariamente indisponível' : 'Pede ao Cadastro a inativação deste cliente no TOTVS'"
         @click="abrir"
     >
-        {{ inativacao ? `Inativação solicitada em ${inativacao.em}` : 'Solicitar inativação' }}
+        {{ inativacao ? `Inativação solicitada em ${inativacao.em}` : manutencao ? 'Inativação em manutenção' : 'Solicitar inativação' }}
     </button>
 
     <ConfirmacaoModal
         :show="modal.show"
         titulo="Solicitar inativação"
         :subtitulo="`${cliente.razaoSocial} · ${cliente.codCliente}/${cliente.loja}`"
-        :mensagem="`Situação do CNPJ na Receita Federal: ${rotuloSituacao}. Enviar ao Cadastro (cadastro.geral@autopel.com) o pedido para inativar este cliente no TOTVS?`"
-        detalhe="Você vai em cópia do e-mail. O CRM não inativa nada: o cliente continua aparecendo aqui até o Cadastro inativá-lo no TOTVS."
-        rotulo-confirmar="Enviar pedido"
+        :mensagem="`Situação do CNPJ na Receita Federal: ${rotuloSituacao}. Pedir ao Cadastro (cadastro.geral@autopel.com) para inativar este cliente no TOTVS?`"
+        detalhe="O pedido vai na lista diária ao Cadastro, às 18h (dias úteis), com você em cópia. O CRM não inativa nada: o cliente continua aparecendo aqui até o Cadastro inativá-lo no TOTVS."
+        rotulo-confirmar="Solicitar"
         tom="atencao"
         :processando="modal.processando"
         :erro="modal.erro"

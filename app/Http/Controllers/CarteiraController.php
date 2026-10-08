@@ -1230,6 +1230,7 @@ class CarteiraController extends Controller
             ...$resposta->getData(true),
             'inativacao' => [
                 'permitida' => SituacaoCadastral::irregular($situacao),
+                'manutencao' => ! config('receita.inativacao_habilitada'),
                 'situacao' => $situacao,
                 'solicitada' => $this->pedidoDeInativacao->recentes([$cliente->id])[$cliente->id] ?? null,
             ],
@@ -1889,8 +1890,9 @@ class CarteiraController extends Controller
     }
 
     /**
-     * "Solicitar inativação": e-mail ao Cadastro pedindo para inativar no TOTVS esta
-     * filial, cujo CNPJ está irregular na Receita. Quem clicou vai em cópia. JSON porque
+     * "Solicitar inativação": registra o pedido para inativar no TOTVS esta filial, cujo
+     * CNPJ está irregular na Receita. O e-mail ao Cadastro sai na lista diária das 18h,
+     * com quem clicou em cópia. JSON porque
      * o botão vive na linha da tabela e na filial expandida — uma visita do Inertia
      * recarregaria a lista e fecharia a filial aberta.
      *
@@ -1900,6 +1902,12 @@ class CarteiraController extends Controller
     public function solicitarInativacao(Request $request, Cliente $cliente): JsonResponse
     {
         $this->autorizarCliente($request, $cliente);
+
+        if (! config('receita.inativacao_habilitada')) {
+            return response()->json([
+                'mensagem' => 'A solicitação de inativação está em manutenção. Tente mais tarde.',
+            ], 503);
+        }
 
         $resultado = $this->pedidoDeInativacao->solicitar($cliente, $request->user());
 
@@ -1911,8 +1919,8 @@ class CarteiraController extends Controller
                 'mensagem' => 'A inativação deste cliente já foi solicitada.',
                 'inativacao' => PedidoDeInativacao::paraTela($resultado['solicitacao']),
             ], 409),
-            'enviado' => response()->json([
-                'mensagem' => 'Pedido enviado para '.$resultado['destino'].'.',
+            'registrado' => response()->json([
+                'mensagem' => 'Pedido registrado. Vai ao Cadastro na lista de hoje, às 18h.',
                 'inativacao' => PedidoDeInativacao::paraTela($resultado['solicitacao']),
             ]),
         };

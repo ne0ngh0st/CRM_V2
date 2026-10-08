@@ -11,9 +11,14 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * "Solicitar inativação" (pedido do Tony, 2026-10-01): manda um e-mail ao Cadastro de
- * clientes pedindo que um cliente com CNPJ irregular na Receita seja inativado no TOTVS.
- * Quem pediu vai em cópia.
+ * "Solicitar inativação" (pedido do Tony, 2026-10-01): pede ao Cadastro de clientes que
+ * um cliente com CNPJ irregular na Receita seja inativado no TOTVS. Quem pediu vai em
+ * cópia.
+ *
+ * ⚠️ O clique só REGISTRA o pedido; o e-mail sai numa LISTA DIÁRIA (`enviarPendentes()`,
+ * às 18h pelo `EnviarInativacoesDoDiaJob`). Até 2026-10-05 era um e-mail por clique, e
+ * num dia só foram 43 — a cota do SMTP é de 500 por mês, compartilhada com faturamento
+ * e fiscal. Para o Cadastro, uma lista também é melhor que 43 mensagens soltas.
  *
  * ⚠️ O CRM não inativa nada. A Carteira é só leitura (Regra de ouro nº 4): o cliente
  * continua aparecendo até o Cadastro inativá-lo no TOTVS e o import seguinte trazer isso.
@@ -37,7 +42,7 @@ class PedidoDeInativacao
     ) {}
 
     /**
-     * @return array{status: 'enviado'|'ja_solicitado'|'nao_irregular', solicitacao?: SolicitacaoInativacao, destino?: string}
+     * @return array{status: 'registrado'|'ja_solicitado'|'nao_irregular', solicitacao?: SolicitacaoInativacao}
      */
     public function solicitar(Cliente $cliente, User $solicitante): array
     {
@@ -60,10 +65,39 @@ class PedidoDeInativacao
             'solicitado_por' => $solicitante->id,
         ]);
 
-        $dados = $this->email($cliente, $solicitante, $receita);
-        $this->envio->enviar($dados);
+        return ['status' => 'registrado', 'solicitacao' => $solicitacao];
+    }
 
-        return ['status' => 'enviado', 'solicitacao' => $solicitacao, 'destino' => EnvioParaCadastro::destinoDescrito($dados)];
+    /**
+     * Manda ao Cadastro, num e-mail só, todos os pedidos ainda não enviados. Devolve
+     * quantos foram na lista (0 = nenhum e-mail).
+     *
+     * ⚠️ Tudo numa transação com lock: o carimbo `enviado_em` só fica gravado se o e-mail
+     * entrou na fila. Se o Redis recusar, nada é carimbado e a próxima rodada tenta de
+     * novo — perder um pedido aqui é o Cadastro nunca ficar sabendo dele.
+     */
+    public function enviarPendentes(): int
+    {
+        return DB::transaction(function () {
+            $pendentes = SolicitacaoInativacao::query()
+                ->whereNull('enviado_em')
+                ->with(['cliente', 'solicitante:id,name,display_name,email'])
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->filter(fn (SolicitacaoInativacao $s) => $s->cliente !== null)
+                ->values();
+
+            if ($pendentes->isEmpty()) {
+                return 0;
+            }
+
+            $this->envio->enviar($this->emailDaLista($pendentes->all()));
+
+            SolicitacaoInativacao::query()->whereIn('id', $pendentes->pluck('id'))->update(['enviado_em' => now()]);
+
+            return $pendentes->count();
+        });
     }
 
     /**
@@ -111,46 +145,67 @@ class PedidoDeInativacao
             ->first();
     }
 
-    /** @return array{to: string, solicitanteEmail: ?string, subject: string, body: string} */
-    private function email(Cliente $cliente, User $solicitante, object $receita): array
+    /**
+     * @param  list<SolicitacaoInativacao>  $pedidos
+     * @return array{to: string, cc: list<string>, subject: string, body: string}
+     */
+    private function emailDaLista(array $pedidos): array
     {
-        $situacao = $receita->situacao;
-        $desde = $receita->data_situacao ? Carbon::parse($receita->data_situacao)->format('d/m/Y') : null;
-        $nomeSolicitante = $solicitante->display_name ?: $solicitante->name;
+        $receitas = DB::table('cnpj_situacoes')
+            ->whereIn('cnpj', array_map(fn ($p) => $p->cnpj, $pedidos))
+            ->get()
+            ->keyBy('cnpj');
 
-        $fonte = $receita->fonte === SituacaoCadastral::FONTE_BASE
-            ? 'Base de dados aberta da Receita Federal'.($receita->referencia ? ' ('.substr($receita->referencia, 5, 2).'/'.substr($receita->referencia, 0, 4).')' : '')
-            : 'Consulta ao cartão CNPJ em '.Carbon::parse($receita->atualizado_em)->format('d/m/Y');
+        $nomes = $this->nomeVendedor->porCodigo(array_filter(array_map(fn ($p) => $p->cliente->cod_vendedor, $pedidos)));
 
+        $total = count($pedidos);
         $corpo = "Olá!\n\n";
-        $corpo .= "Solicitamos a INATIVAÇÃO do cadastro abaixo no TOTVS: o CNPJ está {$situacao} na Receita Federal.\n\n";
-        $corpo .= EnvioParaCadastro::secao('CLIENTE', [
-            'Código / Loja' => "{$cliente->cod_cliente} / {$cliente->loja}",
-            'Razão Social' => $cliente->razao_social,
-            'Nome Fantasia' => $cliente->nome_fantasia,
-            'CNPJ' => $cliente->cnpj,
-            'Município / UF' => trim(($cliente->municipio ?? '').' / '.($cliente->estado ?? ''), ' /'),
-            'Vendedor da carteira' => $cliente->cod_vendedor
-                ? $this->nomeVendedor->para($cliente->cod_vendedor)." ({$cliente->cod_vendedor})"
-                : null,
-            'Última compra' => $cliente->data_ultima_compra?->format('d/m/Y') ?? 'Nunca',
-        ]);
-        $corpo .= EnvioParaCadastro::secao('SITUAÇÃO NA RECEITA FEDERAL', [
-            'Situação' => $situacao,
-            'Desde' => $desde,
-            'Fonte' => $fonte,
-        ]);
-        $corpo .= EnvioParaCadastro::secao('SOLICITAÇÃO', [
-            'Solicitado por' => "{$nomeSolicitante} ({$solicitante->email})",
-            'Data/Hora' => now()->format('d/m/Y H:i'),
-        ]);
+        $corpo .= $total === 1
+            ? "Solicitamos a INATIVAÇÃO no TOTVS do cadastro abaixo: o CNPJ está irregular na Receita Federal.\n\n"
+            : "Solicitamos a INATIVAÇÃO no TOTVS dos {$total} cadastros abaixo: o CNPJ de cada um está irregular na Receita Federal.\n\n";
+
+        foreach ($pedidos as $n => $pedido) {
+            $cliente = $pedido->cliente;
+            $receita = $receitas[$pedido->cnpj] ?? null;
+            $solicitante = $pedido->solicitante;
+
+            $corpo .= EnvioParaCadastro::secao(($n + 1).". {$cliente->razao_social}", [
+                'Código / Loja' => "{$cliente->cod_cliente} / {$cliente->loja}",
+                'Nome Fantasia' => $cliente->nome_fantasia,
+                'CNPJ' => $cliente->cnpj,
+                'Município / UF' => trim(($cliente->municipio ?? '').' / '.($cliente->estado ?? ''), ' /'),
+                'Vendedor da carteira' => $cliente->cod_vendedor
+                    ? ($nomes[$cliente->cod_vendedor] ?? $cliente->cod_vendedor)." ({$cliente->cod_vendedor})"
+                    : null,
+                'Última compra' => $cliente->data_ultima_compra?->format('d/m/Y') ?? 'Nunca',
+                'Situação na Receita' => $pedido->situacao_receita
+                    .($receita?->data_situacao ? ' desde '.Carbon::parse($receita->data_situacao)->format('d/m/Y') : ''),
+                'Fonte' => $receita ? self::fonte($receita) : null,
+                'Solicitado por' => $solicitante
+                    ? ($solicitante->display_name ?: $solicitante->name)." ({$solicitante->email}) em ".$pedido->created_at->format('d/m/Y H:i')
+                    : null,
+            ]);
+        }
+
         $corpo .= EnvioParaCadastro::assinatura();
+
+        $primeiro = $pedidos[0];
+        $assunto = $total === 1
+            ? "Inativação de cliente — {$primeiro->situacao_receita} na Receita — {$primeiro->cliente->razao_social} ({$primeiro->cliente->cod_cliente}/{$primeiro->cliente->loja})"
+            : "Inativação de clientes — {$total} cadastros com CNPJ irregular na Receita — ".now()->format('d/m/Y');
 
         return [
             'to' => EnvioParaCadastro::EMAILS['cadastroCliente'],
-            'solicitanteEmail' => $solicitante->email,
-            'subject' => "Inativação de cliente — {$situacao} na Receita — {$cliente->razao_social} ({$cliente->cod_cliente}/{$cliente->loja})",
+            'cc' => array_values(array_unique(array_filter(array_map(fn ($p) => $p->solicitante?->email, $pedidos)))),
+            'subject' => $assunto,
             'body' => $corpo,
         ];
+    }
+
+    private static function fonte(object $receita): string
+    {
+        return $receita->fonte === SituacaoCadastral::FONTE_BASE
+            ? 'Base de dados aberta da Receita Federal'.($receita->referencia ? ' ('.substr($receita->referencia, 5, 2).'/'.substr($receita->referencia, 0, 4).')' : '')
+            : 'Consulta ao cartão CNPJ em '.Carbon::parse($receita->atualizado_em)->format('d/m/Y');
     }
 }

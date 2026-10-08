@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\AquecerCacheDashboardJob;
+use App\Jobs\EnviarInativacoesDoDiaJob;
 use App\Jobs\EnviarResumosEquipeJob;
 use App\Jobs\ExpurgarCapturasWpJob;
 use App\Jobs\ExpurgarExportacoesJob;
@@ -46,6 +47,13 @@ Schedule::command('model:prune', ['--model' => [\App\Models\EmailEnviado::class]
  */
 // Fuso explícito: 18:15 é horário de expediente, não pode depender do APP_TIMEZONE.
 Schedule::job(new EnviarResumosEquipeJob)->weekdays()->at('18:15')->timezone('America/Sao_Paulo')->onOneServer();
+
+/*
+ * Pedidos de inativação (CNPJ irregular na Receita) vão ao Cadastro numa lista só, no fim
+ * do dia útil — eram um e-mail por clique e estouravam a cota do SMTP (2026-10-05). Pedido
+ * de sábado/domingo entra na lista de segunda.
+ */
+Schedule::job(new EnviarInativacoesDoDiaJob)->weekdays()->at('18:00')->timezone('America/Sao_Paulo')->onOneServer();
 
 /*
  * Cache warming do Dashboard (ver docs/performance.md §1.3).

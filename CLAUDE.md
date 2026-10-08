@@ -2940,6 +2940,15 @@ em cópia**. Regra em `App\Services\Receita\PedidoDeInativacao`; botão em
 - ⚠️ **O servidor confere a situação** antes de enviar — CNPJ ativo ou nunca verificado
   devolve 422 sem e-mail. Pedir ao Cadastro que inative cliente ativo é o erro que não
   pode acontecer, e a requisição pode chegar de fora do botão.
+- **Lista diária, não e-mail por clique (2026-10-05).** O clique só registra
+  (`solicitacoes_inativacao.enviado_em` nulo); `EnviarInativacoesDoDiaJob`, dias úteis às
+  18:00, manda UM e-mail com todos os pendentes e todos os solicitantes em cópia, e
+  carimba `enviado_em` na mesma transação. Motivo: 43 e-mails num dia só, contra uma cota
+  de 500/mês do SMTP compartilhada com faturamento e fiscal.
+- 🚧 **EM MANUTENÇÃO desde 2026-10-07** (decisão do Tony): `RECEITA_INATIVACAO_HABILITADA`
+  (`config('receita.inativacao_habilitada')`, default **false**). Desligado, o botão aparece
+  cinza "Inativação em manutenção", a rota responde 503 e a lista das 18h não sai; o que já
+  estava registrado fica pendente e vai na primeira lista depois de religar.
 - **Não repete em 30 dias** (`DIAS_SEM_REPETIR`): o botão vira "Inativação solicitada em
   dd/mm por Fulano". Mesmo escopo das outras ações (`autorizarCliente`).
 - ⚠️ **O envio saiu do `CadastroController` para `App\Services\Cadastros\EnvioParaCadastro`**

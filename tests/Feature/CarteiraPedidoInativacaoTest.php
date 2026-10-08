@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\EnviarInativacoesDoDiaJob;
 use App\Mail\CadastroSolicitacaoMail;
 use App\Models\Cliente;
 use App\Models\SolicitacaoInativacao;
@@ -16,8 +17,9 @@ use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 /**
- * "Solicitar inativação" (Tony, 2026-10-01): e-mail ao Cadastro de clientes pedindo para
- * inativar no TOTVS um cliente com CNPJ irregular na Receita, com quem pediu em cópia.
+ * "Solicitar inativação" (Tony, 2026-10-01): pede ao Cadastro de clientes para inativar no
+ * TOTVS um cliente com CNPJ irregular na Receita, com quem pediu em cópia. Desde
+ * 2026-10-05 o clique só registra e o e-mail sai numa lista diária (cota do SMTP).
  *
  * ⚠️ O e-mail vai para um setor de verdade. O que estes testes travam é justamente o que
  * não pode escapar: pedir inativação de CNPJ ATIVO, pedir duas vezes, pedir cliente de
@@ -36,7 +38,7 @@ class CarteiraPedidoInativacaoTest extends TestCase
         parent::setUp();
         Mail::fake();
         // Não herdar o modo teste do .env local: aqui se confere o destino REAL.
-        config(['cadastros.redirecionar_emails_para' => null]);
+        config(['cadastros.redirecionar_emails_para' => null, 'receita.inativacao_habilitada' => true]);
         $this->seed(RoleSeeder::class);
 
         $this->vendedor = User::factory()->create(['is_active' => true, 'email' => 'vendedor@autopel.com']);
@@ -44,25 +46,64 @@ class CarteiraPedidoInativacaoTest extends TestCase
         VendedorPerfil::create(['user_id' => $this->vendedor->id, 'cod_vendedor' => '001']);
     }
 
-    public function test_cnpj_irregular_manda_para_o_cadastro_com_o_solicitante_em_copia(): void
+    public function test_o_clique_so_registra_e_nao_manda_email(): void
     {
         $cliente = $this->cliente('11111111000111', '001', 'BAIXADA');
 
         $this->pedir($cliente)->assertOk()->assertJsonPath('inativacao.por', $this->vendedor->display_name ?: $this->vendedor->name);
 
+        Mail::assertNothingQueued();
+        $this->assertDatabaseHas('solicitacoes_inativacao', [
+            'cliente_id' => $cliente->id, 'situacao_receita' => 'BAIXADA', 'solicitado_por' => $this->vendedor->id, 'enviado_em' => null,
+        ]);
+    }
+
+    public function test_a_lista_do_dia_vai_num_email_so_com_todos_os_solicitantes_em_copia(): void
+    {
+        $outro = User::factory()->create(['is_active' => true, 'email' => 'outro@autopel.com']);
+        $outro->assignRole('vendedor');
+        VendedorPerfil::create(['user_id' => $outro->id, 'cod_vendedor' => '001']);
+
+        $a = $this->cliente('11111111000111', '001', 'BAIXADA');
+        $b = $this->cliente('55555555000155', '001', 'INAPTA');
+        $c = $this->cliente('66666666000166', '001', 'SUSPENSA');
+        $this->pedir($a)->assertOk();
+        $this->pedir($b)->assertOk();
+        $this->actingAs($outro)->postJson(route('carteira.solicitarInativacao', $c))->assertOk();
+
+        (new EnviarInativacoesDoDiaJob)->handle(app(\App\Services\Receita\PedidoDeInativacao::class));
+
+        Mail::assertQueuedCount(1);
         Mail::assertQueued(CadastroSolicitacaoMail::class, function (CadastroSolicitacaoMail $mail) {
             return $mail->hasTo(self::CADASTRO)
                 && $mail->hasCc('vendedor@autopel.com')
-                && str_contains($mail->envelope()->subject, 'BAIXADA na Receita')
-                && str_contains($mail->envelope()->subject, 'EMPRESA 11111111000111')
+                && $mail->hasCc('outro@autopel.com')
+                && str_contains($mail->envelope()->subject, '3 cadastros')
                 && str_contains($mail->corpo, 'INATIVAÇÃO')
-                && str_contains($mail->corpo, '11.111.111/0001-11');
+                && str_contains($mail->corpo, '11.111.111/0001-11')
+                && str_contains($mail->corpo, '55.555.555/0001-55')
+                && str_contains($mail->corpo, '66.666.666/0001-66')
+                && str_contains($mail->corpo, 'SUSPENSA');
         });
-        Mail::assertQueuedCount(1);
+        $this->assertSame(0, SolicitacaoInativacao::whereNull('enviado_em')->count());
+    }
 
-        $this->assertDatabaseHas('solicitacoes_inativacao', [
-            'cliente_id' => $cliente->id, 'situacao_receita' => 'BAIXADA', 'solicitado_por' => $this->vendedor->id,
-        ]);
+    public function test_pedido_ja_enviado_nao_volta_na_lista_seguinte(): void
+    {
+        $this->pedir($this->cliente('11111111000111', '001', 'BAIXADA'))->assertOk();
+        $job = fn () => (new EnviarInativacoesDoDiaJob)->handle(app(\App\Services\Receita\PedidoDeInativacao::class));
+
+        $job();
+        $job();
+
+        Mail::assertQueuedCount(1);
+    }
+
+    public function test_sem_pedido_pendente_nao_manda_nada(): void
+    {
+        (new EnviarInativacoesDoDiaJob)->handle(app(\App\Services\Receita\PedidoDeInativacao::class));
+
+        Mail::assertNothingQueued();
     }
 
     public function test_cnpj_ativo_ou_nao_verificado_nao_manda_nada(): void
@@ -77,14 +118,13 @@ class CarteiraPedidoInativacaoTest extends TestCase
         $this->assertSame(0, SolicitacaoInativacao::count());
     }
 
-    public function test_segundo_pedido_nao_manda_outro_email(): void
+    public function test_segundo_pedido_nao_registra_outro(): void
     {
         $cliente = $this->cliente('11111111000111', '001', 'INAPTA');
 
         $this->pedir($cliente)->assertOk();
         $this->pedir($cliente)->assertStatus(409)->assertJsonPath('inativacao.em', now()->format('d/m/Y'));
 
-        Mail::assertQueuedCount(1);
         $this->assertSame(1, SolicitacaoInativacao::count());
     }
 
@@ -96,7 +136,7 @@ class CarteiraPedidoInativacaoTest extends TestCase
 
         $this->pedir($cliente)->assertOk();
 
-        Mail::assertQueuedCount(2);
+        $this->assertSame(2, SolicitacaoInativacao::count());
     }
 
     public function test_cliente_de_outra_carteira_nao_pode_ser_pedido(): void
@@ -105,7 +145,7 @@ class CarteiraPedidoInativacaoTest extends TestCase
 
         $this->assertContains($this->pedir($alheio)->status(), [403, 404]);
 
-        Mail::assertNothingQueued();
+        $this->assertSame(0, SolicitacaoInativacao::count());
     }
 
     public function test_modo_teste_redireciona_e_tira_as_copias(): void
@@ -114,6 +154,7 @@ class CarteiraPedidoInativacaoTest extends TestCase
         $cliente = $this->cliente('11111111000111', '001', 'BAIXADA');
 
         $this->pedir($cliente)->assertOk();
+        (new EnviarInativacoesDoDiaJob)->handle(app(\App\Services\Receita\PedidoDeInativacao::class));
 
         Mail::assertQueued(CadastroSolicitacaoMail::class, function (CadastroSolicitacaoMail $mail) {
             return $mail->hasTo('antonio.barbosa@autopel.com')
@@ -139,6 +180,22 @@ class CarteiraPedidoInativacaoTest extends TestCase
         $ficha = $this->actingAs($this->vendedor)->get(route('carteira.detalhes', $cliente))
             ->viewData('page')['props']['cliente']['receita'];
         $this->assertSame(now()->format('d/m/Y'), $ficha['inativacao']['em']);
+    }
+
+    public function test_em_manutencao_nao_registra_nem_manda_lista(): void
+    {
+        $cliente = $this->cliente('11111111000111', '001', 'BAIXADA');
+        $this->pedir($cliente)->assertOk();
+
+        config(['receita.inativacao_habilitada' => false]);
+
+        $outro = $this->cliente('33333333000133', '001', 'BAIXADA');
+        $this->pedir($outro)->assertStatus(503);
+        $this->assertDatabaseMissing('solicitacoes_inativacao', ['cliente_id' => $outro->id]);
+
+        (new EnviarInativacoesDoDiaJob)->handle(app(\App\Services\Receita\PedidoDeInativacao::class));
+        Mail::assertNothingQueued();
+        $this->assertDatabaseHas('solicitacoes_inativacao', ['cliente_id' => $cliente->id, 'enviado_em' => null]);
     }
 
     /**

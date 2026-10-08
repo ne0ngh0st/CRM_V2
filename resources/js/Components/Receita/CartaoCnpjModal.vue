@@ -257,6 +257,7 @@ const consultadoTexto = computed(() => {
                 :cliente="cliente"
                 :situacao="dados.inativacao.situacao"
                 :solicitada="dados.inativacao.solicitada"
+                :manutencao="dados.inativacao.manutencao"
             />
         </template>
     </ModalPadrao>

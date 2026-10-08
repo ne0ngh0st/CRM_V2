@@ -22,6 +22,14 @@ return [
     'validade_dias' => (int) env('RECEITA_CNPJ_VALIDADE_DIAS', 30),
 
     /*
+     * "Solicitar inativação" (Cartão CNPJ da Carteira). Desligado = EM MANUTENÇÃO
+     * (decisão do Tony, 2026-10-07): o botão aparece desabilitado, a rota recusa com 503
+     * e a lista das 18h não sai. Pedido já registrado fica pendente e vai na primeira
+     * lista depois de religar.
+     */
+    'inativacao_habilitada' => (bool) env('RECEITA_INATIVACAO_HABILITADA', false),
+
+    /*
      * Base aberta de CNPJ da Receita (carga mensal, `receita:importar-situacoes`).
      * Publicada num compartilhamento público do Nextcloud do SERPRO; o "token" é o id
      * do link público, não uma credencial. Mudou de endereço em 2025 — se a carga

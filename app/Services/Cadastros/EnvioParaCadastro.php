@@ -36,7 +36,10 @@ class EnvioParaCadastro
      * O solicitante SEMPRE vai em cópia (pedido do Tony, 2026-08-28) — além
      * do `cc` fixo do setor (quando houver), nunca no lugar dele.
      *
-     * @param  array{to: string, cc?: ?string, solicitanteEmail?: ?string, subject: string, body: string}  $dados
+     * `cc` aceita uma lista: a lista diária de inativação leva em cópia todo mundo que
+     * pediu algum cliente nela.
+     *
+     * @param  array{to: string, cc?: string|list<string>|null, solicitanteEmail?: ?string, subject: string, body: string}  $dados
      */
     public function enviar(array $dados, ?string $anexoConteudo = null, ?string $anexoNome = null): void
     {
@@ -90,7 +93,7 @@ class EnvioParaCadastro
     private static function copias(array $dados): array
     {
         return array_values(array_unique(array_filter([
-            $dados['cc'] ?? null,
+            ...(array) ($dados['cc'] ?? []),
             $dados['solicitanteEmail'] ?? null,
         ])));
     }

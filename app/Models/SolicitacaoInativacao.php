@@ -12,6 +12,8 @@ class SolicitacaoInativacao extends Model
 
     protected $fillable = ['cliente_id', 'cnpj', 'situacao_receita', 'solicitado_por'];
 
+    protected $casts = ['enviado_em' => 'datetime'];
+
     public function cliente(): BelongsTo
     {
         return $this->belongsTo(Cliente::class);
