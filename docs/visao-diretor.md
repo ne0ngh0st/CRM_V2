@@ -241,13 +241,19 @@ php artisan diretor:importar-ranking-abras --dry-run --detalhe
 - Idempotente pela chave de nome da prospecção (`chaveDeNome`): rodar de novo atualiza a
   posição (= `ordem`) e não duplica; nome, observação e UF já preenchidos não mudam. Conta
   da aba fora do ranking vai para depois dele.
-- Depois de criar, chama `visao-diretor:sugerir-vinculos --segmento=101` (clientes pelo
-  nome das filiais, só nas contas da aba) e `ContaDoLead::sugerirParaLeadsSemConta()`.
-- ⚠️ **Nome comum puxa homônimo.** Dry-run em dev (08/10): 131 das 200 redes ganham
-  vínculo, e as grandes casam certo (Carrefour, Tatico = Centro Oeste, Joanin = Comercial
-  Oswaldo Cruz). Mas "Supermercado da Família" (PE) puxa a "Família Gaúcha" (RS), "Rede
-  Paraíba" puxa "Paraíba Papéis" e "Pague Menos" (SP) puxa mercados de mesmo nome em MG e
-  BA. Entram como SUGESTÃO, revisáveis no modal da conta.
+- **Os clientes são ligados pela IDENTIDADE JURÍDICA** (`VinculoPorRazaoSocial`): razão
+  social da ABRAS (e as do campo `razoes`, para quem ela publica só a marca: Assaí =
+  Sendas, GPA = Cia Brasileira de Distribuição) igual à dos nossos clientes, ou cortada
+  pelo TOTVS em 40 caracteres, expandida para as filiais do mesmo CNPJ raiz (calculado em
+  memória, Regra de ouro nº 3). Entra como sugestão e SUBSTITUI a que a conta tinha.
+- ⚠️ **Nome de marca NÃO liga cliente nesta aba** (Tony, 08/10: "se não achou eles, o
+  vínculo está fraco"). A primeira versão usava `VinculoPorCliente`: não achou Assaí, GPA
+  nem Sonda, e das redes que só o nome ligava a maioria era homônimo ("Comercial Reis" ×
+  atacadista de embalagens). Sem razão social casando, a sugestão por nome é LIMPA e a rede
+  fica como Lead até alguém ligar à mão. Vínculo manual nunca é tocado.
+- Razão social "igual" ignora acento, pontuação, sufixo societário, "& CIA"/"E CIA",
+  conectivos e o plural de SUPERMERCADO. **Prefixo não vale** — "SUPERMERCADO BEL" não é
+  BELTRAME, "CASA SANTA" não é CASA SANTA LUZIA —, exceto quando o TOTVS cortou o nome.
 
 **Os leads.** A base antiga (`origem = sistema`, ~14 mil em produção) não tinha segmento.
 `SegmentoDosLeads` preenche pelo **CNAE principal** da Receita (`cnpj_situacoes.cnae_principal`,

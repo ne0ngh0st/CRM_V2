@@ -28,12 +28,15 @@ use Throwable;
  *
  * Depois de criar as contas:
  *   1. `VinculoPorRazaoSocial` liga os clientes pela razão social (a da ABRAS e as do campo
- *      `razoes`, para quem a ABRAS publica só a marca) + CNPJ raiz. É o vínculo forte, e
- *      SUBSTITUI as sugestões que a conta tinha (manual nunca é tocado);
- *   2. `visao-diretor:sugerir-vinculos --segmento=101 --so-sem-vinculo` tenta pelo nome
- *      das filiais só as redes que não casaram pela razão social — o nome de marca é
- *      fraco e puxa homônimo, então não pode somar ao vínculo forte;
- *   3. `ContaDoLead::sugerirParaLeadsSemConta()` sugere a rede dos leads já classificados.
+ *      `razoes`, para quem a ABRAS publica só a marca) + CNPJ raiz, SUBSTITUINDO as
+ *      sugestões que a conta tinha. Conta com vínculo manual nunca é tocada;
+ *   2. `ContaDoLead::sugerirParaLeadsSemConta()` sugere a rede dos leads já classificados.
+ *
+ * ⚠️ NÃO usa a sugestão pelo nome das filiais (`VinculoPorCliente`), e LIMPA a que a conta
+ * tinha quando a razão social não casa (Tony, 2026-10-08: "se não achou eles, o vínculo
+ * está fraco"). Medido em produção: das 31 redes que só o nome ligava, a maioria era
+ * homônimo — "Comercial Reis" × atacadista de embalagens, "Supermercado Vianense" × loja
+ * de roupa. Rede sem identidade jurídica no CRM fica como Lead até alguém ligar à mão.
  *
  * ⚠️ Idempotente: a conta é achada pela mesma chave de nome da prospecção
  * (`SugestaoDeVinculo::chaveDeNome`), então rodar de novo — ou com o ranking do ano
@@ -49,8 +52,7 @@ class ImportarRankingAbras extends Command
     protected $signature = 'diretor:importar-ranking-abras
         {--arquivo=database/data/visao-diretor/ranking-abras-2026.json : JSON com o ranking}
         {--limite=200 : quantas posições do ranking viram conta}
-        {--dry-run : faz tudo numa transação e desfaz no fim (mostra o relatório sem gravar)}
-        {--detalhe : lista os vínculos sugeridos conta a conta, com exemplos de filiais}';
+        {--dry-run : faz tudo numa transação e desfaz no fim (mostra o relatório sem gravar)}';
 
     protected $description = 'Contas da aba Supermercadista (Visão Diretor) a partir do ranking da ABRAS';
 
@@ -141,6 +143,7 @@ class ImportarRankingAbras extends Command
             $catalogo = $porRazao->catalogo();
             $pelaRazao = 0;
             $codigosPelaRazao = 0;
+            $limpas = 0;
 
             foreach ($doRanking as $id => $r) {
                 $conta = ContaEstrategica::with('vinculos')->find($id);
@@ -152,6 +155,12 @@ class ImportarRankingAbras extends Command
                 $codigos = $porRazao->clientes([$r['razao_social'], ...($r['razoes'] ?? [])], $catalogo);
 
                 if ($codigos === []) {
+                    // A sugestão que houver veio do nome de marca: sem razão social, sai.
+                    if ($conta->vinculos->isNotEmpty()) {
+                        $clientesDaConta->sincronizarVinculos($conta, []);
+                        $limpas++;
+                    }
+
                     continue;
                 }
 
@@ -166,14 +175,9 @@ class ImportarRankingAbras extends Command
 
             $this->newLine();
             $this->info("Clientes pela razão social + CNPJ raiz: {$pelaRazao} redes · {$codigosPelaRazao} códigos");
-
-            $this->newLine();
-            $this->info('Clientes pelo nome das filiais (só redes sem vínculo):');
-            $this->call('visao-diretor:sugerir-vinculos', [
-                '--segmento' => $segmento->codigo,
-                '--so-sem-vinculo' => true,
-                '--detalhe' => (bool) $this->option('detalhe'),
-            ]);
+            if ($limpas > 0) {
+                $this->warn("Sugestões por nome removidas (razão social não casou): {$limpas} redes");
+            }
 
             $leads = $contaDoLead->sugerirParaLeadsSemConta();
             $this->newLine();

@@ -198,15 +198,13 @@ class SupermercadistaAbrasTest extends TestCase
     }
 
     /**
-     * Os clientes entram como sugestão pelo nome das filiais, e só nas contas da aba nova:
-     * a carga não pode acrescentar vínculo em conta de outra aba sem ninguém pedir.
-     *
-     * Mutação: tirar o filtro `--segmento` do `visao-diretor:sugerir-vinculos`.
+     * Os clientes entram como sugestão (pela razão social), e só nas contas da aba nova: a
+     * carga não pode mexer em conta de outra aba sem ninguém pedir.
      */
     public function test_vincula_clientes_so_nas_contas_da_aba_nova(): void
     {
-        $this->filial('000100', '101', 'CARREFOUR BAIRRO', 'CARREFOUR COMERCIO E INDUSTRIA LTDA');
-        $this->filial('000200', '109', 'DROGARIA VIDA', 'DROGARIA VIDA LTDA');
+        $this->filial('000100', '101', 'CARREFOUR BAIRRO', 'CARREFOUR COMERCIO E INDUSTRIA LTDA', '45543915000181');
+        $this->filial('000200', '109', 'DROGARIA VIDA', 'DROGARIA VIDA LTDA', '12345678000195');
         $drogaria = ContaEstrategica::create(['segmento_id' => $this->drogarias->id, 'nome' => 'DROGARIA VIDA', 'ordem' => 1]);
         $this->ranking([[1, 'CARREFOUR', 'CARREFOUR COMÉRCIO E INDÚSTRIA LTDA.', 'SP']]);
 
@@ -221,11 +219,8 @@ class SupermercadistaAbrasTest extends TestCase
     }
 
     /**
-     * A razão social é o vínculo forte: usa as `razoes` de quem a ABRAS publica só pela
-     * marca, e a sugestão por nome não soma ao que ela achou (o "mercadinho Savegnago" é
-     * homônimo).
-     *
-     * Mutação: tirar o `--so-sem-vinculo` da chamada da sugestão por nome.
+     * A razão social é o vínculo: usa as `razoes` de quem a ABRAS publica só pela marca, e
+     * o nome de marca não entra — o "mercadinho Savegnago" é homônimo.
      */
     public function test_razao_social_e_o_vinculo_forte(): void
     {
@@ -239,9 +234,38 @@ class SupermercadistaAbrasTest extends TestCase
 
         $this->artisan('diretor:importar-ranking-abras', ['--arquivo' => $this->arquivo])->assertSuccessful();
 
-        $codigos = fn (string $nome) => ContaEstrategica::where('nome', $nome)->sole()->vinculos()->orderBy('codigo')->pluck('codigo')->all();
-        $this->assertSame(['000911'], $codigos('GPA'));
-        $this->assertSame(['000300'], $codigos('SAVEGNAGO SUPERMERCADOS'), 'o homônimo pelo nome não soma');
+        $this->assertSame(['000911'], $this->codigosDa('GPA'));
+        $this->assertSame(['000300'], $this->codigosDa('SAVEGNAGO SUPERMERCADOS'), 'o homônimo pelo nome não entra');
+    }
+
+    /**
+     * Sugestão por nome que a conta já tinha sai quando a razão social não casa; vínculo
+     * manual nunca é tocado.
+     *
+     * Mutação: tirar a limpeza (`sincronizarVinculos($conta, [])`).
+     */
+    public function test_sem_razao_social_a_sugestao_por_nome_sai_e_o_manual_fica(): void
+    {
+        $this->filial('000500', '101', 'PAGUE MENOS DE TUPACIGUARA', 'PAGUE MENOS DE TUPACIGUARA LTDA', '55555555000191');
+        $this->filial('005507', '101', 'SONDA - ESCRITORIO', 'SONDA SUPERMERCADOS EXPORTACAO E IMPORTA', '66666666000191');
+        $pagueMenos = ContaEstrategica::create(['segmento_id' => $this->supermercadista->id, 'nome' => 'PAGUE MENOS', 'ordem' => 1]);
+        $pagueMenos->vinculos()->create(['tipo' => 'cliente', 'codigo' => '000500', 'origem' => ContaEstrategicaVinculo::ORIGEM_SUGESTAO]);
+        $sonda = ContaEstrategica::create(['segmento_id' => $this->supermercadista->id, 'nome' => 'SONDA SUPERMERCADOS', 'ordem' => 2]);
+        $sonda->vinculos()->create(['tipo' => 'cliente', 'codigo' => '999999', 'origem' => ContaEstrategicaVinculo::ORIGEM_MANUAL]);
+        $this->ranking([
+            [1, 'PAGUE MENOS', 'PAGUE MENOS COM. DE PROD. ALIM. LTDA.', 'SP'],
+            [2, 'SONDA SUPERMERCADOS', 'SONDA SUPERMERCADOS EXPORTAÇÃO E IMPORTAÇÃO S.A.', 'SP'],
+        ]);
+
+        $this->artisan('diretor:importar-ranking-abras', ['--arquivo' => $this->arquivo])->assertSuccessful();
+
+        $this->assertSame([], $this->codigosDa('PAGUE MENOS'));
+        $this->assertSame(['999999'], $this->codigosDa('SONDA SUPERMERCADOS'), 'manual não é tocado');
+    }
+
+    private function codigosDa(string $nome): array
+    {
+        return ContaEstrategica::where('nome', $nome)->sole()->vinculos()->orderBy('codigo')->pluck('codigo')->all();
     }
 
     // ---------------------------------------------------------------- apoio

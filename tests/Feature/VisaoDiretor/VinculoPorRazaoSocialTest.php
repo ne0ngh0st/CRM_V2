@@ -71,6 +71,16 @@ class VinculoPorRazaoSocialTest extends TestCase
         $this->assertSame(['000100'], $this->clientes('A.C.D.A IMPORTAÇÃO E EXPORTAÇÃO LTDA.'));
     }
 
+    /** "& CIA" × "E CIA" e plural: casos reais (Giassi, Juba) que o nome exato perdia. */
+    public function test_ignora_cia_conectivos_e_plural(): void
+    {
+        $this->filial('000100', '11111111000101', 'GIASSI & CIA LTDA');
+        $this->filial('000200', '22222222000101', 'JUBA SUPERMERCADOS LTDA');
+
+        $this->assertSame(['000100'], $this->clientes('GIASSI E CIA. LTDA.'));
+        $this->assertSame(['000200'], $this->clientes('JUBA SUPERMERCADO LTDA.'));
+    }
+
     /** Mutação: tirar a regra da maioria. */
     public function test_codigo_com_maioria_de_outra_empresa_fica_de_fora(): void
     {

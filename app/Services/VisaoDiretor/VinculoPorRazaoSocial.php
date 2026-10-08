@@ -123,7 +123,12 @@ class VinculoPorRazaoSocial
     {
         $s = mb_strtoupper(Str::ascii($razao));
         $s = preg_replace('/[^A-Z0-9]+/', ' ', $s);
-        $s = preg_replace('/\b(LTDA|LIMITADA|EIRELI|EIRELE|EPP|ME|S A|SA)\b/', ' ', $s);
+        // Sufixo societário, "& CIA"/"E CIA" e conectivos: a mesma empresa aparece como
+        // "GIASSI & CIA" e "GIASSI E CIA", "CASA VISCARDI S/A COMERCIO E IMPORTACAO" e
+        // "… S.A. COMÉRCIO IMPORTAÇÃO".
+        $s = preg_replace('/\b(LTDA|LIMITADA|EIRELI|EIRELE|EPP|ME|S A|SA|CIA|COMPANHIA|E|DE|DA|DO|DAS|DOS)\b/', ' ', $s);
+        // "SUPERMERCADO JUBA" × "SUPERMERCADOS JUBA".
+        $s = preg_replace('/\b(SUPERMERCADO|HIPERMERCADO|MERCADO)S\b/', '$1', $s);
 
         return trim(preg_replace('/\s+/', ' ', $s));
     }

@@ -3023,8 +3023,9 @@ Primeira aba da Visão Diretor → Maiores por Segmento. Detalhe em `docs/visao-
 - O mercado pequeno que não está no ranking **continua só como lead**; o lead que casa com
   uma rede do ranking vira SUGESTÃO de vínculo, como na prospecção.
 - `AbasDaPlanilha::FORA_DA_PLANILHA` diz quais abas a carga da planilha da diretoria pula.
-- ⚠️ Nome comum de supermercado puxa homônimo nas sugestões de vínculo ("Supermercado da
-  Família" PE × "Família Gaúcha" RS). Revisar na tela.
+- ⚠️ **Cliente é ligado à rede pela razão social + CNPJ raiz (`VinculoPorRazaoSocial`),
+  nunca pelo nome de marca** (Tony: "se não achou eles, o vínculo está fraco"). O nome de
+  marca não achava Assaí/GPA/Sonda e puxava homônimo. Sem razão social, a rede fica Lead.
 
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado

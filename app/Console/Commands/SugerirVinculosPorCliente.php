@@ -28,8 +28,7 @@ class SugerirVinculosPorCliente extends Command
     protected $signature = 'visao-diretor:sugerir-vinculos
         {--dry-run : mostra o que seria vinculado, sem gravar}
         {--detalhe : lista conta a conta, com exemplos de filiais casadas}
-        {--segmento= : só grava nas contas deste segmento (código TOTVS, ex.: 101)}
-        {--so-sem-vinculo : só grava em conta que ainda não tem vínculo nenhum}';
+        {--segmento= : só grava nas contas deste segmento (código TOTVS, ex.: 101)}';
 
     protected $description = 'Sugere vínculos conta-alvo → clientes pelo nome fantasia/razão das filiais';
 
@@ -82,11 +81,6 @@ class SugerirVinculosPorCliente extends Command
         foreach ($contas as $conta) {
             $proposta = $propostas[$conta->id] ?? null;
             if (! $proposta || ($soSegmento !== null && (string) $conta->segmento->codigo !== (string) $soSegmento)) {
-                continue;
-            }
-
-            // O nome de marca é o sinal fraco: não soma a um vínculo já feito pela razão social.
-            if ($this->option('so-sem-vinculo') && $conta->vinculos->isNotEmpty()) {
                 continue;
             }
 
