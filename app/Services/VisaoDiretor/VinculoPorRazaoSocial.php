@@ -21,6 +21,10 @@ use Illuminate\Support\Str;
  * 1. **Razão social IGUAL, não prefixo.** Começo de nome casava "SUPERMERCADO BEL" com
  *    BELTRAME e "CASA SANTA" com CASA SANTA LUZIA — empresas diferentes. Comparação depois
  *    de tirar acento, pontuação e sufixo societário (LTDA, S/A, EIRELI…).
+ *    **Abreviação só em palavra de tipo de negócio** (`TERMOS`), palavra a palavra: "PAGUE
+ *    MENOS COM. DE PROD. ALIM." é "PAGUE MENOS COMERCIO DE PRODUTOS ALIMENTICIOS". Sem
+ *    isso a regra estrita apagou Roldão (53 lojas), Pague Menos, Serrano e Agricer.
+ *    A palavra de MARCA continua tendo que ser igual — "BEL" não é "BELTRAME".
  * 2. **Prefixo só quando o TOTVS cortou o nome**: a razão social do cliente com 38+
  *    caracteres que é o começo da razão da rede (o corte cai no meio da palavra).
  * 3. **Expansão pelo CNPJ raiz** (os 8 primeiros dígitos, calculados em memória — nunca
@@ -34,6 +38,15 @@ class VinculoPorRazaoSocial
     /** A partir daqui a razão social do TOTVS pode estar cortada (o campo tem 40). */
     private const TAMANHO_CORTADO = 38;
 
+    /** Palavras que a razão social abrevia ("COM.", "PROD.", "ALIM.", "DIST."). */
+    private const TERMOS = [
+        'COMERCIO', 'COMERCIAL', 'PRODUTOS', 'ALIMENTICIOS', 'ALIMENTICIA', 'ALIMENTOS',
+        'ALIMENTACAO', 'DISTRIBUIDORA', 'DISTRIBUIDOR', 'DISTRIBUICAO', 'GENEROS',
+        'IMPORTACAO', 'IMPORTADORA', 'EXPORTACAO', 'EXPORTADORA', 'INDUSTRIA', 'ATACADISTA',
+        'ATACADO', 'VAREJISTA', 'PARTICIPACOES', 'EMPREENDIMENTOS', 'SERVICOS',
+        'SUPERMERCADO', 'ADMINISTRACAO',
+    ];
+
     /**
      * Os clientes em memória, UMA vez por rodada.
      *
@@ -45,6 +58,7 @@ class VinculoPorRazaoSocial
         $cortadas = [];
         $filiaisPorCodigo = [];
         $totalPorCodigo = [];
+        $porPrimeira = [];
 
         $linhas = DB::table('clientes')
             ->select('cod_cliente', 'razao_social', 'cnpj_digitos')
@@ -68,12 +82,13 @@ class VinculoPorRazaoSocial
             }
 
             $porRazao[$chave][$raiz] = true;
+            $porPrimeira[strtok($chave, ' ')][$chave] = true;
             if (mb_strlen(trim((string) $c->razao_social)) >= self::TAMANHO_CORTADO) {
                 $cortadas[$chave][$raiz] = true;
             }
         }
 
-        return compact('porRazao', 'cortadas', 'filiaisPorCodigo', 'totalPorCodigo');
+        return compact('porRazao', 'porPrimeira', 'cortadas', 'filiaisPorCodigo', 'totalPorCodigo');
     }
 
     /**
@@ -90,7 +105,12 @@ class VinculoPorRazaoSocial
                 continue;
             }
 
-            $raizes += $catalogo['porRazao'][$alvo] ?? [];
+            // Igual, ou igual a menos de abreviação. A 1ª palavra (marca) é sempre igual.
+            foreach (array_keys($catalogo['porPrimeira'][strtok($alvo, ' ')] ?? []) as $chave) {
+                if ($chave === $alvo || self::abreviada($alvo, (string) $chave)) {
+                    $raizes += $catalogo['porRazao'][$chave];
+                }
+            }
 
             foreach ($catalogo['cortadas'] as $chave => $dela) {
                 // Cortada no meio da palavra ("…E IMPORTA"): sem exigir fronteira.
@@ -118,6 +138,41 @@ class VinculoPorRazaoSocial
         return $codigos;
     }
 
+    /**
+     * Mesmas palavras, na mesma ordem, e as diferentes são abreviação uma da outra de um
+     * mesmo termo de `TERMOS` ("COM" × "COMERCIO", "DIST" × "DISTRIBIDORA" — o erro de
+     * digitação é da própria ABRAS).
+     */
+    private static function abreviada(string $a, string $b): bool
+    {
+        $pa = explode(' ', $a);
+        $pb = explode(' ', $b);
+
+        if (count($pa) !== count($pb)) {
+            return false;
+        }
+
+        foreach ($pa as $i => $x) {
+            $y = $pb[$i];
+            if ($x === $y) {
+                continue;
+            }
+
+            [$curta, $longa] = strlen($x) < strlen($y) ? [$x, $y] : [$y, $x];
+            if (strlen($curta) < 3 || ! str_starts_with($longa, $curta)) {
+                return false;
+            }
+
+            $inicioLonga = substr($longa, 0, 6);
+            $termo = array_filter(self::TERMOS, fn (string $t) => str_starts_with($t, $curta) && str_starts_with($t, $inicioLonga));
+            if ($termo === []) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /** "SONDA SUPERMERCADOS EXPORTAÇÃO E IMPORTAÇÃO S.A." → "SONDA SUPERMERCADOS EXPORTACAO E IMPORTACAO" */
     public static function normalizar(string $razao): string
     {
@@ -127,6 +182,8 @@ class VinculoPorRazaoSocial
         // "GIASSI & CIA" e "GIASSI E CIA", "CASA VISCARDI S/A COMERCIO E IMPORTACAO" e
         // "… S.A. COMÉRCIO IMPORTAÇÃO".
         $s = preg_replace('/\b(LTDA|LIMITADA|EIRELI|EIRELE|EPP|ME|S A|SA|CIA|COMPANHIA|E|DE|DA|DO|DAS|DOS)\b/', ' ', $s);
+        // "ROLDAO AUTO SERVICO" × "ROLDAO AUTOSSERVICO".
+        $s = preg_replace('/\bAUTO ?S?SERVICO\b/', 'AUTOSSERVICO', $s);
         // "SUPERMERCADO JUBA" × "SUPERMERCADOS JUBA".
         $s = preg_replace('/\b(SUPERMERCADO|HIPERMERCADO|MERCADO)S\b/', '$1', $s);
 

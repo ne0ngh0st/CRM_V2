@@ -81,6 +81,38 @@ class VinculoPorRazaoSocialTest extends TestCase
         $this->assertSame(['000200'], $this->clientes('JUBA SUPERMERCADO LTDA.'));
     }
 
+    /**
+     * Abreviação da ABRAS e "auto serviço" separado: casos reais que a regra estrita apagou
+     * em produção (Pague Menos, Roldão com 53 lojas, Agricer).
+     *
+     * Mutação: tirar a chamada de `abreviada()`.
+     */
+    public function test_abreviacao_de_termo_e_auto_servico(): void
+    {
+        $this->filial('000100', '11111111000101', 'PAGUE MENOS COMERCIO DE PRODUTOS ALIMENTICIOS LTDA');
+        $this->filial('000200', '22222222000101', 'ROLDAO AUTO SERVICO COMERCIO DE ALIMENTOS S/A');
+        $this->filial('000300', '33333333000101', 'AGRICER DIST. E COM. DE PRODUTOS ALIMENTICIOS LTDA');
+
+        $this->assertSame(['000100'], $this->clientes('PAGUE MENOS COM. DE PROD. ALIM. LTDA.'));
+        $this->assertSame(['000200'], $this->clientes('ROLDÃO AUTOSSERVICO COMÉRCIO DE ALIMENTOS LTDA.'));
+        $this->assertSame(['000300'], $this->clientes('AGRICER DISTRIBIDORA E COMERCIAL DE PROD. ALIM. LTDA.'));
+    }
+
+    /**
+     * Abreviação vale só para palavra de tipo de negócio: na marca, "SUPER" não é
+     * "SUPERBOM" e "BEL" não é "BELTRAME".
+     *
+     * Mutação: aceitar qualquer palavra como abreviação (tirar o filtro de `TERMOS`).
+     */
+    public function test_abreviacao_nao_vale_para_a_marca(): void
+    {
+        $this->filial('000100', '11111111000101', 'SUPERBOM COMERCIO DE ALIMENTOS LTDA');
+        $this->filial('000200', '22222222000101', 'SUPERMERCADO BEL LTDA');
+
+        $this->assertSame([], $this->clientes('SUPER COMERCIO DE ALIMENTOS LTDA.'));
+        $this->assertSame([], $this->clientes('SUPERMERCADO BELTRAME LTDA.'));
+    }
+
     /** Mutação: tirar a regra da maioria. */
     public function test_codigo_com_maioria_de_outra_empresa_fica_de_fora(): void
     {
