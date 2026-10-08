@@ -197,12 +197,18 @@ class SugestaoDeVinculo
 
     /**
      * @param  Collection<int, array{codigo: string, nome: string, compacto: string, tokensTodos: list<string>, tokensDistintivos: list<string>, total: int, porSeg: array<string, int>}>  $catalogo
+     * `$soPrefixo` desliga a 2ª camada (token distintivo). Contra uma base grande de nomes
+     * de PESSOA e de mercadinho ela casa sobrenome e palavra comum: medido em produção em
+     * 08/10/2026, 556 sugestões de lead para as redes da ABRAS, quase todas erradas
+     * ("Crestani & Filhos" × "4 Filhos Supermercado").
+     *
      * @return array{grupos: Collection<int, array{codigo: string, nome: string}>, ambiguo: bool}
      */
-    public function sugerir(string $nome, string $codigoSegmento, Collection $catalogo): array
+    public function sugerir(string $nome, string $codigoSegmento, Collection $catalogo, bool $soPrefixo = false): array
     {
         $alvo = $this->alvoPrefixo($nome);
-        $tokens = $this->tokensDistintivos($nome);
+        // Só a 1ª camada: ver `ContaDoLead::sugerirParaLeadsSemConta()`.
+        $tokens = $soPrefixo ? [] : $this->tokensDistintivos($nome);
 
         $prefixo = $catalogo->filter(fn (array $g) => $this->casaPrefixo($alvo, $g))->values();
         $token = $catalogo

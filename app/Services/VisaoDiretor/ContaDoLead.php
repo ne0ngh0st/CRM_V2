@@ -48,7 +48,7 @@ class ContaDoLead
      * `detalhe` é o que a /atualizacoes lista no clique: as redes criadas e, por lead
      * (id), o nome da rede a que ele foi ligado nesta rodada.
      */
-    public function vincularDaProspeccao(array $itens, bool $dryRun = false): array
+    public function vincularDaProspeccao(array $itens, bool $dryRun = false, bool $soPrefixo = false): array
     {
         $stats = ['criadas' => 0, 'confirmados' => 0, 'sugeridos' => 0, 'ambiguos' => 0, 'foraDasAbas' => 0, 'fundidos' => 0,
             'detalhe' => ['redesCriadas' => [], 'ligados' => []]];
@@ -134,7 +134,7 @@ class ContaDoLead
             $stats['detalhe']['ligados'][$i['lead_id']] = is_int($conta) ? trim($i['rede']) : $conta->nome;
         }
 
-        foreach ($this->sugerir($semRede, $contas, $codigoDoSegmento) as $leadId => $contaIds) {
+        foreach ($this->sugerir($semRede, $contas, $codigoDoSegmento, $soPrefixo) as $leadId => $contaIds) {
             if (count($contaIds) > 1) {
                 $stats['ambiguos']++;
 
@@ -199,7 +199,9 @@ class ContaDoLead
             ])
             ->all();
 
-        return $this->vincularDaProspeccao($itens, $dryRun);
+        // Só pelo COMEÇO do nome: é a base inteira de leads contra todas as redes, e a
+        // camada de token distintivo casava sobrenome (556 sugestões, quase todas erradas).
+        return $this->vincularDaProspeccao($itens, $dryRun, soPrefixo: true);
     }
 
     /**
@@ -255,7 +257,7 @@ class ContaDoLead
      * @param  Collection<int, string>  $codigoDoSegmento  segmento_id → código
      * @return array<int, list<int>> lead_id → contas candidatas
      */
-    private function sugerir(Collection $leads, Collection $contas, Collection $codigoDoSegmento): array
+    private function sugerir(Collection $leads, Collection $contas, Collection $codigoDoSegmento, bool $soPrefixo = false): array
     {
         $candidatos = [];
 
@@ -269,7 +271,7 @@ class ContaDoLead
 
             // ⚠️ (string) dos dois lados: código numérico vira chave INTEIRA de array ('109' → 109).
             foreach ($contas->filter(fn ($c) => (string) $codigoDoSegmento[$c->segmento_id] === (string) $segmento) as $conta) {
-                $achados = $this->sugestao->sugerir($conta->nome, (string) $segmento, $catalogo);
+                $achados = $this->sugestao->sugerir($conta->nome, (string) $segmento, $catalogo, $soPrefixo);
 
                 foreach ($achados['grupos']->pluck('codigo')->unique() as $leadId) {
                     $candidatos[(int) $leadId][] = $conta->id;

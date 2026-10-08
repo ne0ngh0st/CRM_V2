@@ -117,6 +117,24 @@ class SupermercadistaAbrasTest extends TestCase
         $this->assertNull(Lead::find($outro)->conta_estrategica_id, 'mercado pequeno continua só lead');
     }
 
+    /**
+     * Só pelo começo do nome. Caso real de produção (08/10): a camada de token distintivo
+     * ligava a rede "CRESTANI & FILHOS" a todo mercadinho com FILHOS no nome.
+     *
+     * Mutação: tirar o `soPrefixo: true` de `sugerirParaLeadsSemConta()`.
+     */
+    public function test_sugestao_de_lead_nao_casa_por_sobrenome_no_meio_do_nome(): void
+    {
+        ContaEstrategica::create(['segmento_id' => $this->supermercadista->id, 'nome' => 'CRESTANI & FILHOS', 'ordem' => 1]);
+        $outro = $this->lead('11111111000191', cnae: '4711302', razao: '4 FILHOS SUPERMERCADO LTDA');
+        $mesmo = $this->lead('22222222000191', cnae: '4711302', razao: 'CRESTANI & FILHOS LTDA');
+
+        $this->artisan('leads:classificar-segmento')->assertSuccessful();
+
+        $this->assertNull(Lead::find($outro)->conta_estrategica_id);
+        $this->assertSame(Lead::CONTA_SUGERIDA, Lead::find($mesmo)->conta_vinculo);
+    }
+
     // ---------------------------------------------------------------- ranking ABRAS
 
     public function test_ranking_cria_as_contas_na_ordem_da_posicao(): void
