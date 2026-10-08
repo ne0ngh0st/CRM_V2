@@ -275,7 +275,7 @@ class ImportLeadsTotvs extends Command
             foreach (array_keys($novos) as $cnpj) {
                 $ids[$cnpj] = --$provisorio;
             }
-            $contas = app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids), true);
+            $contas = app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids), true, criarPelaMarca: true);
             $this->relatarContas($contas);
 
             $this->info('[dry-run] nada foi escrito.');
@@ -288,7 +288,7 @@ class ImportLeadsTotvs extends Command
             $this->info('Leads gravados: '.number_format(count($novos) + count($adotados), 0, ',', '.'));
 
             $ids = $this->leadsPorCnpj(fn ($q) => $q->whereIn('origem', Lead::ORIGENS_IMPORTADAS));
-            $contas = app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids));
+            $contas = app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids), criarPelaMarca: true);
             $this->relatarContas($contas);
 
             $sincronia = $situacao->sincronizarLeads();
@@ -362,7 +362,7 @@ class ImportLeadsTotvs extends Command
     /**
      * @param  array<string, array<string, mixed>>  $registros
      * @param  array<string, int>  $ids
-     * @return list<array{lead_id: int, segmento: ?string, rede: ?string, filiais: ?int, uf: ?string, nome: string, nomes: list<string>}>
+     * @return list<array{lead_id: int, segmento: ?string, rede: ?string, filiais: ?int, uf: ?string, nome: string, fantasia: ?string, nomes: list<string>}>
      */
     private function itensParaConta(array $registros, array $ids): array
     {
@@ -380,6 +380,7 @@ class ImportLeadsTotvs extends Command
                 'filiais' => $r['_filiais_rede'],
                 'uf' => $r['estado'],
                 'nome' => $r['razao_social'],
+                'fantasia' => $r['nome_fantasia'],
                 'nomes' => array_values(array_filter([$r['razao_social'], $r['nome_fantasia']])),
             ];
         }
@@ -391,7 +392,11 @@ class ImportLeadsTotvs extends Command
     private function relatarContas(array $s): void
     {
         $this->line('  Maiores por Segmento:');
-        $this->line("    contas novas criadas pela coluna `rede`: {$s['criadas']}");
+        $this->line('    contas novas: '.$s['criadas'].' ('.($s['criadas'] - ($s['pelaMarca'] ?? 0)).' pela coluna `rede`, '
+            .($s['pelaMarca'] ?? 0).' pela marca do lead)');
+        if (($s['pelaRazao'] ?? 0) > 0) {
+            $this->line("    `rede` de grupo ligada à conta pelo nome do lead: {$s['pelaRazao']}");
+        }
         $this->line("    leads ligados a uma conta: {$s['confirmados']}");
         $this->line("    sugestões para confirmar na Visão Diretor: {$s['sugeridos']}");
         if (($s['fundidos'] ?? 0) > 0) {

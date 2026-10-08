@@ -2863,8 +2863,31 @@ LEIA-ME ficam em `Leads/_MODELO/`. Subpasta não é lida (o glob é `Leads/*.csv
   no servidor arquivo removido da pasta; como tudo é deduplicado por CNPJ, um arquivo
   renomeado não duplica lead, mas um arquivo apagado continua sendo lido.
 - Os ~17 mil leads do `base_marco` continuam no CRM; aparecem só como "sumiram da base".
-- Fluxo para subir leads novos: CSV na pasta → `totvs:import-leads --dry-run` → se houver
-  segurados, `receita:importar-situacoes --forcar` → `totvs:import-leads`.
+- **Fluxo para subir leads novos (revisto em 2026-10-08) — a carga da Receita vem ANTES
+  do import, sempre:**
+  1. CSV na pasta `Leads/` → `bash infra/enviar-relatorios-totvs.sh` (o vigia automático
+     NÃO roda nesta máquina — [[agendador-do-windows-nao-executa-nesta-maquina]]) → na
+     app-2, `php artisan totvs:sincronizar-s3`.
+  2. Na app-2, `php artisan receita:importar-situacoes --forcar` (~20 min). A carga
+     mensal grava só os CNPJs de interesse que existiam NO DIA DELA; CNPJ de planilha
+     nova não está lá até a carga rodar de novo.
+  3. `totvs:import-leads --dry-run`, conferir, `totvs:import-leads`.
+  - 🥇 **Decisão do Tony (2026-10-08): base baixada da Receita > API pública.** CNPJ
+    desconhecido cai nas APIs gratuitas do cartão (BrasilAPI → minhareceita → CNPJá), e
+    elas falham justamente em lote: em 08/10 as duas primeiras davam 500/503/timeout da
+    AWS, cada CNPJ esperava ~8 s por elas antes da terceira (5/min), o import levou mais
+    de 15 min e segurou 43 de 122. As APIs servem ao botão do cartão (um CNPJ, ao vivo),
+    não a carga de lista.
+  - O `--dry-run` GUARDA as consultas que deram certo (o import seguinte só refaz as que
+    falharam). ⚠️ Ao conferir isso no RDS, `cnpj_situacoes.atualizado_em` está em horário
+    de Brasília e o `NOW()` do RDS em UTC — `atualizado_em > NOW() - INTERVAL 30 MINUTE`
+    dá zero e parece que nada foi gravado.
+  - Planilha montada por IA/ferramenta de busca: conferir o dígito verificador (o import
+    recusa) e a coluna `rede` — em 08/10 a de alimentação veio com 99 de 180 CNPJs
+    inventados e, depois de limpa, com `rede`/`filiais_rede` desalinhadas das linhas
+    (Rei da Coxinha → Arcos Dourados). **`rede` e `filiais_rede` vão em branco** (decisão
+    do Tony): o import liga sozinho a conta existente por nome (sugestão) e, sem conta
+    parecida, cria a conta pela marca do lead.
 - **Origem `prospeccao`** ("Prospecção"), não `sistema` (que segue sendo a base antiga).
   `Lead::ORIGENS_IMPORTADAS` (as duas) é o que a Receita fiscaliza e o import adota pelo
   CNPJ; lead `sistema` que reaparece num CSV vira `prospeccao`. CNPJ que já é lead manual
@@ -2872,14 +2895,22 @@ LEIA-ME ficam em `Leads/_MODELO/`. Subpasta não é lida (o glob é `Leads/*.csv
 - **Mescla com a Maiores por Segmento** (`ContaDoLead`), só nos 6 segmentos das abas:
   coluna `rede` que bate liga o lead à conta; que não bate CRIA a conta no fim da aba;
   vazia vira SUGESTÃO pelo nome (mesma heurística de `SugestaoDeVinculo`), confirmada ou
-  recusada no card da Visão Diretor. Sem `rede` e sem sugestão, não vira conta.
+  recusada no card da Visão Diretor. **Sem `rede` e sem sugestão, vira conta pela MARCA**
+  (nome fantasia; sem fantasia, razão social), CONFIRMADA — decisão do Tony em 2026-10-08:
+  "esses leads precisam aparecer nos maiores do segmento". Lojas da mesma marca caem na
+  mesma conta. ⚠️ Só no `totvs:import-leads` (`criarPelaMarca`); o
+  `sugerirParaLeadsSemConta()` (base antiga, ~17 mil) nunca cria conta.
 - ⚠️ **"Bate" = `SugestaoDeVinculo::chaveDeNome()`**: ignora palavra de tipo (Rede, Grupo,
   Farmácias, Drogaria…) e a ordem das palavras — "Farmácias São João" = SÃO JOÃO
   FARMACIAS. FARMA/DROGA/SUPER NÃO são ignoradas (são marca). Até 2026-10-05 era só o
   nome compactado e a carga de drogarias de 02/10 criou 8 contas duplicadas. `rede` que
   bate com DUAS contas não liga nem cria (conta como ambíguo). `filiais_rede` lê ponto e
-  vírgula como milhar ("1.600" chegou a gravar 1 filial). ⚠️ Nome de grupo controlador
-  ("Grupo DPSP") nenhuma regra pega — conferir as redes criadas no relatório da rodada.
+  vírgula como milhar ("1.600" chegou a gravar 1 filial). ⚠️ **`rede` com nome de grupo
+  controlador** ("Grupo DPSP", 08/10 criou conta duplicada da Pacheco/São Paulo): antes de
+  criar conta pela `rede`, o nome do PRÓPRIO lead é comparado com as contas pela mesma
+  chave ("DROGARIAS PACHECO S.A." → DROGARIA PACHECO); casou com uma, liga nela (e as
+  filiais do CSV, que são do grupo, não vão para a conta); com duas, ambíguo. Grupo cujo
+  lead não lembra nenhuma conta ainda vira conta nova — conferir o relatório da rodada.
 - ⚠️ **Vários leads por conta**: a ligação mora em `leads.conta_estrategica_id` +
   `conta_vinculo` (`sugerido`/`confirmado`/`recusado`). O `contas_estrategicas.lead_id`
   antigo foi migrado e dropado. "Leads desta conta" = `Lead::scopeLigadoAConta()`, usado

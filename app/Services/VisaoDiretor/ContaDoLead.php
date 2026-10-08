@@ -19,12 +19,25 @@ use Illuminate\Support\Facades\DB;
  * |-------------------------------|--------------------------------------------------------|
  * | bate com conta do segmento    | lead ligado a ela, CONFIRMADO                          |
  * | bate com DUAS ou mais contas  | nada: conta como ambíguo, para alguém desempatar       |
- * | preenchida e não bate         | conta NOVA criada na aba, lead ligado, CONFIRMADO      |
+ * | preenchida e não bate         | 1º o NOME DO LEAD contra as contas (abaixo); se não    |
+ * |                               | casar com nenhuma, conta NOVA na aba, CONFIRMADO       |
  * | vazia                         | SUGESTÃO pelo nome (mesma heurística da carga da       |
- * |                               | planilha), esperando alguém confirmar na tela          |
+ * |                               | planilha), esperando alguém confirmar na tela; sem     |
+ * |                               | sugestão, conta NOVA pela MARCA (só no import)         |
  *
- * ⚠️ Lead com `rede` vazia e sem sugestão NÃO vira conta: se virasse, todo lead avulso
- * apareceria como "maior por segmento" e a lista perderia o sentido.
+ * ⚠️ `rede` com nome de GRUPO CONTROLADOR (2026-10-08): "Grupo DPSP" não bate com conta
+ * nenhuma, e a carga de drogarias criou uma conta DPSP ao lado de DROGARIA SÃO PAULO e
+ * DROGARIA PACHECO — a mesma empresa duas vezes. Antes de criar conta pela `rede`, o
+ * nome do PRÓPRIO lead ("DROGARIAS PACHECO S.A.") é comparado com as contas do segmento
+ * pelo começo do nome: casou com uma, é ela; casou com mais de uma, ambíguo e nada é
+ * criado. Só quando não casa com nenhuma a `rede` vira conta nova.
+ *
+ * ⚠️ Lead SEM `rede` e sem sugestão vira conta pela MARCA (nome fantasia; sem fantasia,
+ * razão social) — decisão do Tony (2026-10-08): os leads da prospecção têm que aparecer
+ * na Maiores por Segmento, e preencher `rede` à mão não é opção. Leads da mesma marca
+ * caem na mesma conta (`chaveDeNome`). Vale SÓ para o import (`$criarPelaMarca`): o
+ * `sugerirParaLeadsSemConta()` percorre os ~17 mil leads da base antiga, e lá isso viraria
+ * milhares de contas de loja avulsa.
  *
  * ⚠️ Sugestão só é feita para lead que nunca teve ligação: a confirmada é decisão de
  * alguém, e a recusada guarda a conta justamente para não ser sugerida de novo. A coluna
@@ -42,16 +55,18 @@ class ContaDoLead
     }
 
     /**
-     * @param  list<array{lead_id: int, segmento: ?string, rede: ?string, filiais: ?int, uf: ?string, nome: string}>  $itens
-     * @return array{criadas: int, confirmados: int, sugeridos: int, ambiguos: int, foraDasAbas: int, fundidos: int, detalhe: array{redesCriadas: list<string>, ligados: array<int, string>}}
+     * @param  list<array{lead_id: int, segmento: ?string, rede: ?string, filiais: ?int, uf: ?string, nome: string, fantasia?: ?string}>  $itens
+     * @return array{criadas: int, pelaMarca: int, pelaRazao: int, confirmados: int, sugeridos: int, ambiguos: int, foraDasAbas: int, fundidos: int, detalhe: array{redesCriadas: list<string>, ligados: array<int, string>}}
      *
      * `detalhe` é o que a /atualizacoes lista no clique: as redes criadas e, por lead
-     * (id), o nome da rede a que ele foi ligado nesta rodada.
+     * (id), o nome da rede a que ele foi ligado nesta rodada. `criadas` inclui as
+     * `pelaMarca`; `pelaRazao` conta os leads cuja `rede` não bateu e que foram ligados
+     * pelo próprio nome a uma conta existente.
      */
-    public function vincularDaProspeccao(array $itens, bool $dryRun = false, bool $soPrefixo = false): array
+    public function vincularDaProspeccao(array $itens, bool $dryRun = false, bool $soPrefixo = false, bool $criarPelaMarca = false): array
     {
-        $stats = ['criadas' => 0, 'confirmados' => 0, 'sugeridos' => 0, 'ambiguos' => 0, 'foraDasAbas' => 0, 'fundidos' => 0,
-            'detalhe' => ['redesCriadas' => [], 'ligados' => []]];
+        $stats = ['criadas' => 0, 'pelaMarca' => 0, 'pelaRazao' => 0, 'confirmados' => 0, 'sugeridos' => 0, 'ambiguos' => 0,
+            'foraDasAbas' => 0, 'fundidos' => 0, 'detalhe' => ['redesCriadas' => [], 'ligados' => []]];
 
         $abas = AbasDaPlanilha::codigos();
         $segmentoId = Segmento::query()->whereIn('codigo', $abas)->pluck('id', 'codigo');
@@ -111,14 +126,38 @@ class ContaDoLead
             }
 
             $conta = $candidatas[0] ?? null;
+            $peloNomeDoLead = false;
+
+            if ($conta === null) {
+                // Nome de grupo ("Grupo DPSP"): o nome do lead diz qual conta é. Mesma chave da
+                // `rede` ("DROGARIAS PACHECO S.A." = DROGARIA PACHECO); o prefixo não serve,
+                // porque o plural ("DROGARIAS") não começa com o singular da conta.
+                $peloNome = collect([$i['nome'], $i['fantasia'] ?? null])->filter()
+                    ->flatMap(fn (string $n) => $porNome[$i['segmento'].'|'.$this->sugestao->chaveDeNome($n)] ?? [])
+                    ->filter(fn ($c) => $c instanceof ContaEstrategica)
+                    ->unique('id')->values()->all();
+
+                if (count($peloNome) > 1) {
+                    $stats['ambiguos']++;
+
+                    continue;
+                }
+
+                if ($peloNome !== []) {
+                    $conta = $peloNome[0];
+                    $peloNomeDoLead = true;
+                    $stats['pelaRazao']++;
+                }
+            }
 
             if ($conta === null) {
                 $stats['criadas']++;
                 $stats['detalhe']['redesCriadas'][] = trim($i['rede']);
                 $conta = $dryRun ? -$stats['criadas'] : $this->criarConta($segmentoId[$i['segmento']], $i);
                 $porNome[$chave] = [$conta];
-            } elseif (! $dryRun && $conta->filiais_mercado === null && $i['filiais']) {
+            } elseif (! $dryRun && ! $peloNomeDoLead && $conta->filiais_mercado === null && $i['filiais']) {
                 // Conta sem o número de filiais aprende com o CSV; número já digitado nunca é sobrescrito.
+                // Ligada pelo nome do lead, não: as filiais do CSV são do GRUPO da `rede`.
                 $conta->forceFill(['filiais_mercado' => $i['filiais']])->save();
             }
 
@@ -134,7 +173,11 @@ class ContaDoLead
             $stats['detalhe']['ligados'][$i['lead_id']] = is_int($conta) ? trim($i['rede']) : $conta->nome;
         }
 
+        $comDestino = []; // lead_id → true: sugerido ou ambíguo, não vira conta pela marca
+
         foreach ($this->sugerir($semRede, $contas, $codigoDoSegmento, $soPrefixo) as $leadId => $contaIds) {
+            $comDestino[$leadId] = true;
+
             if (count($contaIds) > 1) {
                 $stats['ambiguos']++;
 
@@ -143,6 +186,10 @@ class ContaDoLead
 
             $ligar[] = [$leadId, $contaIds[0], Lead::CONTA_SUGERIDA];
             $stats['sugeridos']++;
+        }
+
+        if ($criarPelaMarca) {
+            $this->criarPelaMarca($semRede->reject(fn (array $i) => isset($comDestino[$i['lead_id']])), $ligar, $porNome, $segmentoId, $stats, $dryRun);
         }
 
         if (! $dryRun) {
@@ -280,6 +327,52 @@ class ContaDoLead
         }
 
         return array_map(fn (array $ids) => array_values(array_unique($ids)), $candidatos);
+    }
+
+    /**
+     * Lead sem `rede` que não ganhou sugestão nem ficou ambíguo: a MARCA dele (nome
+     * fantasia; sem fantasia, razão social) vira a conta. Duas lojas da mesma marca caem
+     * na mesma conta, e marca que já é conta liga direto. Ligação CONFIRMADA, como a
+     * conta criada pela `rede`: aparece na coluna da Maiores por Segmento na hora.
+     *
+     * @param  Collection<int, array>  $semRede  já sem os sugeridos e os ambíguos
+     * @param  list<array{0: int, 1: int, 2: string}>  $ligar
+     * @param  array<string, list<ContaEstrategica|int>>  $porNome
+     * @param  Collection<string, int>  $segmentoId  código → id
+     */
+    private function criarPelaMarca(Collection $semRede, array &$ligar, array &$porNome, Collection $segmentoId, array &$stats, bool $dryRun): void
+    {
+        foreach ($semRede as $i) {
+            $marca = trim((string) (filled($i['fantasia'] ?? null) ? $i['fantasia'] : $i['nome']));
+            if ($marca === '') {
+                continue;
+            }
+
+            $chave = $i['segmento'].'|'.$this->sugestao->chaveDeNome($marca);
+            $candidatas = $porNome[$chave] ?? [];
+
+            if (count($candidatas) > 1) {
+                $stats['ambiguos']++;
+
+                continue;
+            }
+
+            $conta = $candidatas[0] ?? null;
+
+            if ($conta === null) {
+                $stats['criadas']++;
+                $stats['pelaMarca']++;
+                $stats['detalhe']['redesCriadas'][] = $marca;
+                $conta = $dryRun ? -$stats['criadas']
+                    : $this->criarConta($segmentoId[$i['segmento']], ['rede' => $marca, 'uf' => $i['uf'], 'filiais' => null]);
+                $porNome[$chave] = [$conta];
+            }
+
+            $contaId = is_int($conta) ? $conta : $conta->id;
+            $ligar[] = [$i['lead_id'], $contaId, Lead::CONTA_CONFIRMADA];
+            $stats['confirmados']++;
+            $stats['detalhe']['ligados'][$i['lead_id']] = is_int($conta) ? $marca : $conta->nome;
+        }
     }
 
     /** @param  array{rede: string, uf: ?string, filiais: ?int}  $item */
