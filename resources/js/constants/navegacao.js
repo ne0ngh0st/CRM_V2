@@ -27,8 +27,9 @@
  */
 const soGestor = ({ isGestor }) => isGestor;
 const soAdmin = ({ isAdmin }) => isAdmin;
-// Admin + diretor. Espelha o gate `ver-visao-diretor` do servidor — o menu só esconde;
-// quem proíbe é o gate (docs/visao-diretor.md).
+// Quem passa no gate `ver-visao-diretor` (admin, diretor e quem tem a permissão própria).
+// O valor vem pronto do servidor — o menu só esconde; quem proíbe é o gate
+// (docs/visao-diretor.md).
 const soDiretor = ({ isDiretor }) => isDiretor;
 
 /**

@@ -39,7 +39,9 @@ const papeis = computed(() => page.props.auth?.roles ?? []);
  */
 const perfil = computed(() => ({
     isGestor: papeis.value.some((r) => ['admin', 'diretor', 'supervisor'].includes(r)),
-    isDiretor: papeis.value.some((r) => ['admin', 'diretor'].includes(r)),
+    // Vem decidido do servidor (gate `ver-visao-diretor`), que também dá acesso por
+    // permissão própria, sem o perfil diretor.
+    isDiretor: Boolean(page.props.auth?.veVisaoDiretor),
     isAdmin: papeis.value.includes('admin'),
 }));
 

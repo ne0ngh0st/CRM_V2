@@ -45,8 +45,20 @@ class AppServiceProvider extends ServiceProvider
          * rotas usa `can:ver-visao-diretor`, então página nova nasce protegida e não
          * depende de alguém lembrar de um `hasAnyRole` no controller. A Carteira também
          * pergunta isto antes de aceitar o filtro `?conta_alvo=`. Ver docs/visao-diretor.md.
+         *
+         * Além dos perfis, entra quem tiver a permissão `ver-visao-diretor` do spatie dada
+         * direto ao usuário. Existe para o ROBERTO BAROLI (2026-10-08): no papel ele é
+         * diretor, mas no sistema opera como supervisor — só a equipe dele — e mesmo assim
+         * usa a Maiores por Segmento. Dar o perfil `diretor` traria junto a empresa
+         * inteira em todas as telas.
+         *
+         * O OR abaixo é declarativo: o spatie já registra um `Gate::before` que libera
+         * quem tem uma permissão de mesmo nome (`register_permission_check_method`). Está
+         * escrito aqui para a regra inteira ser lida num lugar só. ⚠️ `checkPermissionTo`,
+         * nunca `hasPermissionTo`: o segundo LANÇA exceção se a permissão não existir.
          */
-        Gate::define('ver-visao-diretor', fn (User $user) => $user->hasAnyRole(['admin', 'diretor']));
+        Gate::define('ver-visao-diretor', fn (User $user) => $user->hasAnyRole(['admin', 'diretor'])
+            || $user->checkPermissionTo('ver-visao-diretor'));
 
         // Log do que sai pelo SMTP, para a tela admin /emails.
         Event::listen(MessageSent::class, [RegistroDeEmails::class, 'enviado']);

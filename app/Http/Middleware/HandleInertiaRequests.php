@@ -36,6 +36,9 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
                 'roles' => $request->user()?->getRoleNames() ?? [],
+                // O menu da Visão Diretor NÃO se decide pelo perfil no front: há quem entre
+                // por permissão própria (ver o gate no AppServiceProvider). O front só lê.
+                'veVisaoDiretor' => (bool) $request->user()?->can('ver-visao-diretor'),
             ],
             // Usado por telas que precisam saber o id do registro recém-criado pra
             // continuar operando nele (ex.: anexar imagens à faca logo após cadastrar).

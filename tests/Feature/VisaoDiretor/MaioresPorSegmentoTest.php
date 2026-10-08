@@ -154,6 +154,24 @@ class MaioresPorSegmentoTest extends TestCase
         $this->assertDatabaseHas('contas_estrategicas', ['id' => $conta->id, 'nome' => 'RAIA']);
     }
 
+    public function test_supervisor_com_permissao_propria_entra(): void
+    {
+        // O caso do ROBERTO BAROLI: supervisor no sistema, mas usa a Maiores por Segmento.
+        $comPermissao = $this->usuario('supervisor');
+        $comPermissao->givePermissionTo('ver-visao-diretor');
+        $semPermissao = $this->usuario('supervisor');
+
+        $this->actingAs($comPermissao)
+            ->get(route('visao-diretor.maiores.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('auth.veVisaoDiretor', true));
+
+        $this->actingAs($semPermissao)->get(route('visao-diretor.maiores.index'))->assertForbidden();
+        $this->actingAs($semPermissao)
+            ->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('auth.veVisaoDiretor', false));
+    }
+
     public function test_visitante_vai_para_o_login(): void
     {
         $this->get(route('visao-diretor.maiores.index'))->assertRedirect(route('login'));
