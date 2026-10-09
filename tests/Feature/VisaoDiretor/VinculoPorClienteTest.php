@@ -135,6 +135,43 @@ class VinculoPorClienteTest extends TestCase
         $this->assertSame([], $this->sugerir('LOJA ELETRICA', '120')['clientes']);
     }
 
+    /** Produção, 09/10/2026: a conta "BURGUER KING" não achava o grupo BURGER KING (66 lojas). */
+    public function test_variacao_de_grafia_casa(): void
+    {
+        $this->filial('000086', '75', '112', 'BURGER KING - SPM');
+        $this->filial('000087', '75', '112', 'BURGER KING');
+        $this->filial('000120', '1305', '112', 'KOPENHAGEM MOOCA');
+        $this->filial('000121', '9998', '109', 'REDE COOPERFARMA');
+        $this->filial('000122', '9998', '112', 'SPOLETO2');
+        $this->filial('000123', '9998', '112', 'CASA DO BOLO');
+
+        $this->assertSame(['75'], $this->sugerir('BURGUER KING', '112')['grupos']);
+        $this->assertSame(['1305'], $this->sugerir('KOPENHAGEN', '112')['grupos']);
+        $this->assertSame(['000121'], $this->sugerir('COPERFARMA', '109')['clientes']);
+        $this->assertSame(['000122'], $this->sugerir('SPOLETO', '112')['clientes']);
+        $this->assertSame(['000123'], $this->sugerir('CASA DE BOLOS', '112')['clientes']);
+    }
+
+    /** Distância de edição foi descartada por isto: letra TROCADA é outra marca. */
+    public function test_letra_trocada_nao_casa(): void
+    {
+        $this->filial('000130', '864', '113', 'LE PARK ESTACIONAMENTOS');
+        $this->filial('000131', '9998', '120', 'SUPERMERCADO BERTAO');
+        $this->filial('000132', '9998', '101', 'POSTO MOUTINHO');
+
+        $this->assertSame([], $this->sugerir('GEPARK', '113')['grupos']);
+        $this->assertSame([], $this->sugerir('SERTAO', '120')['clientes']);
+        $this->assertSame([], $this->sugerir('GRUPO COUTINHO', '101')['clientes']);
+    }
+
+    /** "PIZZAS" vira "PIZA" na grafia, mas continua sendo palavra genérica. */
+    public function test_generica_decidida_pelo_nome_escrito(): void
+    {
+        $this->filial('000140', '9998', '109', 'FARMACIAS PAGUE MENOS');
+
+        $this->assertSame([], $this->sugerir('FARMACIAS', '109')['clientes']);
+    }
+
     public function test_conta_com_duas_marcas_procura_as_duas(): void
     {
         $this->filial('000100', '9998', '109', 'FARMACIA DESCONTO FACIL');

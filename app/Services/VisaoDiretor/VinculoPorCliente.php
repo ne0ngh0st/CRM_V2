@@ -31,6 +31,11 @@ use Illuminate\Support\Facades\DB;
  *    o 000800 (centenas de escolas) não entra por causa de uma filial.
  * 6. **9998 nunca vira grupo** (`GRUPOS_PROIBIDOS`); as filiais dele entram como código.
  *
+ * A comparação ignora variação de GRAFIA (`grafia()`), nos dois lados: a conta "BURGUER
+ * KING" não casava o grupo BURGER KING (66 lojas) por uma letra (Tony, 2026-10-09).
+ * ⚠️ Distância de edição foi medida e descartada: casava GEPARK com LEPARK e SERTAO com
+ * BERTAO. Só variações de escrita da MESMA palavra, nunca letra trocada.
+ *
  * Grupo ou código que casa com DUAS contas é descartado pelo comando, nunca escolhido.
  */
 class VinculoPorCliente
@@ -80,14 +85,15 @@ class VinculoPorCliente
             $vistos = [];
             foreach ([$c->nome_fantasia, $c->razao_social] as $nome) {
                 $marca = $this->nomes->marca((string) $nome);
-                $compacto = implode('', $marca);
+                $grafia = $this->grafia($marca);
+                $compacto = implode('', $grafia);
 
                 if (strlen($compacto) < self::MINIMO_COMPACTO || isset($vistos[$compacto])) {
                     continue;
                 }
 
                 $vistos[$compacto] = true;
-                $indice[substr($compacto, 0, 3)][] = [$i, $marca];
+                $indice[substr($compacto, 0, 3)][] = [$i, $marca, $grafia];
             }
         }
 
@@ -102,8 +108,10 @@ class VinculoPorCliente
         $casadas = [];
 
         foreach ($this->alternativas($nomeConta) as $alvo) {
-            foreach ($catalogo['indice'][substr(implode('', $alvo), 0, 3)] ?? [] as [$i, $marca]) {
-                if (! isset($casadas[$i]) && $this->casa($alvo, $marca)) {
+            $alvoGrafia = $this->grafia($alvo);
+
+            foreach ($catalogo['indice'][substr(implode('', $alvoGrafia), 0, 3)] ?? [] as [$i, $marca, $grafia]) {
+                if (! isset($casadas[$i]) && $this->casa($alvo, $alvoGrafia, $marca, $grafia)) {
                     $casadas[$i] = true;
                 }
             }
@@ -192,6 +200,40 @@ class VinculoPorCliente
         return $saida;
     }
 
+    /**
+     * A forma de comparar, palavra a palavra: número separado das letras ("SPOLETO2" =
+     * "SPOLETO 2"), PH→F, Y→I, GUE/GUI→GE/GI ("BURGUER" = "BURGER"), letra dobrada
+     * vira uma ("COOPERFARMA" = "COPERFARMA", "MILLIUM" = "MILIUM"), plural de palavra
+     * com 5+ letras ("BOLOS" = "BOLO") e M final vira N ("KOPENHAGEM" = "KOPENHAGEN").
+     *
+     * ⚠️ Só para comparar. Se o nome identifica alguma coisa (`identifica()`, palavra
+     * genérica) continua sendo decidido pelo nome escrito: "PIZZAS" vira "PIZA", que não
+     * está na lista de genéricas.
+     *
+     * @param  list<string>  $marca
+     * @return list<string>
+     */
+    public function grafia(array $marca): array
+    {
+        $saida = [];
+
+        foreach ($marca as $palavra) {
+            foreach (preg_split('/(?<=[A-Z])(?=[0-9])|(?<=[0-9])(?=[A-Z])/', $palavra) as $p) {
+                $p = str_replace(['PH', 'Y'], ['F', 'I'], $p);
+                $p = preg_replace('/GU([EI])/', 'G$1', $p);
+                $p = preg_replace('/([A-Z])\1+/', '$1', $p);
+
+                if (strlen($p) >= 5 && str_ends_with($p, 'S')) {
+                    $p = substr($p, 0, -1);
+                }
+
+                $saida[] = preg_replace('/M$/', 'N', $p);
+            }
+        }
+
+        return $saida;
+    }
+
     /** @param  list<string>  $marca */
     private function identifica(array $marca): bool
     {
@@ -210,19 +252,25 @@ class VinculoPorCliente
      * (marca PARQUE) casava a conta "Posto Parque Dez". Nome de filial curto e genérico é
      * comum; nome de conta curto não — a conta foi escrita pela diretoria.
      *
+     * Recebe o nome escrito (para `identifica()`) e a `grafia()` (para comparar).
+     *
      * @param  list<string>  $conta
+     * @param  list<string>  $contaGrafia
      * @param  list<string>  $cliente
+     * @param  list<string>  $clienteGrafia
      */
-    private function casa(array $conta, array $cliente): bool
+    private function casa(array $conta, array $contaGrafia, array $cliente, array $clienteGrafia): bool
     {
-        $clienteECurto = strlen(implode('', $cliente)) < strlen(implode('', $conta));
-        [$curto, $longo] = $clienteECurto ? [$cliente, $conta] : [$conta, $cliente];
+        $clienteECurto = strlen(implode('', $clienteGrafia)) < strlen(implode('', $contaGrafia));
+        [$curtoEscrito, $curto, $longo] = $clienteECurto
+            ? [$cliente, $clienteGrafia, $contaGrafia]
+            : [$conta, $contaGrafia, $clienteGrafia];
 
         if ($clienteECurto && count($cliente) === 1) {
             return false;
         }
 
-        if (! $this->identifica($curto)) {
+        if (! $this->identifica($curtoEscrito)) {
             return false;
         }
 
