@@ -72,6 +72,18 @@ class VinculoPorClienteTest extends TestCase
     }
 
     /**
+     * Produção, 09/10/2026: o cliente "AMOR AOS PEDACOS" está como SUPERMERCADISTA no
+     * TOTVS e a conta é de ALIMENTACAO. Nome igual vale em outro segmento; começo de nome não.
+     */
+    public function test_nome_igual_vale_em_outro_segmento(): void
+    {
+        $this->filial('008298', '9998', '101', 'AMOR AOS PEDACOS');
+        $this->filial('008299', '9998', '101', 'AMOR AOS PEDACOS DOCERIA');
+
+        $this->assertSame(['008298'], $this->sugerir('AMOR AOS PEDACOS', '112')['clientes']);
+    }
+
+    /**
      * Grupo entra quando a maioria das filiais dele casa — e traz junto as filiais com
      * nome diferente da mesma rede ("AUTO BRASIL ESTAC"). Mutação: trocar `>=` por `>` na
      * maioria, ou exigir 100%.

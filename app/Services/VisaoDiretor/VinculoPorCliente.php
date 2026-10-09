@@ -23,7 +23,9 @@ use Illuminate\Support\Facades\DB;
  * 2. **O lado curto tem que identificar alguma coisa**: 4+ letras e, se for uma palavra
  *    só, não genérica ("BRASIL", "FARMA", "CENTER").
  * 3. **Filial avulsa só no segmento da conta.** "REDE FURNAS" (posto) não leva FURNAS
- *    CENTRAIS ELÉTRICAS.
+ *    CENTRAIS ELÉTRICAS. ⚠️ Exceção: nome IGUAL ao da conta vale em qualquer segmento —
+ *    o TOTVS tem 184 clientes com nome de comida cadastrados como SUPERMERCADISTA, e a
+ *    conta AMOR AOS PEDACOS não achava o cliente "AMOR AOS PEDACOS" (2026-10-09).
  * 4. **Grupo só se a MAIORIA das filiais dele casar pelo nome** (e ao menos uma no segmento
  *    da conta). É o que traz as filiais com nome diferente da mesma rede ("AUTO BRASIL
  *    ESTAC") sem trazer o grupo de outra empresa que tem uma loja com nome parecido.
@@ -111,8 +113,9 @@ class VinculoPorCliente
             $alvoGrafia = $this->grafia($alvo);
 
             foreach ($catalogo['indice'][substr(implode('', $alvoGrafia), 0, 3)] ?? [] as [$i, $marca, $grafia]) {
-                if (! isset($casadas[$i]) && $this->casa($alvo, $alvoGrafia, $marca, $grafia)) {
-                    $casadas[$i] = true;
+                if (! ($casadas[$i] ?? false) && $this->casa($alvo, $alvoGrafia, $marca, $grafia)) {
+                    // true = nome igual: vale fora do segmento da conta (trava 3).
+                    $casadas[$i] = implode('', $alvoGrafia) === implode('', $grafia);
                 }
             }
         }
@@ -121,11 +124,13 @@ class VinculoPorCliente
         $casadasPorGrupo = [];
         $grupoComSegmento = [];
 
+        $noSegmento = fn (int $i) => $casadas[$i] || $filiais[$i]['segmento'] === $codigoSegmento;
+
         foreach (array_keys($casadas) as $i) {
             $f = $filiais[$i];
             $casadasPorGrupo[$f['grupo']] = ($casadasPorGrupo[$f['grupo']] ?? 0) + 1;
 
-            if ($f['segmento'] === $codigoSegmento) {
+            if ($noSegmento($i)) {
                 $grupoComSegmento[$f['grupo']] = true;
             }
         }
@@ -152,7 +157,7 @@ class VinculoPorCliente
                 continue;
             }
 
-            if ($f['segmento'] === $codigoSegmento) {
+            if ($noSegmento($i)) {
                 $casadasPorCodigo[$f['codigo']] = ($casadasPorCodigo[$f['codigo']] ?? 0) + 1;
                 $exemplos[] = $f['nome'];
             }
