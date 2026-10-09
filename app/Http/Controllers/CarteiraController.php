@@ -1005,21 +1005,8 @@ class CarteiraController extends Controller
      */
     private const LIMITE_FILIAIS = 100;
 
-    /**
-     * Prefixos de `loja` que são ENDEREÇO DE ENTREGA, não filial comercial.
-     *
-     * ✅ CONFIRMADO PELO ADRIANO (TOTVS) em 2026-09-11: `E` e `X` são endereço de
-     * entrega mesmo. Antes disto era inferência nossa a partir dos dados — as 26.828
-     * linhas com estes prefixos têm CNPJ idêntico ao da matriz e 98% nunca compraram,
-     * porque a compra é lançada na loja comercial. Caso extremo real: a AUTOPASS tem 220
-     * linhas na carteira da Sthefany, sendo 2 filiais (CNPJ /0001-40 e /0025-18) e 218
-     * pontos de entrega, um por estação de metrô.
-     *
-     * ⚠️ Prefixo NOVO que o TOTVS venha a criar cai aqui como filial comercial, e nada
-     * acusa — a contagem simplesmente para de separar. Se aparecer prefixo estranho na
-     * base, é esta lista que precisa saber dele.
-     */
-    private const PREFIXOS_ENTREGA = ['E', 'X'];
+    /** Ver `Cliente::PREFIXOS_ENTREGA` — a decisão mora no model. */
+    private const PREFIXOS_ENTREGA = Cliente::PREFIXOS_ENTREGA;
 
     /** baseQuery() + aderência + ordenação. Usado por index() (lista) e exportar(). */
     public function listaQuery(Request $request): Builder

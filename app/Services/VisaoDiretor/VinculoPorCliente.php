@@ -2,6 +2,7 @@
 
 namespace App\Services\VisaoDiretor;
 
+use App\Models\Cliente;
 use App\Models\ContaEstrategicaVinculo;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -74,6 +75,13 @@ class VinculoPorCliente
             ->cursor();
 
         foreach ($linhas as $c) {
+            // Endereço de entrega: o "nome fantasia" ali é rua ou bairro ("IPIRANGA", "RUA
+            // CAYOWAA, 45") e casava conta de outra empresa. Também não entra na contagem
+            // da maioria — é a mesma empresa da loja comercial.
+            if (in_array(mb_substr((string) $c->loja, 0, 1), Cliente::PREFIXOS_ENTREGA, true)) {
+                continue;
+            }
+
             $i = count($filiais);
             $grupo = (string) $c->cod_grupo;
             $codigo = (string) $c->cod_cliente;

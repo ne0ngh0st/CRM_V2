@@ -83,6 +83,21 @@ class VinculoPorClienteTest extends TestCase
         $this->assertSame(['008298'], $this->sugerir('AMOR AOS PEDACOS', '112')['clientes']);
     }
 
+    /** Produção, 09/10/2026: a loja E001 da Track & Field tem "IPIRANGA" (o bairro) no nome. */
+    public function test_endereco_de_entrega_nao_casa(): void
+    {
+        $this->filial('012537', '232', '108', 'TRACK & FIELD');
+        Cliente::create([
+            'cod_cliente' => '012537', 'loja' => 'E001', 'razao_social' => 'IPIRANGA',
+            'nome_fantasia' => 'IPIRANGA', 'cod_grupo' => '232', 'cod_segmento' => '108',
+            'cod_vendedor' => '000001', 'estado' => 'SP',
+        ]);
+
+        $r = $this->sugerir('IPIRANGA', '108');
+        $this->assertSame([], $r['grupos']);
+        $this->assertSame([], $r['clientes']);
+    }
+
     /** Igual só pela MARCA não basta: a palavra de tipo diz que é outro negócio. */
     public function test_igual_so_na_marca_nao_vale_em_outro_segmento(): void
     {
