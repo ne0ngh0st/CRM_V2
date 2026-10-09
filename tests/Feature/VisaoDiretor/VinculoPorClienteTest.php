@@ -83,6 +83,16 @@ class VinculoPorClienteTest extends TestCase
         $this->assertSame(['008298'], $this->sugerir('AMOR AOS PEDACOS', '112')['clientes']);
     }
 
+    /** Igual só pela MARCA não basta: a palavra de tipo diz que é outro negócio. */
+    public function test_igual_so_na_marca_nao_vale_em_outro_segmento(): void
+    {
+        $this->filial('211312', '9998', '101', 'SUPERMERCADO NIPPON');
+        $this->filial('007648', '9998', '101', 'SUPERMERCADO OPCAO');
+
+        $this->assertSame([], $this->sugerir('NIPPON', '112')['clientes']);
+        $this->assertSame([], $this->sugerir('POSTO OPÇÃO', '114')['clientes']);
+    }
+
     /**
      * Grupo entra quando a maioria das filiais dele casa — e traz junto as filiais com
      * nome diferente da mesma rede ("AUTO BRASIL ESTAC"). Mutação: trocar `>=` por `>` na

@@ -4,6 +4,7 @@ namespace App\Services\VisaoDiretor;
 
 use App\Models\ContaEstrategicaVinculo;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Sugestão de vínculo conta → clientes pelo NOME DOS CLIENTES (fantasia e razão social),
@@ -23,9 +24,11 @@ use Illuminate\Support\Facades\DB;
  * 2. **O lado curto tem que identificar alguma coisa**: 4+ letras e, se for uma palavra
  *    só, não genérica ("BRASIL", "FARMA", "CENTER").
  * 3. **Filial avulsa só no segmento da conta.** "REDE FURNAS" (posto) não leva FURNAS
- *    CENTRAIS ELÉTRICAS. ⚠️ Exceção: nome IGUAL ao da conta vale em qualquer segmento —
- *    o TOTVS tem 184 clientes com nome de comida cadastrados como SUPERMERCADISTA, e a
- *    conta AMOR AOS PEDACOS não achava o cliente "AMOR AOS PEDACOS" (2026-10-09).
+ *    CENTRAIS ELÉTRICAS. ⚠️ Exceção: nome IGUAL ao da conta, COMO ESTÁ ESCRITO
+ *    (`escrita()`), vale em qualquer segmento — o TOTVS tem 184 clientes com nome de
+ *    comida cadastrados como SUPERMERCADISTA, e a conta AMOR AOS PEDACOS não achava o
+ *    cliente "AMOR AOS PEDACOS" (2026-10-09). Igual pela marca não basta: "NIPPON" =
+ *    "SUPERMERCADO NIPPON" e "POSTO OPÇÃO" = "SUPERMERCADO OPÇÃO" na marca.
  * 4. **Grupo só se a MAIORIA das filiais dele casar pelo nome** (e ao menos uma no segmento
  *    da conta). É o que traz as filiais com nome diferente da mesma rede ("AUTO BRASIL
  *    ESTAC") sem trazer o grupo de outra empresa que tem uma loja com nome parecido.
@@ -95,7 +98,7 @@ class VinculoPorCliente
                 }
 
                 $vistos[$compacto] = true;
-                $indice[substr($compacto, 0, 3)][] = [$i, $marca, $grafia];
+                $indice[substr($compacto, 0, 3)][] = [$i, $marca, $grafia, $this->escrita((string) $nome)];
             }
         }
 
@@ -109,13 +112,13 @@ class VinculoPorCliente
     {
         $casadas = [];
 
-        foreach ($this->alternativas($nomeConta) as $alvo) {
+        foreach ($this->alternativas($nomeConta) as [$alvo, $alvoEscrito]) {
             $alvoGrafia = $this->grafia($alvo);
 
-            foreach ($catalogo['indice'][substr(implode('', $alvoGrafia), 0, 3)] ?? [] as [$i, $marca, $grafia]) {
+            foreach ($catalogo['indice'][substr(implode('', $alvoGrafia), 0, 3)] ?? [] as [$i, $marca, $grafia, $escrita]) {
                 if (! ($casadas[$i] ?? false) && $this->casa($alvo, $alvoGrafia, $marca, $grafia)) {
-                    // true = nome igual: vale fora do segmento da conta (trava 3).
-                    $casadas[$i] = implode('', $alvoGrafia) === implode('', $grafia);
+                    // true = nome igual como escrito: vale fora do segmento da conta (trava 3).
+                    $casadas[$i] = $alvoEscrito === $escrita;
                 }
             }
         }
@@ -188,7 +191,7 @@ class VinculoPorCliente
     /**
      * "ASFAR / DESCONTO FACIL" são duas marcas da mesma conta; cada uma é procurada.
      *
-     * @return list<list<string>>
+     * @return list<array{0: list<string>, 1: string}> marca e `escrita()` de cada parte
      */
     private function alternativas(string $nome): array
     {
@@ -198,11 +201,27 @@ class VinculoPorCliente
             $marca = $this->nomes->marca($parte);
 
             if ($this->identifica($marca)) {
-                $saida[] = $marca;
+                $saida[] = [$marca, $this->escrita($parte)];
             }
         }
 
         return $saida;
+    }
+
+    /**
+     * O nome como está escrito, para a exceção de segmento: sem pontuação, sufixo
+     * societário, conectivo e agrupador (REDE, GRUPO, LOJAS), mas COM a palavra de tipo —
+     * "SUPERMERCADO NIPPON" não é "NIPPON". Mesma `grafia()` da comparação.
+     */
+    private function escrita(string $nome): string
+    {
+        $palavras = preg_split('/[^A-Z0-9]+/', mb_strtoupper(Str::ascii($nome)), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $palavras = array_values(array_diff($palavras, [
+            'REDE', 'GRUPO', 'LOJA', 'LOJAS', 'SA', 'S', 'A', 'LTDA', 'ME', 'EPP', 'EIRELI',
+            'DO', 'DA', 'DE', 'DOS', 'DAS', 'E',
+        ]));
+
+        return implode('', $this->grafia($palavras));
     }
 
     /**
