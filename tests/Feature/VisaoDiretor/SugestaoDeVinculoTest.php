@@ -179,6 +179,18 @@ class SugestaoDeVinculoTest extends TestCase
         $this->assertSame([], $this->codigos('OGGI SORVETES', '112'));
     }
 
+    /** Carga de alimentação de 08/10/2026: GRANO DORO ficava ambíguo com PIZZA CREK/PIZZA HUT. */
+    public function test_pizza_nao_e_marca(): void
+    {
+        $this->grupo('p1', 'PIZZA HUT');
+        $this->grupo('p2', 'PIZZA CREK');
+        $this->filial('p1', '112');
+        $this->filial('p2', '112');
+
+        $this->assertSame([], $this->codigos('GRANO DORO PIZZA DELIVERY LTDA', '112'));
+        $this->assertSame(['p1'], $this->codigos('PIZZA HUT', '112'));
+    }
+
     /**
      * Mutação: ESTACIONAMENTOS contar como marca. Na planilha real, 12 contas "LEAD"
      * herdavam as 47 lojas de um único grupo genérico.
