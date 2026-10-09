@@ -172,10 +172,12 @@ class VinculoPorCliente
             }
         }
 
-        // Grupo pelo próprio nome: mesmas travas de nome, e com loja no segmento da conta
-        // (ou nome igual como escrito) — o "GRUPO KOPENHAGEM" da fábrica não entra numa
-        // conta de ALIMENTACAO.
+        // Grupo pelo próprio nome: mesmas travas de nome, e com loja no segmento da conta.
+        // Nome igual como escrito vale de OUTRO segmento só se a conta não achou grupo
+        // nenhum no dela: PIMENTA VERDE e BOXTER estão em outro segmento no TOTVS e são
+        // eles mesmos; já KOPENHAGEN achou o 1305 (as lojas) e não leva o 1407 (a fábrica).
         $exemplosDeGrupo = [];
+        $deOutroSegmento = [];
         foreach ($this->alternativas($nomeConta) as [$alvo, $alvoEscrito]) {
             $alvoGrafia = $this->grafia($alvo);
 
@@ -184,10 +186,19 @@ class VinculoPorCliente
                     continue;
                 }
 
-                if ($alvoEscrito === $escrita || isset($catalogo['segmentosDoGrupo'][$grupo][$codigoSegmento])) {
+                if (isset($catalogo['segmentosDoGrupo'][$grupo][$codigoSegmento])) {
                     $grupos[] = $grupo;
                     $exemplosDeGrupo[] = $nome;
+                } elseif ($alvoEscrito === $escrita) {
+                    $deOutroSegmento[$grupo] = $nome;
                 }
+            }
+        }
+
+        if ($grupos === []) {
+            foreach ($deOutroSegmento as $grupo => $nome) {
+                $grupos[] = (string) $grupo;
+                $exemplosDeGrupo[] = $nome;
             }
         }
 

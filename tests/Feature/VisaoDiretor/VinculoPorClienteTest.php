@@ -197,12 +197,21 @@ class VinculoPorClienteTest extends TestCase
     public function test_grupo_casa_pelo_proprio_nome(): void
     {
         GrupoCliente::create(['codigo' => '1305', 'nome' => 'KOPENHAGEM']);
-        GrupoCliente::create(['codigo' => '1407', 'nome' => 'GRUPO KOPENHAGEM INDUSTRIA']);
+        GrupoCliente::create(['codigo' => '1407', 'nome' => 'GRUPO KOPENHAGEM']);
         $this->filial('011503', '1305', '112', 'BABOO');
         $this->filial('011504', '1305', '112', 'KOP SP HOSPITAL ALBERT EINSTEIN');
         $this->filial('011600', '1407', '105', 'CRM INDUSTRIA E COMERCIO DE ALIMENTOS');
 
         $this->assertSame(['1305'], $this->sugerir('KOPENHAGEN', '112')['grupos']);
+    }
+
+    /** PIMENTA VERDE: o grupo está em outro segmento no TOTVS e não há outro no da conta. */
+    public function test_grupo_de_outro_segmento_so_sem_grupo_no_da_conta(): void
+    {
+        GrupoCliente::create(['codigo' => '2220', 'nome' => 'GRUPO PIMENTA VERDE']);
+        $this->filial('020000', '2220', '101', 'VIENA');
+
+        $this->assertSame(['2220'], $this->sugerir('PIMENTA VERDE', '112')['grupos']);
     }
 
     /** Distância de edição foi descartada por isto: letra TROCADA é outra marca. */
