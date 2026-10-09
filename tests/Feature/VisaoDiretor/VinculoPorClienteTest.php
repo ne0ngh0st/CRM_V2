@@ -5,6 +5,7 @@ namespace Tests\Feature\VisaoDiretor;
 use App\Models\Cliente;
 use App\Models\ContaEstrategica;
 use App\Models\ContaEstrategicaVinculo;
+use App\Models\GrupoCliente;
 use App\Models\Segmento;
 use App\Services\VisaoDiretor\VinculoPorCliente;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -187,6 +188,21 @@ class VinculoPorClienteTest extends TestCase
         $this->assertSame(['000121'], $this->sugerir('COPERFARMA', '109')['clientes']);
         $this->assertSame(['000122'], $this->sugerir('SPOLETO', '112')['clientes']);
         $this->assertSame(['000123'], $this->sugerir('CASA DE BOLOS', '112')['clientes']);
+    }
+
+    /**
+     * Produção, 09/10/2026: o grupo 1305 se chama KOPENHAGEM, mas as lojas dele não
+     * (BABOO, KOP SP HOSPITAL…). O GRUPO KOPENHAGEM da fábrica não tem loja no segmento.
+     */
+    public function test_grupo_casa_pelo_proprio_nome(): void
+    {
+        GrupoCliente::create(['codigo' => '1305', 'nome' => 'KOPENHAGEM']);
+        GrupoCliente::create(['codigo' => '1407', 'nome' => 'GRUPO KOPENHAGEM INDUSTRIA']);
+        $this->filial('011503', '1305', '112', 'BABOO');
+        $this->filial('011504', '1305', '112', 'KOP SP HOSPITAL ALBERT EINSTEIN');
+        $this->filial('011600', '1407', '105', 'CRM INDUSTRIA E COMERCIO DE ALIMENTOS');
+
+        $this->assertSame(['1305'], $this->sugerir('KOPENHAGEN', '112')['grupos']);
     }
 
     /** Distância de edição foi descartada por isto: letra TROCADA é outra marca. */

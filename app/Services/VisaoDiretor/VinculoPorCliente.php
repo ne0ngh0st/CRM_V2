@@ -68,6 +68,7 @@ class VinculoPorCliente
         $indice = [];
         $porGrupo = [];
         $porCodigo = [];
+        $segmentosDoGrupo = [];
 
         $linhas = DB::table('clientes')
             ->select('cod_cliente', 'loja', 'cod_grupo', 'cod_segmento', 'razao_social', 'nome_fantasia')
@@ -93,6 +94,7 @@ class VinculoPorCliente
                 'nome' => (string) ($c->nome_fantasia ?: $c->razao_social),
             ];
             $porGrupo[$grupo] = ($porGrupo[$grupo] ?? 0) + 1;
+            $segmentosDoGrupo[$grupo][(string) $c->cod_segmento] = true;
             $porCodigo[$codigo] = ($porCodigo[$codigo] ?? 0) + 1;
 
             $vistos = [];
@@ -110,7 +112,20 @@ class VinculoPorCliente
             }
         }
 
-        return ['filiais' => $filiais, 'indice' => $indice, 'porGrupo' => $porGrupo, 'porCodigo' => $porCodigo];
+        // O NOME DO GRUPO também identifica: o grupo 1305 se chama KOPENHAGEM, e as lojas
+        // dele, BABOO, BAIXADO, "KOP SP HOSPITAL…" — nenhuma casaria pelo nome (2026-10-09).
+        $nomesDeGrupo = [];
+        foreach (DB::table('grupos_cliente')->whereNotIn('codigo', ContaEstrategicaVinculo::GRUPOS_PROIBIDOS)->get(['codigo', 'nome']) as $g) {
+            $marca = $this->nomes->marca((string) $g->nome);
+            $grafia = $this->grafia($marca);
+
+            if (strlen(implode('', $grafia)) >= self::MINIMO_COMPACTO) {
+                $nomesDeGrupo[substr(implode('', $grafia), 0, 3)][] = [(string) $g->codigo, $marca, $grafia, $this->escrita((string) $g->nome), (string) $g->nome];
+            }
+        }
+
+        return ['filiais' => $filiais, 'indice' => $indice, 'porGrupo' => $porGrupo, 'porCodigo' => $porCodigo,
+            'nomesDeGrupo' => $nomesDeGrupo, 'segmentosDoGrupo' => $segmentosDoGrupo];
     }
 
     /**
@@ -157,8 +172,27 @@ class VinculoPorCliente
             }
         }
 
+        // Grupo pelo próprio nome: mesmas travas de nome, e com loja no segmento da conta
+        // (ou nome igual como escrito) — o "GRUPO KOPENHAGEM" da fábrica não entra numa
+        // conta de ALIMENTACAO.
+        $exemplosDeGrupo = [];
+        foreach ($this->alternativas($nomeConta) as [$alvo, $alvoEscrito]) {
+            $alvoGrafia = $this->grafia($alvo);
+
+            foreach ($catalogo['nomesDeGrupo'][substr(implode('', $alvoGrafia), 0, 3)] ?? [] as [$grupo, $marca, $grafia, $escrita, $nome]) {
+                if (in_array($grupo, $grupos, true) || ! $this->casa($alvo, $alvoGrafia, $marca, $grafia)) {
+                    continue;
+                }
+
+                if ($alvoEscrito === $escrita || isset($catalogo['segmentosDoGrupo'][$grupo][$codigoSegmento])) {
+                    $grupos[] = $grupo;
+                    $exemplosDeGrupo[] = $nome;
+                }
+            }
+        }
+
         $casadasPorCodigo = [];
-        $exemplos = [];
+        $exemplos = $exemplosDeGrupo;
         foreach (array_keys($casadas) as $i) {
             $f = $filiais[$i];
 
