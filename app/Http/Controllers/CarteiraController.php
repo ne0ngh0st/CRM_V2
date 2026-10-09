@@ -1169,6 +1169,9 @@ class CarteiraController extends Controller
 
         $receitaPorCnpj = $this->situacaoReceita->detalhes($filiais->pluck('cnpj_digitos'));
         $inativacoes = $this->pedidoDeInativacao->recentes($filiais->pluck('id'));
+        // Mesmo código de cliente pode ter lojas de vendedores diferentes (3.964 casos);
+        // para o gestor, a expansão é onde se vê quem cuida de cada uma.
+        $nomesPorCodVendedor = $this->nomeVendedor->porCodigo($filiais->pluck('cod_vendedor'));
 
         $filiais = $filiais
             ->map(fn (Cliente $filial) => [
@@ -1183,6 +1186,8 @@ class CarteiraController extends Controller
                 'municipio' => $filial->municipio,
                 'estado' => $filial->estado,
                 'cep' => $filial->cep,
+                'codVendedor' => $filial->cod_vendedor,
+                'vendedorNome' => $nomesPorCodVendedor[$filial->cod_vendedor] ?? $filial->cod_vendedor,
                 'ehEntrega' => in_array(mb_substr((string) $filial->loja, 0, 1), self::PREFIXOS_ENTREGA, true),
                 'status' => $this->statusResolver->statusPara($filial->data_ultima_compra, $hoje),
                 'dataUltimaCompra' => optional($filial->data_ultima_compra)->format('d/m/Y'),

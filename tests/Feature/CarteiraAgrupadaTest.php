@@ -393,6 +393,21 @@ class CarteiraAgrupadaTest extends TestCase
         $this->assertSame(2, $this->actingAs($this->admin)->getJson(route('carteira.filiais', '400'))->json('total'));
     }
 
+    public function test_cada_filial_traz_o_proprio_vendedor(): void
+    {
+        // O 400 tem uma loja do 001 e outra do 002: a expansão tem que dizer quem cuida
+        // de CADA uma, não repetir o vendedor da âncora.
+        $this->vendedor->update(['display_name' => 'FULANO DO 001']);
+
+        $porLoja = collect($this->actingAs($this->admin)->getJson(route('carteira.filiais', '400'))->json('filiais'))
+            ->keyBy('loja');
+
+        $this->assertSame('001', $porLoja['0001']['codVendedor']);
+        $this->assertSame('FULANO DO 001', $porLoja['0001']['vendedorNome']);
+        $this->assertSame('002', $porLoja['0002']['codVendedor']);
+        $this->assertSame('002', $porLoja['0002']['vendedorNome'], 'sem nome conhecido, cai no código');
+    }
+
     public function test_filiais_de_cliente_fora_do_escopo_da_404(): void
     {
         // Existe, mas é de outro vendedor: para o 001 tem que ser indistinguível de
