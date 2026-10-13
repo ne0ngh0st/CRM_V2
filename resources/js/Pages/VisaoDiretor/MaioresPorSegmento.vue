@@ -300,7 +300,7 @@ async function excluir(conta) {
             <DarkCard
                 v-else
                 :title="abaAtiva.nome"
-                :subtitle="`${abaAtiva.contas.length === abaAtiva.resumo.contas ? '' : `${abaAtiva.contas.length} de `}${abaAtiva.resumo.contas} contas · ${formatInteiro(abaAtiva.resumo.filiaisMercado)} filiais no mercado`"
+                :subtitle="`${abaAtiva.contas.length === abaAtiva.resumo.contas ? '' : `${abaAtiva.contas.length} de `}${abaAtiva.resumo.contas} contas · ${formatInteiro(abaAtiva.resumo.filiais)} filiais no CRM`"
             >
                 <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">

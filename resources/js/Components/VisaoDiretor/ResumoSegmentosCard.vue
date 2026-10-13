@@ -66,8 +66,9 @@ const emit = defineEmits(['filtrar']);
                     </span>
 
                     <span class="text-xs text-gray-600">
-                        <span class="block text-[0.65rem] uppercase tracking-wide text-gray-400">Filiais mercado</span>
-                        <span class="tabular-nums">{{ formatInteiro(s.resumo.filiaisMercado) }}</span>
+                        <span class="block text-[0.65rem] uppercase tracking-wide text-gray-400">Filiais no CRM</span>
+                        <span class="tabular-nums">{{ formatInteiro(s.resumo.filiais) }}</span>
+                        <span class="block text-[0.7rem] text-gray-400">de {{ formatInteiro(s.resumo.filiaisMercado) }} no mercado</span>
                     </span>
 
                     <span class="text-xs text-gray-600">

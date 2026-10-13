@@ -50,13 +50,13 @@ function tituloVendedores(conta) {
 
 /**
  * Subtotal das contas EXIBIDAS (com filtro, só as filtradas). Soma do mesmo jeito que o
- * resumo do servidor (`MaioresPorSegmentoResolver`, `sum`), então sem filtro bate com o
- * "N filiais no mercado" do subtítulo do card.
+ * resumo do servidor (`MaioresPorSegmentoResolver::resumir()`), então sem filtro bate com o
+ * "N filiais no CRM" do subtítulo do card.
  */
 const subtotal = computed(() => ({
     contas: props.contas.length,
-    filiais: props.contas.reduce((t, c) => t + (c.filiaisMercado ?? 0), 0),
-    semFiliais: props.contas.filter((c) => c.filiaisMercado === null).length,
+    filiais: props.contas.reduce((t, c) => t + c.lojas, 0),
+    filiaisMercado: props.contas.reduce((t, c) => t + (c.filiaisMercado ?? 0), 0),
     clientes: props.contas.reduce((t, c) => t + (c.clientes ?? 0), 0),
 }));
 
@@ -105,7 +105,7 @@ async function alternar(conta) {
                     <th class="tbl-th w-8" />
                     <th class="tbl-th">Conta</th>
                     <th class="tbl-th">UF</th>
-                    <th class="tbl-th" title="Filiais que a rede tem no mercado">Filiais</th>
+                    <th class="tbl-th" title="Filiais da rede que estão no CRM (cliente + loja). Embaixo, quantas a rede tem no mercado">Filiais</th>
                     <th class="tbl-th" title="Clientes desta rede na nossa carteira">Clientes</th>
                     <th class="tbl-th">Status</th>
                     <th class="tbl-th" title="Quem atende as lojas desta rede que já são clientes (o de mais filiais primeiro)">Vendedor</th>
@@ -145,8 +145,22 @@ async function alternar(conta) {
                             >{{ conta.site }}</a>
                         </td>
                         <td class="tbl-td" data-rotulo="UF">{{ conta.uf || '—' }}</td>
-                        <td class="tbl-td tabular-nums" data-rotulo="Filiais (mercado)">
-                            {{ conta.filiaisMercado !== null ? formatInteiro(conta.filiaisMercado) : '—' }}
+                        <!--
+                            Filiais no CRM = os pares (cliente, loja) da conta, o mesmo total da
+                            Carteira por filial (`agrupar=0`) — por isso o clique abre essa lista.
+                            O número de mercado (digitado) fica embaixo, como referência.
+                        -->
+                        <td class="tbl-td tabular-nums" data-rotulo="Filiais" @click.stop>
+                            <Link
+                                v-if="conta.lojas"
+                                :href="route('carteira.index', { conta_alvo: conta.id, agrupar: 0 })"
+                                class="tbl-main font-semibold text-teal hover:underline"
+                                title="Abrir estas filiais na Carteira"
+                            >{{ formatInteiro(conta.lojas) }}</Link>
+                            <span v-else class="text-gray-400">0</span>
+                            <span v-if="conta.filiaisMercado !== null" class="tbl-sub whitespace-nowrap" title="Filiais que a rede tem no mercado">
+                                de {{ formatInteiro(conta.filiaisMercado) }}
+                            </span>
                         </td>
                         <td class="tbl-td" data-rotulo="Clientes" @click.stop>
                             <Link
@@ -177,9 +191,8 @@ async function alternar(conta) {
                                     :title="tituloVendedores(conta)"
                                 >{{ nomeCurto(conta.atendimento[0].nome) }}</Link>
                                 <!--
-                                    ⚠️ Sem contagem de lojas aqui: "lojas" são filiais (2.819 na
-                                    Raia) e ficariam ao lado da coluna Clientes (87, cod_cliente
-                                    distinto) — dois números para "quantos". Fica no tooltip.
+                                    Sem contagem de lojas aqui: o total de filiais já é a coluna
+                                    Filiais; a quebra por vendedor fica no tooltip.
                                 -->
                                 <span v-if="conta.atendimento.length > 1" class="tbl-sub" :title="tituloVendedores(conta)">
                                     +{{ conta.atendimento.length - 1 }} {{ conta.atendimento.length === 2 ? 'vendedor' : 'vendedores' }}
@@ -312,11 +325,9 @@ async function alternar(conta) {
                         <span class="tbl-sub font-normal">{{ subtotal.contas }} {{ subtotal.contas === 1 ? 'conta' : 'contas' }}</span>
                     </td>
                     <td class="tbl-td tbl-td-oculto" />
-                    <td class="tbl-td tabular-nums text-gray-800" data-rotulo="Filiais (mercado)">
+                    <td class="tbl-td tabular-nums text-gray-800" data-rotulo="Filiais">
                         {{ formatInteiro(subtotal.filiais) }}
-                        <span v-if="subtotal.semFiliais" class="tbl-sub font-normal" title="Contas sem o número de filiais preenchido não entram na soma">
-                            {{ subtotal.semFiliais }} sem dado
-                        </span>
+                        <span class="tbl-sub whitespace-nowrap font-normal" title="Filiais que as redes têm no mercado">de {{ formatInteiro(subtotal.filiaisMercado) }}</span>
                     </td>
                     <td class="tbl-td tabular-nums text-gray-800" data-rotulo="Clientes">{{ formatInteiro(subtotal.clientes) }}</td>
                     <td class="tbl-td tbl-td-oculto" colspan="5" />

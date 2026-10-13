@@ -216,6 +216,22 @@ class MaioresPorSegmentoTest extends TestCase
         $this->assertSame(1, $this->totalDaCarteira($this->admin, ['conta_alvo' => $conta->id, 'agrupar' => '0']));
     }
 
+    /**
+     * O resumo soma as filiais no CRM (pares cliente+loja) e, à parte, as de mercado
+     * (digitadas). Desde 2026-10-13 a tela mostra a primeira; a segunda é referência.
+     */
+    public function test_resumo_soma_filiais_do_crm_e_de_mercado(): void
+    {
+        $this->conta('RAIA', [['grupo', '100'], ['grupo', '101']], 100); // 3 filiais
+        $this->conta('OUTRA', [['cliente', '000003']], 7);               // 1 filial
+        $this->conta('SEM VINCULO', [], null);
+
+        $resumo = app(MaioresPorSegmentoResolver::class)->resolver()['segmentos'][0]['resumo'];
+
+        $this->assertSame(4, $resumo['filiais']);
+        $this->assertSame(107, $resumo['filiaisMercado']);
+    }
+
     // ─── A invariante: número clicado == lista aberta ───────────────────────────
 
     public function test_clientes_batem_com_a_carteira_filtrada(): void
