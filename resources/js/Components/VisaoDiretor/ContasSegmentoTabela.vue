@@ -7,7 +7,7 @@
  *   - cada vendedor   → a carteira DELE dentro da conta
  *   - linha expandida → os clientes, cada um com link para a ficha
  */
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira';
@@ -47,6 +47,18 @@ function tituloVendedores(conta) {
 
     return [...linhas, 'Clique no nome para abrir a carteira dele nesta rede'].join('\n');
 }
+
+/**
+ * Subtotal das contas EXIBIDAS (com filtro, só as filtradas). Soma do mesmo jeito que o
+ * resumo do servidor (`MaioresPorSegmentoResolver`, `sum`), então sem filtro bate com o
+ * "N filiais no mercado" do subtítulo do card.
+ */
+const subtotal = computed(() => ({
+    contas: props.contas.length,
+    filiais: props.contas.reduce((t, c) => t + (c.filiaisMercado ?? 0), 0),
+    semFiliais: props.contas.filter((c) => c.filiaisMercado === null).length,
+    clientes: props.contas.reduce((t, c) => t + (c.clientes ?? 0), 0),
+}));
 
 const expandida = ref(null);
 const carregando = ref(null);
@@ -291,6 +303,25 @@ async function alternar(conta) {
                     </tr>
                 </template>
             </tbody>
+            <tfoot v-if="contas.length">
+                <!-- Mesmo desenho da linha de totais do /metas; o `tfoot` entra no reflow de cartão. -->
+                <tr class="divide-x divide-gray-200 border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-800">
+                    <td class="tbl-td tbl-td-oculto" />
+                    <td class="tbl-td tbl-td-titulo text-gray-800">
+                        Subtotal
+                        <span class="tbl-sub font-normal">{{ subtotal.contas }} {{ subtotal.contas === 1 ? 'conta' : 'contas' }}</span>
+                    </td>
+                    <td class="tbl-td tbl-td-oculto" />
+                    <td class="tbl-td tabular-nums text-gray-800" data-rotulo="Filiais (mercado)">
+                        {{ formatInteiro(subtotal.filiais) }}
+                        <span v-if="subtotal.semFiliais" class="tbl-sub font-normal" title="Contas sem o número de filiais preenchido não entram na soma">
+                            {{ subtotal.semFiliais }} sem dado
+                        </span>
+                    </td>
+                    <td class="tbl-td tabular-nums text-gray-800" data-rotulo="Clientes">{{ formatInteiro(subtotal.clientes) }}</td>
+                    <td class="tbl-td tbl-td-oculto" colspan="5" />
+                </tr>
+            </tfoot>
         </table>
     </div>
 </template>
