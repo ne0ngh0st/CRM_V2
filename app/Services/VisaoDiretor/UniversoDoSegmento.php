@@ -39,6 +39,7 @@ class UniversoDoSegmento
         private readonly ClientesDaConta $clientesDaConta,
         private readonly MaioresPorSegmentoResolver $redesResolver,
         private readonly BuscaNasRedes $buscaNasRedes,
+        private readonly VinculosSuspeitos $vinculosSuspeitos,
         private readonly NomeVendedorResolver $nomeVendedor,
     ) {
     }
@@ -198,6 +199,9 @@ class UniversoDoSegmento
         $daPagina = $redesFiltradas->slice($offset, self::POR_PAGINA)->values();
         $vagas = self::POR_PAGINA - $daPagina->count();
 
+        // Vínculos com cara de errado, só das redes desta página (`VinculosSuspeitos`).
+        $suspeitos = $this->vinculosSuspeitos->porConta($daPagina);
+
         $linhas = $vagas > 0
             ? $this->ordenar($filtrada)->offset(max(0, $offset - $redesFiltradas->count()))->limit($vagas)->get()
             : collect();
@@ -207,7 +211,7 @@ class UniversoDoSegmento
             // Paginador do Laravel, no formato que `Pagination.vue` já consome. Quem chama
             // decide o caminho dos links (`withPath`); o parâmetro da página é `pagina`.
             'linhas' => new LengthAwarePaginator(
-                [...$daPagina->map(fn (array $r) => $this->linhaDeRede($r))->all(), ...$this->montarLinhas($linhas, $segmento)],
+                [...$daPagina->map(fn (array $r) => $this->linhaDeRede($r, $suspeitos[$r['id']] ?? []))->all(), ...$this->montarLinhas($linhas, $segmento)],
                 $redesFiltradas->count() + $avulsos,
                 self::POR_PAGINA,
                 $pagina,
@@ -294,10 +298,19 @@ class UniversoDoSegmento
         return $redes->whereIn('status', MaioresPorSegmentoResolver::FILTROS_STATUS[$status])->values();
     }
 
-    /** A linha de rede como a tabela recebe: a do resolver, marcada. */
-    private function linhaDeRede(array $rede): array
+    /**
+     * A linha de rede como a tabela recebe: a do resolver, marcada.
+     *
+     * @param  list<array{tipo: string, codigo: string, motivo: string, texto: string}>  $suspeitos
+     */
+    private function linhaDeRede(array $rede, array $suspeitos = []): array
     {
-        return [...collect($rede)->except('segmento')->all(), 'tipo' => 'rede', 'chave' => "rede-{$rede['id']}"];
+        return [
+            ...collect($rede)->except('segmento')->all(),
+            'tipo' => 'rede',
+            'chave' => "rede-{$rede['id']}",
+            'suspeitos' => $suspeitos,
+        ];
     }
 
     /** Do maior capital ao menor; `id` desempata no mesmo sentido (o índice atende os dois). */

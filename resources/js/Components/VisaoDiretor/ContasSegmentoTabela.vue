@@ -183,6 +183,18 @@ async function alternar(conta) {
                                 />
                             </span>
                             <!--
+                                Vínculo com cara de errado (`VinculosSuspeitos`): código ligado a
+                                outra rede, ou quase nenhuma filial com o nome da rede. Só avisa;
+                                quem revisa decide em Editar, onde o vínculo aparece destacado.
+                            -->
+                            <button
+                                v-if="conta.suspeitos?.length"
+                                type="button"
+                                class="tbl-sub mx-auto font-semibold text-red-700 hover:underline"
+                                :title="conta.suspeitos.map((s) => `${s.tipo === 'grupo' ? 'Grupo' : 'Cliente'} ${s.codigo}: ${s.texto}`).join('\n')"
+                                @click.stop="emit('editar', conta)"
+                            >⚠ {{ conta.suspeitos.length }} {{ conta.suspeitos.length === 1 ? 'vínculo suspeito' : 'vínculos suspeitos' }}</button>
+                            <!--
                                 A rede casou com a busca por DENTRO (uma filial ou um lead dela) ou
                                 por um apelido: diz por quê, senão "OBA" trazendo FARTURA parece erro.
                             -->

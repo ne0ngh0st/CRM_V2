@@ -62,6 +62,16 @@ watch(() => props.show, (aberto) => {
 });
 
 const titulo = computed(() => (props.conta ? `Editar ${props.conta.nome}` : 'Nova conta-alvo'));
+/*
+ * Vínculos com cara de errado, vindos da tabela (`VinculosSuspeitos`). Comparados pela
+ * chave tipo:código, então somem do destaque assim que o vínculo é removido da lista.
+ */
+const suspeitos = computed(() => Object.fromEntries((props.conta?.suspeitos ?? []).map((s) => [`${s.tipo}:${s.codigo}`, s.texto])));
+
+function suspeitoDe(v) {
+    return suspeitos.value[`${v.tipo}:${v.codigo}`] ?? null;
+}
+
 const sugestoes = computed(() => form.vinculos.filter((v) => v.origem === 'sugestao').length);
 
 function jaVinculado(tipo, codigo) {
@@ -226,8 +236,10 @@ const rotulo = 'text-xs font-semibold uppercase tracking-wide text-gray-400';
                         v-for="(v, i) in form.vinculos"
                         :key="`${v.tipo}:${v.codigo}`"
                         class="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs"
-                        :class="v.origem === 'sugestao' ? 'border-amber bg-amber/10 text-gray-700' : 'border-gray-300 bg-gray-50 text-gray-700'"
+                        :class="suspeitoDe(v) ? 'border-red-300 bg-red-50 text-gray-700' : (v.origem === 'sugestao' ? 'border-amber bg-amber/10 text-gray-700' : 'border-gray-300 bg-gray-50 text-gray-700')"
+                        :title="suspeitoDe(v) ? `Suspeito: ${suspeitoDe(v)}` : null"
                     >
+                        <span v-if="suspeitoDe(v)" class="font-semibold text-red-700">⚠</span>
                         <span class="text-[0.65rem] font-semibold uppercase text-gray-400">{{ v.tipo === 'grupo' ? 'Grupo' : 'Cliente' }}</span>
                         <span class="max-w-[14rem] truncate" :title="v.nome || v.codigo">{{ v.nome || v.codigo }}</span>
                         <span class="text-gray-400">({{ v.codigo }})</span>

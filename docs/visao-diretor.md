@@ -334,6 +334,19 @@ que aquela loja estava ativa. O fantasia continua na busca e aparece na linha de
 quando é ele que explica o resultado. "Lojas" na linha expandida abre na Carteira
 exatamente aquelas filiais (`conta_alvo` + código + `agrupar=0`).
 
+**Alerta de vínculo suspeito (2026-10-13).** Achado em produção: o código 000242 é a
+ESTAPAR (1.626 estacionamentos) e estava ligado ao CARREFOUR e ao MATEUS, porque um ou dois
+estacionamentos ficam em loja deles e levam o nome — a sugestão automática puxou o código
+inteiro, e a aprovação em massa das sugestões (13/10) o congelou. `VinculosSuspeitos` marca,
+nas redes da página aberta (~46 ms em dev), o vínculo que:
+- está ligado a **outra rede** também; ou
+- tem **10+ filiais e menos de 10%** com o nome da rede (palavras de marca ou apelido) na
+  razão social ou no fantasia.
+
+A linha da rede mostra "⚠ N vínculos suspeitos" (clique abre o Editar) e o modal destaca o
+vínculo em vermelho com o motivo. Só avisa; quem revisa decide. Rede ligada pela razão social
+(Assaí = Sendas) cai na segunda regra até alguém pôr a razão no "Também conhecida como".
+
 **Paginação e números.** A paginação corre sobre a concatenação (as redes ocupam as
 primeiras posições). Os tiles contam LINHAS da tabela — uma rede vale uma — e ignoram o
 próprio filtro de status; busca e UF valem para redes e clientes. O rodapé "Subtotal das
