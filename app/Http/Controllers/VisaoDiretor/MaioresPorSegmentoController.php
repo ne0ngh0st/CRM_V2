@@ -14,10 +14,14 @@ use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Vendedores\NomeVendedorResolver;
 use App\Services\VisaoDiretor\BuscaDeVinculo;
+use App\Services\VisaoDiretor\BuscaNasRedes;
 use App\Services\VisaoDiretor\ClientesDaConta;
 use App\Services\VisaoDiretor\ContaDoLead;
 use App\Services\VisaoDiretor\LeadDaConta;
+use App\Services\VisaoDiretor\AbasDaPlanilha;
 use App\Services\VisaoDiretor\MaioresPorSegmentoResolver;
+use App\Services\VisaoDiretor\TermoDeBusca;
+use App\Services\VisaoDiretor\UniversoDoSegmento;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -48,17 +52,39 @@ class MaioresPorSegmentoController extends Controller
     ) {
     }
 
-    public function index(Request $request, LeadDaConta $leadDaConta, ContaDoLead $contaDoLead): Response
+    public function index(Request $request, LeadDaConta $leadDaConta, ContaDoLead $contaDoLead, UniversoDoSegmento $universo): Response
     {
         $filtros = $this->filtros($request);
 
         return Inertia::render('VisaoDiretor/MaioresPorSegmento', [
+            // Uma aba por segmento: os sete com redes primeiro, na ordem da planilha.
+            'abas' => $this->abas($universo),
             /*
-             * A aba (`segmento`) NÃO recorta o payload: as seis tabelas viajam juntas e
-             * o front troca sem ir ao servidor — igual virar a aba no Excel. O recorte
-             * continua valendo no export, que manda o filtro de verdade.
+             * A tabela do segmento aberto: redes, depois todos os clientes e leads, uma
+             * paginação só (decisão do Tony, 2026-10-13). Trocar de aba busca só esta prop.
+             * No Resumo, nada.
              */
-            'dados' => $this->resolver->resolver([...$filtros, 'segmento' => '']),
+            'universo' => function () use ($filtros, $universo, $request) {
+                if ($filtros['segmento'] === '') {
+                    return null;
+                }
+
+                // Os filtros do topo (status, UF, busca) valem para a tabela inteira.
+                $lista = $universo->lista($filtros['segmento'], [...$filtros, 'pagina' => max(1, $request->integer('pagina', 1))]);
+                $lista['linhas'] = $lista['linhas']
+                    ->withPath(route('visao-diretor.maiores.index'))
+                    ->withQueryString()
+                    ->toArray();
+
+                return $lista;
+            },
+            /*
+             * Resumo (quadro por segmento, KPIs) e o cabeçalho de cada aba. As linhas que a
+             * tabela do segmento mostra vêm de `universo`.
+             */
+            // Closure: paginar ou filtrar a tabela (`only: universo`) não paga a agregação
+            // das ~580 contas de todos os segmentos (~470 ms em dev).
+            'dados' => fn () => $this->resolver->resolver([...$filtros, 'segmento' => '']),
             'filtros' => $filtros,
             // Quem pode receber o lead de uma conta-alvo (botão "Gerar lead").
             'responsaveisLead' => $leadDaConta->responsaveis(),
@@ -87,6 +113,12 @@ class MaioresPorSegmentoController extends Controller
         return $this->entregarPlanilha('maiores-por-segmento', $request);
     }
 
+    /** "Clientes e leads" do segmento aberto, com os filtros da lista. Mais de 2.500 linhas vai para a fila. */
+    public function exportarClientes(Request $request): RedirectResponse
+    {
+        return $this->entregarPlanilha('clientes-leads-segmento', $request);
+    }
+
     public function buscarVinculo(Request $request, BuscaDeVinculo $busca): JsonResponse
     {
         return response()->json($busca->buscar((string) $request->string('q')));
@@ -100,6 +132,7 @@ class MaioresPorSegmentoController extends Controller
      * expandida não pode mostrar clientes que a coluna "Clientes" não contou.
      */
     public function clientes(
+        Request $request,
         ContaEstrategica $conta,
         ClienteStatusResolver $status,
         NomeVendedorResolver $nomeVendedor,
@@ -117,7 +150,23 @@ class MaioresPorSegmentoController extends Controller
 
         $total = DB::query()->fromSub($grupos, 'g')->count();
 
+        /*
+         * Com a busca da página (`?busca=`), quem casou vem primeiro e volta marcado: é por
+         * ele que a rede apareceu ("encontrado: OBA HORTIFRUTI"). Mesma regra de
+         * `BuscaNasRedes` (`TermoDeBusca`) — nome fantasia, razão social ou CNPJ.
+         */
+        $busca = trim((string) $request->string('busca'));
+        $casa = '0';
+        $bindings = [];
+        if ($busca !== '') {
+            [$sql, $bindings] = TermoDeBusca::sql(['clientes.nome_fantasia', 'clientes.razao_social'], $busca, 'clientes.cnpj_digitos');
+            $casa = "MAX({$sql})";
+        }
+
         $pagina = (clone $grupos)
+            ->selectRaw("{$casa} as casa_busca", $bindings)
+            // ⚠️ Só com busca: `ORDER BY 0` o MySQL lê como "a coluna nº 0" e a rede não abre.
+            ->when($busca !== '', fn ($q) => $q->orderByRaw("{$casa} DESC", $bindings))
             ->orderByRaw('MAX(clientes.data_ultima_compra) IS NULL, MAX(clientes.data_ultima_compra) DESC')
             ->limit(self::LIMITE_CLIENTES_EXPANDIDOS)
             ->get();
@@ -141,7 +190,14 @@ class MaioresPorSegmentoController extends Controller
                 return [
                     'id' => $g->ancora_id,
                     'codCliente' => $g->cod_cliente,
-                    'nome' => $a?->nome_fantasia ?: $a?->razao_social,
+                    /*
+                     * A linha é o CLIENTE (todas as lojas do código), então o nome é o da
+                     * empresa — a razão social, como na Carteira agrupada. O nome fantasia
+                     * da âncora é de UMA loja ("REDE OBA - VILA NOVA"), e ao lado do status
+                     * e da última compra do cliente inteiro parecia que aquela loja estava
+                     * ativa (Tony, 13/10/2026).
+                     */
+                    'nome' => $a?->razao_social ?: $a?->nome_fantasia,
                     'razaoSocial' => $a?->razao_social,
                     'estado' => $a?->estado,
                     // Todas as UFs das filiais, a da âncora primeiro (é a que a célula mostra).
@@ -152,6 +208,7 @@ class MaioresPorSegmentoController extends Controller
                     'lojas' => (int) $g->lojas,
                     'ultimaCompra' => $uc?->toDateString(),
                     'status' => $status->statusPara($uc, $hoje),
+                    'casaBusca' => (bool) $g->casa_busca,
                 ];
             })->all(),
         ]);
@@ -242,14 +299,37 @@ class MaioresPorSegmentoController extends Controller
     }
 
     /**
+     * As abas da tela: as de `AbasDaPlanilha` (têm redes) na ordem dela, depois os demais
+     * segmentos do maior para o menor (clientes + leads). O tamanho só ordena: não vai para a
+     * tela, onde seria um terceiro número para a mesma coisa.
+     *
+     * @return list<array{id: int, codigo: string, nome: string}>
+     */
+    private function abas(UniversoDoSegmento $universo): array
+    {
+        $totais = $universo->totaisPorSegmento();
+        $daPlanilha = AbasDaPlanilha::codigos();
+
+        return Segmento::query()->get(['id', 'codigo', 'nome'])
+            ->sortBy(fn (Segmento $s) => in_array((string) $s->codigo, $daPlanilha, true)
+                ? sprintf('0-%02d', array_search((string) $s->codigo, $daPlanilha, true))
+                : sprintf('1-%09d', 999999999 - ($totais[(string) $s->codigo] ?? 0)))
+            ->map(fn (Segmento $s) => ['id' => $s->id, 'codigo' => (string) $s->codigo, 'nome' => $s->nome])
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array{segmento?: string, status?: string, uf?: string, busca?: string}
      */
     private function filtros(Request $request): array
     {
         $status = (string) $request->string('status');
+        $segmento = (string) $request->string('segmento');
 
         return [
-            'segmento' => (string) $request->string('segmento'),
+            // Segmento que não existe vira o Resumo, em vez de uma aba vazia sem nome.
+            'segmento' => UniversoDoSegmento::segmentoValido($segmento) ? $segmento : '',
             // Whitelist: valor desconhecido vira "sem filtro" em vez de tela vazia.
             'status' => array_key_exists($status, MaioresPorSegmentoResolver::FILTROS_STATUS) ? $status : '',
             'uf' => mb_strtoupper(substr((string) $request->string('uf'), 0, 2)),
@@ -262,6 +342,8 @@ class MaioresPorSegmentoController extends Controller
         $request->merge([
             'uf' => $request->filled('uf') ? mb_strtoupper(trim((string) $request->input('uf'))) : null,
             'nome' => trim((string) $request->input('nome')),
+            // "OBA,  Oba Hortifruti ," → "OBA, Oba Hortifruti": um formato só, e vazio vira nulo.
+            'apelidos' => implode(', ', BuscaNasRedes::apelidos($request->input('apelidos'))) ?: null,
         ]);
 
         $validator = validator($request->all(), [
@@ -275,6 +357,7 @@ class MaioresPorSegmentoController extends Controller
             'uf' => ['nullable', 'string', 'size:2', 'alpha'],
             'filiais_mercado' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'site' => ['nullable', 'string', 'max:150'],
+            'apelidos' => ['nullable', 'string', 'max:500'],
             'observacao' => ['nullable', 'string', 'max:5000'],
             'vinculos' => ['array', 'max:200'],
             'vinculos.*.tipo' => ['required', Rule::in(ContaEstrategicaVinculo::TIPOS)],

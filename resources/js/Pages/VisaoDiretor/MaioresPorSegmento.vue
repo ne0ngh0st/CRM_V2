@@ -7,6 +7,11 @@
  * mais o Resumo (a aba DASHBOARD). Nome, UF, filiais e observação são digitados; status
  * e atendimento vêm do CRM (ver docs/visao-diretor.md). Clientes e vendedores levam a
  * uma lista viva da Carteira.
+ *
+ * Desde 2026-10-13 há uma aba para cada um dos 23 segmentos, e cada uma é UMA tabela
+ * paginada: as redes primeiro (ordem do ranking), depois todos os clientes e leads que não
+ * pertencem a nenhuma delas, por capital social. Vem do servidor (`universo`), só a do
+ * segmento aberto; os filtros do topo valem para a tabela inteira.
  */
 import { computed, reactive, ref } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -19,6 +24,7 @@ import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
 import ResumoSegmentosCard from '@/Components/VisaoDiretor/ResumoSegmentosCard.vue';
 import ContasSegmentoTabela from '@/Components/VisaoDiretor/ContasSegmentoTabela.vue';
+import Pagination from '@/Components/Pagination.vue';
 import SugestoesLeadsCard from '@/Components/VisaoDiretor/SugestoesLeadsCard.vue';
 import ContaEstrategicaModal from '@/Components/VisaoDiretor/ContaEstrategicaModal.vue';
 import GerarLeadContaModal from '@/Components/VisaoDiretor/GerarLeadContaModal.vue';
@@ -30,7 +36,7 @@ import EspecialistaSelo from '@/Components/Segmentos/EspecialistaSelo.vue';
 import { useConfirmacao } from '@/composables/useConfirmacao';
 import { ROTULOS_STATUS_CONTA, STATUS_CONTA } from '@/constants/visaoDiretor';
 import { contarFiltrosAtivos } from '@/utils/filtros';
-import { formatInteiro } from '@/utils/formato';
+import { dataHora, formatInteiro } from '@/utils/formato';
 
 const props = defineProps({
     dados: { type: Object, required: true },
@@ -38,6 +44,8 @@ const props = defineProps({
     segmentosDisponiveis: { type: Array, default: () => [] },
     responsaveisLead: { type: Array, default: () => [] },
     sugestoesLeads: { type: Array, default: () => [] },
+    abas: { type: Array, default: () => [] },
+    universo: { type: Object, default: null },
 });
 
 /*
@@ -45,9 +53,10 @@ const props = defineProps({
  * troca de aba — o payload já traz tudo.
  */
 const sugestoesDaAba = computed(() => {
-    const nome = props.dados.segmentos.find((s) => s.codigo === filtros.segmento)?.nome;
+    if (! filtros.segmento) return props.sugestoesLeads;
+    const nome = segmentoAberto.value?.nome;
 
-    return nome ? props.sugestoesLeads.filter((s) => s.segmento === nome) : props.sugestoesLeads;
+    return props.sugestoesLeads.filter((s) => s.segmento === nome);
 });
 
 const filtros = reactive({
@@ -57,7 +66,7 @@ const filtros = reactive({
     busca: props.filtros.busca || '',
 });
 
-const PROPS_DA_LISTA = ['dados', 'filtros'];
+const PROPS_DA_LISTA = ['dados', 'filtros', 'universo'];
 
 function queryDaPagina(segmento = filtros.segmento) {
     return {
@@ -65,13 +74,36 @@ function queryDaPagina(segmento = filtros.segmento) {
         status: filtros.status || undefined,
         uf: filtros.uf || undefined,
         busca: filtros.busca || undefined,
+        // Sem `pagina`: mudar de aba ou de filtro sempre volta para a primeira página.
     };
 }
 
-function aplicarFiltros() {
-    router.get(route('visao-diretor.maiores.index'), queryDaPagina(), {
-        preserveState: true, preserveScroll: true, replace: true, only: PROPS_DA_LISTA,
+// Enquanto a tabela do segmento vem do servidor, ela fica esmaecida.
+const carregando = ref(false);
+
+/*
+ * O Resumo (`dados`) custa a agregação de todas as contas (~470 ms em dev): dentro de um
+ * segmento a visita pede só a tabela. O Resumo fica marcado como desatualizado e é
+ * buscado de novo quando a pessoa voltar para ele.
+ */
+const resumoDesatualizado = ref(false);
+
+function visitar(query, segmento = filtros.segmento) {
+    if (segmento) resumoDesatualizado.value = true;
+
+    router.get(route('visao-diretor.maiores.index'), query, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+        only: segmento ? ['universo', 'filtros'] : ['dados', 'filtros'],
+        onStart: () => { carregando.value = true; },
+        onFinish: () => { carregando.value = false; },
+        onSuccess: () => { if (! segmento) resumoDesatualizado.value = false; },
     });
+}
+
+function aplicarFiltros() {
+    visitar(queryDaPagina());
 }
 
 let atrasoBusca;
@@ -81,15 +113,18 @@ function onBusca() {
 }
 
 /**
- * Troca de aba é local: as tabelas de todas as abas já vieram no payload. Ir ao servidor só
- * para esconder cinco delas atrasaria o clique (Regra nº 9) e faria a tela parecer
- * o Excel com um loading no meio.
- *
- * A URL acompanha (`?segmento=109`) para o F5 e o link compartilhado abrirem a
- * mesma aba. `replaceState` em cima do estado do Inertia, para o voltar do
- * navegador não perder a página.
+ * A tabela de um segmento vem do servidor (`universo`, paginada). O Resumo já está no
+ * payload: só a URL acompanha, por `replaceState` em cima do estado do Inertia, para o
+ * voltar do navegador não perder a página.
  */
 function trocarAba(codigo) {
+    if (codigo || resumoDesatualizado.value) {
+        filtros.segmento = codigo;
+        visitar(queryDaPagina(codigo), codigo);
+
+        return;
+    }
+
     filtros.segmento = codigo;
     const qs = new URLSearchParams();
     const q = queryDaPagina(codigo);
@@ -102,6 +137,10 @@ function filtrarSegmento(codigo) {
     trocarAba(codigo);
 }
 
+/*
+ * No Resumo os tiles contam REDES (o quadro por segmento); dentro de um segmento contam as
+ * LINHAS da tabela — redes, clientes e leads. Os dois vêm do servidor.
+ */
 const TILES_STATUS = [
     { status: 'ativo', tom: 'ok', rotulo: ROTULOS_STATUS_CONTA.ativo, valor: (k) => k.ativo },
     { status: 'inativando', tom: 'warn', rotulo: ROTULOS_STATUS_CONTA.inativando, valor: (k) => k.inativando },
@@ -117,13 +156,43 @@ function filtrarStatus(status) {
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, ['status', 'uf']));
 const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '' || filtros.segmento !== '');
 
+const segmentoAberto = computed(() => props.abas.find((a) => a.codigo === filtros.segmento) ?? null);
+
+// Redes do segmento aberto (cabeçalho, especialista). Nulo no Resumo e nos segmentos sem redes.
 const abaAtiva = computed(() => {
     if (! filtros.segmento) return null;
 
     return props.dados.segmentos.find((s) => s.codigo === filtros.segmento) ?? null;
 });
 
-const kpis = computed(() => abaAtiva.value?.resumo ?? props.dados.kpis);
+// O segmento aberto, com ou sem redes ({ id, codigo, nome }): para "Nova conta" e os modais.
+const segmentoDaAba = computed(() => abaAtiva.value ?? segmentoAberto.value);
+
+// A tabela do segmento chegou e é deste segmento (durante a troca de aba ainda é a anterior).
+const tabela = computed(() => (filtros.segmento && props.universo?.segmento === filtros.segmento ? props.universo : null));
+
+const kpis = computed(() => {
+    if (! filtros.segmento) return { ...props.dados.kpis, rotuloTotal: 'Contas-alvo', total: props.dados.kpis.contas };
+    const c = tabela.value?.contagens;
+
+    return c
+        ? { ...c, rotuloTotal: 'Todos', total: c.total }
+        : { ativo: 0, inativando: 0, inativo: 0, lead: 0, rotuloTotal: 'Todos', total: 0 };
+});
+
+const subtituloTabela = computed(() => {
+    const c = tabela.value?.contagens;
+    if (! c) return 'Carregando…';
+    const partes = [];
+    if (c.redes) partes.push(`${formatInteiro(c.redes)} ${c.redes === 1 ? 'rede' : 'redes'}`);
+    partes.push(`${formatInteiro(c.clientes)} ${c.clientes === 1 ? 'cliente' : 'clientes'}`);
+    partes.push(`${formatInteiro(c.leads)} ${c.leads === 1 ? 'lead' : 'leads'}`);
+    const quando = tabela.value.reconstruidoEm ? ` · atualizada ${dataHora(tabela.value.reconstruidoEm)}` : '';
+
+    const ordem = c.redes ? 'redes primeiro, depois por capital social' : 'do maior capital social ao menor';
+
+    return `${partes.join(' · ')} · ${ordem}${quando}`;
+});
 
 // ─── Cadastro / edição ───────────────────────────────────────────────────────
 const modalAberto = ref(false);
@@ -132,7 +201,7 @@ const segmentoDaNova = ref(null);
 
 function novaConta(segmento = null) {
     contaEmEdicao.value = null;
-    segmentoDaNova.value = segmento?.id ?? abaAtiva.value?.id ?? null;
+    segmentoDaNova.value = segmento?.id ?? segmentoDaAba.value?.id ?? null;
     modalAberto.value = true;
 }
 
@@ -201,7 +270,7 @@ async function excluir(conta) {
                         <input
                             v-model="filtros.busca"
                             type="search"
-                            placeholder="Nome da rede"
+                            :placeholder="filtros.segmento ? 'Rede, cliente, razão social ou CNPJ' : 'Nome da rede'"
                             class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                             @input="onBusca"
                         />
@@ -235,13 +304,14 @@ async function excluir(conta) {
                     @click="trocarAba('')"
                 >Resumo</button>
                 <button
-                    v-for="s in dados.segmentos"
+                    v-for="s in abas"
                     :key="s.codigo"
                     type="button"
                     role="tab"
                     :aria-selected="filtros.segmento === s.codigo"
                     class="-mb-px shrink-0 border-b-2 px-4 py-2 text-sm font-medium uppercase tracking-wide transition"
                     :class="filtros.segmento === s.codigo ? 'border-cyan bg-white text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'"
+                    :title="`${formatInteiro(s.total)} clientes e leads`"
                     @click="trocarAba(s.codigo)"
                 >{{ s.nome }}</button>
             </div>
@@ -252,11 +322,11 @@ async function excluir(conta) {
                 (o servidor calcula sem ele), senão os vizinhos zerariam a cada clique.
             -->
             <div class="flex flex-wrap gap-2">
-                <KpiTile :value="kpis.contas" label="Contas-alvo" botao @click="filtrarStatus('')" />
+                <KpiTile :value="formatInteiro(kpis.total)" :label="kpis.rotuloTotal" botao @click="filtrarStatus('')" />
                 <KpiTile
                     v-for="t in TILES_STATUS"
                     :key="t.status"
-                    :value="t.valor(kpis)"
+                    :value="formatInteiro(t.valor(kpis))"
                     :label="t.rotulo"
                     :tone="t.tom"
                     botao
@@ -278,7 +348,7 @@ async function excluir(conta) {
             <SugestoesLeadsCard v-if="sugestoesDaAba.length" :sugestoes="sugestoesDaAba" />
 
             <ResumoSegmentosCard
-                v-if="! abaAtiva"
+                v-if="! filtros.segmento"
                 :linhas="dados.resumoPorSegmento"
                 :segmento-ativo="filtros.segmento"
                 @filtrar="filtrarSegmento"
@@ -299,8 +369,8 @@ async function excluir(conta) {
 
             <DarkCard
                 v-else
-                :title="abaAtiva.nome"
-                :subtitle="`${abaAtiva.contas.length === abaAtiva.resumo.contas ? '' : `${abaAtiva.contas.length} de `}${abaAtiva.resumo.contas} contas · ${formatInteiro(abaAtiva.resumo.filiais)} filiais no CRM`"
+                :title="segmentoDaAba?.nome ?? ''"
+                :subtitle="subtituloTabela"
             >
                 <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
@@ -313,12 +383,14 @@ async function excluir(conta) {
                     da Equipe (decisão do Tony, 2026-09-22). O link leva para lá.
                 -->
                 <template #actions>
+                    <!-- A planilha leva a tabela inteira (todas as páginas), com os mesmos filtros. -->
                     <ExportarExcelButton
-                        rota="visao-diretor.maiores.exportar"
+                        rota="visao-diretor.maiores.exportar-clientes"
                         :filtros="filtros"
-                        :tem-filtros-ativos="temFiltrosAtivos"
+                        :tem-filtros-ativos="filtrosAtivos > 0 || filtros.busca !== ''"
                     />
                     <Link
+                        v-if="abaAtiva"
                         :href="route('equipe.segmentos')"
                         class="rounded px-1 py-0.5 transition hover:bg-white/10"
                         title="O especialista é marcado pela estrela em Equipe → Segmentos"
@@ -327,17 +399,26 @@ async function excluir(conta) {
                     </Link>
                 </template>
 
-                <p v-if="! abaAtiva.contas.length" class="px-3 py-10 text-center text-sm text-gray-400">
-                    {{ abaAtiva.resumo.contas ? 'Nenhuma conta neste segmento com os filtros aplicados.' : 'Nenhuma conta neste segmento.' }}
+                <p v-if="! tabela" class="px-3 py-10 text-center text-sm text-gray-400">Carregando…</p>
+                <p v-else-if="! tabela.linhas.data.length" class="px-3 py-10 text-center text-sm text-gray-400">
+                    {{ tabela.contagens.total ? 'Nada neste segmento com os filtros aplicados.' : 'Nenhuma rede, cliente ou lead neste segmento.' }}
                 </p>
-                <ContasSegmentoTabela
-                    v-else
-                    :contas="abaAtiva.contas"
-                    @editar="(conta) => editar(conta, abaAtiva)"
-                    @historico="(conta) => verHistorico(conta, abaAtiva)"
-                    @gerar-lead="(conta) => gerarLead(conta, abaAtiva)"
-                    @excluir="excluir"
-                />
+                <template v-else>
+                    <div class="transition-opacity" :class="carregando ? 'opacity-50' : ''">
+                        <ContasSegmentoTabela
+                            :contas="tabela.linhas.data"
+                            :posicao-inicial="tabela.linhas.from ?? 1"
+                            :subtotal-redes="tabela.subtotalRedes"
+                            :segmento="tabela.segmento"
+                            :busca="tabela.filtros.busca"
+                            @editar="(conta) => editar(conta, segmentoDaAba)"
+                            @historico="(conta) => verHistorico(conta, segmentoDaAba)"
+                            @gerar-lead="(conta) => gerarLead(conta, segmentoDaAba)"
+                            @excluir="excluir"
+                        />
+                    </div>
+                    <div class="mt-3"><Pagination :meta="tabela.linhas" :only="['universo']" /></div>
+                </template>
             </DarkCard>
         </div>
 

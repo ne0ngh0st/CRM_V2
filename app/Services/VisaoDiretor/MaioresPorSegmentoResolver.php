@@ -48,6 +48,7 @@ class MaioresPorSegmentoResolver
         private readonly ClienteStatusResolver $statusResolver,
         private readonly NomeVendedorResolver $nomeVendedor,
         private readonly EspecialistasDoSegmento $especialistas,
+        private readonly BuscaNasRedes $buscaNasRedes,
     ) {
     }
 
@@ -133,11 +134,16 @@ class MaioresPorSegmentoResolver
     /**
      * Uma linha por conta, com todos os derivados. Sem filtro de tela.
      *
+     * Com `$segmento` (código TOTVS), só as contas dele — a tabela de um segmento não paga
+     * a agregação das ~580 contas da página inteira (474 ms → poucas dezenas, dev 13/10).
+     * A posição continua sendo DENTRO do segmento, então o resultado é o mesmo recorte.
+     *
      * @return Collection<int, array>
      */
-    public function linhas(): Collection
+    public function linhas(?string $segmento = null): Collection
     {
         $contas = ContaEstrategica::query()
+            ->when($segmento !== null, fn ($q) => $q->whereHas('segmento', fn ($s) => $s->where('codigo', $segmento)))
             ->with('segmento:id,codigo,nome')
             // Subconsulta na MESMA query: não mexe no teto de queries da página.
             ->withCount('observacoes')
@@ -153,7 +159,7 @@ class MaioresPorSegmentoResolver
             return collect();
         }
 
-        $pares = $this->clientesDaConta->paresDeTodasAsContas();
+        $pares = $this->clientesDaConta->paresDeTodasAsContas($segmento !== null ? $contas->pluck('id')->all() : null);
 
         /*
          * (conta, vendedor) → lojas e última compra. A linha da conta soma as lojas e
@@ -181,7 +187,7 @@ class MaioresPorSegmentoResolver
             ->get()
             ->keyBy('conta_id');
 
-        $vinculos = $this->vinculosComNome();
+        $vinculos = $this->vinculosComNome($segmento !== null ? $contas->pluck('id')->all() : null);
 
         // Lead da prospecção não tem `user_id`: o responsável sai do código de vendedor.
         $nomes = $this->nomeVendedor->porCodigo(
@@ -216,6 +222,8 @@ class MaioresPorSegmentoResolver
                     'nome' => $conta->nome,
                     'uf' => $conta->uf,
                     'site' => $conta->site,
+                    // "Também conhecida como" — entra na busca (`BuscaNasRedes`) e no modal.
+                    'apelidos' => $conta->apelidos,
                     'observacao' => $conta->observacao,
                     // Versões no histórico (inclui a vigente). Só a tela usa; o Excel não.
                     'versoesObservacao' => (int) $conta->observacoes_count,
@@ -268,9 +276,10 @@ class MaioresPorSegmentoResolver
      *
      * @return Collection<int, Collection<int, array>> por `conta_id`
      */
-    private function vinculosComNome(): Collection
+    private function vinculosComNome(?array $contas = null): Collection
     {
         $vinculos = ContaEstrategicaVinculo::query()
+            ->when($contas !== null, fn ($q) => $q->whereIn('conta_id', $contas ?: [0]))
             ->orderBy('tipo')->orderBy('codigo')
             ->get(['conta_id', 'tipo', 'codigo', 'origem']);
 
@@ -306,14 +315,16 @@ class MaioresPorSegmentoResolver
         $segmento = (string) ($filtros['segmento'] ?? '');
         $status = (string) ($filtros['status'] ?? '');
         $uf = (string) ($filtros['uf'] ?? '');
-        $busca = mb_strtoupper(trim((string) ($filtros['busca'] ?? '')));
+        $busca = trim((string) ($filtros['busca'] ?? ''));
 
-        return $linhas
+        $filtradas = $linhas
             ->when($segmento !== '', fn ($c) => $c->where('segmento.codigo', $segmento))
             ->when($status !== '', fn ($c) => $c->whereIn('status', self::FILTROS_STATUS[$status] ?? [$status]))
             ->when($uf !== '', fn ($c) => $c->where('uf', $uf))
-            ->when($busca !== '', fn ($c) => $c->filter(fn (array $l) => str_contains(mb_strtoupper($l['nome']), $busca)))
             ->values();
+
+        // Nome, apelidos e quem está DENTRO da rede: a mesma regra da tabela do segmento.
+        return $this->buscaNasRedes->filtrar($filtradas, $busca);
     }
 
     /**

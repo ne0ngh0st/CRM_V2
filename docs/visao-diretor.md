@@ -21,7 +21,7 @@ página **Maiores por Segmento**, e fixa o padrão das que vierem depois.
 | Páginas Vue | `resources/js/Pages/VisaoDiretor/` | |
 | Componentes | `resources/js/Components/VisaoDiretor/` | |
 | Menu | grupo `visao-diretor` em `constants/navegacao.js`, `visivel: soDiretor` | `isDiretor` mora no objeto de perfil do `AuthenticatedLayout` |
-| Layout | `PageHero` → abas (uma por segmento) → `KpiTile` → `DarkCard` | Abas iguais às da planilha; o Resumo é a aba DASHBOARD |
+| Layout | `PageHero` → abas (uma por segmento, os 23) → `KpiTile` → `DarkCard` | Os sete com redes na ordem da planilha; o Resumo é a aba DASHBOARD |
 | Tabela | tokens `.tbl*` + `.tbl-cartoes` (celular) | Regra de ouro nº 5, `docs/mobile.md` |
 | Dentro de card | alinhamento esquerda/direita, sem `.tbl*` | Lição do `SegmentosInativosCard` (10/09) |
 | Links | todo nome → entidade do CRM | É a razão da seção existir |
@@ -61,8 +61,9 @@ retrato das maiores redes do país, **onde já atendemos e onde não** — a fun
 A tela é **uma aba por segmento**: Supermercadista primeiro (não existe na planilha, ver
 abaixo), depois a ordem da planilha (Drogarias, Rede de Lojas, Alimentação, Postos,
 Construção, Estacionamentos), mais o **Resumo** no lugar da aba DASHBOARD. As abas existem
-mesmo sem conta cadastrada. A troca de aba é local —
-o payload traz todas as tabelas, igual virar a folha no Excel.
+mesmo sem conta cadastrada. Desde 2026-10-13 são os 23 segmentos, e cada aba é uma
+tabela paginada (redes, depois clientes e leads) que vem do servidor ao abrir — ver
+"Uma tabela por segmento" abaixo.
 
 ⚠️ **É lista de ALVOS, não de faturamento.** Na planilha, "ATENDIMENTO" e "STATUS" eram
 preenchidos à mão cruzando com o CRM, e envelheciam no dia seguinte. Aqui os dois são
@@ -272,6 +273,92 @@ lido pela carga mensal no campo 11 do Estabelecimentos e gravado também pelo ca
 - Produção (08/10): 4.296 dos 14.101 leads `sistema` ativos eram supermercado/mercearia;
   o resto é calçados, entrega e logística. Assaí, GPA e Sonda foram ligados à mão (grupos
   60 e 10, códigos 000911 e 005507): o nome do ranking não bate com o do cliente.
+
+### Uma tabela por segmento: redes, clientes e leads (2026-10-13)
+
+Pedido do Tony: além das redes, ver **todo cliente e todo lead** de cada segmento, paginado,
+e **"é tudo a mesma coisa"** — uma tabela só, nada de alternar entre "redes" e "clientes".
+Decisões dele (não reabrir sem ele pedir):
+
+- **Os 23 segmentos** viram abas: os sete com redes primeiro (ordem da planilha), depois os
+  demais do maior para o menor. Nos 16 sem redes a tabela começa direto nos clientes.
+- **Redes primeiro**, na ordem do ranking/planilha. A linha da rede continua como era:
+  expande para os clientes dela, tem Editar, Observação e Gerar lead.
+- **Depois, todos os outros clientes e leads, misturados, por capital social da Receita**
+  (do maior para o menor; sem capital vai para o fim).
+- **Ninguém duas vezes:** cliente que é de uma rede DO SEGMENTO está dentro da linha da
+  rede, não solto; lead ligado à rede com confirmação, idem. Lead cujo CNPJ já é de
+  cliente não aparece (CNPJ EXATO, a regra do import — filial de rede que ainda não compra
+  continua como lead).
+- ⚠️ Foi tentado antes, e recusado no mesmo dia: redes e clientes em duas listas com um
+  alternador. "Ficou confuso."
+
+| O que se repete | Onde mora |
+|---|---|
+| A tabela (redes + avulsos), contagens, paginação, Excel | `App\Services\VisaoDiretor\UniversoDoSegmento` |
+| As linhas de rede | `MaioresPorSegmentoResolver::linhas()` (as mesmas do Resumo) |
+| Clientes e leads pré-calculados | `visao_diretor_universo` (só `reconstruir()` escreve) |
+| A tela | `ContasSegmentoTabela.vue` (linha com `tipo` = rede, cliente ou lead) |
+| Excel | recurso `clientes-leads-segmento` no `CatalogoDeExportacoes` |
+
+**Grão.** Cliente entra no segmento se tem ao menos uma filial nele — o mesmo conjunto de
+`/carteira?segmento=X` agrupada. Filiais e capital contam só as filiais daquele segmento;
+a **última compra é a de todas as filiais**, a mesma da pill da Carteira. Cliente com
+filiais em dois segmentos aparece nos dois. Só redes DO segmento recolhem: a Magazine Luiza
+(TOTVS 115, rede em Rede de Lojas) aparece solta em Magazines. Lead entra pelo nome do
+segmento (`leads.segmento`), fora da etapa "Outros"; **lead sem segmento não aparece**.
+
+**Busca: a rede aparece pelo que está dentro dela (2026-10-13).** Digitar "OBA" traz a
+FARTURA, porque o Oba Hortifruti é uma filial dela. Antes o cliente sumia: não aparecia
+solto (é da rede) e a rede não aparecia (o nome é outro). Regra única em `BuscaNasRedes`,
+usada pela tabela do segmento E pelo Resumo — uma rede casa se casar:
+- o nome dela, ou um apelido ("Também conhecida como", `contas_estrategicas.apelidos`,
+  marcas separadas por vírgula, editadas no modal — serve à rede-alvo sem cliente ligado);
+- o nome fantasia, a razão social ou o CNPJ de uma filial ligada (pelos vínculos);
+- o nome, a razão social ou o CNPJ de um lead ligado com confirmação.
+
+A tela diz por quê, embaixo do nome ("encontrado: OBA HORTIFRUTI" / "também conhecida
+como: …"), e ao abrir a rede quem casou vem primeiro, destacado.
+
+⚠️ **Casar = COMEÇO DE PALAVRA, nunca "contém"** (`TermoDeBusca`, usado nos quatro lugares
+— redes em PHP, filiais/leads/clientes/linha expandida em SQL). Com "contém", "OBA" trazia
+SOROCOBA, COBASI e BOBATO e enterrava o que se procurava. Ignora maiúsculas e acentos
+("bom preco" acha "Bom Preço"); `%` e `_` digitados são texto. Quatro ou mais dígitos casam
+pelo começo do CNPJ.
+
+**Linha de cliente = razão social, nunca o fantasia de uma loja (2026-10-13).** Na tabela e
+na linha expandida da rede, a linha é o CLIENTE inteiro (status e última compra de todas
+as lojas), e por isso mostra a razão social, como a Carteira agrupada. Antes mostrava o
+fantasia da filial-âncora ("REDE OBA - VILA NOVA") ao lado do status do cliente, e parecia
+que aquela loja estava ativa. O fantasia continua na busca e aparece na linha de baixo
+quando é ele que explica o resultado. "Lojas" na linha expandida abre na Carteira
+exatamente aquelas filiais (`conta_alvo` + código + `agrupar=0`).
+
+**Paginação e números.** A paginação corre sobre a concatenação (as redes ocupam as
+primeiras posições). Os tiles contam LINHAS da tabela — uma rede vale uma — e ignoram o
+próprio filtro de status; busca e UF valem para redes e clientes. O rodapé "Subtotal das
+redes" soma as redes exibidas em **todas** as páginas (vem do servidor).
+
+⚠️ **Invariantes testadas:** (1) avulsos + clientes recolhidos nas redes == total de
+`/carteira?segmento=X`; (2) cada tile == total da lista filtrada por ele; (3) a página 2
+começa exatamente onde a 1 parou, atravessando de redes para clientes.
+
+**Por que uma tabela pré-calculada.** Ordenar ao vivo por capital (que mora em
+`cnpj_situacoes`) custou **820 ms** em Supermercadista (dev, 13/10). Na tabela, com índice
+em `(segmento, capital_ordem, id)`, os clientes da página saem em poucos ms; o número de
+consultas não cresce com clientes nem com redes (há teste).
+- ⚠️ `capital_ordem` = capital ou -1, nunca `ORDER BY capital IS NULL` (expressão não usa
+  índice). `lead` é palavra reservada do MySQL (`LEAD()`): alias de contagem é `leads`.
+- O **status** é calculado na consulta a partir da data, então não envelhece. O que
+  envelhece é quem entra e sai — a tela mostra "atualizada às HH:MM".
+- **Quem é da rede é lido ao vivo** (vínculos + `Lead::ligadoAConta`), não gravado na
+  tabela: editar os vínculos de uma conta vale no request seguinte.
+
+**Reconstrução** (`php artisan visao-diretor:reconstruir-universo`, transação única; ~14 s
+no dev): fim de todo `totvs:atualizar` (está em `AtualizadorTotvs::DERIVADOS`), fim do
+`totvs:import-leads` e de hora em hora (:50), para o que muda entre importações.
+
+Testes: `tests/Feature/VisaoDiretor/UniversoDoSegmentoTest.php` (verificado por mutação).
 
 ## 3. Rollup de faturamento — `faturamento_cliente_mensal`
 

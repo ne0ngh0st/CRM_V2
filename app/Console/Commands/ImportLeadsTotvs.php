@@ -336,6 +336,18 @@ class ImportLeadsTotvs extends Command
             'contas' => $contas,
         ]]);
 
+        /*
+         * A lista de clientes e leads da Visão Diretor mostra os leads novos já, em vez de
+         * esperar a reconstrução de hora em hora. Best-effort: o import já está gravado, e
+         * uma falha aqui é corrigida sozinha pela próxima rodada agendada.
+         */
+        try {
+            $this->call('visao-diretor:reconstruir-universo');
+        } catch (\Throwable $e) {
+            report($e);
+            $this->warn('Não deu para atualizar a lista da Visão Diretor agora; a rodada agendada refaz.');
+        }
+
         return self::SUCCESS;
     }
 

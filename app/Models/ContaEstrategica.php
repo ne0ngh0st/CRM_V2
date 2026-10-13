@@ -26,6 +26,7 @@ class ContaEstrategica extends Model
     protected $fillable = [
         'segmento_id',
         'nome',
+        'apelidos',
         'uf',
         'filiais_mercado',
         'site',

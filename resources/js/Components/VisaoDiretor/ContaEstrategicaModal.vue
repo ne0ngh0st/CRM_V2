@@ -37,6 +37,7 @@ const form = useForm({
     uf: '',
     filiais_mercado: '',
     site: '',
+    apelidos: '',
     observacao: '',
     vinculos: [],
 });
@@ -52,6 +53,7 @@ watch(() => props.show, (aberto) => {
     form.uf = c?.uf ?? '';
     form.filiais_mercado = c?.filiaisMercado ?? '';
     form.site = c?.site ?? '';
+    form.apelidos = c?.apelidos ?? '';
     form.observacao = c?.observacao ?? '';
     form.vinculos = (c?.vinculos ?? []).map((v) => ({ ...v }));
 
@@ -181,6 +183,12 @@ const rotulo = 'text-xs font-semibold uppercase tracking-wide text-gray-400';
                 <label :class="rotulo" for="conta_site">Site</label>
                 <input id="conta_site" v-model="form.site" type="text" maxlength="150" placeholder="exemplo.com.br" :class="campo" />
                 <InputError :message="form.errors.site" class="mt-1" />
+            </div>
+            <div class="sm:col-span-3">
+                <label :class="rotulo" for="conta_apelidos">Também conhecida como</label>
+                <input id="conta_apelidos" v-model="form.apelidos" type="text" maxlength="500" placeholder="Ex.: OBA, Oba Hortifruti" :class="campo" />
+                <InputError :message="form.errors.apelidos" class="mt-1" />
+                <p class="mt-1 text-[0.7rem] text-gray-400">Marcas da rede, separadas por vírgula. Entram na busca.</p>
             </div>
             <div class="sm:col-span-6">
                 <label :class="rotulo" for="conta_obs">Observação estratégica</label>

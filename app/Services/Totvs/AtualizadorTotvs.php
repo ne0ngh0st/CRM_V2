@@ -70,6 +70,8 @@ class AtualizadorTotvs
      */
     public const DERIVADOS = [
         'faturamento:rollup-mensal',
+        // Lista de clientes e leads por segmento da Visão Diretor (status sai da última compra).
+        'visao-diretor:reconstruir-universo',
     ];
 
     private const ARQUIVO_MARCADOR = '.ultima-importacao';

@@ -4,6 +4,7 @@ namespace App\Services\Exportacao;
 
 use App\Exports\CadastroExport;
 use App\Exports\CarteiraExport;
+use App\Exports\ClientesLeadsSegmentoExport;
 use App\Exports\EquipeExport;
 use App\Exports\LeadExport;
 use App\Exports\MaioresPorSegmentoExport;
@@ -24,6 +25,7 @@ use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
 use App\Services\VisaoDiretor\MaioresPorSegmentoResolver;
+use App\Services\VisaoDiretor\UniversoDoSegmento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use InvalidArgumentException;
@@ -73,6 +75,7 @@ class CatalogoDeExportacoes
         'cadastros-cliente' => 'Solicitações de cliente novo',
         'cadastros-lead' => 'Solicitações de lead',
         'maiores-por-segmento' => 'Maiores por segmento',
+        'clientes-leads-segmento' => 'Clientes e leads do segmento',
     ];
 
     public function rotulo(string $recurso): string
@@ -106,6 +109,7 @@ class CatalogoDeExportacoes
             'cadastros-bobina', 'cadastros-etiqueta', 'cadastros-cliente', 'cadastros-lead'
                 => $this->cadastros($recurso, $request, $user),
             'maiores-por-segmento' => $this->maioresPorSegmento($request, $user),
+            'clientes-leads-segmento' => $this->clientesLeadsSegmento($request, $user),
 
             /*
              * ⚠️ Estoura em vez de cair num default. O recurso vem de um registro do banco
@@ -223,6 +227,31 @@ class CatalogoDeExportacoes
             'maiores-por-segmento',
             // Linhas da planilha = contas das abas. Não `kpis.contas`: os KPIs ignoram o filtro de status.
             collect($dados['segmentos'])->sum(fn (array $s) => count($s['contas'])),
+        );
+    }
+
+    /**
+     * "Clientes e leads" de um segmento (Visão Diretor). Mesmo gate e mesma razão da
+     * planilha das redes: o plano também é montado dentro do job.
+     */
+    private function clientesLeadsSegmento(Request $request, User $user): PlanoDeExportacao
+    {
+        abort_unless(Gate::forUser($user)->allows('ver-visao-diretor'), 403);
+
+        $segmento = (string) $request->string('segmento');
+        abort_unless(UniversoDoSegmento::segmentoValido($segmento), 422, 'Escolha um segmento para exportar.');
+
+        $filtros = [
+            'status' => (string) $request->string('status'),
+            'busca' => (string) $request->string('busca'),
+            'uf' => mb_strtoupper(substr((string) $request->string('uf'), 0, 2)),
+        ];
+
+        return new PlanoDeExportacao(
+            new ClientesLeadsSegmentoExport($segmento, $filtros),
+            "maiores-por-segmento-{$segmento}",
+            // O mesmo total que a paginação da tela mostra, sem montar as linhas.
+            app(UniversoDoSegmento::class)->lista($segmento, $filtros)['linhas']->total(),
         );
     }
 

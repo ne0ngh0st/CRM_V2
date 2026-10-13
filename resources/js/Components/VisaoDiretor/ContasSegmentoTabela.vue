@@ -1,22 +1,41 @@
 <script setup>
 /**
- * As contas-alvo de um segmento.
+ * A tabela de um segmento: as contas-alvo (redes) primeiro, depois os clientes e leads
+ * que não pertencem a nenhuma delas (`UniversoDoSegmento`, 2026-10-13). Uma tabela só:
+ * cada linha tem `tipo` = `rede` | `cliente` | `lead`. Só a rede expande e tem ações.
  *
  * 🥇 A razão de isto não ser um Power BI: todo número leva a uma lista viva do CRM.
  *   - "N clientes"    → Carteira agrupada com `?conta_alvo=` (mesmo total, há teste)
  *   - cada vendedor   → a carteira DELE dentro da conta
  *   - linha expandida → os clientes, cada um com link para a ficha
  */
-import { computed, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
+import CapitalPorte from '@/Components/Receita/CapitalPorte.vue';
 import { ROTULOS_STATUS_CARTEIRA, TONS_STATUS_CARTEIRA } from '@/constants/carteira';
 import { ROTULOS_STATUS_CONTA, TONS_STATUS_CONTA } from '@/constants/visaoDiretor';
 import { formatDataCurta, formatInteiro, nomeCurto } from '@/utils/formato';
 
 const props = defineProps({
     contas: { type: Array, required: true },
+    // Posição (na lista inteira) da primeira linha desta página: numera clientes e leads.
+    posicaoInicial: { type: Number, default: 1 },
+    // Rodapé: as redes exibidas em TODAS as páginas (o servidor soma). Nulo = sem rodapé.
+    subtotalRedes: { type: Object, default: null },
+    // Código do segmento da aba: o link de filiais do cliente abre só as filiais dele aqui.
+    segmento: { type: String, default: '' },
+    // A busca aplicada: na linha expandida, quem casou vem primeiro e destacado.
+    busca: { type: String, default: '' },
 });
+
+const ehRede = (linha) => (linha.tipo ?? 'rede') === 'rede';
+
+function hrefDaLinha(l) {
+    return l.tipo === 'cliente'
+        ? route('carteira.detalhes', l.clienteId)
+        : route('leads.index', { busca: l.documento || l.nome });
+}
 
 const emit = defineEmits(['editar', 'excluir', 'historico', 'gerar-lead']);
 
@@ -48,16 +67,6 @@ function tituloVendedores(conta) {
     return [...linhas, 'Clique no nome para abrir a carteira dele nesta rede'].join('\n');
 }
 
-/**
- * Subtotal das contas EXIBIDAS (com filtro, só as filtradas). Soma do mesmo jeito que o
- * resumo do servidor (`MaioresPorSegmentoResolver::resumir()`), então sem filtro bate com o
- * "N filiais no CRM" do subtítulo do card.
- */
-const subtotal = computed(() => ({
-    contas: props.contas.length,
-    filiais: props.contas.reduce((t, c) => t + c.lojas, 0),
-    clientes: props.contas.reduce((t, c) => t + (c.clientes ?? 0), 0),
-}));
 
 const expandida = ref(null);
 const carregando = ref(null);
@@ -79,7 +88,7 @@ async function alternar(conta) {
     carregando.value = conta.id;
 
     try {
-        const resposta = await fetch(route('visao-diretor.maiores.clientes', conta.id), {
+        const resposta = await fetch(route('visao-diretor.maiores.clientes', { conta: conta.id, busca: props.busca || undefined }), {
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin',
         });
@@ -102,10 +111,11 @@ async function alternar(conta) {
             <thead>
                 <tr class="tbl-head-row">
                     <th class="tbl-th w-8" />
-                    <th class="tbl-th">Conta</th>
+                    <th class="tbl-th">Nome</th>
                     <th class="tbl-th">UF</th>
                     <th class="tbl-th" title="Filiais da rede que estão no CRM (cliente + loja)">Filiais</th>
                     <th class="tbl-th" title="Clientes desta rede na nossa carteira">Clientes</th>
+                    <th class="tbl-th" title="Capital social da empresa na Receita">Capital / Porte</th>
                     <th class="tbl-th">Status</th>
                     <th class="tbl-th" title="Quem atende as lojas desta rede que já são clientes (o de mais filiais primeiro)">Vendedor</th>
                     <th class="tbl-th">Observação</th>
@@ -114,8 +124,45 @@ async function alternar(conta) {
                 </tr>
             </thead>
             <tbody class="tbl-body">
-                <template v-for="conta in contas" :key="conta.id">
-                    <tr class="tbl-row cursor-pointer" @click="alternar(conta)">
+                <template v-for="(conta, i) in contas" :key="conta.chave ?? conta.id">
+                    <!-- Cliente ou lead fora das redes: sem expansão nem ações. -->
+                    <tr v-if="! ehRede(conta)" class="tbl-row">
+                        <td class="tbl-td tbl-td-oculto" />
+                        <td class="tbl-td tbl-td-titulo">
+                            <Link :href="hrefDaLinha(conta)" class="tbl-main text-teal hover:underline sm:max-w-[260px]" :title="conta.razaoSocial || conta.nome">
+                                <span class="mr-1 tabular-nums text-gray-400">{{ posicaoInicial + i }}.</span>{{ conta.nome }}
+                            </Link>
+                            <span class="tbl-sub mx-auto truncate sm:max-w-[260px]" :title="conta.nomeFantasia">{{ conta.tipo === 'lead' ? 'Lead' : 'Cliente' }}<template v-if="conta.nomeFantasia"> · {{ conta.nomeFantasia }}</template> · {{ conta.documento || 'sem CNPJ' }}</span>
+                        </td>
+                        <td class="tbl-td" data-rotulo="UF">{{ conta.uf || '—' }}</td>
+                        <!--
+                            As filiais DESTE segmento (é o que `lojas` conta), por filial na
+                            Carteira: código do cliente + segmento dão exatamente essa lista.
+                        -->
+                        <td class="tbl-td tabular-nums" data-rotulo="Filiais">
+                            <Link
+                                v-if="conta.tipo === 'cliente'"
+                                :href="route('carteira.index', { busca: conta.codCliente, segmento, agrupar: 0 })"
+                                class="tbl-main font-semibold text-teal hover:underline"
+                                title="Abrir estas filiais na Carteira"
+                            >{{ formatInteiro(conta.lojas) }}</Link>
+                            <span v-else class="text-gray-400">—</span>
+                        </td>
+                        <td class="tbl-td text-gray-400" data-rotulo="Clientes">—</td>
+                        <td class="tbl-td" data-rotulo="Capital / Porte"><CapitalPorte :receita="conta.receita" /></td>
+                        <td class="tbl-td" data-rotulo="Status">
+                            <StatusPill :tone="TONS_STATUS_CONTA[conta.status]" size="sm">{{ ROTULOS_STATUS_CONTA[conta.status] }}</StatusPill>
+                        </td>
+                        <td class="tbl-td" data-rotulo="Vendedor">
+                            <span v-if="conta.vendedor" class="tbl-main sm:max-w-[150px]" :title="conta.vendedor">{{ nomeCurto(conta.vendedor) }}</span>
+                            <span v-else class="text-gray-400" :title="conta.tipo === 'lead' ? 'Lead sem dono: só admin e diretor o veem' : null">—</span>
+                        </td>
+                        <td class="tbl-td text-gray-400" data-rotulo="Observação">—</td>
+                        <td class="tbl-td" data-rotulo="Última compra">{{ conta.tipo === 'cliente' ? formatDataCurta(conta.ultimaCompra) : '—' }}</td>
+                        <td class="tbl-td tbl-td-oculto" />
+                    </tr>
+
+                    <tr v-else class="tbl-row cursor-pointer" @click="alternar(conta)">
                         <td class="tbl-td tbl-td-oculto">
                             <svg
                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -135,8 +182,20 @@ async function alternar(conta) {
                                     title="Vínculo sugerido pela carga da planilha — revisar em Editar"
                                 />
                             </span>
+                            <!--
+                                A rede casou com a busca por DENTRO (uma filial ou um lead dela) ou
+                                por um apelido: diz por quê, senão "OBA" trazendo FARTURA parece erro.
+                            -->
+                            <span
+                                v-if="conta.encontradoPor"
+                                class="tbl-sub font-medium text-amber-dark"
+                                :title="conta.encontradoPor.nomes.join('\n')"
+                            >
+                                {{ conta.encontradoPor.origem === 'apelido' ? 'também conhecida como' : 'encontrado' }}:
+                                {{ conta.encontradoPor.nomes.join(', ') }}<template v-if="conta.encontradoPor.total > conta.encontradoPor.nomes.length"> (+{{ conta.encontradoPor.total - conta.encontradoPor.nomes.length }})</template>
+                            </span>
                             <a
-                                v-if="conta.site"
+                                v-else-if="conta.site"
                                 :href="`https://${conta.site.replace(/^https?:\/\//, '')}`"
                                 target="_blank" rel="noopener"
                                 class="tbl-sub hover:text-teal hover:underline"
@@ -166,6 +225,8 @@ async function alternar(conta) {
                             >{{ formatInteiro(conta.clientes) }}</Link>
                             <span v-else class="text-gray-400">0</span>
                         </td>
+                        <!-- A rede não tem um CNPJ só: o capital fica nas linhas dos clientes. -->
+                        <td class="tbl-td text-gray-400" data-rotulo="Capital / Porte">—</td>
                         <td class="tbl-td" data-rotulo="Status">
                             <StatusPill :tone="TONS_STATUS_CONTA[conta.status]" size="sm">
                                 {{ ROTULOS_STATUS_CONTA[conta.status] ?? conta.status }}
@@ -244,8 +305,8 @@ async function alternar(conta) {
                         </td>
                     </tr>
 
-                    <tr v-if="expandida === conta.id">
-                        <td colspan="10" class="tbl-td tbl-td-expansao bg-gray-50/60">
+                    <tr v-if="ehRede(conta) && expandida === conta.id">
+                        <td colspan="11" class="tbl-td tbl-td-expansao bg-gray-50/60">
                             <p v-if="carregando === conta.id" class="py-3 text-xs text-gray-400">Carregando clientes…</p>
                             <p v-else-if="erro === conta.id" class="py-3 text-xs text-red-700">Não foi possível carregar os clientes.</p>
                             <p v-else-if="! conta.vinculos.length" class="py-3 text-xs text-gray-500">
@@ -273,9 +334,9 @@ async function alternar(conta) {
                                                 </tr>
                                             </thead>
                                             <tbody class="tbl-body">
-                                                <tr v-for="c in clientesPorConta[conta.id].clientes" :key="c.codCliente" class="tbl-itens-row">
+                                                <tr v-for="c in clientesPorConta[conta.id].clientes" :key="c.codCliente" class="tbl-itens-row" :class="c.casaBusca ? 'bg-amber/10' : ''">
                                                     <td class="tbl-itens-td">
-                                                        <Link :href="route('carteira.detalhes', c.id)" class="font-medium text-teal hover:underline" :title="c.razaoSocial">
+                                                        <Link :href="route('carteira.detalhes', c.id)" class="font-medium text-teal hover:underline" title="Abrir a ficha do cliente">
                                                             {{ c.nome }}
                                                         </Link>
                                                     </td>
@@ -285,7 +346,14 @@ async function alternar(conta) {
                                                     </td>
                                                     <td class="tbl-itens-td">{{ c.grupo || '—' }}</td>
                                                     <td class="tbl-itens-td">{{ c.vendedor || '—' }}</td>
-                                                    <td class="tbl-itens-td tabular-nums">{{ c.lojas }}</td>
+                                                    <!-- As lojas DESTE cliente nesta rede, por filial na Carteira (mesmo total). -->
+                                                    <td class="tbl-itens-td tabular-nums">
+                                                        <Link
+                                                            :href="route('carteira.index', { conta_alvo: conta.id, busca: c.codCliente, agrupar: 0 })"
+                                                            class="font-semibold text-teal hover:underline"
+                                                            title="Abrir estas lojas na Carteira"
+                                                        >{{ formatInteiro(c.lojas) }}</Link>
+                                                    </td>
                                                     <td class="tbl-itens-td">{{ formatDataCurta(c.ultimaCompra) }}</td>
                                                     <td class="tbl-itens-td">
                                                         <StatusPill :tone="TONS_STATUS_CARTEIRA[c.status]" size="sm">
@@ -311,20 +379,20 @@ async function alternar(conta) {
                     </tr>
                 </template>
             </tbody>
-            <tfoot v-if="contas.length">
+            <tfoot v-if="subtotalRedes && subtotalRedes.redes">
                 <!-- Mesmo desenho da linha de totais do /metas; o `tfoot` entra no reflow de cartão. -->
                 <tr class="divide-x divide-gray-200 border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-800">
                     <td class="tbl-td tbl-td-oculto" />
                     <td class="tbl-td tbl-td-titulo text-gray-800">
-                        Subtotal
-                        <span class="tbl-sub font-normal">{{ subtotal.contas }} {{ subtotal.contas === 1 ? 'conta' : 'contas' }}</span>
+                        Subtotal das redes
+                        <span class="tbl-sub font-normal">{{ subtotalRedes.redes }} {{ subtotalRedes.redes === 1 ? 'rede' : 'redes' }}, em todas as páginas</span>
                     </td>
                     <td class="tbl-td tbl-td-oculto" />
                     <td class="tbl-td tabular-nums text-gray-800" data-rotulo="Filiais">
-                        {{ formatInteiro(subtotal.filiais) }}
+                        {{ formatInteiro(subtotalRedes.filiais) }}
                     </td>
-                    <td class="tbl-td tabular-nums text-gray-800" data-rotulo="Clientes">{{ formatInteiro(subtotal.clientes) }}</td>
-                    <td class="tbl-td tbl-td-oculto" colspan="5" />
+                    <td class="tbl-td tabular-nums text-gray-800" data-rotulo="Clientes">{{ formatInteiro(subtotalRedes.clientes) }}</td>
+                    <td class="tbl-td tbl-td-oculto" colspan="6" />
                 </tr>
             </tfoot>
         </table>

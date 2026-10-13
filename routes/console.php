@@ -73,6 +73,18 @@ Schedule::job(new AquecerCacheDashboardJob)
     ->name('aquecer-cache-dashboard');
 
 /*
+ * Lista de clientes e leads por segmento da Visão Diretor (`visao_diretor_universo`).
+ * Também roda no fim do `totvs:atualizar` e do `totvs:import-leads`; o agendamento de hora
+ * em hora cobre o que muda entre uma importação e outra (lead criado à mão, excluído,
+ * reclassificado pela Receita). Reconstrução inteira em poucos segundos, numa transação.
+ */
+Schedule::command('visao-diretor:reconstruir-universo')
+    ->hourlyAt(50)
+    ->onOneServer()
+    ->withoutOverlapping(30)
+    ->name('visao-diretor-universo');
+
+/*
  * Publica no CloudWatch os números que só a aplicação conhece — profundidade da fila,
  * idade do último aquecimento e jobs falhados.
  *

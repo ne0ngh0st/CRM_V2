@@ -76,8 +76,14 @@ class ClientesDaConta
      * Carteira — que filtra com `OR` e a conta uma vez só.
      *
      * Traz junto as colunas que a agregação usa, para ela não precisar voltar a `clientes`.
+     *
+     * Com `$contas`, só os pares dessas contas — o filtro entra DENTRO de cada lado do
+     * UNION (filtrar por fora calcularia o UNION inteiro antes de descartar). É o que deixa
+     * a tabela de um segmento pagar só as redes dele.
+     *
+     * @param  list<int>|null  $contas
      */
-    public function paresDeTodasAsContas(): QueryBuilder
+    public function paresDeTodasAsContas(?array $contas = null): QueryBuilder
     {
         $colunas = [
             'v.conta_id',
@@ -96,6 +102,11 @@ class ClientesDaConta
             ->join('clientes as c', 'c.cod_cliente', '=', 'v.codigo')
             ->where('v.tipo', ContaEstrategicaVinculo::TIPO_CLIENTE)
             ->select($colunas);
+
+        if ($contas !== null) {
+            $porGrupo->whereIn('v.conta_id', $contas ?: [0]);
+            $porCodigo->whereIn('v.conta_id', $contas ?: [0]);
+        }
 
         return $porGrupo->union($porCodigo);
     }
