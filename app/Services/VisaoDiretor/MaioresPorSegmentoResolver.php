@@ -368,7 +368,7 @@ class MaioresPorSegmentoResolver
             'inativo' => $status->get('inativo', 0),
             'lead' => $status->get('lead', 0),
             // Filiais da rede no CRM (cliente + loja) — o número que a tela mostra desde
-            // 2026-10-13. O de mercado (digitado) continua ao lado, como referência.
+            // 2026-10-13. O de mercado (digitado) não aparece mais na tela, só no Excel.
             'filiais' => (int) $contas->sum('lojas'),
             'filiaisMercado' => (int) $contas->sum('filiaisMercado'),
             'clientes' => (int) $contas->sum('clientes'),
