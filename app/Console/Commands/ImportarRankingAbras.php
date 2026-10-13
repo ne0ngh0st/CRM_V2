@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\ContaEstrategica;
 use App\Models\ContaEstrategicaVinculo;
+use App\Models\Lead;
 use App\Models\Segmento;
 use App\Services\VisaoDiretor\ClientesDaConta;
 use App\Services\VisaoDiretor\ContaDoLead;
@@ -51,7 +52,8 @@ class ImportarRankingAbras extends Command
 {
     protected $signature = 'diretor:importar-ranking-abras
         {--arquivo=database/data/visao-diretor/ranking-abras-2026.json : JSON com o ranking}
-        {--limite=200 : quantas posições do ranking viram conta}
+        {--limite=0 : quantas posições do ranking viram conta (0 = todas)}
+        {--detalhe : lista, por rede, os clientes ligados e a UF deles (homônimo em outra UF aparece marcado)}
         {--dry-run : faz tudo numa transação e desfaz no fim (mostra o relatório sem gravar)}';
 
     protected $description = 'Contas da aba Supermercadista (Visão Diretor) a partir do ranking da ABRAS';
@@ -59,7 +61,7 @@ class ImportarRankingAbras extends Command
     public function handle(SugestaoDeVinculo $nomes, ContaDoLead $contaDoLead, VinculoPorRazaoSocial $porRazao, ClientesDaConta $clientesDaConta): int
     {
         $arquivo = base_path((string) $this->option('arquivo'));
-        $limite = max(1, (int) $this->option('limite'));
+        $limite = (int) $this->option('limite');
         $dryRun = (bool) $this->option('dry-run');
 
         if (! is_file($arquivo)) {
@@ -70,7 +72,7 @@ class ImportarRankingAbras extends Command
 
         $ranking = collect(json_decode((string) file_get_contents($arquivo), true)['ranking'] ?? [])
             ->sortBy('posicao')
-            ->take($limite)
+            ->when($limite > 0, fn ($r) => $r->take($limite))
             ->values();
 
         $segmento = Segmento::where('codigo', Segmento::CODIGO_SUPERMERCADISTA)->first();
@@ -144,6 +146,8 @@ class ImportarRankingAbras extends Command
             $pelaRazao = 0;
             $codigosPelaRazao = 0;
             $limpas = 0;
+            $ligados = []; // conta_id → códigos, para o --detalhe
+            $homonimos = [];
 
             foreach ($doRanking as $id => $r) {
                 $conta = ContaEstrategica::with('vinculos')->find($id);
@@ -152,7 +156,11 @@ class ImportarRankingAbras extends Command
                     continue;
                 }
 
-                $codigos = $porRazao->clientes([$r['razao_social'], ...($r['razoes'] ?? [])], $catalogo);
+                $razoes = [$r['razao_social'], ...($r['razoes'] ?? [])];
+                $codigos = $porRazao->clientes($razoes, $catalogo, $r['uf'] ?? null);
+                if (count($codigos) < count($porRazao->clientes($razoes, $catalogo))) {
+                    $homonimos[] = "#{$r['posicao']} {$r['nome']}";
+                }
 
                 if ($codigos === []) {
                     // A sugestão que houver veio do nome de marca: sem razão social, sai.
@@ -171,17 +179,43 @@ class ImportarRankingAbras extends Command
                 ], $codigos));
                 $pelaRazao++;
                 $codigosPelaRazao += count($codigos);
+                $ligados[$id] = $codigos;
             }
 
             $this->newLine();
             $this->info("Clientes pela razão social + CNPJ raiz: {$pelaRazao} redes · {$codigosPelaRazao} códigos");
+            if ($homonimos !== []) {
+                $this->warn('Razão social igual em outro estado, descartada como homônimo: '.count($homonimos).' redes');
+                foreach ($homonimos as $l) {
+                    $this->line("  - {$l}");
+                }
+            }
             if ($limpas > 0) {
                 $this->warn("Sugestões por nome removidas (razão social não casou): {$limpas} redes");
             }
 
+            if ($this->option('detalhe')) {
+                $this->detalhar($ligados, $doRanking);
+            }
+
+            $jaSugeridos = DB::table('leads')->where('conta_vinculo', Lead::CONTA_SUGERIDA)->pluck('id');
             $leads = $contaDoLead->sugerirParaLeadsSemConta();
             $this->newLine();
             $this->info("Leads sugeridos para uma rede: {$leads['sugeridos']}".($leads['ambiguos'] ? " · ambíguos: {$leads['ambiguos']}" : ''));
+
+            if ($this->option('detalhe')) {
+                // Dentro da transação: no dry-run, as sugestões existem até o rollback.
+                $novas = DB::table('leads')
+                    ->join('contas_estrategicas as c', 'c.id', '=', 'leads.conta_estrategica_id')
+                    ->where('leads.conta_vinculo', Lead::CONTA_SUGERIDA)
+                    ->whereNotIn('leads.id', $jaSugeridos)
+                    ->orderBy('c.ordem')
+                    ->get(['c.ordem', 'c.nome as conta', 'c.uf', 'leads.razao_social', 'leads.estado']);
+                foreach ($novas as $n) {
+                    $this->line(sprintf('  #%d %s (%s) ← %s [%s]%s', $n->ordem, $n->conta, $n->uf, $n->razao_social, $n->estado,
+                        $n->uf && $n->estado && $n->uf !== $n->estado ? '  ⚠ outra UF' : ''));
+                }
+            }
 
             $semVinculo = ContaEstrategica::where('segmento_id', $segmento->id)->whereDoesntHave('vinculos')->orderBy('ordem')->pluck('nome', 'ordem');
             $this->newLine();
@@ -205,5 +239,41 @@ class ImportarRankingAbras extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Por rede, os clientes que a razão social ligou e as UFs das filiais deles. A rede da
+     * cauda costuma ser UMA loja, e razão social igual em outro estado é homônimo
+     * ("LEMOS SUPERMERCADO" PE × RN) — por isso a marcação quando nenhuma filial está na UF
+     * da sede publicada pela ABRAS.
+     *
+     * @param  array<int, list<string>>  $ligados  conta_id → códigos
+     * @param  array<int, array>  $doRanking  conta_id → linha do ranking
+     */
+    private function detalhar(array $ligados, array $doRanking): void
+    {
+        $clientes = DB::table('clientes')
+            ->whereIn('cod_cliente', array_merge(...array_values($ligados ?: [[]])))
+            ->get(['cod_cliente', 'razao_social', 'estado'])
+            ->groupBy('cod_cliente');
+
+        $foraDaUf = 0;
+        $this->newLine();
+        $this->info('Detalhe — clientes ligados pela razão social:');
+
+        foreach ($ligados as $id => $codigos) {
+            $r = $doRanking[$id];
+            $ufs = collect($codigos)->flatMap(fn (string $c) => $clientes->get($c, collect())->pluck('estado'))->filter()->unique();
+            $alerta = $ufs->doesntContain($r['uf']);
+            $foraDaUf += $alerta ? 1 : 0;
+
+            $this->line(sprintf('  #%d %s (%s)%s', $r['posicao'], $r['nome'], $r['uf'], $alerta ? '  ⚠ nenhuma filial na UF da sede' : ''));
+            foreach ($codigos as $c) {
+                $filiais = $clientes->get($c, collect());
+                $this->line(sprintf('      %s %s [%s] %d filial(is)', $c, $filiais->first()?->razao_social, $filiais->pluck('estado')->filter()->unique()->sort()->implode(','), $filiais->count()));
+            }
+        }
+
+        $this->warn("Redes sem filial na UF da sede: {$foraDaUf}");
     }
 }

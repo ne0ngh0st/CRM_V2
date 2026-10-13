@@ -172,7 +172,7 @@ class UniversoDoSegmento
 
         $todas = $this->redesDoSegmento($segmento);
         $redes = $this->filtrarBuscaEUf($todas, $busca, $uf);
-        $base = $this->base($segmento, $busca, $uf, $todas->pluck('id')->all());
+        $base = $this->base($segmento, $busca, $uf, $this->comAlguemDentro($todas));
 
         /*
          * As contagens IGNORAM o filtro de status (os tiles são o próprio filtro: um filtro
@@ -249,7 +249,7 @@ class UniversoDoSegmento
 
         $todas = $this->redesDoSegmento($segmento);
         $redes = $this->filtrarBuscaEUf($todas, $busca, $uf);
-        $query = $this->base($segmento, $busca, $uf, $todas->pluck('id')->all());
+        $query = $this->base($segmento, $busca, $uf, $this->comAlguemDentro($todas));
         $this->aplicarStatus($query, $status);
 
         $linhas = $this->filtrarRedes($redes, $status)->map(fn (array $r) => $this->linhaDeRede($r))->all();
@@ -273,6 +273,18 @@ class UniversoDoSegmento
      *
      * @return Collection<int, array>
      */
+    /**
+     * Só as redes que recolhem alguém (cliente ou lead ligado). Com o ranking ABRAS
+     * completo, 667 das 1.055 redes do Supermercadista não têm ninguém dentro, e mandá-las
+     * para `base()` só engordava a consulta de pares (dev, 13/10).
+     *
+     * @return list<int>
+     */
+    private function comAlguemDentro(Collection $redes): array
+    {
+        return $redes->filter(fn (array $r) => $r['clientes'] > 0 || $r['leads'] !== [])->pluck('id')->values()->all();
+    }
+
     private function redesDoSegmento(string $segmento): Collection
     {
         return $this->redesResolver->linhas($segmento)->values();

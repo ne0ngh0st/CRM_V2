@@ -32,6 +32,12 @@ use Illuminate\Support\Str;
  *    ("SUPERMERCADO BAKLIZI LTDA. - FILIAL", endereço no lugar do nome).
  * 4. **Código do cliente só se a MAIORIA das filiais dele está nessas raízes** — mesmo
  *    cuidado do `VinculoPorCliente`: um código que mistura empresas não entra por uma loja.
+ * 5. **Homônimo em outro estado não entra** (2026-10-13, ranking completo): com a UF da
+ *    sede, a raiz que não tem filial nessa UF E está num estado só é descartada. A cauda
+ *    do ranking é de loja única, e razão social igual se repete pelo país — "SUPERMERCADO
+ *    REAL" SC casava um mercado de MT, e o mesmo "SUPERMERCADO RODRIGUES" do RN era ligado
+ *    às redes de SC e de GO. Raiz em vários estados fica (Cencosud: sede SP, nossas filiais
+ *    em seis outros estados).
  */
 class VinculoPorRazaoSocial
 {
@@ -50,7 +56,7 @@ class VinculoPorRazaoSocial
     /**
      * Os clientes em memória, UMA vez por rodada.
      *
-     * @return array{porRazao: array<string, array<string, true>>, cortadas: array<string, array<string, true>>, filiaisPorCodigo: array<string, array<string, int>>, totalPorCodigo: array<string, int>}
+     * @return array{porRazao: array<string, array<string, true>>, cortadas: array<string, array<string, true>>, filiaisPorCodigo: array<string, array<string, int>>, totalPorCodigo: array<string, int>, ufsPorRaiz: array<string, array<string, true>>}
      */
     public function catalogo(): array
     {
@@ -59,9 +65,10 @@ class VinculoPorRazaoSocial
         $filiaisPorCodigo = [];
         $totalPorCodigo = [];
         $porPrimeira = [];
+        $ufsPorRaiz = [];
 
         $linhas = DB::table('clientes')
-            ->select('cod_cliente', 'razao_social', 'cnpj_digitos')
+            ->select('cod_cliente', 'razao_social', 'cnpj_digitos', 'estado')
             ->orderBy('id')
             ->cursor();
 
@@ -75,6 +82,9 @@ class VinculoPorRazaoSocial
 
             $raiz = substr($c->cnpj_digitos, 0, 8);
             $filiaisPorCodigo[$codigo][$raiz] = ($filiaisPorCodigo[$codigo][$raiz] ?? 0) + 1;
+            if (filled($c->estado)) {
+                $ufsPorRaiz[$raiz][strtoupper((string) $c->estado)] = true;
+            }
 
             $chave = self::normalizar((string) $c->razao_social);
             if ($chave === '') {
@@ -88,14 +98,15 @@ class VinculoPorRazaoSocial
             }
         }
 
-        return compact('porRazao', 'porPrimeira', 'cortadas', 'filiaisPorCodigo', 'totalPorCodigo');
+        return compact('porRazao', 'porPrimeira', 'cortadas', 'filiaisPorCodigo', 'totalPorCodigo', 'ufsPorRaiz');
     }
 
     /**
      * @param  list<string>  $razoes  razões sociais da rede (a da ABRAS e as conhecidas)
+     * @param  ?string  $uf  UF da sede; com ela, vale a regra 5 (homônimo em outro estado)
      * @return list<string> códigos de cliente da rede
      */
-    public function clientes(array $razoes, array $catalogo): array
+    public function clientes(array $razoes, array $catalogo, ?string $uf = null): array
     {
         $raizes = [];
 
@@ -118,6 +129,15 @@ class VinculoPorRazaoSocial
                     $raizes += $dela;
                 }
             }
+        }
+
+        if (filled($uf)) {
+            $uf = strtoupper($uf);
+            $raizes = array_filter($raizes, function ($_, $raiz) use ($catalogo, $uf) {
+                $ufs = $catalogo['ufsPorRaiz'][$raiz] ?? [];
+
+                return isset($ufs[$uf]) || count($ufs) >= 2;
+            }, ARRAY_FILTER_USE_BOTH);
         }
 
         if ($raizes === []) {

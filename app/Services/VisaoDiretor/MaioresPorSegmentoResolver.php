@@ -153,6 +153,13 @@ class MaioresPorSegmentoResolver
              * volta a oferecer "Gerar lead"). Duas consultas para o conjunto, não por conta.
              */
             ->with(['leads' => fn ($q) => $q->visivel()->orderBy('id')->select('id', 'conta_estrategica_id', 'user_id', 'cod_vendedor', 'etapa', 'nome'), 'leads.user:id,name,display_name'])
+            /*
+             * Ordem do ranking/planilha, no banco. ⚠️ Não trocar por
+             * `->sortBy([['ordem', 'asc'], ['id', 'asc']])` na Collection: a forma multi-coluna
+             * chama data_get() a cada comparação e custou 185 ms com as 1.055 contas do ranking
+             * ABRAS completo (dev, 13/10) — mais que todas as consultas da página juntas.
+             */
+            ->orderBy('ordem')->orderBy('id')
             ->get();
 
         if ($contas->isEmpty()) {
@@ -206,7 +213,6 @@ class MaioresPorSegmentoResolver
         $posicoes = [];
 
         return $contas
-            ->sortBy([['ordem', 'asc'], ['id', 'asc']])
             ->map(function (ContaEstrategica $conta) use ($porVendedor, $porConta, $vinculos, $nomes, $hoje, &$posicoes) {
                 $posicoes[$conta->segmento_id] = ($posicoes[$conta->segmento_id] ?? 0) + 1;
 
