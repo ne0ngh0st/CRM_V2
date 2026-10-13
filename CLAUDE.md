@@ -2923,6 +2923,17 @@ LEIA-ME ficam em `Leads/_MODELO/`. Subpasta não é lida (o glob é `Leads/*.csv
   (ex.: uma loja da Drogaria São Paulo que ainda não é cliente) entra como lead de quem a
   planilha indicar.
 - Lead que JÁ estava no CRM e virou cliente não é atualizado pelo CSV nem ligado a rede.
+- **Um lead por EMPRESA (2026-10-13, decisão do Tony).** A base antiga cadastrou cada loja
+  como lead (Festval: 29) e a mesma empresa aparecia repetida na Visão Diretor e no funil.
+  `App\Services\Leads\ConsolidacaoDeFiliais` agrupa pela raiz do CNPJ (calculada, Regra nº 3)
+  e deixa um: ligado a rede → etapa trabalhada → origem escolhida (prospecção/manual/site)
+  → com dono → matriz `/0001` → mais antigo. Os outros passam o histórico (as tabelas da
+  `FusaoDeLeads`) e viram `excluido`, **sem** o carimbo da Receita — então nem a Receita nem o
+  import (que casa pelo CNPJ inclusive com excluído e mantém o status) os trazem de volta.
+  Roda no fim de todo `totvs:import-leads` e por `leads:consolidar-filiais [--dry-run]`.
+  ⚠️ Consequência: planilha de prospecção com várias lojas de uma rede vira UM lead.
+  Cliente continua contado por código do TOTVS (bate com a Carteira); a filial de empresa
+  que já é cliente continua como lead próprio.
 
 ### Situação na Receita evidenciada na Carteira — 2026-10-01
 

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Lead;
 use App\Models\LeadImportacao;
+use App\Services\Leads\ConsolidacaoDeFiliais;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\Normalizador;
 use App\Services\VisaoDiretor\ContaDoLead;
@@ -335,6 +336,15 @@ class ImportLeadsTotvs extends Command
             'voltaram' => $sincronia['reativados'],
             'contas' => $contas,
         ]]);
+
+        /*
+         * Um lead por empresa: uma planilha com várias filiais de uma empresa (ou filial nova
+         * de uma empresa que já tinha lead) vira um lead só. Regras em `ConsolidacaoDeFiliais`.
+         */
+        $consolidadas = $dryRun ? ['excluidos' => 0] : app(ConsolidacaoDeFiliais::class)->consolidar();
+        if ($consolidadas['excluidos'] > 0) {
+            $this->line(sprintf('  filiais consolidadas: %d leads em %d empresas', $consolidadas['excluidos'], $consolidadas['empresas']));
+        }
 
         /*
          * A lista de clientes e leads da Visão Diretor mostra os leads novos já, em vez de
