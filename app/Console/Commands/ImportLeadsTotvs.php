@@ -269,16 +269,15 @@ class ImportLeadsTotvs extends Command
 
         $sincronia = ['excluidos' => [], 'reativados' => 0];
 
-        if ($dryRun) {
-            // Lead novo ainda não tem id: um negativo por CNPJ basta para contar as ligações.
-            $ids = $existentes;
-            $provisorio = 0;
-            foreach (array_keys($novos) as $cnpj) {
-                $ids[$cnpj] = --$provisorio;
-            }
-            $contas = app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids), true, criarPelaMarca: true);
-            $this->relatarContas($contas);
+        /*
+         * ⚠️ Desde 2026-10-14 o import NÃO liga lead a rede nem cria conta na Visão Diretor
+         * (a página passou a ser só clientes e leads — decisão do Tony). As colunas `rede` e
+         * `filiais_rede` do CSV são lidas e ignoradas; saem com o código das redes.
+         */
+        $contas = [];
 
+        if ($dryRun) {
+            $ids = $existentes;
             $this->info('[dry-run] nada foi escrito.');
         } else {
             DB::transaction(function () use ($novos, $adotados, $existentes, $chunk) {
@@ -289,8 +288,6 @@ class ImportLeadsTotvs extends Command
             $this->info('Leads gravados: '.number_format(count($novos) + count($adotados), 0, ',', '.'));
 
             $ids = $this->leadsPorCnpj(fn ($q) => $q->whereIn('origem', Lead::ORIGENS_IMPORTADAS));
-            $contas = app(ContaDoLead::class)->vincularDaProspeccao($this->itensParaConta($novos + $adotados, $ids), criarPelaMarca: true);
-            $this->relatarContas($contas);
 
             $sincronia = $situacao->sincronizarLeads();
             if ($sincronia['excluidos'] !== []) {

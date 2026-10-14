@@ -2892,6 +2892,9 @@ LEIA-ME ficam em `Leads/_MODELO/`. Subpasta não é lida (o glob é `Leads/*.csv
   `Lead::ORIGENS_IMPORTADAS` (as duas) é o que a Receita fiscaliza e o import adota pelo
   CNPJ; lead `sistema` que reaparece num CSV vira `prospeccao`. CNPJ que já é lead manual
   ou do site é ignorado. No BI sai como `PROSPECCAO`.
+- ⚠️ **DESLIGADO em 2026-10-14**: o import não liga lead a rede nem cria conta (a Visão
+  Diretor passou a ser só clientes e leads — ver "Visão Diretor sem redes" abaixo). As
+  colunas `rede`/`filiais_rede` são lidas e ignoradas. O que segue é histórico.
 - **Mescla com a Maiores por Segmento** (`ContaDoLead`), só nos 6 segmentos das abas:
   coluna `rede` que bate liga o lead à conta; que não bate CRIA a conta no fim da aba;
   vazia vira SUGESTÃO pelo nome (mesma heurística de `SugestaoDeVinculo`), confirmada ou
@@ -3050,7 +3053,23 @@ não alerta. Célula em `Components/Receita/CapitalPorte.vue`.
   (CNPJ inteiro em vez da raiz), carga sem Empresas apagando capital, cartão sem capital
   apagando o da carga, código no lugar do rótulo.
 
+### Visão Diretor sem redes: uma linha por empresa — 2026-10-14
+
+A Maiores por Segmento é para o **dono da empresa** ver onde atuamos, deixamos de atuar e
+nunca atuamos. Redes, contas e vínculos saíram da tela (Tony: "confusos e desnecessários").
+Detalhe em `docs/visao-diretor.md` §2, "Redesenho de 2026-10-14".
+
+- Tabela por segmento: **uma linha por EMPRESA** (raiz do CNPJ calculada só dentro de
+  `UniversoDoSegmento::reconstruir()`, nunca coluna — Regra nº 3) e por lead. Colunas:
+  Nome (fantasia = a marca; razão social e CNPJ embaixo), Grupo, UF, Filiais, Status, Vendedor,
+  Ações (Google Maps com o endereço da Receita e cartão CNPJ). Capital social só ordena.
+- Lead de empresa que já é cliente (mesma raiz) não aparece.
+- ⚠️ **Fase 2 pendente**: apagar o código das redes e dropar as tabelas depois do OK do
+  dono. Até lá as rotas de escrita e os serviços existem sem uso pela tela.
+
 ### Aba Supermercadista na Maiores por Segmento — 2026-10-08
+
+> ⚠️ Histórico: desde 2026-10-14 a tela não mostra redes (seção acima).
 
 Primeira aba da Visão Diretor → Maiores por Segmento. Detalhe em `docs/visao-diretor.md`
 ("Aba Supermercadista"); aqui fica o que muda decisão.

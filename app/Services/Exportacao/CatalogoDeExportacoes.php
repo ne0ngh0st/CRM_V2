@@ -24,7 +24,7 @@ use App\Http\Controllers\TabelaPrecoController;
 use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
-use App\Services\VisaoDiretor\MaioresPorSegmentoResolver;
+use App\Services\Segmentos\EspecialistasDoSegmento;
 use App\Services\VisaoDiretor\UniversoDoSegmento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -215,19 +215,14 @@ class CatalogoDeExportacoes
     {
         abort_unless(Gate::forUser($user)->allows('ver-visao-diretor'), 403);
 
-        $dados = app(MaioresPorSegmentoResolver::class)->resolver([
-            'segmento' => (string) $request->string('segmento'),
-            'status' => (string) $request->string('status'),
-            'uf' => (string) $request->string('uf'),
-            'busca' => (string) $request->string('busca'),
-        ]);
-
-        return new PlanoDeExportacao(
-            new MaioresPorSegmentoExport($dados['segmentos']),
-            'maiores-por-segmento',
-            // Linhas da planilha = contas das abas. Não `kpis.contas`: os KPIs ignoram o filtro de status.
-            collect($dados['segmentos'])->sum(fn (array $s) => count($s['contas'])),
+        // O Resumo da tela: uma linha por segmento, com o especialista.
+        $especialistas = app(EspecialistasDoSegmento::class)->porCodigo();
+        $segmentos = array_map(
+            fn (array $s) => [...$s, 'especialista' => $especialistas[$s['codigo']] ?? null],
+            app(UniversoDoSegmento::class)->resumo(),
         );
+
+        return new PlanoDeExportacao(new MaioresPorSegmentoExport($segmentos), 'maiores-por-segmento', count($segmentos));
     }
 
     /**

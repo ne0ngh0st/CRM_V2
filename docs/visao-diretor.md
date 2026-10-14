@@ -53,6 +53,53 @@ definição. O filtro:
 
 `/visao-diretor/maiores-por-segmento`
 
+### ⚠️ Redesenho de 2026-10-14 — o que vale HOJE (o resto desta seção é histórico)
+
+Pedido do Tony: a página é para o **dono da empresa** ver onde a Autopel atua, deixou de
+atuar e nunca atuou, e redes/contas/vínculos confundiam mais do que explicavam. Decisões
+dele (não reabrir sem ele pedir):
+
+- **Sem redes na tela.** Nada de conta-alvo, vínculo, sugestão, "vínculo suspeito", linha
+  expansível, Nova conta, Editar, Observação, Gerar lead.
+- **Uma linha por EMPRESA** = raiz do CNPJ, calculada dentro de `reconstruir()`
+  (`UniversoDoSegmento::EMPRESA`, nunca coluna — Regra de ouro nº 3). Cliente com CPF ou
+  sem CNPJ: por código. Motivo: "pesquisar Carrefour traz duas páginas de Carrefour" — a
+  mesma empresa tinha 26 códigos no TOTVS.
+- **Colunas:** Nome (fantasia em cima; razão social e CNPJ da matriz embaixo) · Grupo
+  (do TOTVS, o da matriz, lido na hora; CLIENTES DIVERSOS 9998 sai "—") · UF ·
+  Filiais (do segmento; lead "—") · Status (Ativo / Perdendo / A trabalhar / Lead) ·
+  Vendedor · Ações (mapa e cartão CNPJ). **Capital social sai da tela** mas continua
+  ordenando a lista. Última compra também saiu.
+- **Nome fantasia = a marca**: trecho antes do primeiro "-" ou "(" do fantasia de cada
+  filial, o mais frequente na empresa ("ATACADAO - LJ 1" → ATACADAO). Marcadores do
+  cadastro (ENTREGA, ALMOX, MATRIZ, CNPJ BAIXADO, LOJA 01…) não contam
+  (`FANTASIA_DE_CADASTRO`); se nenhum se repete, fica sem fantasia e a razão social sobe.
+- **Lead de empresa que já é cliente (mesma raiz) não aparece** — a empresa já está na
+  linha do cliente.
+- **Botões:** cartão CNPJ (`carteira.cartaoCnpj` pela matriz, ou `leads.cartaoCnpj`) e
+  Google Maps com o endereço **da Receita**. O endereço não está na base mensal, só no
+  cartão: o botão busca o cartão (30 dias de cache) e monta a URL com `urlDoMapa()`. A aba
+  é aberta antes do `fetch`, senão o bloqueador de pop-up a barra.
+- **Resumo:** uma linha por segmento (Ativos, Perdendo, A trabalhar, Leads), do maior para
+  o menor — é também a ordem das abas. Os números são os tiles de cada aba (teste).
+- **Invariantes testadas** (`UniversoDoSegmentoTest`): filiais de cada linha == Carteira
+  `?busca=<raiz>&segmento=X&agrupar=0` (o link da célula); soma das filiais da aba ==
+  Carteira do segmento por filial; tile == lista filtrada; Resumo == tiles.
+  ⚠️ O número de CLIENTES aqui (empresas) não é o da Carteira agrupada (códigos): unidades
+  diferentes, de propósito.
+- **O import de leads parou de criar/ligar conta** (`totvs:import-leads`), e a carga da
+  Receita e o `leads:classificar-segmento` pararam de sugerir rede. As colunas `rede` e
+  `filiais_rede` do CSV são lidas e ignoradas.
+- **Fase 2 (depois do OK do dono):** apagar o código das redes (`ContaEstrategica*`,
+  `ClientesDaConta`, `ContaDoLead`, `LeadDaConta`, `Vinculo*`, `BuscaNasRedes`,
+  `SugestaoDeVinculo`, `MaioresPorSegmentoResolver`, ranking ABRAS, rotas de escrita, os
+  componentes Vue sem uso, o filtro `?conta_alvo=` da Carteira e dos Leads) e dropar as
+  tabelas. Drop não tem volta — por isso ficou para depois.
+
+Medido no dev (14/10): tabela 44-54 ms, Resumo 110 ms, UFs 77 ms; reconstrução ~26 s
+(era ~14 s — o passo do fantasia por empresa). A busca segue em ~430 ms (a regex do
+`TermoDeBusca`, não mudou neste redesenho).
+
 Substitui a planilha `MAIORES POR SEGMENTO - CRM.xlsx`: as maiores redes do **mercado** em
 sete segmentos (Supermercadista, Drogarias, Rede de Lojas, Alimentação, Postos, Material de
 Construção, Estacionamentos), com o número de filiais que cada uma tem no Brasil. É o

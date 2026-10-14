@@ -13,12 +13,12 @@ use App\Models\Segmento;
 use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Vendedores\NomeVendedorResolver;
+use App\Services\Segmentos\EspecialistasDoSegmento;
 use App\Services\VisaoDiretor\BuscaDeVinculo;
 use App\Services\VisaoDiretor\BuscaNasRedes;
 use App\Services\VisaoDiretor\ClientesDaConta;
 use App\Services\VisaoDiretor\ContaDoLead;
 use App\Services\VisaoDiretor\LeadDaConta;
-use App\Services\VisaoDiretor\AbasDaPlanilha;
 use App\Services\VisaoDiretor\MaioresPorSegmentoResolver;
 use App\Services\VisaoDiretor\TermoDeBusca;
 use App\Services\VisaoDiretor\UniversoDoSegmento;
@@ -52,24 +52,34 @@ class MaioresPorSegmentoController extends Controller
     ) {
     }
 
-    public function index(Request $request, LeadDaConta $leadDaConta, ContaDoLead $contaDoLead, UniversoDoSegmento $universo): Response
+    /**
+     * Desde 2026-10-14 a tela é só clientes e leads por segmento (ver `UniversoDoSegmento`).
+     * Redes, contas e vínculos saíram da tela; as rotas de escrita delas ainda existem e
+     * saem junto com o código, depois que a diretoria aprovar a página nova.
+     */
+    public function index(Request $request, UniversoDoSegmento $universo, EspecialistasDoSegmento $especialistas): Response
     {
         $filtros = $this->filtros($request);
 
         return Inertia::render('VisaoDiretor/MaioresPorSegmento', [
-            // Uma aba por segmento: os sete com redes primeiro, na ordem da planilha.
-            'abas' => $this->abas($universo),
             /*
-             * A tabela do segmento aberto: redes, depois todos os clientes e leads, uma
-             * paginação só (decisão do Tony, 2026-10-13). Trocar de aba busca só esta prop.
-             * No Resumo, nada.
+             * Uma linha por segmento, do maior para o menor: é o Resumo E a ordem das abas.
+             * Uma varredura de `visao_diretor_universo`.
              */
+            'resumo' => function () use ($universo, $especialistas) {
+                $porCodigo = $especialistas->porCodigo();
+
+                return array_map(
+                    fn (array $s) => [...$s, 'especialista' => $porCodigo[$s['codigo']] ?? null],
+                    $universo->resumo(),
+                );
+            },
+            // A tabela do segmento aberto. No Resumo, nada. Trocar de aba busca só esta prop.
             'universo' => function () use ($filtros, $universo, $request) {
                 if ($filtros['segmento'] === '') {
                     return null;
                 }
 
-                // Os filtros do topo (status, UF, busca) valem para a tabela inteira.
                 $lista = $universo->lista($filtros['segmento'], [...$filtros, 'pagina' => max(1, $request->integer('pagina', 1))]);
                 $lista['linhas'] = $lista['linhas']
                     ->withPath(route('visao-diretor.maiores.index'))
@@ -78,19 +88,9 @@ class MaioresPorSegmentoController extends Controller
 
                 return $lista;
             },
-            /*
-             * Resumo (quadro por segmento, KPIs) e o cabeçalho de cada aba. As linhas que a
-             * tabela do segmento mostra vêm de `universo`.
-             */
-            // Closure: paginar ou filtrar a tabela (`only: universo`) não paga a agregação
-            // das ~580 contas de todos os segmentos (~470 ms em dev).
-            'dados' => fn () => $this->resolver->resolver([...$filtros, 'segmento' => '']),
+            'ufs' => fn () => $universo->ufs(),
+            'reconstruidoEm' => fn () => $universo->reconstruidoEm()?->toIso8601String(),
             'filtros' => $filtros,
-            // Quem pode receber o lead de uma conta-alvo (botão "Gerar lead").
-            'responsaveisLead' => $leadDaConta->responsaveis(),
-            // Leads da prospecção que o import achou parecidos com uma rede. Esperam decisão.
-            'sugestoesLeads' => $contaDoLead->sugestoesPendentes(),
-            'segmentosDisponiveis' => Segmento::query()->orderBy('nome')->get(['id', 'codigo', 'nome']),
         ]);
     }
 
@@ -299,27 +299,6 @@ class MaioresPorSegmentoController extends Controller
     }
 
     /**
-     * As abas da tela: as de `AbasDaPlanilha` (têm redes) na ordem dela, depois os demais
-     * segmentos do maior para o menor (clientes + leads). O tamanho só ordena: não vai para a
-     * tela, onde seria um terceiro número para a mesma coisa.
-     *
-     * @return list<array{id: int, codigo: string, nome: string}>
-     */
-    private function abas(UniversoDoSegmento $universo): array
-    {
-        $totais = $universo->totaisPorSegmento();
-        $daPlanilha = AbasDaPlanilha::codigos();
-
-        return Segmento::query()->get(['id', 'codigo', 'nome'])
-            ->sortBy(fn (Segmento $s) => in_array((string) $s->codigo, $daPlanilha, true)
-                ? sprintf('0-%02d', array_search((string) $s->codigo, $daPlanilha, true))
-                : sprintf('1-%09d', 999999999 - ($totais[(string) $s->codigo] ?? 0)))
-            ->map(fn (Segmento $s) => ['id' => $s->id, 'codigo' => (string) $s->codigo, 'nome' => $s->nome])
-            ->values()
-            ->all();
-    }
-
-    /**
      * @return array{segmento?: string, status?: string, uf?: string, busca?: string}
      */
     private function filtros(Request $request): array
@@ -331,7 +310,7 @@ class MaioresPorSegmentoController extends Controller
             // Segmento que não existe vira o Resumo, em vez de uma aba vazia sem nome.
             'segmento' => UniversoDoSegmento::segmentoValido($segmento) ? $segmento : '',
             // Whitelist: valor desconhecido vira "sem filtro" em vez de tela vazia.
-            'status' => array_key_exists($status, MaioresPorSegmentoResolver::FILTROS_STATUS) ? $status : '',
+            'status' => in_array($status, UniversoDoSegmento::STATUS, true) ? $status : '',
             'uf' => mb_strtoupper(substr((string) $request->string('uf'), 0, 2)),
             'busca' => trim((string) $request->string('busca')),
         ];

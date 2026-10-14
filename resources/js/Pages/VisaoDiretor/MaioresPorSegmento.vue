@@ -2,16 +2,13 @@
 /**
  * Visão Diretor → Maiores por Segmento.
  *
- * Substitui a planilha "MAIORES POR SEGMENTO - CRM.xlsx": as maiores redes do MERCADO em
- * cada segmento, e onde a Autopel está nelas. Uma aba por segmento, igual à planilha,
- * mais o Resumo (a aba DASHBOARD). Nome, UF, filiais e observação são digitados; status
- * e atendimento vêm do CRM (ver docs/visao-diretor.md). Clientes e vendedores levam a
- * uma lista viva da Carteira.
+ * Para o dono da empresa ver, por segmento, onde a Autopel atua (cliente ativo), deixou de
+ * atuar (perdendo / a trabalhar) e nunca atuou (lead). Redesenhada em 2026-10-14: redes,
+ * contas e vínculos saíram — a tabela é cliente e lead, o mesmo grão da Carteira (ver
+ * docs/visao-diretor.md e `UniversoDoSegmento`).
  *
- * Desde 2026-10-13 há uma aba para cada um dos 23 segmentos, e cada uma é UMA tabela
- * paginada: as redes primeiro (ordem do ranking), depois todos os clientes e leads que não
- * pertencem a nenhuma delas, por capital social. Vem do servidor (`universo`), só a do
- * segmento aberto; os filtros do topo valem para a tabela inteira.
+ * O Resumo é uma linha por segmento; cada aba é uma tabela paginada que vem do servidor
+ * (`universo`), só a do segmento aberto.
  */
 import { computed, reactive, ref } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -21,42 +18,23 @@ import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import FilterField from '@/Components/FilterField.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
-import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
-import ResumoSegmentosCard from '@/Components/VisaoDiretor/ResumoSegmentosCard.vue';
-import ContasSegmentoTabela from '@/Components/VisaoDiretor/ContasSegmentoTabela.vue';
 import Pagination from '@/Components/Pagination.vue';
-import SugestoesLeadsCard from '@/Components/VisaoDiretor/SugestoesLeadsCard.vue';
-import ContaEstrategicaModal from '@/Components/VisaoDiretor/ContaEstrategicaModal.vue';
-import GerarLeadContaModal from '@/Components/VisaoDiretor/GerarLeadContaModal.vue';
-import HistoricoObservacaoConta from '@/Components/VisaoDiretor/HistoricoObservacaoConta.vue';
-import ModalPadrao from '@/Components/ModalPadrao.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import SecondaryButton from '@/Components/SecondaryButton.vue';
+import ResumoSegmentosCard from '@/Components/VisaoDiretor/ResumoSegmentosCard.vue';
+import ClientesLeadsTabela from '@/Components/VisaoDiretor/ClientesLeadsTabela.vue';
 import EspecialistaSelo from '@/Components/Segmentos/EspecialistaSelo.vue';
-import { useConfirmacao } from '@/composables/useConfirmacao';
-import { ROTULOS_STATUS_CONTA, STATUS_CONTA } from '@/constants/visaoDiretor';
+import { ROTULOS_STATUS_CONTA } from '@/constants/visaoDiretor';
 import { contarFiltrosAtivos } from '@/utils/filtros';
 import { dataHora, formatInteiro } from '@/utils/formato';
+import { urlDoMapa } from '@/utils/mapas';
+import CartaoCnpjModal from '@/Components/Receita/CartaoCnpjModal.vue';
+import ModalPadrao from '@/Components/ModalPadrao.vue';
 
 const props = defineProps({
-    dados: { type: Object, required: true },
-    filtros: { type: Object, required: true },
-    segmentosDisponiveis: { type: Array, default: () => [] },
-    responsaveisLead: { type: Array, default: () => [] },
-    sugestoesLeads: { type: Array, default: () => [] },
-    abas: { type: Array, default: () => [] },
+    resumo: { type: Array, default: () => [] },
     universo: { type: Object, default: null },
-});
-
-/*
- * Na aba de um segmento, só as sugestões dele; no Resumo, todas. Recorte local, como a
- * troca de aba — o payload já traz tudo.
- */
-const sugestoesDaAba = computed(() => {
-    if (! filtros.segmento) return props.sugestoesLeads;
-    const nome = segmentoAberto.value?.nome;
-
-    return props.sugestoesLeads.filter((s) => s.segmento === nome);
+    ufs: { type: Array, default: () => [] },
+    reconstruidoEm: { type: String, default: null },
+    filtros: { type: Object, required: true },
 });
 
 const filtros = reactive({
@@ -66,184 +44,130 @@ const filtros = reactive({
     busca: props.filtros.busca || '',
 });
 
-const PROPS_DA_LISTA = ['dados', 'filtros', 'universo'];
-
-function queryDaPagina(segmento = filtros.segmento) {
+// Sem `pagina`: mudar de aba ou de filtro sempre volta para a primeira página.
+function queryDaPagina() {
     return {
-        segmento: segmento || undefined,
+        segmento: filtros.segmento || undefined,
         status: filtros.status || undefined,
         uf: filtros.uf || undefined,
         busca: filtros.busca || undefined,
-        // Sem `pagina`: mudar de aba ou de filtro sempre volta para a primeira página.
     };
 }
 
 // Enquanto a tabela do segmento vem do servidor, ela fica esmaecida.
 const carregando = ref(false);
 
-/*
- * O Resumo (`dados`) custa a agregação de todas as contas (~470 ms em dev): dentro de um
- * segmento a visita pede só a tabela. O Resumo fica marcado como desatualizado e é
- * buscado de novo quando a pessoa voltar para ele.
- */
-const resumoDesatualizado = ref(false);
-
-function visitar(query, segmento = filtros.segmento) {
-    if (segmento) resumoDesatualizado.value = true;
-
-    router.get(route('visao-diretor.maiores.index'), query, {
+function visitar() {
+    router.get(route('visao-diretor.maiores.index'), queryDaPagina(), {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: segmento ? ['universo', 'filtros'] : ['dados', 'filtros'],
+        only: ['universo', 'filtros'],
         onStart: () => { carregando.value = true; },
         onFinish: () => { carregando.value = false; },
-        onSuccess: () => { if (! segmento) resumoDesatualizado.value = false; },
     });
-}
-
-function aplicarFiltros() {
-    visitar(queryDaPagina());
 }
 
 let atrasoBusca;
 function onBusca() {
     clearTimeout(atrasoBusca);
-    atrasoBusca = setTimeout(aplicarFiltros, 300);
+    atrasoBusca = setTimeout(visitar, 300);
 }
 
-/**
- * A tabela de um segmento vem do servidor (`universo`, paginada). O Resumo já está no
- * payload: só a URL acompanha, por `replaceState` em cima do estado do Inertia, para o
- * voltar do navegador não perder a página.
- */
+/** Trocar de aba limpa os filtros: cada segmento abre inteiro. */
 function trocarAba(codigo) {
-    if (codigo || resumoDesatualizado.value) {
-        filtros.segmento = codigo;
-        visitar(queryDaPagina(codigo), codigo);
-
-        return;
-    }
-
-    filtros.segmento = codigo;
-    const qs = new URLSearchParams();
-    const q = queryDaPagina(codigo);
-    Object.entries(q).forEach(([k, v]) => { if (v) qs.set(k, v); });
-    const url = route('visao-diretor.maiores.index') + (qs.toString() ? `?${qs}` : '');
-    window.history.replaceState(window.history.state, '', url);
+    Object.assign(filtros, { segmento: codigo, status: '', uf: '', busca: '' });
+    visitar();
 }
 
-function filtrarSegmento(codigo) {
-    trocarAba(codigo);
-}
-
-/*
- * No Resumo os tiles contam REDES (o quadro por segmento); dentro de um segmento contam as
- * LINHAS da tabela — redes, clientes e leads. Os dois vêm do servidor.
- */
-const TILES_STATUS = [
-    { status: 'ativo', tom: 'ok', rotulo: ROTULOS_STATUS_CONTA.ativo, valor: (k) => k.ativo },
-    { status: 'inativando', tom: 'warn', rotulo: ROTULOS_STATUS_CONTA.inativando, valor: (k) => k.inativando },
-    // Um tile só para as duas: filtra `a_trabalhar` (inativo + lead) no servidor.
-    { status: 'a_trabalhar', tom: 'danger', rotulo: 'A trabalhar + lead', valor: (k) => k.inativo + k.lead },
+// Os tiles SÃO o filtro de status: clicar aplica, clicar de novo remove.
+const TILES = [
+    { status: 'ativo', tom: 'ok', rotulo: 'Ativos' },
+    { status: 'inativando', tom: 'warn', rotulo: ROTULOS_STATUS_CONTA.inativando },
+    { status: 'inativo', tom: 'danger', rotulo: ROTULOS_STATUS_CONTA.inativo },
+    { status: 'lead', tom: 'default', rotulo: 'Leads' },
 ];
 
 function filtrarStatus(status) {
-    filtros.status = status;
-    aplicarFiltros();
+    filtros.status = filtros.status === status ? '' : status;
+    visitar();
 }
 
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, ['status', 'uf']));
-const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '' || filtros.segmento !== '');
 
-const segmentoAberto = computed(() => props.abas.find((a) => a.codigo === filtros.segmento) ?? null);
+const segmentoAberto = computed(() => props.resumo.find((s) => s.codigo === filtros.segmento) ?? null);
 
-// Redes do segmento aberto (cabeçalho, especialista). Nulo no Resumo e nos segmentos sem redes.
-const abaAtiva = computed(() => {
-    if (! filtros.segmento) return null;
-
-    return props.dados.segmentos.find((s) => s.codigo === filtros.segmento) ?? null;
-});
-
-// O segmento aberto, com ou sem redes ({ id, codigo, nome }): para "Nova conta" e os modais.
-const segmentoDaAba = computed(() => abaAtiva.value ?? segmentoAberto.value);
-
-// A tabela do segmento chegou e é deste segmento (durante a troca de aba ainda é a anterior).
+// A tabela chegou e é deste segmento (durante a troca de aba ainda é a anterior).
 const tabela = computed(() => (filtros.segmento && props.universo?.segmento === filtros.segmento ? props.universo : null));
 
-const kpis = computed(() => {
-    if (! filtros.segmento) return { ...props.dados.kpis, rotuloTotal: 'Contas-alvo', total: props.dados.kpis.contas };
-    const c = tabela.value?.contagens;
-
-    return c
-        ? { ...c, rotuloTotal: 'Todos', total: c.total }
-        : { ativo: 0, inativando: 0, inativo: 0, lead: 0, rotuloTotal: 'Todos', total: 0 };
-});
+const atualizada = computed(() => (props.reconstruidoEm ? `Atualizada ${dataHora(props.reconstruidoEm)}` : ''));
 
 const subtituloTabela = computed(() => {
     const c = tabela.value?.contagens;
     if (! c) return 'Carregando…';
-    const partes = [];
-    if (c.redes) partes.push(`${formatInteiro(c.redes)} ${c.redes === 1 ? 'rede' : 'redes'}`);
-    partes.push(`${formatInteiro(c.clientes)} ${c.clientes === 1 ? 'cliente' : 'clientes'}`);
-    partes.push(`${formatInteiro(c.leads)} ${c.leads === 1 ? 'lead' : 'leads'}`);
-    const quando = tabela.value.reconstruidoEm ? ` · atualizada ${dataHora(tabela.value.reconstruidoEm)}` : '';
 
-    const ordem = c.redes ? 'redes primeiro, depois por capital social' : 'do maior capital social ao menor';
-
-    return `${partes.join(' · ')} · ${ordem}${quando}`;
+    return [
+        `${formatInteiro(c.clientes)} ${c.clientes === 1 ? 'cliente' : 'clientes'}`,
+        `${formatInteiro(c.leads)} ${c.leads === 1 ? 'lead' : 'leads'}`,
+        'maiores primeiro',
+        atualizada.value,
+    ].filter(Boolean).join(' · ');
 });
 
-// ─── Cadastro / edição ───────────────────────────────────────────────────────
-const modalAberto = ref(false);
-const contaEmEdicao = ref(null);
-const segmentoDaNova = ref(null);
+// ─── Cartão CNPJ e mapa (endereço da Receita) ─────────────────────────────────
 
-function novaConta(segmento = null) {
-    contaEmEdicao.value = null;
-    segmentoDaNova.value = segmento?.id ?? segmentoDaAba.value?.id ?? null;
-    modalAberto.value = true;
+/*
+ * As duas ações leem o mesmo cartão: o do cliente pela âncora (matriz) na rota da
+ * Carteira, que compara com o TOTVS; o do lead pela rota dos Leads.
+ */
+function urlDoCartao(l) {
+    return l.tipo === 'cliente' ? route('carteira.cartaoCnpj', l.clienteId) : route('leads.cartaoCnpj', l.leadId);
 }
 
-function editar(conta, segmento) {
-    contaEmEdicao.value = { ...conta, segmentoId: segmento.id };
-    modalAberto.value = true;
+const cartaoDe = ref(null);
+
+function abrirCartao(l) {
+    cartaoDe.value = { url: urlDoCartao(l), cliente: { razaoSocial: l.nome, cnpj: l.documento } };
 }
 
-// Histórico da observação, aberto pela célula da tabela. "Editar" leva ao formulário.
-const historicoDe = ref(null);
+const avisoMapa = ref('');
 
-function verHistorico(conta, segmento) {
-    historicoDe.value = { conta, segmento };
-}
+/**
+ * O endereço da Receita não fica na base mensal, só no cartão (consultado na hora e
+ * guardado 30 dias). Então o mapa busca o cartão e abre o Maps com o endereço dele.
+ *
+ * ⚠️ A aba é aberta ANTES do fetch, ainda dentro do clique: aberta depois de um `await`,
+ * o bloqueador de pop-up do navegador a barra. Sem endereço, a aba é fechada e a tela avisa.
+ */
+async function abrirMapa(l) {
+    const aba = window.open('about:blank', '_blank');
 
-function editarDoHistorico() {
-    const { conta, segmento } = historicoDe.value;
-    historicoDe.value = null;
-    editar(conta, segmento);
-}
+    try {
+        const resposta = await fetch(urlDoCartao(l), {
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        });
+        const corpo = await resposta.json();
+        const endereco = corpo.cartao?.endereco;
+        const url = resposta.ok && endereco ? urlDoMapa({ ...endereco, documento: l.documento }) : null;
 
-// "Gerar lead" — conta sem loja nossa vira lead com responsável (LeadDaConta no servidor).
-const leadDe = ref(null);
+        if (! url) {
+            aba?.close();
+            avisoMapa.value = corpo.erro || 'A Receita não tem um endereço completo para este CNPJ.';
 
-function gerarLead(conta, segmento) {
-    leadDe.value = { conta, segmento };
-}
+            return;
+        }
 
-const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
-
-async function excluir(conta) {
-    const ok = await confirmar({
-        titulo: 'Excluir conta',
-        mensagem: `A conta "${conta.nome}" sai da Visão Diretor.`,
-        detalhe: 'Os clientes continuam na Carteira — só a conta-alvo e os vínculos dela são apagados.',
-        rotuloConfirmar: 'Excluir',
-        tom: 'danger',
-    });
-
-    if (! ok) return;
-
-    router.delete(route('visao-diretor.maiores.destroy', conta.id), { preserveScroll: true, only: PROPS_DA_LISTA });
+        if (aba) {
+            aba.opener = null;
+            aba.location.href = url;
+        } else {
+            window.open(url, '_blank', 'noopener');
+        }
+    } catch {
+        aba?.close();
+        avisoMapa.value = 'Não foi possível consultar a Receita agora. Tente de novo em alguns minutos.';
+    }
 }
 </script>
 
@@ -261,39 +185,29 @@ async function excluir(conta) {
                     </svg>
                 </template>
                 <template #subtitle>
-                    As maiores redes do mercado em cada segmento e onde a Autopel está nelas.
-                    Status e atendimento vêm da Carteira.
+                    Onde a Autopel atua, deixou de atuar e ainda não atua, em cada segmento.
                 </template>
-                <template #filtrosFixos>
+                <template v-if="filtros.segmento" #filtrosFixos>
                     <div class="flex w-full flex-col gap-1 sm:min-w-[180px] sm:max-w-[260px] sm:flex-1">
                         <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Busca</label>
                         <input
                             v-model="filtros.busca"
                             type="search"
-                            :placeholder="filtros.segmento ? 'Rede, cliente, razão social ou CNPJ' : 'Nome da rede'"
+                            placeholder="Nome, razão social ou CNPJ"
                             class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
                             @input="onBusca"
                         />
                     </div>
                 </template>
-                <template #filtros>
-                    <FilterField v-model="filtros.status" label="Status" @update:model-value="aplicarFiltros">
-                        <option value="">Todos</option>
-                        <option v-for="s in STATUS_CONTA" :key="s" :value="s">{{ ROTULOS_STATUS_CONTA[s] }}</option>
-                        <option value="a_trabalhar">A trabalhar + lead</option>
-                    </FilterField>
-                    <FilterField v-model="filtros.uf" label="UF" @update:model-value="aplicarFiltros">
+                <template v-if="filtros.segmento" #filtros>
+                    <FilterField v-model="filtros.uf" label="UF" @update:model-value="visitar">
                         <option value="">Todas</option>
-                        <option v-for="uf in dados.opcoes.ufs" :key="uf" :value="uf">{{ uf }}</option>
+                        <option v-for="uf in ufs" :key="uf" :value="uf">{{ uf }}</option>
                     </FilterField>
                 </template>
             </PageHero>
 
-            <!--
-                Igual à planilha: uma aba por segmento, mais o Resumo (a aba DASHBOARD).
-                `overflow-x-auto` + nowrap para caber as sete no celular sem virar duas
-                fileiras — no Excel as abas também rolam na horizontal.
-            -->
+            <!-- Uma aba por segmento, do maior para o menor, mais o Resumo. -->
             <div class="flex gap-1 overflow-x-auto border-b border-gray-300" role="tablist" aria-label="Segmentos">
                 <button
                     type="button"
@@ -304,166 +218,100 @@ async function excluir(conta) {
                     @click="trocarAba('')"
                 >Resumo</button>
                 <button
-                    v-for="s in abas"
+                    v-for="s in resumo"
                     :key="s.codigo"
                     type="button"
                     role="tab"
                     :aria-selected="filtros.segmento === s.codigo"
                     class="-mb-px shrink-0 border-b-2 px-4 py-2 text-sm font-medium uppercase tracking-wide transition"
                     :class="filtros.segmento === s.codigo ? 'border-cyan bg-white text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'"
-                    :title="`${formatInteiro(s.total)} clientes e leads`"
                     @click="trocarAba(s.codigo)"
                 >{{ s.nome }}</button>
             </div>
 
-            <!--
-                Os tiles de status SÃO o filtro de status: clicar aplica, clicar de novo
-                remove ("Contas-alvo" também remove). Os números ignoram o próprio filtro
-                (o servidor calcula sem ele), senão os vizinhos zerariam a cada clique.
-            -->
-            <div class="flex flex-wrap gap-2">
-                <KpiTile :value="formatInteiro(kpis.total)" :label="kpis.rotuloTotal" botao @click="filtrarStatus('')" />
-                <KpiTile
-                    v-for="t in TILES_STATUS"
-                    :key="t.status"
-                    :value="formatInteiro(t.valor(kpis))"
-                    :label="t.rotulo"
-                    :tone="t.tom"
-                    botao
-                    :ativo="filtros.status === t.status"
-                    @click="filtrarStatus(filtros.status === t.status ? '' : t.status)"
-                />
-            </div>
-
-            <div class="flex flex-wrap items-center justify-end gap-2">
-                <div class="flex items-center gap-2">
-                    <button
-                        type="button"
-                        class="inline-flex min-h-9 items-center gap-1 rounded bg-teal px-3 text-xs font-semibold text-white transition hover:bg-navy"
-                        @click="novaConta()"
-                    >+ Nova conta</button>
-                </div>
-            </div>
-
-            <SugestoesLeadsCard v-if="sugestoesDaAba.length" :sugestoes="sugestoesDaAba" />
-
             <ResumoSegmentosCard
                 v-if="! filtros.segmento"
-                :linhas="dados.resumoPorSegmento"
-                :segmento-ativo="filtros.segmento"
-                @filtrar="filtrarSegmento"
+                :linhas="resumo"
+                :subtitulo="['Clientes por situação e leads. Clique para abrir o segmento.', atualizada].filter(Boolean).join(' · ')"
+                @abrir="trocarAba"
             >
-                <!--
-                    O botão mora no header PRETO do card, como em toda página: ele é desenhado
-                    para fundo escuro e, solto no fundo cinza da página, ficava invisível.
-                    No Resumo exporta todos os segmentos; dentro de uma aba, só aquela.
-                -->
                 <template #actions>
-                    <ExportarExcelButton
-                        rota="visao-diretor.maiores.exportar"
-                        :filtros="filtros"
-                        :tem-filtros-ativos="temFiltrosAtivos"
-                    />
+                    <ExportarExcelButton rota="visao-diretor.maiores.exportar" :filtros="{}" :tem-filtros-ativos="false" />
                 </template>
             </ResumoSegmentosCard>
 
-            <DarkCard
-                v-else
-                :title="segmentoDaAba?.nome ?? ''"
-                :subtitle="subtituloTabela"
-            >
-                <template #icon>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
-                        <path d="M4 20V9l8-5 8 5v11" stroke-linejoin="round" />
-                        <path d="M9 20v-6h6v6" stroke-linejoin="round" />
-                    </svg>
-                </template>
-                <!--
-                    Só leitura: o especialista é marcado pela estrela no quadro de Segmentos
-                    da Equipe (decisão do Tony, 2026-09-22). O link leva para lá.
-                -->
-                <template #actions>
-                    <!-- A planilha leva a tabela inteira (todas as páginas), com os mesmos filtros. -->
-                    <ExportarExcelButton
-                        rota="visao-diretor.maiores.exportar-clientes"
-                        :filtros="filtros"
-                        :tem-filtros-ativos="filtrosAtivos > 0 || filtros.busca !== ''"
+            <template v-else>
+                <!-- Contam a tabela inteira com busca e UF, ignorando o próprio filtro de status. -->
+                <div class="flex flex-wrap gap-2">
+                    <KpiTile
+                        :value="formatInteiro(tabela?.contagens.total ?? 0)"
+                        label="Todos"
+                        botao
+                        @click="filtrarStatus('')"
                     />
-                    <Link
-                        v-if="abaAtiva"
-                        :href="route('equipe.segmentos')"
-                        class="rounded px-1 py-0.5 transition hover:bg-white/10"
-                        title="O especialista é marcado pela estrela em Equipe → Segmentos"
-                    >
-                        <EspecialistaSelo :especialista="abaAtiva.especialista" superficie="escuro" />
-                    </Link>
-                </template>
+                    <KpiTile
+                        v-for="t in TILES"
+                        :key="t.status"
+                        :value="formatInteiro(tabela?.contagens[t.status] ?? 0)"
+                        :label="t.rotulo"
+                        :tone="t.tom"
+                        botao
+                        :ativo="filtros.status === t.status"
+                        @click="filtrarStatus(t.status)"
+                    />
+                </div>
 
-                <p v-if="! tabela" class="px-3 py-10 text-center text-sm text-gray-400">Carregando…</p>
-                <p v-else-if="! tabela.linhas.data.length" class="px-3 py-10 text-center text-sm text-gray-400">
-                    {{ tabela.contagens.total ? 'Nada neste segmento com os filtros aplicados.' : 'Nenhuma rede, cliente ou lead neste segmento.' }}
-                </p>
-                <template v-else>
-                    <div class="transition-opacity" :class="carregando ? 'opacity-50' : ''">
-                        <ContasSegmentoTabela
-                            :contas="tabela.linhas.data"
-                            :posicao-inicial="tabela.linhas.from ?? 1"
-                            :subtotal-redes="tabela.subtotalRedes"
-                            :segmento="tabela.segmento"
-                            :busca="tabela.filtros.busca"
-                            @editar="(conta) => editar(conta, segmentoDaAba)"
-                            @historico="(conta) => verHistorico(conta, segmentoDaAba)"
-                            @gerar-lead="(conta) => gerarLead(conta, segmentoDaAba)"
-                            @excluir="excluir"
+                <DarkCard :title="segmentoAberto?.nome ?? ''" :subtitle="subtituloTabela">
+                    <template #icon>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full">
+                            <path d="M4 20V9l8-5 8 5v11" stroke-linejoin="round" />
+                            <path d="M9 20v-6h6v6" stroke-linejoin="round" />
+                        </svg>
+                    </template>
+                    <template #actions>
+                        <ExportarExcelButton
+                            rota="visao-diretor.maiores.exportar-clientes"
+                            :filtros="filtros"
+                            :tem-filtros-ativos="filtrosAtivos > 0 || filtros.busca !== ''"
                         />
-                    </div>
-                    <div class="mt-3"><Pagination :meta="tabela.linhas" :only="['universo']" /></div>
-                </template>
-            </DarkCard>
+                        <!-- O especialista é marcado pela estrela em Equipe → Segmentos. -->
+                        <Link
+                            :href="route('equipe.segmentos')"
+                            class="rounded px-1 py-0.5 transition hover:bg-white/10"
+                            title="O especialista é marcado pela estrela em Equipe → Segmentos"
+                        >
+                            <EspecialistaSelo :especialista="segmentoAberto?.especialista" superficie="escuro" />
+                        </Link>
+                    </template>
+
+                    <p v-if="! tabela" class="px-3 py-10 text-center text-sm text-gray-400">Carregando…</p>
+                    <p v-else-if="! tabela.linhas.data.length" class="px-3 py-10 text-center text-sm text-gray-400">
+                        {{ tabela.contagens.total ? 'Nada neste segmento com os filtros aplicados.' : 'Nenhum cliente ou lead neste segmento.' }}
+                    </p>
+                    <template v-else>
+                        <div class="transition-opacity" :class="carregando ? 'opacity-50' : ''">
+                            <ClientesLeadsTabela
+                                :linhas="tabela.linhas.data"
+                                :posicao-inicial="tabela.linhas.from ?? 1"
+                                :segmento="tabela.segmento"
+                                @cartao-cnpj="abrirCartao"
+                                @mapa="abrirMapa"
+                            />
+                        </div>
+                        <div class="mt-3"><Pagination :meta="tabela.linhas" :only="['universo']" /></div>
+                    </template>
+                </DarkCard>
+            </template>
         </div>
-
-        <ContaEstrategicaModal
-            :show="modalAberto"
-            :conta="contaEmEdicao"
-            :segmento-inicial="segmentoDaNova"
-            :segmentos="segmentosDisponiveis"
-            @close="modalAberto = false"
+        <CartaoCnpjModal
+            :show="!! cartaoDe"
+            :url="cartaoDe?.url ?? ''"
+            :cliente="cartaoDe?.cliente ?? null"
+            @close="cartaoDe = null"
         />
 
-        <GerarLeadContaModal
-            :show="!! leadDe"
-            :conta="leadDe?.conta ?? null"
-            :segmento="leadDe?.segmento ?? null"
-            :responsaveis="responsaveisLead"
-            @close="leadDe = null"
-        />
-
-        <ModalPadrao
-            :show="!! historicoDe"
-            titulo="Histórico da observação"
-            :subtitulo="historicoDe?.conta.nome ?? ''"
-            max-width="lg"
-            @close="historicoDe = null"
-        >
-            <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5">
-                    <path d="M4 4h16v12H8l-4 4V4Z" stroke-linecap="round" stroke-linejoin="round" />
-                    <line x1="8" y1="9" x2="16" y2="9" stroke-linecap="round" />
-                    <line x1="8" y1="12.5" x2="13" y2="12.5" stroke-linecap="round" />
-                </svg>
-            </template>
-            <HistoricoObservacaoConta
-                v-if="historicoDe"
-                :conta-id="historicoDe.conta.id"
-                :versao="historicoDe.conta.versoesObservacao"
-                altura-maxima="max-h-96"
-            />
-            <template #footer>
-                <SecondaryButton type="button" @click="historicoDe = null">Fechar</SecondaryButton>
-                <PrimaryButton type="button" @click="editarDoHistorico">Editar observação</PrimaryButton>
-            </template>
+        <ModalPadrao :show="!! avisoMapa" titulo="Endereço da Receita" max-width="md" @close="avisoMapa = ''">
+            <p class="text-sm text-gray-600">{{ avisoMapa }}</p>
         </ModalPadrao>
-
-        <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
     </AuthenticatedLayout>
 </template>

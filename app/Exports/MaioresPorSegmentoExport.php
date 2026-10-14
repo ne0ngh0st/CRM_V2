@@ -6,58 +6,34 @@ use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 
 /**
- * Planilha da Visão Diretor → Maiores por Segmento. Uma linha por conta, com os derivados
- * já calculados pelo `MaioresPorSegmentoResolver` — a planilha nunca recalcula nada.
+ * Planilha do Resumo da Visão Diretor → Maiores por Segmento: uma linha por segmento, com
+ * os mesmos números da tela (`UniversoDoSegmento::resumo()`) — a planilha nunca recalcula.
  *
  * `headings()` e `array()` são listas paralelas mantidas à mão; há teste conferindo o
  * tamanho das duas.
  */
 class MaioresPorSegmentoExport implements FromArray, WithHeadings
 {
-    /** Mesmo mapa do front (`ROTULOS_STATUS_CARTEIRA` + lead). Mudou lá, muda aqui. */
-    private const ROTULOS_STATUS = [
-        'ativo' => 'Ativo',
-        'inativando' => 'Perdendo',
-        'inativo' => 'A trabalhar',
-        'lead' => 'Lead',
-    ];
-
-    /** @param  list<array<string, mixed>>  $segmentos  saída `segmentos` do resolver */
+    /** @param  list<array<string, mixed>>  $segmentos  saída de `UniversoDoSegmento::resumo()` com o especialista */
     public function __construct(private readonly array $segmentos)
     {
     }
 
     public function array(): array
     {
-        $linhas = [];
-
-        foreach ($this->segmentos as $segmento) {
-            foreach ($segmento['contas'] as $c) {
-                $linhas[] = [
-                    $segmento['nome'],
-                    $segmento['especialista']['nome'] ?? '',
-                    $c['nome'],
-                    $c['uf'] ?? '',
-                    $c['lojas'],
-                    $c['filiaisMercado'] ?? '',
-                    $c['clientes'],
-                    self::ROTULOS_STATUS[$c['status']] ?? $c['status'],
-                    $c['ultimaCompra'] ?? '',
-                    implode(' · ', array_column($c['atendimento'], 'nome')),
-                    $c['site'] ?? '',
-                    $c['observacao'] ?? '',
-                ];
-            }
-        }
-
-        return $linhas;
+        return array_map(fn (array $s) => [
+            $s['nome'],
+            $s['especialista']['nome'] ?? '',
+            $s['clientes'],
+            $s['ativo'],
+            $s['inativando'],
+            $s['inativo'],
+            $s['leads'],
+        ], $this->segmentos);
     }
 
     public function headings(): array
     {
-        return [
-            'Segmento', 'Especialista', 'Conta', 'UF', 'Filiais (CRM)', 'Filiais (mercado)', 'Clientes',
-            'Status', 'Última compra', 'Atendimento', 'Site', 'Observação',
-        ];
+        return ['Segmento', 'Especialista', 'Clientes', 'Ativos', 'Perdendo', 'A trabalhar', 'Leads'];
     }
 }

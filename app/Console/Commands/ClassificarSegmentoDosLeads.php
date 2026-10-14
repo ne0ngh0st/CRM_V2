@@ -26,7 +26,7 @@ class ClassificarSegmentoDosLeads extends Command
 
     protected $description = 'Preenche o segmento dos leads importados pelo CNAE da Receita';
 
-    public function handle(SegmentoDosLeads $segmentos, ContaDoLead $contaDoLead): int
+    public function handle(SegmentoDosLeads $segmentos): int
     {
         $dryRun = (bool) $this->option('dry-run');
         $this->info('Banco alvo: '.DB::connection()->getDatabaseName().($dryRun ? ' (dry-run: nada será gravado)' : ''));
@@ -44,12 +44,6 @@ class ClassificarSegmentoDosLeads extends Command
             $this->line("CNAE fora do mapa (ficam sem segmento): {$r['foraDoMapa']}");
             foreach ($r['cnaesForaDoMapa'] as $cnae => $total) {
                 $this->line(sprintf('  %s-%s/%s: %d', substr($cnae, 0, 4), substr($cnae, 4, 1), substr($cnae, 5, 2), $total));
-            }
-
-            $c = $contaDoLead->sugerirParaLeadsSemConta();
-            $this->info("Leads sugeridos para uma rede da Maiores por Segmento: {$c['sugeridos']}");
-            if ($c['ambiguos'] > 0) {
-                $this->warn("  sem sugestão (o nome casa com mais de uma rede): {$c['ambiguos']}");
             }
 
             if ($dryRun) {

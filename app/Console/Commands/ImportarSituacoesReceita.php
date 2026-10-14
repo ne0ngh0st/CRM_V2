@@ -54,7 +54,7 @@ class ImportarSituacoesReceita extends Command
 
     protected $description = 'Carrega a situação cadastral (Receita) dos CNPJs de leads e clientes';
 
-    public function handle(SituacaoCadastral $situacoes, SegmentoDosLeads $segmentos, ContaDoLead $contaDoLead): int
+    public function handle(SituacaoCadastral $situacoes, SegmentoDosLeads $segmentos): int
     {
         $locais = (array) $this->option('arquivo');
         $referencia = $this->option('referencia') ?: ($locais === [] ? $this->referenciaMaisRecente() : null);
@@ -129,9 +129,6 @@ class ImportarSituacoesReceita extends Command
         foreach ($classificacao['classificados'] as $segmento => $total) {
             $this->line("  {$segmento}: {$total}");
         }
-
-        $contas = $contaDoLead->sugerirParaLeadsSemConta();
-        $this->info("Leads sugeridos para uma rede da Maiores por Segmento: {$contas['sugeridos']}");
 
         return self::SUCCESS;
     }

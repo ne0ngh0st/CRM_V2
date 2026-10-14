@@ -378,23 +378,6 @@ class MaioresPorSegmentoTest extends TestCase
         $this->assertSame(['RAIA'], array_column($dados['segmentos'][0]['contas'], 'nome'));
     }
 
-    /** O tile "A trabalhar + lead" filtra as duas situações, e bate com o número dele. */
-    public function test_filtro_a_trabalhar_traz_inativo_e_lead(): void
-    {
-        $this->conta('RAIA', [['grupo', '100']]); // ativo
-        $this->conta('A TRABALHAR', [['cliente', '000002']]); // inativo
-        $this->conta('SEM VINCULO'); // lead
-
-        $dados = app(MaioresPorSegmentoResolver::class)->resolver(['status' => 'a_trabalhar']);
-
-        $this->assertSame(['A TRABALHAR', 'SEM VINCULO'], array_column($dados['segmentos'][0]['contas'], 'nome'));
-        $this->assertSame(2, $dados['kpis']['inativo'] + $dados['kpis']['lead']);
-
-        $this->actingAs($this->admin)
-            ->get(route('visao-diretor.maiores.index', ['status' => 'a_trabalhar']))
-            ->assertInertia(fn (Assert $p) => $p->where('filtros.status', 'a_trabalhar'));
-    }
-
     /** A posição é a da planilha dentro do segmento, e filtrar não renumera. */
     public function test_posicao_da_conta_nao_muda_com_filtro(): void
     {
@@ -428,27 +411,6 @@ class MaioresPorSegmentoTest extends TestCase
         );
         $this->assertSame(0, $dados['segmentos'][0]['resumo']['contas']);
         $this->assertSame([], $dados['segmentos'][0]['contas']);
-    }
-
-    /**
-     * A página manda as seis tabelas juntas (troca de aba local). O `?segmento=` da URL
-     * não pode recortar o payload, senão o clique na aba iria ao servidor.
-     */
-    public function test_a_pagina_nao_recorta_as_abas_pelo_segmento_da_url(): void
-    {
-        $postos = Segmento::create(['codigo' => '114', 'nome' => 'POSTOS']);
-        $this->conta('RAIA', [['grupo', '100']]);
-        ContaEstrategica::create(['segmento_id' => $postos->id, 'nome' => 'SHELL']);
-
-        $this->actingAs($this->admin)
-            ->get(route('visao-diretor.maiores.index', ['segmento' => '109']))
-            ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->where('filtros.segmento', '109')
-                ->has('dados.segmentos', 2)
-                ->where('dados.segmentos.0.codigo', '109')
-                ->where('dados.segmentos.1.codigo', '114')
-            );
     }
 
     public function test_linha_expandida_lista_os_mesmos_clientes_da_contagem(): void
@@ -512,15 +474,6 @@ class MaioresPorSegmentoTest extends TestCase
         DB::disableQueryLog();
 
         return $n;
-    }
-
-    public function test_planilha_tem_cabecalho_e_linha_do_mesmo_tamanho(): void
-    {
-        $this->conta('RAIA', [['grupo', '100']], 100);
-        $dados = app(MaioresPorSegmentoResolver::class)->resolver();
-        $export = new MaioresPorSegmentoExport($dados['segmentos']);
-
-        $this->assertCount(count($export->headings()), $export->array()[0]);
     }
 
     // ─── Rollup de faturamento ──────────────────────────────────────────────────

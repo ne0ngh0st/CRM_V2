@@ -7,8 +7,8 @@ use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 
 /**
- * Planilha da tabela de um segmento (Visão Diretor → Maiores por Segmento): as redes, depois
- * os clientes e leads, na ordem e com os filtros da tela. As linhas vêm prontas de
+ * Planilha da tabela de um segmento (Visão Diretor → Maiores por Segmento): clientes e
+ * leads, na ordem e com os filtros da tela. As linhas vêm prontas de
  * `UniversoDoSegmento::tudo()` — a planilha nunca recalcula nada.
  *
  * `headings()` e `map()` são listas paralelas mantidas à mão; há teste conferindo o tamanho.
@@ -22,8 +22,6 @@ class ClientesLeadsSegmentoExport implements FromArray, WithHeadings
         'inativo' => 'A trabalhar',
         'lead' => 'Lead',
     ];
-
-    private const TIPOS = ['rede' => 'Rede', 'cliente' => 'Cliente', 'lead' => 'Lead'];
 
     /**
      * Guarda só o recorte: as linhas são montadas em `array()`, quando o arquivo é gerado
@@ -47,30 +45,22 @@ class ClientesLeadsSegmentoExport implements FromArray, WithHeadings
 
     public function headings(): array
     {
-        return [
-            'Nome', 'Tipo', 'Razão social', 'CNPJ', 'UF', 'Filiais', 'Clientes',
-            'Capital social', 'Porte', 'Status', 'Vendedor', 'Última compra',
-        ];
+        return ['Nome fantasia', 'Razão social', 'Tipo', 'CNPJ', 'Grupo', 'UF', 'Filiais', 'Status', 'Vendedor'];
     }
 
     /** @param  array<string, mixed>  $l  uma linha de `UniversoDoSegmento::tudo()` */
     public function map(array $l): array
     {
-        $rede = $l['tipo'] === 'rede';
-
         return [
+            $l['nomeFantasia'] ?? '',
             $l['nome'],
-            self::TIPOS[$l['tipo']] ?? $l['tipo'],
-            $rede ? '' : ($l['razaoSocial'] ?? ''),
-            $rede ? '' : ($l['documento'] ?? ''),
+            $l['tipo'] === 'lead' ? 'Lead' : 'Cliente',
+            $l['documento'] ?? '',
+            $l['grupo'] ?? '',
             $l['uf'] ?? '',
-            $l['tipo'] === 'lead' ? '' : $l['lojas'],
-            $rede ? $l['clientes'] : '',
-            $rede ? null : $l['receita']['capitalSocial'],
-            $rede ? '' : ($l['receita']['porte'] ?? ''),
+            $l['filiais'] ?? '',
             self::ROTULOS_STATUS[$l['status']] ?? $l['status'],
-            $rede ? implode(' · ', array_column($l['atendimento'], 'nome')) : ($l['vendedor'] ?? ''),
-            $l['ultimaCompra'] ?? '',
+            $l['vendedor'] ?? '',
         ];
     }
 }

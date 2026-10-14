@@ -55,49 +55,6 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->assertSame(Lead::ORIGEM_PROSPECCAO, Lead::sole()->origem);
     }
 
-    public function test_rede_que_bate_com_conta_existente_liga_sem_criar_outra(): void
-    {
-        $conta = $this->conta('Drogaria São Paulo');
-
-        // Caixa, acento e espaço diferentes: é a mesma rede.
-        $this->importar([$this->linha('11111111000191', 'DROGARIA SAO PAULO S/A', '109', rede: 'drogaria sao  paulo')]);
-
-        $this->assertSame(1, ContaEstrategica::count());
-        $lead = Lead::sole();
-        $this->assertSame($conta->id, $lead->conta_estrategica_id);
-        $this->assertSame(Lead::CONTA_CONFIRMADA, $lead->conta_vinculo);
-    }
-
-    /** Os casos reais da carga de drogarias de 02/10, que viraram contas duplicadas. */
-    public function test_rede_com_palavra_de_tipo_ou_ordem_diferente_liga_na_conta_existente(): void
-    {
-        $saoJoao = $this->conta('SÃO JOÃO FARMACIAS', ordem: 1);
-        $auge = $this->conta('AUGEFARMA', ordem: 2);
-        $total = $this->conta('DROGARIA TOTAL', ordem: 3);
-
-        $this->importar([
-            $this->linha('11111111000191', 'COMERCIO BRAIR LTDA', '109', rede: 'Farmácias São João'),
-            $this->linha('22222222000191', 'BROKER AUGEFARMA LTDA', '109', rede: 'Rede Augefarma'),
-            $this->linha('33333333000191', 'GRUPO TOTAL LTDA', '109', rede: 'Grupo Total'),
-        ]);
-
-        $this->assertSame(3, ContaEstrategica::count(), 'nenhuma conta nova');
-        $this->assertSame($saoJoao->id, Lead::where('cnpj', 'like', '11.111.111%')->sole()->conta_estrategica_id);
-        $this->assertSame($auge->id, Lead::where('cnpj', 'like', '22.222.222%')->sole()->conta_estrategica_id);
-        $this->assertSame($total->id, Lead::where('cnpj', 'like', '33.333.333%')->sole()->conta_estrategica_id);
-    }
-
-    /** FARMA faz parte da marca: "Rede Farma Total" não é a DROGARIA TOTAL. */
-    public function test_palavra_que_e_marca_nao_e_ignorada(): void
-    {
-        $total = $this->conta('DROGARIA TOTAL');
-
-        $this->importar([$this->linha('11111111000191', 'FARMA TOTAL LTDA', '109', rede: 'Rede Farma Total')]);
-
-        $this->assertSame(2, ContaEstrategica::count());
-        $this->assertNotSame($total->id, Lead::sole()->conta_estrategica_id);
-    }
-
     public function test_rede_que_bate_com_duas_contas_nao_liga_nem_cria_outra(): void
     {
         $this->conta('DROGARIA SÃO PAULO', ordem: 1);
@@ -109,41 +66,6 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->assertNull(Lead::sole()->conta_estrategica_id);
     }
 
-    public function test_conta_nova_nasce_em_caixa_alta_com_acento(): void
-    {
-        $this->importar([$this->linha('11111111000191', 'X LTDA', '109', rede: '  Farmácias Preço Justo ')]);
-
-        $this->assertSame('FARMÁCIAS PREÇO JUSTO', ContaEstrategica::sole()->nome);
-    }
-
-    public function test_filiais_com_separador_de_milhar(): void
-    {
-        $this->importar([
-            $this->linha('11111111000191', 'DROGARIAS PACHECO S.A.', '109', rede: 'Grupo DPSP', filiais: '1.600'),
-            $this->linha('22222222000191', 'FARMA X LTDA', '109', rede: 'Farma X', filiais: '2,347'),
-        ]);
-
-        $this->assertSame(1600, ContaEstrategica::where('nome', 'GRUPO DPSP')->sole()->filiais_mercado);
-        $this->assertSame(2347, ContaEstrategica::where('nome', 'FARMA X')->sole()->filiais_mercado);
-    }
-
-    public function test_rede_que_nao_existe_vira_conta_nova_uma_so_para_varios_cnpjs(): void
-    {
-        $this->conta('RAIA DROGASIL', ordem: 7);
-
-        $this->importar([
-            $this->linha('11111111000191', 'FARMA NOVA LTDA', '109', rede: 'FARMA NOVA', filiais: '42'),
-            $this->linha('22222222000191', 'FARMA NOVA FILIAL', '109', rede: 'Farma Nova'),
-        ]);
-
-        $nova = ContaEstrategica::where('nome', 'FARMA NOVA')->sole();
-        $this->assertSame($this->drogarias->id, $nova->segmento_id);
-        $this->assertSame(42, $nova->filiais_mercado);
-        $this->assertSame('SP', $nova->uf);
-        $this->assertSame(8, $nova->ordem, 'conta nova entra no fim da aba');
-        $this->assertSame(2, $nova->leads()->count());
-    }
-
     public function test_filiais_do_csv_nao_sobrescreve_numero_ja_digitado(): void
     {
         $conta = $this->conta('RAIA DROGASIL', filiais: 2390);
@@ -151,87 +73,6 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->importar([$this->linha('11111111000191', 'RAIA', '109', rede: 'RAIA DROGASIL', filiais: '10')]);
 
         $this->assertSame(2390, $conta->fresh()->filiais_mercado);
-    }
-
-    public function test_sem_rede_sugere_pelo_nome_e_so_conta_depois_de_confirmar(): void
-    {
-        $conta = $this->conta('RAIA DROGASIL');
-
-        $this->importar([$this->linha('11111111000191', 'RAIA DROGASIL S/A', '109')]);
-
-        $lead = Lead::sole();
-        $this->assertSame(Lead::CONTA_SUGERIDA, $lead->conta_vinculo);
-        $this->assertSame([], $this->linhaDa($conta)['leads'], 'sugestão não aparece na coluna');
-        $this->assertSame([$lead->id], array_column(app(ContaDoLead::class)->sugestoesPendentes(), 'leadId'));
-
-        $this->actingAs($this->diretor())
-            ->post(route('visao-diretor.maiores.sugestao.confirmar', $lead))
-            ->assertRedirect();
-
-        $this->assertSame(Lead::CONTA_CONFIRMADA, $lead->fresh()->conta_vinculo);
-        $this->assertSame([$lead->id], array_column($this->linhaDa($conta)['leads'], 'id'));
-        $this->assertSame([], app(ContaDoLead::class)->sugestoesPendentes());
-    }
-
-    public function test_sugestao_recusada_nao_volta_no_proximo_import(): void
-    {
-        $this->conta('RAIA DROGASIL');
-        $linhas = [$this->linha('11111111000191', 'RAIA DROGASIL S/A', '109')];
-        $this->importar($linhas);
-
-        $this->actingAs($this->diretor())
-            ->post(route('visao-diretor.maiores.sugestao.recusar', Lead::sole()))
-            ->assertRedirect();
-
-        $this->importar($linhas);
-
-        $this->assertSame(Lead::CONTA_RECUSADA, Lead::sole()->conta_vinculo);
-        $this->assertSame([], app(ContaDoLead::class)->sugestoesPendentes());
-    }
-
-    /** Decisão do Tony (2026-10-08): o lead da prospecção tem que aparecer na Maiores por Segmento. */
-    public function test_sem_rede_e_sem_nome_parecido_vira_conta_pela_marca(): void
-    {
-        $this->conta('RAIA DROGASIL');
-
-        $this->importar([$this->linha('11111111000191', 'BOTICA DO BAIRRO ME', '109', fantasia: 'Botica do Bairro')]);
-
-        $nova = ContaEstrategica::where('nome', 'BOTICA DO BAIRRO')->sole();
-        $lead = Lead::sole();
-        $this->assertSame($nova->id, $lead->conta_estrategica_id);
-        $this->assertSame(Lead::CONTA_CONFIRMADA, $lead->conta_vinculo);
-        $this->assertSame($this->drogarias->id, $nova->segmento_id);
-        $this->assertNull($nova->filiais_mercado, 'marca não traz número de filiais');
-        $this->assertSame([$lead->id], array_column($this->linhaDa($nova)['leads'], 'id'));
-    }
-
-    public function test_lojas_da_mesma_marca_caem_na_mesma_conta(): void
-    {
-        $this->importar([
-            $this->linha('11111111000191', 'CIAMBELLA COMERCIO DE ALIMENTOS LTDA', '109', fantasia: 'BELLA GULA'),
-            $this->linha('22222222000191', 'SABOR PONTOCOM COMERCIO LTDA', '109', fantasia: 'Bella Gula'),
-        ]);
-
-        $conta = ContaEstrategica::sole();
-        $this->assertSame('BELLA GULA', $conta->nome);
-        $this->assertSame(2, $conta->leads()->count());
-    }
-
-    public function test_sem_fantasia_a_marca_e_a_razao_social(): void
-    {
-        $this->importar([$this->linha('11111111000191', 'Braz Comercio de Alimentos Ltda', '109')]);
-
-        $this->assertSame('BRAZ COMERCIO DE ALIMENTOS LTDA', ContaEstrategica::sole()->nome);
-    }
-
-    public function test_lead_com_sugestao_nao_vira_conta_pela_marca(): void
-    {
-        $this->conta('RAIA DROGASIL');
-
-        $this->importar([$this->linha('11111111000191', 'RAIA DROGASIL S/A', '109', fantasia: 'Droga Raia')]);
-
-        $this->assertSame(1, ContaEstrategica::count());
-        $this->assertSame(Lead::CONTA_SUGERIDA, Lead::sole()->conta_vinculo);
     }
 
     public function test_sugestao_ambigua_nao_vira_conta_pela_marca(): void
@@ -257,21 +98,6 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->assertSame(0, ContaEstrategica::count());
     }
 
-    /** O caso real de 08/10: `rede` com o nome do grupo controlador duplicava a conta. */
-    public function test_rede_de_grupo_liga_pela_razao_social_sem_criar_conta(): void
-    {
-        $pacheco = $this->conta('DROGARIA PACHECO', ordem: 1);
-        $this->conta('DROGARIA SÃO PAULO', ordem: 2);
-
-        $this->importar([$this->linha('11111111000191', 'DROGARIAS PACHECO S.A.', '109', rede: 'Grupo DPSP', filiais: '1.600')]);
-
-        $this->assertSame(2, ContaEstrategica::count());
-        $lead = Lead::sole();
-        $this->assertSame($pacheco->id, $lead->conta_estrategica_id);
-        $this->assertSame(Lead::CONTA_CONFIRMADA, $lead->conta_vinculo);
-        $this->assertNull($pacheco->fresh()->filiais_mercado, 'as filiais do CSV são do grupo, não da conta');
-    }
-
     public function test_rede_de_grupo_com_razao_que_casa_com_duas_contas_nao_cria_nada(): void
     {
         $this->conta('DROGARIA SÃO PAULO', ordem: 1);
@@ -290,28 +116,6 @@ class LeadsDaProspeccaoTest extends TestCase
 
         $this->assertSame(0, ContaEstrategica::count());
         $this->assertNull(Lead::sole()->conta_estrategica_id);
-    }
-
-    public function test_numero_da_coluna_bate_com_a_lista_de_leads_que_abre(): void
-    {
-        $conta = $this->conta('FARMA NOVA');
-        $this->importar([
-            $this->linha('11111111000191', 'FARMA NOVA 1', '109', rede: 'FARMA NOVA'),
-            $this->linha('22222222000191', 'FARMA NOVA 2', '109', rede: 'FARMA NOVA'),
-            $this->linha('33333333000191', 'OUTRA COISA', '109'),
-        ]);
-        // Excluído sai dos dois lados.
-        Lead::where('razao_social', 'FARMA NOVA 2')->update(['status' => 'excluido']);
-
-        $naColuna = count($this->linhaDa($conta)['leads']);
-
-        $this->actingAs($this->diretor())
-            ->get(route('leads.index', ['conta_alvo' => $conta->id]))
-            ->assertInertia(fn (Assert $p) => $p
-                ->where('leads.total', $naColuna)
-                ->where('filtros.contaAlvo.nome', 'FARMA NOVA'));
-
-        $this->assertSame(1, $naColuna);
     }
 
     public function test_recorte_por_conta_e_ignorado_fora_da_visao_diretor(): void
@@ -358,37 +162,6 @@ class LeadsDaProspeccaoTest extends TestCase
         $this->assertSame(Lead::ORIGEM_MANUAL, Lead::sole()->origem);
     }
 
-    /**
-     * O caso real de 2026-10-05: a diretoria abriu o lead da rede (sem CNPJ, com dono) e
-     * depois a prospecção trouxe a mesma rede com CNPJ. Vira UM lead: o da diretoria, que
-     * herda o CNPJ e o que apontava para o outro — e não renasce no import seguinte.
-     */
-    public function test_lead_da_diretoria_e_da_prospeccao_da_mesma_conta_viram_um_so(): void
-    {
-        $conta = $this->conta('AGAFARMA');
-        $dono = User::factory()->create(['is_active' => true]);
-        $daDiretoria = Lead::create([
-            'origem' => Lead::ORIGEM_MANUAL, 'user_id' => $dono->id, 'cod_vendedor' => '010755',
-            'nome' => 'AGAFARMA', 'razao_social' => 'AGAFARMA', 'status' => 'ativo', 'etapa' => Lead::ETAPA_NOVO,
-        ]);
-        $daDiretoria->forceFill(['conta_estrategica_id' => $conta->id, 'conta_vinculo' => Lead::CONTA_CONFIRMADA])->save();
-
-        $linha = [...$this->linha('11111111000191', 'AGAFARMA COMERCIO LTDA', '109', rede: 'Agafarma'), 'cod_vendedor' => ''];
-        $this->importar([$linha]);
-
-        $lead = Lead::sole();
-        $this->assertSame($daDiretoria->id, $lead->id);
-        $this->assertSame('11.111.111/0001-91', $lead->cnpj);
-        $this->assertSame('AGAFARMA COMERCIO LTDA', $lead->razao_social);
-        $this->assertSame('010755', $lead->cod_vendedor);
-        $this->assertSame(Lead::ORIGEM_MANUAL, $lead->origem);
-        $this->assertSame($conta->id, $lead->conta_estrategica_id);
-
-        $this->importar([$linha]);
-
-        $this->assertSame(1, Lead::count());
-    }
-
     /** O que já apontava para o lead que sai passa para o que fica. */
     public function test_juntar_leva_o_historico_do_lead_que_sai(): void
     {
@@ -429,19 +202,6 @@ class LeadsDaProspeccaoTest extends TestCase
         app(SituacaoCadastral::class)->sincronizarLeads();
 
         $this->assertSame('excluido', Lead::sole()->status);
-    }
-
-    public function test_dry_run_nao_cria_conta_nem_liga_lead(): void
-    {
-        $this->conta('RAIA DROGASIL');
-        $this->escrever([$this->linha('11111111000191', 'FARMA NOVA', '109', rede: 'FARMA NOVA')]);
-
-        $this->artisan('totvs:import-leads', ['--dry-run' => true])
-            ->expectsOutputToContain('contas novas: 1 (1 pela coluna `rede`, 0 pela marca do lead)')
-            ->assertSuccessful();
-
-        $this->assertSame(1, ContaEstrategica::count());
-        $this->assertSame(0, Lead::count());
     }
 
     public function test_rodada_grava_o_relatorio_e_a_atualizacoes_mostra(): void
