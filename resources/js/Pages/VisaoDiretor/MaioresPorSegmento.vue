@@ -109,7 +109,7 @@ const subtituloTabela = computed(() => {
     return [
         `${formatInteiro(c.clientes)} ${c.clientes === 1 ? 'cliente' : 'clientes'}`,
         `${formatInteiro(c.leads)} ${c.leads === 1 ? 'lead' : 'leads'}`,
-        'maiores primeiro',
+        tabela.value.todosOsSegmentos ? 'busca em todos os segmentos, este primeiro' : 'maiores primeiro',
         atualizada.value,
     ].filter(Boolean).join(' · ');
 });
@@ -241,7 +241,7 @@ async function abrirMapa(l) {
             </ResumoSegmentosCard>
 
             <template v-else>
-                <!-- Contam a tabela inteira com busca e UF, ignorando o próprio filtro de status. -->
+                <!-- Contam a tabela inteira com busca e UF, ignorando o próprio filtro de status. Com busca, de todos os segmentos. -->
                 <div class="flex flex-wrap gap-2">
                     <KpiTile
                         :value="formatInteiro(tabela?.contagens.total ?? 0)"
@@ -286,7 +286,7 @@ async function abrirMapa(l) {
 
                     <p v-if="! tabela" class="px-3 py-10 text-center text-sm text-gray-400">Carregando…</p>
                     <p v-else-if="! tabela.linhas.data.length" class="px-3 py-10 text-center text-sm text-gray-400">
-                        {{ tabela.contagens.total ? 'Nada neste segmento com os filtros aplicados.' : 'Nenhum cliente ou lead neste segmento.' }}
+                        {{ tabela.todosOsSegmentos ? 'Nada encontrado em nenhum segmento.' : tabela.contagens.total ? 'Nada neste segmento com os filtros aplicados.' : 'Nenhum cliente ou lead neste segmento.' }}
                     </p>
                     <template v-else>
                         <div class="transition-opacity" :class="carregando ? 'opacity-50' : ''">
@@ -294,6 +294,7 @@ async function abrirMapa(l) {
                                 :linhas="tabela.linhas.data"
                                 :posicao-inicial="tabela.linhas.from ?? 1"
                                 :segmento="tabela.segmento"
+                                :mostrar-segmento="tabela.todosOsSegmentos"
                                 @cartao-cnpj="abrirCartao"
                                 @mapa="abrirMapa"
                             />

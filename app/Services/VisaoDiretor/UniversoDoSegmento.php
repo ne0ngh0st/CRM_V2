@@ -199,11 +199,25 @@ class UniversoDoSegmento
                 SQL, [$agora]);
             DB::statement('DROP TEMPORARY TABLE vdu_raiz_cliente');
 
+            self::preencherBusca();
+
             return [
                 'clientes' => DB::table('visao_diretor_universo')->where('tipo', 'cliente')->count(),
                 'leads' => DB::table('visao_diretor_universo')->where('tipo', 'lead')->count(),
             ];
         });
+    }
+
+    /**
+     * As colunas que a busca lê (`busca_texto`, `documento_digitos`), no formato de
+     * `TermoDeBusca::sqlNormalizado()`. Chamada no fim de `reconstruir()` e pela migration
+     * que criou as colunas — o mesmo código, para as duas nunca divergirem.
+     */
+    public static function preencherBusca(): void
+    {
+        $texto = TermoDeBusca::expressaoNormalizada(['nome', 'razao_social', 'nome_fantasia']);
+
+        DB::update("UPDATE visao_diretor_universo SET busca_texto = {$texto}, documento_digitos = NULLIF(REGEXP_REPLACE(COALESCE(documento, ''), '[^0-9]', ''), '')");
     }
 
     /** Quando a tabela foi reconstruída pela última vez (null = nunca). */
@@ -273,7 +287,7 @@ class UniversoDoSegmento
         $filtrada = clone $base;
         $this->aplicarStatus($filtrada, $status);
 
-        $linhas = $this->ordenar($filtrada)
+        $linhas = $this->ordenar($filtrada, $segmento, $busca)
             ->offset(($pagina - 1) * self::POR_PAGINA)
             ->limit(self::POR_PAGINA)
             ->get();
@@ -290,6 +304,8 @@ class UniversoDoSegmento
                 ['pageName' => 'pagina'],
             ),
             'contagens' => $contagens,
+            // Com busca, a lista é de TODOS os segmentos (ver `base()`): a tela mostra a coluna Segmento.
+            'todosOsSegmentos' => $busca !== '',
             'filtros' => ['status' => $status, 'busca' => $busca, 'uf' => $uf],
             'reconstruidoEm' => $this->reconstruidoEm()?->toIso8601String(),
         ];
@@ -304,11 +320,12 @@ class UniversoDoSegmento
      */
     public function tudo(string $segmento, array $filtros = []): array
     {
-        $query = $this->base($segmento, trim((string) ($filtros['busca'] ?? '')), (string) ($filtros['uf'] ?? ''));
+        $busca = trim((string) ($filtros['busca'] ?? ''));
+        $query = $this->base($segmento, $busca, (string) ($filtros['uf'] ?? ''));
         $this->aplicarStatus($query, $this->status($filtros['status'] ?? ''));
 
         $linhas = [];
-        $this->ordenar($query)->chunk(1000, function (Collection $lote) use (&$linhas) {
+        $this->ordenar($query, $segmento, $busca)->chunk(1000, function (Collection $lote) use (&$linhas) {
             array_push($linhas, ...$this->montarLinhas($lote));
         });
 
@@ -327,24 +344,45 @@ class UniversoDoSegmento
         return in_array($valor, self::STATUS, true) ? $valor : '';
     }
 
-    /** Do maior capital ao menor; `id` desempata no mesmo sentido (o índice atende os dois). */
-    private function ordenar(Builder $query): Builder
+    /**
+     * Do maior capital ao menor; `id` desempata no mesmo sentido (o índice atende os dois).
+     * Com busca (que atravessa os segmentos), as linhas da aba aberta vêm antes.
+     */
+    private function ordenar(Builder $query, string $segmento, string $busca): Builder
     {
+        if ($busca !== '') {
+            $query->orderByRaw('segmento_codigo <> ?', [$segmento]);
+        }
+
         return $query->orderByDesc('capital_ordem')->orderByDesc('id');
     }
 
-    /** Os clientes e leads do segmento, com busca e UF. */
+    /**
+     * Os clientes e leads do segmento, com busca e UF.
+     *
+     * ⚠️ COM BUSCA, O SEGMENTO NÃO RECORTA (Tony, 2026-10-14): o cadastro do TOTVS tem muito
+     * cliente no segmento errado, e procurar uma drogaria na aba Drogarias sem achá-la, por
+     * estar cadastrada como supermercado, faz parecer que ela não existe. A busca procura em
+     * todos os segmentos; a aba aberta só ordena (as linhas dela primeiro) e a tela marca o
+     * que está em outro segmento. Empresa com filiais em dois segmentos aparece duas vezes,
+     * uma por segmento — é a mesma informação que diz onde estão as outras filiais.
+     * Tiles e lista continuam saindo desta mesma base, então continuam batendo.
+     */
     private function base(string $segmento, string $busca, string $uf): Builder
     {
-        $query = DB::table('visao_diretor_universo')->where('segmento_codigo', $segmento);
+        $query = DB::table('visao_diretor_universo');
+
+        if ($busca === '') {
+            $query->where('segmento_codigo', $segmento);
+        }
 
         if ($uf !== '') {
             $query->where('uf', $uf);
         }
 
         if ($busca !== '') {
-            // Começo de palavra (`TermoDeBusca`). Documento é gravado com máscara.
-            [$casa, $bindings] = TermoDeBusca::sql(['nome', 'razao_social', 'nome_fantasia'], $busca, "REGEXP_REPLACE(documento, '[^0-9]', '')");
+            // Começo de palavra (`TermoDeBusca`), nas colunas que `preencherBusca()` normalizou.
+            [$casa, $bindings] = TermoDeBusca::sqlNormalizado('busca_texto', $busca, 'documento_digitos');
             $query->whereRaw($casa, $bindings);
         }
 
@@ -415,6 +453,8 @@ class UniversoDoSegmento
     {
         $nomes = $this->nomeVendedor->porCodigo($linhas->pluck('cod_vendedor')->filter()->unique());
         $hoje = Carbon::now();
+        // São ~25 segmentos: uma consulta por lote, sem join na listagem.
+        $segmentos = Segmento::query()->pluck('nome', 'codigo');
 
         /*
          * Grupo do TOTVS da matriz (âncora) de cada empresa. Lido aqui, uma consulta por
@@ -427,7 +467,7 @@ class UniversoDoSegmento
             ->where('a.cod_grupo', '<>', GrupoCliente::SEM_GRUPO)
             ->pluck('g.nome', 'a.id');
 
-        return $linhas->map(function ($l) use ($nomes, $hoje, $grupos) {
+        return $linhas->map(function ($l) use ($nomes, $hoje, $grupos, $segmentos) {
             $ehCliente = $l->tipo === 'cliente';
             $uc = $l->data_ultima_compra ? Carbon::parse($l->data_ultima_compra) : null;
             $digitos = preg_replace('/\D/', '', (string) $l->documento);
@@ -451,6 +491,8 @@ class UniversoDoSegmento
                 'nomeFantasia' => $l->nome_fantasia && mb_strtoupper($l->nome_fantasia) !== mb_strtoupper($l->nome) ? $l->nome_fantasia : null,
                 'documento' => $l->documento,
                 'uf' => $l->uf,
+                'segmentoCodigo' => (string) $l->segmento_codigo,
+                'segmentoNome' => $segmentos[$l->segmento_codigo] ?? (string) $l->segmento_codigo,
                 // Filiais do cliente NESTE segmento. Lead não tem filial nossa: nulo ("—").
                 'filiais' => $ehCliente ? (int) $l->lojas : null,
                 'status' => $ehCliente ? $this->statusResolver->statusPara($uc, $hoje) : 'lead',

@@ -45,7 +45,7 @@ class ClientesLeadsSegmentoExport implements FromArray, WithHeadings
 
     public function headings(): array
     {
-        return ['Razão social', 'Nome fantasia', 'Tipo', 'CNPJ', 'Grupo', 'UF', 'Filiais', 'Status', 'Vendedor'];
+        return ['Razão social', 'Nome fantasia', 'Tipo', 'CNPJ', 'Grupo', 'UF', 'Filiais', 'Status', 'Vendedor', 'Segmento'];
     }
 
     /** @param  array<string, mixed>  $l  uma linha de `UniversoDoSegmento::tudo()` */
@@ -61,6 +61,8 @@ class ClientesLeadsSegmentoExport implements FromArray, WithHeadings
             $l['filiais'] ?? '',
             self::ROTULOS_STATUS[$l['status']] ?? $l['status'],
             $l['vendedor'] ?? '',
+            // Com busca, a planilha atravessa os segmentos como a tela (`UniversoDoSegmento::base()`).
+            $l['segmentoNome'],
         ];
     }
 }

@@ -314,10 +314,52 @@ class UniversoDoSegmentoTest extends TestCase
     {
         app(UniversoDoSegmento::class)->reconstruir();
 
-        // Busca pelo fantasia de uma loja acha a empresa.
-        $this->assertSame(['CLIENTE 000001'], collect($this->lista(['busca' => 'raia'])['dados'])->pluck('nome')->all());
+        // Busca pelo fantasia de uma loja acha a empresa — nos DOIS segmentos em que ela tem filial.
+        $this->assertSame(['CLIENTE 000001', 'CLIENTE 000001'], collect($this->lista(['busca' => 'raia'])['dados'])->pluck('nome')->all());
         $this->assertSame(4, $this->lista(['uf' => 'SP'])['linhas']->total());
         $this->assertSame(0, $this->lista(['uf' => 'RJ'])['linhas']->total());
+    }
+
+    /**
+     * O cadastro do TOTVS erra segmento (Tony, 2026-10-14): com busca, a lista atravessa os
+     * segmentos, a aba aberta vem primeiro e cada linha diz o próprio segmento.
+     */
+    public function test_busca_procura_em_todos_os_segmentos_e_a_aba_vem_primeiro(): void
+    {
+        // Uma drogaria cadastrada como supermercado.
+        $this->cliente('000009', '01', '101', '99999999000101', now()->subDays(5), 'DROGA ERRADA');
+        app(UniversoDoSegmento::class)->reconstruir();
+
+        $naDrogaria = $this->lista(['busca' => 'droga errada']);
+        $this->assertTrue($naDrogaria['todosOsSegmentos']);
+        $this->assertSame([['101', 'SUPERMERCADISTA']], collect($naDrogaria['dados'])->map(fn ($l) => [$l['segmentoCodigo'], $l['segmentoNome']])->all());
+
+        // A empresa com filiais nos dois segmentos: a linha da aba aberta primeiro, nas duas abas.
+        $this->assertSame(['109', '101'], collect($this->lista(['busca' => 'raia'], '109')['dados'])->pluck('segmentoCodigo')->all());
+        $this->assertSame(['101', '109'], collect($this->lista(['busca' => 'raia'], '101')['dados'])->pluck('segmentoCodigo')->all());
+
+        // Começo de palavra, com separador no termo ou no texto; "meio de palavra" não casa.
+        $this->assertSame(1, $this->lista(['busca' => 'droga-errada'])['linhas']->total());
+        $this->assertSame(0, $this->lista(['busca' => 'roga errada'])['linhas']->total());
+        $this->assertSame(1, $this->lista(['busca' => '99.999.999'])['linhas']->total());
+
+        // Sem busca, a aba continua sendo só do segmento.
+        $semBusca = $this->lista();
+        $this->assertFalse($semBusca['todosOsSegmentos']);
+        $this->assertSame(['109'], collect($semBusca['dados'])->pluck('segmentoCodigo')->unique()->values()->all());
+
+        // Tiles e lista continuam saindo da mesma base: o tile "Ativos" == a lista filtrada.
+        $raia = $this->lista(['busca' => 'raia']);
+        $this->assertSame($raia['contagens']['total'], $raia['linhas']->total());
+        $this->assertSame($raia['contagens']['ativo'], $this->lista(['busca' => 'raia', 'status' => 'ativo'])['linhas']->total());
+        // As duas linhas da empresa são ativas: o status é pela última compra de TODAS as filiais.
+        $this->assertSame(2, $raia['contagens']['ativo']);
+
+        // O Excel leva o mesmo recorte, com o segmento de cada linha na última coluna.
+        $export = new ClientesLeadsSegmentoExport('109', ['busca' => 'raia']);
+        $linhas = $export->array();
+        $this->assertSame('Segmento', last($export->headings()));
+        $this->assertSame(['DROGARIAS', 'SUPERMERCADISTA'], array_map(fn ($l) => last($l), $linhas));
     }
 
     public function test_paginacao_nao_pula_ninguem(): void

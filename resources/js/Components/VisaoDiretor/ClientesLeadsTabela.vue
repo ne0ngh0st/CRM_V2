@@ -6,6 +6,9 @@
  * A ordem (capital social) vem do servidor e não aparece aqui.
  *
  * Todo nome leva ao CRM: cliente → ficha; lead → /leads; filiais → essas filiais na Carteira.
+ *
+ * Com busca, a lista atravessa os segmentos (o cadastro do TOTVS erra segmento): aparece a
+ * coluna Segmento, e a linha de OUTRO segmento que não o da aba fica marcada em âmbar.
  */
 import { Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
@@ -16,8 +19,10 @@ defineProps({
     linhas: { type: Array, required: true },
     // Posição (na lista inteira) da primeira linha desta página.
     posicaoInicial: { type: Number, default: 1 },
-    // Código do segmento da aba: o link de filiais abre só as filiais dele aqui.
+    // Código do segmento da aba: a linha de outro segmento é marcada.
     segmento: { type: String, default: '' },
+    // A busca atravessa os segmentos: mostra a coluna Segmento.
+    mostrarSegmento: { type: Boolean, default: false },
 });
 
 // Cliente → a empresa inteira na Carteira (pela raiz do CNPJ); lead → /leads.
@@ -38,15 +43,21 @@ function hrefDaLinha(l) {
                 <tr class="tbl-head-row">
                     <th class="tbl-th">Nome</th>
                     <th class="tbl-th" title="Grupo do cliente no TOTVS (da matriz)">Grupo</th>
+                    <th v-if="mostrarSegmento" class="tbl-th" title="Segmento do cadastro no TOTVS">Segmento</th>
                     <th class="tbl-th">UF</th>
-                    <th class="tbl-th" title="Filiais do cliente neste segmento">Filiais</th>
+                    <th class="tbl-th" title="Filiais do cliente no segmento da linha">Filiais</th>
                     <th class="tbl-th">Status</th>
                     <th class="tbl-th">Vendedor</th>
                     <th class="tbl-th">Ações</th>
                 </tr>
             </thead>
             <tbody class="tbl-body">
-                <tr v-for="(l, i) in linhas" :key="l.chave" class="tbl-row">
+                <tr
+                    v-for="(l, i) in linhas"
+                    :key="l.chave"
+                    class="tbl-row"
+                    :class="mostrarSegmento && l.segmentoCodigo !== segmento ? 'bg-amber/5' : ''"
+                >
                     <!--
                         RAZÃO SOCIAL em cima: é única por empresa. Com a marca em cima, as
                         empresas do mesmo grupo (Carrefour, Bompreço, Comercial de Alimentos
@@ -64,11 +75,20 @@ function hrefDaLinha(l) {
                         <span v-if="l.grupo" class="tbl-trunc sm:max-w-[200px]" :title="l.grupo">{{ l.grupo }}</span>
                         <span v-else class="text-gray-400">—</span>
                     </td>
+                    <td v-if="mostrarSegmento" class="tbl-td" data-rotulo="Segmento">
+                        <StatusPill
+                            v-if="l.segmentoCodigo !== segmento"
+                            tone="warn"
+                            size="sm"
+                            :title="`Cadastrado em ${l.segmentoNome}, não neste segmento`"
+                        >{{ l.segmentoNome }}</StatusPill>
+                        <span v-else>{{ l.segmentoNome }}</span>
+                    </td>
                     <td class="tbl-td" data-rotulo="UF">{{ l.uf || '—' }}</td>
                     <td class="tbl-td tabular-nums" data-rotulo="Filiais">
                         <Link
                             v-if="l.filiais !== null"
-                            :href="route('carteira.index', { busca: l.buscaCarteira, segmento, agrupar: 0 })"
+                            :href="route('carteira.index', { busca: l.buscaCarteira, segmento: l.segmentoCodigo, agrupar: 0 })"
                             class="tbl-main font-semibold text-teal hover:underline"
                             title="Abrir estas filiais na Carteira"
                         >{{ formatInteiro(l.filiais) }}</Link>

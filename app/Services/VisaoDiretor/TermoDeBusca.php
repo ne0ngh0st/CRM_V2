@@ -62,6 +62,52 @@ final class TermoDeBusca
         return ['('.implode(' OR ', $partes).')', $bindings];
     }
 
+    /**
+     * A mesma regra, para uma coluna já normalizada por `expressaoNormalizada()`: o texto
+     * guardado tem espaço no começo e cada separador virou UM espaço, então "começa uma
+     * palavra" é um único `LIKE '% termo%'` — e não 8 por coluna. Para tabela grande lida
+     * inteira (a busca da Visão Diretor atravessa os segmentos: 330 ms → 110 ms em 38 mil
+     * linhas, dev 14/10/2026).
+     *
+     * O termo passa pela mesma troca de separadores: "raia-drogasil" casa com
+     * "RAIA DROGASIL" e com "RAIA-DROGASIL".
+     *
+     * @return array{0: string, 1: list<string>}  [sql entre parênteses, bindings]
+     */
+    public static function sqlNormalizado(string $colunaTexto, string $busca, ?string $colunaDigitos = null): array
+    {
+        $termo = trim((string) preg_replace('/['.preg_quote(implode('', self::SEPARADORES), '/').']+/', ' ', $busca));
+        $partes = [];
+        $bindings = [];
+
+        if ($termo !== '') {
+            $partes[] = "{$colunaTexto} LIKE ?";
+            $bindings[] = '% '.addcslashes($termo, '%_\\').'%';
+        }
+
+        $digitos = preg_replace('/\D/', '', $busca);
+        if ($colunaDigitos !== null && strlen($digitos) >= 4) {
+            $partes[] = "{$colunaDigitos} LIKE ?";
+            $bindings[] = "{$digitos}%";
+        }
+
+        return [$partes ? '('.implode(' OR ', $partes).')' : '(1 = 0)', $bindings];
+    }
+
+    /**
+     * Expressão SQL que grava o texto no formato de `sqlNormalizado()`: as colunas juntas,
+     * um espaço no começo e cada sequência de separadores trocada por um espaço.
+     *
+     * @param  list<string>  $colunas
+     */
+    public static function expressaoNormalizada(array $colunas): string
+    {
+        // `-` primeiro na classe: em outro lugar vira intervalo.
+        $classe = '[-'.implode('', array_diff(self::SEPARADORES, ['-'])).']+';
+
+        return "CONCAT(' ', REGEXP_REPLACE(CONCAT_WS(' ', ".implode(', ', $colunas)."), '{$classe}', ' '))";
+    }
+
     private static function normalizar(string $texto): string
     {
         return mb_strtoupper(Str::ascii(trim($texto)));
