@@ -8,7 +8,7 @@
  * Todo nome leva ao CRM: cliente → ficha; lead → /leads; filiais → essas filiais na Carteira.
  *
  * Com busca, a lista atravessa os segmentos (o cadastro do TOTVS erra segmento): aparece a
- * coluna Segmento, e a linha de OUTRO segmento que não o da aba fica marcada em âmbar.
+ * coluna Segmento, e o segmento que não é o da aba sai em âmbar, com um ponto.
  */
 import { Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
@@ -52,12 +52,7 @@ function hrefDaLinha(l) {
                 </tr>
             </thead>
             <tbody class="tbl-body">
-                <tr
-                    v-for="(l, i) in linhas"
-                    :key="l.chave"
-                    class="tbl-row"
-                    :class="mostrarSegmento && l.segmentoCodigo !== segmento ? 'bg-amber/5' : ''"
-                >
+                <tr v-for="(l, i) in linhas" :key="l.chave" class="tbl-row">
                     <!--
                         RAZÃO SOCIAL em cima: é única por empresa. Com a marca em cima, as
                         empresas do mesmo grupo (Carrefour, Bompreço, Comercial de Alimentos
@@ -76,13 +71,13 @@ function hrefDaLinha(l) {
                         <span v-else class="text-gray-400">—</span>
                     </td>
                     <td v-if="mostrarSegmento" class="tbl-td" data-rotulo="Segmento">
-                        <StatusPill
+                        <!-- Marca discreta (Tony: a pill âmbar ficou "MUITO feio"): só a cor e um ponto. -->
+                        <span
                             v-if="l.segmentoCodigo !== segmento"
-                            tone="warn"
-                            size="sm"
+                            class="inline-flex items-center gap-1.5 text-xs font-medium text-amber-dark"
                             :title="`Cadastrado em ${l.segmentoNome}, não neste segmento`"
-                        >{{ l.segmentoNome }}</StatusPill>
-                        <span v-else>{{ l.segmentoNome }}</span>
+                        ><span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber" aria-hidden="true" />{{ l.segmentoNome }}</span>
+                        <span v-else class="text-xs">{{ l.segmentoNome }}</span>
                     </td>
                     <td class="tbl-td" data-rotulo="UF">{{ l.uf || '—' }}</td>
                     <td class="tbl-td tabular-nums" data-rotulo="Filiais">
