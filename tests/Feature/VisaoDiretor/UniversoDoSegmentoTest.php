@@ -93,11 +93,11 @@ class UniversoDoSegmentoTest extends TestCase
         ]);
     }
 
-    private function receita(string $cnpj, float $capital, string $porte): void
+    private function receita(string $cnpj, float $capital, string $porte, string $situacao = 'ATIVA'): void
     {
         DB::table('cnpj_situacoes')->insert([
             'cnpj' => $cnpj,
-            'situacao' => 'ATIVA',
+            'situacao' => $situacao,
             'capital_social' => $capital,
             'porte' => ['01' => 'ME', '03' => 'EPP', '05' => 'DEMAIS'][$porte],
             'fonte' => 'base',
@@ -360,6 +360,36 @@ class UniversoDoSegmentoTest extends TestCase
         $linhas = $export->array();
         $this->assertSame('Segmento', last($export->headings()));
         $this->assertSame(['DROGARIAS', 'SUPERMERCADISTA'], array_map(fn ($l) => last($l), $linhas));
+    }
+
+    /**
+     * Empresa fechada não entra (Tony, 2026-10-14): sem nenhuma filial ATIVA no segmento, a
+     * linha sai, mesmo tendo comprado agora. Situação desconhecida conta como ativa.
+     */
+    public function test_empresa_sem_filial_ativa_na_receita_nao_aparece(): void
+    {
+        // Toda baixada, e comprou há 5 dias: sai assim mesmo.
+        $this->cliente('000020', '01', '109', '20202020000101', now()->subDays(5));
+        $this->cliente('000020', '02', '109', '20202020000202', now()->subDays(900));
+        $this->receita('20202020000101', 10_000_000, '05', 'BAIXADA');
+        $this->receita('20202020000202', 10_000_000, '05', 'INAPTA');
+        // Matriz baixada, filial ativa: fica, e a linha é a da filial ativa.
+        $this->cliente('000021', '01', '109', '21212121000101', now()->subDays(900));
+        $this->cliente('000021', '02', '109', '21212121000202', now()->subDays(900));
+        $this->receita('21212121000101', 1_000, '01', 'BAIXADA');
+        $this->receita('21212121000202', 1_000, '01');
+        app(UniversoDoSegmento::class)->reconstruir();
+
+        $dados = collect($this->lista()['dados']);
+        $this->assertNull($dados->firstWhere('buscaCarteira', '20.202.020'));
+        $mista = $dados->firstWhere('buscaCarteira', '21.212.121');
+        $this->assertNotNull($mista);
+        $this->assertSame('21.212.121/0002-02', $mista['documento']);
+        $this->assertSame(2, $mista['filiais']);
+        // 000004 (44444444) nunca foi verificada na Receita: continua.
+        $this->assertNotNull($dados->firstWhere('buscaCarteira', '44.444.444'));
+        // Nem a busca a traz de volta.
+        $this->assertSame(0, $this->lista(['busca' => '20202020'])['linhas']->total());
     }
 
     public function test_paginacao_nao_pula_ninguem(): void

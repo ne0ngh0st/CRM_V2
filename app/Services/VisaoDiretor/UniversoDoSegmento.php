@@ -75,6 +75,15 @@ class UniversoDoSegmento
              *
              * A âncora (`cliente_id`) é a matriz (/0001) quando existe — é dela o nome, o
              * CNPJ, a UF e o vendedor da linha. O nome fantasia vem no passo seguinte.
+             *
+             * ⚠️ EMPRESA FECHADA NÃO ENTRA (Tony, 2026-10-14): se TODAS as filiais dela no
+             * segmento estão com situação conhecida e diferente de ATIVA na Receita (baixada,
+             * inapta, suspensa…), a linha sai — mesmo que tenha comprado no último ano. Em
+             * produção eram ~8,8 mil empresas, quase todas em "A trabalhar", e a lista de onde
+             * voltar a vender virava lista de empresa fechada. Situação desconhecida (nunca
+             * verificada, CPF) conta como ativa: não acusar o que não se sabe, como a Carteira.
+             * Com a matriz baixada e alguma filial ativa, a âncora é a filial ativa.
+             * Leads não precisam disso: o import já só deixa entrar lead ATIVA.
              * ⚠️ GROUP_CONCAT corta em 1.024 bytes por padrão e, num INSERT, o corte vira
              * ERRO (empresa com centenas de filiais). Daí o limite da sessão.
              */
@@ -84,7 +93,7 @@ class UniversoDoSegmento
                     (segmento_codigo, tipo, cod_cliente, cliente_id, nome, nome_fantasia, lojas,
                      data_ultima_compra, capital_social, capital_ordem, porte, reconstruido_em)
                 SELECT c.cod_segmento, 'cliente', MIN(c.cod_cliente),
-                       SUBSTRING_INDEX(GROUP_CONCAT(c.id ORDER BY SUBSTRING(c.cnpj_digitos, 9, 4) = '0001' DESC, c.id), ',', 1),
+                       SUBSTRING_INDEX(GROUP_CONCAT(c.id ORDER BY COALESCE(cs.situacao, 'ATIVA') <> 'ATIVA', SUBSTRING(c.cnpj_digitos, 9, 4) = '0001' DESC, c.id), ',', 1),
                        '', NULL,
                        COUNT(*),
                        u.uc, MAX(cs.capital_social), COALESCE(MAX(cs.capital_social), -1),
@@ -96,6 +105,7 @@ class UniversoDoSegmento
                     ON u.empresa = {$empresa}
                 LEFT JOIN cnpj_situacoes cs ON cs.cnpj = c.cnpj_digitos
                 GROUP BY c.cod_segmento, {$empresa}, u.uc
+                HAVING SUM(COALESCE(cs.situacao, 'ATIVA') = 'ATIVA') > 0
                 SQL, [$agora]);
 
             /*
