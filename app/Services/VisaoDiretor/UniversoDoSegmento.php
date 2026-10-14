@@ -161,8 +161,21 @@ class UniversoDoSegmento
              * dizer que já é cliente.
              *
              * Lead de EMPRESA que já é cliente (mesma raiz) não entra: a empresa já está na
-             * linha do cliente. O `LIKE 'raiz%'` usa o índice de `cnpj_digitos`.
+             * linha do cliente.
+             *
+             * ⚠️ As raízes dos clientes vão antes para uma tabela TEMPORÁRIA com chave, e o
+             * lead consulta por igualdade. A primeira versão fazia
+             * `cnpj_digitos LIKE CONCAT(LEFT(l.digitos, 8), '%')`: padrão montado em tempo de
+             * execução não usa índice, e com os ~12 mil leads de produção virou 12 mil
+             * varreduras de `clientes` — travou o deploy de 14/10 por 7+ minutos. No dev
+             * passava porque lá nenhum lead tem segmento (Regra de ouro nº 6).
              */
+            DB::statement('DROP TEMPORARY TABLE IF EXISTS vdu_raiz_cliente');
+            DB::statement('CREATE TEMPORARY TABLE vdu_raiz_cliente (raiz CHAR(8) PRIMARY KEY) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            DB::statement(<<<'SQL'
+                INSERT IGNORE INTO vdu_raiz_cliente (raiz)
+                SELECT DISTINCT LEFT(cnpj_digitos, 8) FROM clientes WHERE CHAR_LENGTH(cnpj_digitos) = 14
+                SQL);
             DB::insert(<<<'SQL'
                 INSERT INTO visao_diretor_universo
                     (segmento_codigo, tipo, lead_id, nome, razao_social, nome_fantasia, documento, uf, cod_vendedor,
@@ -181,9 +194,10 @@ class UniversoDoSegmento
                 JOIN segmentos s ON s.nome = l.segmento
                 LEFT JOIN cnpj_situacoes cs ON cs.cnpj = l.digitos
                 WHERE l.digitos IS NULL
-                   OR (CHAR_LENGTH(l.digitos) = 14 AND NOT EXISTS (SELECT 1 FROM clientes c WHERE c.cnpj_digitos LIKE CONCAT(LEFT(l.digitos, 8), '%')))
+                   OR (CHAR_LENGTH(l.digitos) = 14 AND NOT EXISTS (SELECT 1 FROM vdu_raiz_cliente r WHERE r.raiz = LEFT(l.digitos, 8)))
                    OR (CHAR_LENGTH(l.digitos) <> 14 AND NOT EXISTS (SELECT 1 FROM clientes c WHERE c.cnpj_digitos = l.digitos))
                 SQL, [$agora]);
+            DB::statement('DROP TEMPORARY TABLE vdu_raiz_cliente');
 
             return [
                 'clientes' => DB::table('visao_diretor_universo')->where('tipo', 'cliente')->count(),
