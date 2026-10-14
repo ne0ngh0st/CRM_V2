@@ -48,14 +48,16 @@ function hrefDaLinha(l) {
             <tbody class="tbl-body">
                 <tr v-for="(l, i) in linhas" :key="l.chave" class="tbl-row">
                     <!--
-                        Nome fantasia em cima (a marca, que é como o dono conhece a empresa);
-                        embaixo a razão social e o CNPJ. Sem fantasia, a razão social sobe.
+                        RAZÃO SOCIAL em cima: é única por empresa. Com a marca em cima, as
+                        empresas do mesmo grupo (Carrefour, Bompreço, Comercial de Alimentos
+                        Carrefour…) apareciam todas como "CARREFOUR" e pareciam duplicadas (Tony,
+                        14/10/2026). Embaixo a marca e o CNPJ.
                     -->
                     <td class="tbl-td tbl-td-titulo">
-                        <Link :href="hrefDaLinha(l)" class="tbl-main text-teal hover:underline sm:max-w-[380px]" :title="l.nomeFantasia || l.nome">
-                            <span class="mr-1 tabular-nums text-gray-400">{{ posicaoInicial + i }}.</span>{{ l.nomeFantasia || l.nome }}
+                        <Link :href="hrefDaLinha(l)" class="tbl-main text-teal hover:underline sm:max-w-[380px]" :title="l.nome">
+                            <span class="mr-1 tabular-nums text-gray-400">{{ posicaoInicial + i }}.</span>{{ l.nome }}
                         </Link>
-                        <span v-if="l.nomeFantasia" class="tbl-sub mx-auto truncate sm:max-w-[380px]" :title="l.nome">{{ l.nome }}</span>
+                        <span v-if="l.nomeFantasia" class="tbl-sub mx-auto truncate sm:max-w-[380px]" :title="l.nomeFantasia">{{ l.nomeFantasia }}</span>
                         <span class="tbl-sub">{{ l.documento || 'sem CNPJ' }} · {{ l.tipo === 'lead' ? 'Lead' : 'Cliente' }}</span>
                     </td>
                     <td class="tbl-td" data-rotulo="Grupo">

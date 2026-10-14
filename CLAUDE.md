@@ -3061,7 +3061,7 @@ Detalhe em `docs/visao-diretor.md` §2, "Redesenho de 2026-10-14".
 
 - Tabela por segmento: **uma linha por EMPRESA** (raiz do CNPJ calculada só dentro de
   `UniversoDoSegmento::reconstruir()`, nunca coluna — Regra nº 3) e por lead. Colunas:
-  Nome (fantasia = a marca; razão social e CNPJ embaixo), Grupo, UF, Filiais, Status, Vendedor,
+  Nome (razão social em cima; marca e CNPJ embaixo), Grupo, UF, Filiais, Status, Vendedor,
   Ações (Google Maps com o endereço da Receita e cartão CNPJ). Capital social só ordena.
 - Lead de empresa que já é cliente (mesma raiz) não aparece.
 - ⚠️ **Fase 2 pendente**: apagar o código das redes e dropar as tabelas depois do OK do

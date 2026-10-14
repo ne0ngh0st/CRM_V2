@@ -429,7 +429,7 @@ class UniversoDoSegmentoTest extends TestCase
         // Cabeçalho e linha do mesmo tamanho; a primeira é a empresa de dois códigos.
         $export = new ClientesLeadsSegmentoExport('109', []);
         $linhas = $export->array();
-        $this->assertSame(['RAIA', 'CLIENTE 000001', 'Cliente'], array_slice($linhas[0], 0, 3));
+        $this->assertSame(['CLIENTE 000001', 'RAIA', 'Cliente'], array_slice($linhas[0], 0, 3));
         $this->assertSame(3, $linhas[0][6]);
         $this->assertCount(count($export->headings()), $linhas[0]);
     }

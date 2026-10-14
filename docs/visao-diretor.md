@@ -65,7 +65,7 @@ dele (não reabrir sem ele pedir):
   (`UniversoDoSegmento::EMPRESA`, nunca coluna — Regra de ouro nº 3). Cliente com CPF ou
   sem CNPJ: por código. Motivo: "pesquisar Carrefour traz duas páginas de Carrefour" — a
   mesma empresa tinha 26 códigos no TOTVS.
-- **Colunas:** Nome (fantasia em cima; razão social e CNPJ da matriz embaixo) · Grupo
+- **Colunas:** Nome (razão social em cima — única por empresa; marca e CNPJ da matriz embaixo) · Grupo
   (do TOTVS, o da matriz, lido na hora; CLIENTES DIVERSOS 9998 sai "—") · UF ·
   Filiais (do segmento; lead "—") · Status (Ativo / Perdendo / A trabalhar / Lead) ·
   Vendedor · Ações (mapa e cartão CNPJ). **Capital social sai da tela** mas continua

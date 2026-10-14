@@ -45,15 +45,15 @@ class ClientesLeadsSegmentoExport implements FromArray, WithHeadings
 
     public function headings(): array
     {
-        return ['Nome fantasia', 'Razão social', 'Tipo', 'CNPJ', 'Grupo', 'UF', 'Filiais', 'Status', 'Vendedor'];
+        return ['Razão social', 'Nome fantasia', 'Tipo', 'CNPJ', 'Grupo', 'UF', 'Filiais', 'Status', 'Vendedor'];
     }
 
     /** @param  array<string, mixed>  $l  uma linha de `UniversoDoSegmento::tudo()` */
     public function map(array $l): array
     {
         return [
-            $l['nomeFantasia'] ?? '',
             $l['nome'],
+            $l['nomeFantasia'] ?? '',
             $l['tipo'] === 'lead' ? 'Lead' : 'Cliente',
             $l['documento'] ?? '',
             $l['grupo'] ?? '',
