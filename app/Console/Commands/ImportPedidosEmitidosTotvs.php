@@ -273,6 +273,9 @@ class ImportPedidosEmitidosTotvs extends Command
                 continue;
             }
 
+            $itens[$numero] = self::juntarItemDividido($itens[$numero]);
+            $cabecalhos[$numero]['valor_total'] = array_sum(array_column($itens[$numero], 'valor_total'));
+
             if ($cab['tem_item_aberto']) {
                 // Em aberto (inteiro ou parcial): a etapa vem do 200, que roda depois.
                 $cabecalhos[$numero]['data_faturamento'] = null;
@@ -283,6 +286,57 @@ class ImportPedidosEmitidosTotvs extends Command
         }
 
         return [$cabecalhos, $itens, $linhas, $foraDoFiltro, $semCliente];
+    }
+
+    /**
+     * Junta de volta o item que o 232 partiu em uma linha por liberação de estoque.
+     *
+     * 🚨 Quando o estoque libera um item EM PARTES, o 232 emite uma linha por liberação e
+     * repete em TODAS a quantidade e o valor CHEIOS do item — a parte de cada linha só
+     * aparece em `DTA_LIBERADA`. Caso real (2026-10-15): pedido A23277, 3.840 un de
+     * R$ 29.376, liberado 2.880 + 960, veio em duas linhas de 3.840 / R$ 29.376 e o pedido
+     * entrou DOBRADO (R$ 58.752) no CRM e no Power BI. Medido nos arquivos de maio a
+     * outubro/2026: 20 itens, ~R$ 1,23 mi a mais na venda. O e-mail diário de 14/10, feito
+     * antes da liberação, mostrava o valor certo — e foi a diferença com o BI que
+     * denunciou o problema.
+     *
+     * A regra: linhas do mesmo pedido com produto, quantidade, preço e valor iguais, cujas
+     * quantidades liberadas SOMAM a quantidade do item, são um item só. ⚠️ A soma é o que
+     * separa isso de dois itens iguais de verdade (cada um liberado por inteiro somaria o
+     * dobro, nenhum liberado somaria zero) — não juntar por igualdade das colunas sozinha.
+     *
+     * @param  list<array<string, mixed>>  $itens
+     * @return list<array<string, mixed>>
+     */
+    public static function juntarItemDividido(array $itens): array
+    {
+        $grupos = [];
+        foreach ($itens as $i => $item) {
+            $chave = implode('|', [$item['cod_produto'], $item['quantidade'], $item['valor_unitario'], $item['valor_total']]);
+            $grupos[$chave][] = $i;
+        }
+
+        foreach ($grupos as $indices) {
+            if (count($indices) < 2) {
+                continue;
+            }
+
+            $quantidade = (float) $itens[$indices[0]]['quantidade'];
+            $liberada = array_sum(array_map(fn ($i) => (float) $itens[$i]['quantidade_liberada'], $indices));
+
+            if ($quantidade <= 0 || abs($liberada - $quantidade) > 0.001) {
+                continue;
+            }
+
+            $primeiro = array_shift($indices);
+            $itens[$primeiro]['quantidade_liberada'] = $liberada;
+            foreach ($indices as $i) {
+                $itens[$primeiro]['nota_fiscal'] ??= $itens[$i]['nota_fiscal'];
+                unset($itens[$i]);
+            }
+        }
+
+        return array_values($itens);
     }
 
     /**

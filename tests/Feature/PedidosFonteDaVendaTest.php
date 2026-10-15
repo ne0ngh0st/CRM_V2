@@ -231,4 +231,40 @@ class PedidosFonteDaVendaTest extends TestCase
             'valor_total' => $valor,
         ]);
     }
+
+    /**
+     * Caso real, 2026-10-15: A23277, 3.840 un de R$ 29.376, liberado 2.880 + 960. O 232
+     * repete quantidade e valor cheios em cada linha de liberação, e o pedido entrava
+     * dobrado (R$ 58.752) no CRM e no Power BI.
+     */
+    public function test_item_dividido_por_liberacao_parcial_conta_uma_vez(): void
+    {
+        $linha = ['PEDIDO' => 'A23277', 'COD_PROD' => 'V22706', 'PRC_VENDA' => '7,65', 'QTDA_VENDA' => '3.840,00', 'VLR_TOTAL' => '29.376,00'] + self::ABERTA;
+        $this->escreverRelatorio232([
+            ['DTA_LIBERADA' => '2.880,00', 'CARGA' => ''] + $linha,
+            ['DTA_LIBERADA' => '960,00', 'CARGA' => '195447'] + $linha,
+            ['PEDIDO' => 'A23277', 'COD_PROD' => 'V11111', 'QTDA_VENDA' => '10', 'DTA_LIBERADA' => '0', 'VLR_TOTAL' => '123,00'] + self::ABERTA,
+        ]);
+
+        $this->artisan('totvs:import-pedidos-emitidos')->assertSuccessful();
+
+        $pedido = Pedido::where('numero_pedido', 'A23277')->firstOrFail();
+        $this->assertEqualsWithDelta(29499.0, (float) $pedido->valor_total, 0.001);
+        $this->assertSame(2, PedidoItem::where('pedido_id', $pedido->id)->count());
+        $item = PedidoItem::where('pedido_id', $pedido->id)->where('cod_produto', 'V22706')->firstOrFail();
+        $this->assertEqualsWithDelta(3840.0, (float) $item->quantidade_liberada, 0.001);
+    }
+
+    /** Dois itens iguais de verdade (cada um liberado por inteiro) continuam dois. */
+    public function test_dois_itens_iguais_liberados_por_inteiro_nao_se_juntam(): void
+    {
+        $linha = ['PEDIDO' => '995077', 'COD_PROD' => 'V22706', 'QTDA_VENDA' => '100', 'DTA_LIBERADA' => '100', 'VLR_TOTAL' => '765,00'] + self::ABERTA;
+        $this->escreverRelatorio232([$linha, $linha]);
+
+        $this->artisan('totvs:import-pedidos-emitidos')->assertSuccessful();
+
+        $pedido = Pedido::where('numero_pedido', '995077')->firstOrFail();
+        $this->assertEqualsWithDelta(1530.0, (float) $pedido->valor_total, 0.001);
+        $this->assertSame(2, PedidoItem::where('pedido_id', $pedido->id)->count());
+    }
 }
