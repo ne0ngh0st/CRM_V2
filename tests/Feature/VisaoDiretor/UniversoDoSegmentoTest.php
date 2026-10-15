@@ -357,11 +357,11 @@ class UniversoDoSegmentoTest extends TestCase
         $c = $semFiltro['contagens'];
 
         // Cada faixa tem ao menos um: sem isso, trocar uma pela outra passaria verde.
-        foreach (UniversoDoSegmento::STATUS as $status) {
+        foreach (UniversoDoSegmento::STATUS_DA_LINHA as $status) {
             $this->assertGreaterThan(0, $c[$status], "Fixture sem ninguém em {$status}");
         }
 
-        foreach (UniversoDoSegmento::STATUS as $status) {
+        foreach (UniversoDoSegmento::STATUS_DA_LINHA as $status) {
             $filtrada = $this->lista(['status' => $status]);
 
             $this->assertSame($c, $filtrada['contagens'], "Tiles mudaram com o filtro {$status}");
@@ -371,6 +371,17 @@ class UniversoDoSegmentoTest extends TestCase
 
         // As quatro faixas somam o total: ninguém fica sem faixa.
         $this->assertSame($c['total'], $c['ativo'] + $c['inativando'] + $c['inativo'] + $c['lead']);
+
+        /*
+         * "A conquistar" (Tony, 2026-10-15) = perdendo + a trabalhar + leads, e é o
+         * complemento de "Ativos". O tile é a lista filtrada, e a lista traz os três status.
+         */
+        $this->assertSame($c['inativando'] + $c['inativo'] + $c['lead'], $c['conquistar']);
+        $this->assertSame($c['total'], $c['ativo'] + $c['conquistar']);
+        $conquistar = $this->lista(['status' => 'conquistar']);
+        $this->assertSame($c, $conquistar['contagens']);
+        $this->assertSame($c['conquistar'], $conquistar['linhas']->total());
+        $this->assertEqualsCanonicalizing(UniversoDoSegmento::A_CONQUISTAR, collect($conquistar['dados'])->pluck('status')->unique()->values()->all());
     }
 
     public function test_resumo_bate_com_os_tiles_de_cada_aba(): void

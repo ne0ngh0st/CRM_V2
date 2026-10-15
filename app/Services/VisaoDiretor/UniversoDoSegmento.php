@@ -315,8 +315,17 @@ class UniversoDoSegmento
         return $valor ? Carbon::parse($valor) : null;
     }
 
-    /** Os filtros de status da tela: o mesmo corte da Carteira, mais `lead`. */
-    public const STATUS = ['ativo', 'inativando', 'inativo', 'lead'];
+    /** O status de cada linha: o mesmo corte da Carteira, mais `lead`. */
+    public const STATUS_DA_LINHA = ['ativo', 'inativando', 'inativo', 'lead'];
+
+    /**
+     * "A conquistar" = perdendo + a trabalhar + leads: onde a Autopel não vende hoje. Um
+     * tile só na tela (Tony, 2026-10-15); a pill de cada linha continua dizendo qual dos três.
+     */
+    public const A_CONQUISTAR = ['inativando', 'inativo', 'lead'];
+
+    /** Os filtros de status aceitos: os da linha (links antigos) e o agrupado. */
+    public const STATUS = [...self::STATUS_DA_LINHA, 'conquistar'];
 
     /**
      * O Resumo: uma linha por segmento com clientes e leads por status, do maior segmento
@@ -492,6 +501,10 @@ class UniversoDoSegmento
                 ->where('data_ultima_compra', '>=', $inativando),
             'inativo' => $query->where('tipo', 'cliente')
                 ->where(fn (Builder $d) => $d->whereNull('data_ultima_compra')->orWhere('data_ultima_compra', '<', $inativando)),
+            // O complemento de 'ativo': lead, ou cliente sem compra no último corte.
+            'conquistar' => $query->where(fn (Builder $q) => $q->where('tipo', 'lead')
+                ->orWhere(fn (Builder $c) => $c->where('tipo', 'cliente')
+                    ->where(fn (Builder $d) => $d->whereNull('data_ultima_compra')->orWhere('data_ultima_compra', '<', $ativo)))),
         };
     }
 
@@ -506,7 +519,7 @@ class UniversoDoSegmento
             ->selectRaw("SUM(tipo = 'cliente' AND (data_ultima_compra IS NULL OR data_ultima_compra < ?)) as inativo", [$inativando]);
     }
 
-    /** @return array{total: int, clientes: int, leads: int, ativo: int, inativando: int, inativo: int, lead: int} */
+    /** @return array{total: int, clientes: int, leads: int, ativo: int, inativando: int, inativo: int, lead: int, conquistar: int} */
     private function contagensDe(?object $r): array
     {
         $c = [
@@ -517,7 +530,12 @@ class UniversoDoSegmento
             'inativo' => (int) ($r->inativo ?? 0),
         ];
 
-        return ['total' => $c['clientes'] + $c['leads'], ...$c, 'lead' => $c['leads']];
+        return [
+            'total' => $c['clientes'] + $c['leads'],
+            ...$c,
+            'lead' => $c['leads'],
+            'conquistar' => $c['inativando'] + $c['inativo'] + $c['leads'],
+        ];
     }
 
     /** @return array{0: string, 1: string} */

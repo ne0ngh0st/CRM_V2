@@ -22,7 +22,6 @@ import Pagination from '@/Components/Pagination.vue';
 import ResumoSegmentosCard from '@/Components/VisaoDiretor/ResumoSegmentosCard.vue';
 import ClientesLeadsTabela from '@/Components/VisaoDiretor/ClientesLeadsTabela.vue';
 import EspecialistaSelo from '@/Components/Segmentos/EspecialistaSelo.vue';
-import { ROTULOS_STATUS_CONTA } from '@/constants/visaoDiretor';
 import { contarFiltrosAtivos } from '@/utils/filtros';
 import { dataHora, formatInteiro } from '@/utils/formato';
 import { urlDoMapa } from '@/utils/mapas';
@@ -80,12 +79,14 @@ function trocarAba(codigo) {
     visitar();
 }
 
-// Os tiles SÃO o filtro de status: clicar aplica, clicar de novo remove.
+/*
+ * Os tiles SÃO o filtro de status: clicar aplica, clicar de novo remove.
+ * "A conquistar" junta perdendo, a trabalhar e leads (Tony, 2026-10-15) — onde a Autopel
+ * não vende hoje. A pill de cada linha continua dizendo qual dos três.
+ */
 const TILES = [
     { status: 'ativo', tom: 'ok', rotulo: 'Ativos' },
-    { status: 'inativando', tom: 'warn', rotulo: ROTULOS_STATUS_CONTA.inativando },
-    { status: 'inativo', tom: 'danger', rotulo: ROTULOS_STATUS_CONTA.inativo },
-    { status: 'lead', tom: 'default', rotulo: 'Leads' },
+    { status: 'conquistar', tom: 'warn', rotulo: 'A conquistar' },
 ];
 
 function filtrarStatus(status) {

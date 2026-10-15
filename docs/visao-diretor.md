@@ -82,6 +82,9 @@ dele (não reabrir sem ele pedir):
   é aberta antes do `fetch`, senão o bloqueador de pop-up a barra.
 - **Resumo:** uma linha por segmento (Ativos, Perdendo, A trabalhar, Leads), do maior para
   o menor — é também a ordem das abas. Os números são os tiles de cada aba (teste).
+- **Tiles da aba (2026-10-15):** Todos · Ativos · **A conquistar** (perdendo + a trabalhar +
+  leads, filtro `?status=conquistar`). A pill de cada linha continua dizendo qual dos três;
+  os filtros `inativando`/`inativo`/`lead` continuam aceitos pela URL (links antigos).
 - **Um segmento por empresa (2026-10-15).** O cadastro do TOTVS tem filial no segmento
   errado (AMPLA ENERGIA com 1 filial em Supermercadista, LOJAS RENNER com 1 em Drogarias), e
   a regra anterior punha a empresa em toda aba onde tivesse ao menos uma filial. Agora ela
