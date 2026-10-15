@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Cliente;
+use App\Models\Segmento;
 use App\Models\User;
 use App\Models\VendedorPerfil;
 use Database\Seeders\RoleSeeder;
@@ -406,6 +407,24 @@ class CarteiraAgrupadaTest extends TestCase
         $this->assertSame('FULANO DO 001', $porLoja['0001']['vendedorNome']);
         $this->assertSame('002', $porLoja['0002']['codVendedor']);
         $this->assertSame('002', $porLoja['0002']['vendedorNome'], 'sem nome conhecido, cai no código');
+    }
+
+    public function test_cada_filial_traz_o_proprio_segmento(): void
+    {
+        // Filiais do mesmo cliente em segmentos diferentes (cadastro errado no TOTVS): a
+        // expansão mostra o de CADA uma, pelo nome; código sem nome cai no código; sem
+        // segmento, nulo.
+        Segmento::create(['codigo' => '101', 'nome' => 'SUPERMERCADISTA']);
+        Segmento::create(['codigo' => '109', 'nome' => 'DROGARIAS']);
+        Cliente::where('cod_cliente', '100')->where('loja', '0001')->update(['cod_segmento' => '101']);
+        Cliente::where('cod_cliente', '100')->where('loja', '0002')->update(['cod_segmento' => '109']);
+        Cliente::where('cod_cliente', '100')->where('loja', 'E001')->update(['cod_segmento' => '777']);
+        Cliente::where('cod_cliente', '500')->update(['cod_segmento' => null]);
+
+        $porLoja = fn (string $cod) => collect($this->actingAs($this->vendedor)->getJson(route('carteira.filiais', $cod))->json('filiais'))->keyBy('loja');
+
+        $this->assertSame(['SUPERMERCADISTA', 'DROGARIAS', '777'], [$porLoja('100')['0001']['segmento'], $porLoja('100')['0002']['segmento'], $porLoja('100')['E001']['segmento']]);
+        $this->assertNull($porLoja('500')['Z001']['segmento']);
     }
 
     public function test_filiais_de_cliente_fora_do_escopo_da_404(): void

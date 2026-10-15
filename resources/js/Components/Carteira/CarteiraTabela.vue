@@ -348,6 +348,7 @@ function criarOrcamento(cliente) {
                                         <th class="tbl-itens-th">Razão social</th>
                                         <th class="tbl-itens-th">CNPJ</th>
                                         <th class="tbl-itens-th">Cidade / UF</th>
+                                        <th class="tbl-itens-th">Segmento</th>
                                         <th class="tbl-itens-th">Vendedor</th>
                                         <th class="tbl-itens-th">Status</th>
                                         <th class="tbl-itens-th">Última compra</th>
@@ -375,6 +376,7 @@ function criarOrcamento(cliente) {
                                                 {{ localDe(filial) }}
                                             </EnderecoLink>
                                         </td>
+                                        <td class="tbl-itens-td">{{ filial.segmento ?? '—' }}</td>
                                         <td class="tbl-itens-td">
                                             <span class="tbl-trunc sm:max-w-[180px]" :title="filial.vendedorNome">{{ filial.vendedorNome ?? '—' }}</span>
                                         </td>

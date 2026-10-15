@@ -1159,9 +1159,14 @@ class CarteiraController extends Controller
         // Mesmo código de cliente pode ter lojas de vendedores diferentes (3.964 casos);
         // para o gestor, a expansão é onde se vê quem cuida de cada uma.
         $nomesPorCodVendedor = $this->nomeVendedor->porCodigo($filiais->pluck('cod_vendedor'));
+        // Filiais do mesmo cliente podem estar em segmentos diferentes (699 casos).
+        $nomePorSegmento = Segmento::query()
+            ->whereIn('codigo', $filiais->pluck('cod_segmento')->filter()->unique())
+            ->pluck('nome', 'codigo');
 
         $filiais = $filiais
             ->map(fn (Cliente $filial) => [
+                'segmento' => $filial->cod_segmento ? ($nomePorSegmento[$filial->cod_segmento] ?? $filial->cod_segmento) : null,
                 'inativacao' => $inativacoes[$filial->id] ?? null,
                 'id' => $filial->id,
                 'loja' => $filial->loja,
