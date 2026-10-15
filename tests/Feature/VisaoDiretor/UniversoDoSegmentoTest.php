@@ -393,7 +393,7 @@ class UniversoDoSegmentoTest extends TestCase
 
         foreach (['109', '101'] as $segmento) {
             $tiles = $this->lista([], $segmento)['contagens'];
-            foreach (['total', 'clientes', 'leads', 'ativo', 'inativando', 'inativo', 'lead'] as $chave) {
+            foreach (['total', 'clientes', 'leads', 'ativo', 'inativando', 'inativo', 'lead', 'conquistar'] as $chave) {
                 $this->assertSame($tiles[$chave], $resumo[$segmento][$chave], "Resumo {$segmento}.{$chave}");
             }
         }

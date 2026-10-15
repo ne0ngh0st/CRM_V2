@@ -319,8 +319,8 @@ class UniversoDoSegmento
     public const STATUS_DA_LINHA = ['ativo', 'inativando', 'inativo', 'lead'];
 
     /**
-     * "A conquistar" = perdendo + a trabalhar + leads: onde a Autopel não vende hoje. Um
-     * tile só na tela (Tony, 2026-10-15); a pill de cada linha continua dizendo qual dos três.
+     * `conquistar` = perdendo + a trabalhar + leads: onde a Autopel não vende hoje. Na tela é
+     * "A trabalhar", um tile e uma coluna do Resumo (Tony, 2026-10-15); a pill de cada linha continua dizendo qual dos três.
      */
     public const A_CONQUISTAR = ['inativando', 'inativo', 'lead'];
 

@@ -1,8 +1,9 @@
 <script setup>
 /**
- * O Resumo da Visão Diretor: por segmento, quantos clientes estão ativos, perdendo e a
- * trabalhar, e quantos leads (empresas onde nunca atuamos). Cada número é o tile da aba
- * daquele segmento — vêm da mesma tabela (`UniversoDoSegmento::resumo()`).
+ * O Resumo da Visão Diretor: por segmento, quantos clientes estão ativos e quantas empresas
+ * estão "a trabalhar" no sentido amplo (perdendo + a trabalhar + leads — Tony, 2026-10-15,
+ * as mesmas duas divisões dos tiles da aba). Cada número é o tile da aba daquele segmento — vêm da mesma
+ * tabela (`UniversoDoSegmento::resumo()`).
  *
  * ⚠️ É card, não tabela de dados: alinhamento esquerda/direita, filete entre linhas e
  * nenhuma divisória vertical — os tokens `.tbl*` dentro de card foram o erro do
@@ -12,7 +13,6 @@
  */
 import DarkCard from '@/Components/DarkCard.vue';
 import EspecialistaSelo from '@/Components/Segmentos/EspecialistaSelo.vue';
-import { ROTULOS_STATUS_CONTA } from '@/constants/visaoDiretor';
 import { formatInteiro } from '@/utils/formato';
 
 defineProps({
@@ -24,9 +24,7 @@ const emit = defineEmits(['abrir']);
 
 const COLUNAS = [
     { chave: 'ativo', rotulo: 'Ativos', cor: 'text-green-700' },
-    { chave: 'inativando', rotulo: ROTULOS_STATUS_CONTA.inativando, cor: 'text-amber-dark' },
-    { chave: 'inativo', rotulo: ROTULOS_STATUS_CONTA.inativo, cor: 'text-red-700' },
-    { chave: 'lead', rotulo: 'Leads', cor: 'text-gray-700' },
+    { chave: 'conquistar', rotulo: 'A trabalhar', cor: 'text-amber-dark' },
 ];
 </script>
 
@@ -43,7 +41,7 @@ const COLUNAS = [
         </template>
 
         <!-- Cabeçalho das colunas de número (só onde há espaço para elas lado a lado). -->
-        <div class="hidden grid-cols-[minmax(10rem,1.4fr)_minmax(9rem,1.2fr)_repeat(4,minmax(0,0.7fr))] gap-x-4 px-2 pb-1 text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400 sm:grid">
+        <div class="hidden grid-cols-[minmax(10rem,1.4fr)_minmax(9rem,1.2fr)_repeat(2,minmax(0,0.7fr))] gap-x-4 px-2 pb-1 text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400 sm:grid">
             <span>Segmento</span>
             <span>Especialista</span>
             <span v-for="c in COLUNAS" :key="c.chave" class="text-right">{{ c.rotulo }}</span>
@@ -53,15 +51,15 @@ const COLUNAS = [
             <li v-for="s in linhas" :key="s.codigo">
                 <button
                     type="button"
-                    class="grid w-full grid-cols-4 items-center gap-x-4 gap-y-1 px-2 py-2 text-left transition hover:bg-gray-50 sm:grid-cols-[minmax(10rem,1.4fr)_minmax(9rem,1.2fr)_repeat(4,minmax(0,0.7fr))]"
+                    class="grid w-full grid-cols-2 items-center gap-x-4 gap-y-1 px-2 py-2 text-left transition hover:bg-gray-50 sm:grid-cols-[minmax(10rem,1.4fr)_minmax(9rem,1.2fr)_repeat(2,minmax(0,0.7fr))]"
                     @click="emit('abrir', s.codigo)"
                 >
-                    <span class="col-span-4 sm:col-span-1">
+                    <span class="col-span-2 sm:col-span-1">
                         <span class="block text-sm font-semibold text-gray-800">{{ s.nome }}</span>
                         <span class="block text-[0.7rem] text-gray-400">{{ formatInteiro(s.clientes) }} clientes · {{ formatInteiro(s.leads) }} leads</span>
                     </span>
 
-                    <span class="col-span-4 min-w-0 sm:col-span-1">
+                    <span class="col-span-2 min-w-0 sm:col-span-1">
                         <EspecialistaSelo :especialista="s.especialista" />
                     </span>
 

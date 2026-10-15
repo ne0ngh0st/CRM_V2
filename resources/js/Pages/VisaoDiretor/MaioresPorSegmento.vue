@@ -81,12 +81,13 @@ function trocarAba(codigo) {
 
 /*
  * Os tiles SÃO o filtro de status: clicar aplica, clicar de novo remove.
- * "A conquistar" junta perdendo, a trabalhar e leads (Tony, 2026-10-15) — onde a Autopel
- * não vende hoje. A pill de cada linha continua dizendo qual dos três.
+ * "A trabalhar" junta perdendo, a trabalhar e leads (Tony, 2026-10-15) — onde a Autopel
+ * não vende hoje. A pill de cada linha continua dizendo qual dos três (a chave interna
+ * é `conquistar`, para não colidir com o status `inativo`, cujo rótulo também é "A trabalhar").
  */
 const TILES = [
     { status: 'ativo', tom: 'ok', rotulo: 'Ativos' },
-    { status: 'conquistar', tom: 'warn', rotulo: 'A conquistar' },
+    { status: 'conquistar', tom: 'warn', rotulo: 'A trabalhar' },
 ];
 
 function filtrarStatus(status) {
