@@ -18,9 +18,9 @@ use Illuminate\Support\Facades\DB;
  *
  * Redesenhada em 2026-10-14 (Tony): a página é para o dono da empresa, e redes, contas e
  * vínculos confundiam mais do que explicavam. Agora é o mesmo grão da Carteira:
- * - **cliente** = `cod_cliente` com ao menos uma filial no segmento (o mesmo conjunto que
- *   `/carteira?segmento=X` agrupada lista). Filiais contam só as do segmento; o status vem
- *   da última compra de TODAS as filiais, a mesma da pill da Carteira.
+ * - **cliente** = EMPRESA (raiz do CNPJ), numa aba só: a do segmento em que ela tem mais
+ *   filiais (`criarSegmentoDaEmpresa()`, desde 2026-10-15). Filiais e status contam TODAS
+ *   as filiais dela; o status é o da última compra, o mesmo corte da pill da Carteira.
  * - **lead** = lead visível do segmento (por nome), fora da etapa "Outros", cujo CNPJ NÃO
  *   é de cliente (CNPJ exato, a regra do import de leads).
  * A ordem é o capital social da Receita, que não aparece na tela.
@@ -62,22 +62,21 @@ class UniversoDoSegmento
     {
         $agora = Carbon::now();
         $empresa = self::EMPRESA;
-        $empresaU = str_replace('c.', 'x.', $empresa);
         $empresaA = str_replace('c.', 'a.', $empresa);
 
-        return DB::transaction(function () use ($agora, $empresa, $empresaU, $empresaA) {
+        return DB::transaction(function () use ($agora, $empresa, $empresaA) {
             DB::table('visao_diretor_universo')->delete();
 
             /*
-             * Uma linha por EMPRESA no segmento. Filiais e capital contam só as filiais do
-             * segmento; a última compra é a de TODAS as filiais da empresa (qualquer
-             * segmento), como a pill da Carteira faz com o cliente.
+             * Uma linha por EMPRESA, no segmento DELA (`criarSegmentoDaEmpresa()`): a empresa
+             * aparece numa aba só. Filiais, capital e última compra contam TODAS as filiais da
+             * empresa, de qualquer segmento — é a empresa inteira que a linha descreve.
              *
              * A âncora (`cliente_id`) é a matriz (/0001) quando existe — é dela o nome, o
              * CNPJ, a UF e o vendedor da linha. O nome fantasia vem no passo seguinte.
              *
-             * ⚠️ EMPRESA FECHADA NÃO ENTRA (Tony, 2026-10-14): se TODAS as filiais dela no
-             * segmento estão com situação conhecida e diferente de ATIVA na Receita (baixada,
+             * ⚠️ EMPRESA FECHADA NÃO ENTRA (Tony, 2026-10-14): se TODAS as filiais dela
+             * estão com situação conhecida e diferente de ATIVA na Receita (baixada,
              * inapta, suspensa…), a linha sai — mesmo que tenha comprado no último ano. Em
              * produção eram ~8,8 mil empresas, quase todas em "A trabalhar", e a lista de onde
              * voltar a vender virava lista de empresa fechada. Situação desconhecida (nunca
@@ -87,26 +86,27 @@ class UniversoDoSegmento
              * ⚠️ GROUP_CONCAT corta em 1.024 bytes por padrão e, num INSERT, o corte vira
              * ERRO (empresa com centenas de filiais). Daí o limite da sessão.
              */
+            self::criarSegmentoDaEmpresa();
+
             DB::statement('SET SESSION group_concat_max_len = 4194304');
             DB::insert(<<<SQL
                 INSERT INTO visao_diretor_universo
                     (segmento_codigo, tipo, cod_cliente, cliente_id, nome, nome_fantasia, lojas,
                      data_ultima_compra, capital_social, capital_ordem, porte, reconstruido_em)
-                SELECT c.cod_segmento, 'cliente', MIN(c.cod_cliente),
+                SELECT v.seg, 'cliente', MIN(c.cod_cliente),
                        SUBSTRING_INDEX(GROUP_CONCAT(c.id ORDER BY COALESCE(cs.situacao, 'ATIVA') <> 'ATIVA', SUBSTRING(c.cnpj_digitos, 9, 4) = '0001' DESC, c.id), ',', 1),
                        '', NULL,
                        COUNT(*),
-                       u.uc, MAX(cs.capital_social), COALESCE(MAX(cs.capital_social), -1),
+                       MAX(c.data_ultima_compra), MAX(cs.capital_social), COALESCE(MAX(cs.capital_social), -1),
                        ELT(MAX(FIELD(cs.porte, 'ME', 'EPP', 'DEMAIS')), 'ME', 'EPP', 'DEMAIS'),
                        ?
                 FROM clientes c
-                JOIN segmentos s ON s.codigo = c.cod_segmento
-                JOIN (SELECT {$empresaU} AS empresa, MAX(x.data_ultima_compra) AS uc FROM clientes x GROUP BY empresa) u
-                    ON u.empresa = {$empresa}
+                JOIN vdu_segmento_empresa v ON v.empresa = {$empresa}
                 LEFT JOIN cnpj_situacoes cs ON cs.cnpj = c.cnpj_digitos
-                GROUP BY c.cod_segmento, {$empresa}, u.uc
+                GROUP BY v.empresa, v.seg
                 HAVING SUM(COALESCE(cs.situacao, 'ATIVA') = 'ATIVA') > 0
                 SQL, [$agora]);
+            DB::statement('DROP TEMPORARY TABLE vdu_segmento_empresa');
 
             /*
              * O nome principal é a RAZÃO SOCIAL da âncora (a tela põe o fantasia em cima
@@ -127,7 +127,7 @@ class UniversoDoSegmento
             /*
              * O nome fantasia da linha é a MARCA: o trecho antes do primeiro "-" ou "("
              * do fantasia de cada filial ("ATACADAO - LJ 1" → "ATACADAO"), o mais frequente
-             * entre as filiais da empresa no segmento (empate: o mais curto).
+             * entre as filiais da empresa (empate: o mais curto).
              * Marcadores de uso interno do cadastro (ENTREGA, ALMOX, MATRIZ, CNPJ BAIXADO,
              * LOJA 01…) não contam: escolher o "mais curto" puro trazia justamente eles.
              * Se nenhum fantasia se repete (cada loja do Atacadão tem o seu, e o "vencedor"
@@ -138,27 +138,26 @@ class UniversoDoSegmento
              * terminava em 5 minutos no dev.
              */
             DB::statement('DROP TEMPORARY TABLE IF EXISTS vdu_fantasia');
-            DB::statement('CREATE TEMPORARY TABLE vdu_fantasia (seg VARCHAR(10), empresa VARCHAR(30), f VARCHAR(255), PRIMARY KEY (seg, empresa)) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+            DB::statement('CREATE TEMPORARY TABLE vdu_fantasia (empresa VARCHAR(30) PRIMARY KEY, f VARCHAR(255)) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
             DB::insert(<<<SQL
-                INSERT INTO vdu_fantasia (seg, empresa, f)
-                SELECT seg, empresa, f FROM (
-                    SELECT seg, empresa, MIN(marca) AS f, COUNT(*) AS vezes,
-                           SUM(COUNT(*)) OVER (PARTITION BY seg, empresa) AS filiais,
-                           ROW_NUMBER() OVER (PARTITION BY seg, empresa ORDER BY COUNT(*) DESC, CHAR_LENGTH(MIN(marca))) AS rn
+                INSERT INTO vdu_fantasia (empresa, f)
+                SELECT empresa, f FROM (
+                    SELECT empresa, MIN(marca) AS f, COUNT(*) AS vezes,
+                           SUM(COUNT(*)) OVER (PARTITION BY empresa) AS filiais,
+                           ROW_NUMBER() OVER (PARTITION BY empresa ORDER BY COUNT(*) DESC, CHAR_LENGTH(MIN(marca))) AS rn
                     FROM (
-                        SELECT c.cod_segmento AS seg, {$empresa} AS empresa,
+                        SELECT {$empresa} AS empresa,
                                TRIM(REGEXP_SUBSTR(TRIM(c.nome_fantasia), '^[^-(]+')) AS marca
                         FROM clientes c
-                        WHERE c.cod_segmento IS NOT NULL
                     ) b
                     WHERE marca <> '' AND NOT REGEXP_LIKE(marca, ?, 'i')
-                    GROUP BY seg, empresa, UPPER(marca)
+                    GROUP BY empresa, UPPER(marca)
                 ) t WHERE rn = 1 AND (vezes >= 2 OR filiais = 1)
                 SQL, [self::FANTASIA_DE_CADASTRO]);
             DB::update(<<<SQL
                 UPDATE visao_diretor_universo u
                 JOIN clientes a ON a.id = u.cliente_id
-                JOIN vdu_fantasia m ON m.seg = u.segmento_codigo AND m.empresa = {$empresaA}
+                JOIN vdu_fantasia m ON m.empresa = {$empresaA}
                 SET u.nome_fantasia = m.f
                 WHERE u.tipo = 'cliente'
                 SQL);
@@ -230,6 +229,84 @@ class UniversoDoSegmento
         DB::update("UPDATE visao_diretor_universo SET busca_texto = {$texto}, documento_digitos = NULLIF(REGEXP_REPLACE(COALESCE(documento, ''), '[^0-9]', ''), '')");
     }
 
+    /**
+     * O segmento de cada EMPRESA, na tabela temporária `vdu_segmento_empresa`
+     * (`empresa`, `seg`, `filiais` no segmento dela, `total` de
+     * filiais com segmento conhecido, `empate`).
+     *
+     * O segmento dela é o que tem MAIS FILIAIS; no empate, o da matriz (/0001); sem matriz
+     * no empate, o da filial cadastrada primeiro. Só conta filial com segmento conhecido.
+     *
+     * ⚠️ Decisão do Tony (2026-10-15): uma empresa, uma aba. O cadastro do TOTVS tem filial
+     * no segmento errado (AMPLA ENERGIA com 1 filial em Supermercadista, LOJAS RENNER com 1
+     * em Drogarias), e a regra antiga — aparece em todo segmento com alguma filial — levava a
+     * empresa inteira para a aba errada. Consequência aceita: a aba deixa de bater com
+     * `/carteira?segmento=X`, que continua contando a filial onde ela está cadastrada.
+     *
+     * É também a régua da lista de filiais fora do segmento que vai para o Cadastro
+     * (`visao-diretor:filiais-fora-do-segmento`): as duas leem daqui, e por isso a regra mora
+     * num lugar só. `empate` = quantos segmentos dividem o maior número de filiais (1 = sem
+     * empate); com empate, o segmento escolhido é palpite e a lista pede conferência.
+     */
+    public static function criarSegmentoDaEmpresa(): void
+    {
+        $empresa = self::EMPRESA;
+
+        DB::statement('DROP TEMPORARY TABLE IF EXISTS vdu_segmento_empresa');
+        DB::statement('CREATE TEMPORARY TABLE vdu_segmento_empresa (empresa VARCHAR(30) PRIMARY KEY, seg VARCHAR(10), filiais INT, total INT, empate INT) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+        DB::insert(<<<SQL
+            INSERT INTO vdu_segmento_empresa (empresa, seg, filiais, total, empate)
+            SELECT empresa, seg, filiais, total, empate FROM (
+                SELECT empresa, seg, filiais,
+                       SUM(filiais) OVER (PARTITION BY empresa) AS total,
+                       SUM(filiais = maior) OVER (PARTITION BY empresa) AS empate,
+                       ROW_NUMBER() OVER (PARTITION BY empresa ORDER BY filiais DESC, tem_matriz DESC, primeiro) AS rn
+                FROM (
+                    SELECT empresa, seg, filiais, tem_matriz, primeiro,
+                           MAX(filiais) OVER (PARTITION BY empresa) AS maior
+                    FROM (
+                        SELECT {$empresa} AS empresa, c.cod_segmento AS seg, COUNT(*) AS filiais,
+                               MAX(SUBSTRING(c.cnpj_digitos, 9, 4) = '0001') AS tem_matriz,
+                               MIN(c.id) AS primeiro
+                        FROM clientes c
+                        JOIN segmentos s ON s.codigo = c.cod_segmento
+                        GROUP BY empresa, c.cod_segmento
+                    ) p
+                ) q
+            ) r WHERE rn = 1
+            SQL);
+    }
+
+    /**
+     * As filiais cadastradas FORA do segmento da própria empresa (`criarSegmentoDaEmpresa()`),
+     * para o Cadastro corrigir no TOTVS — o CRM não edita cliente (Regra de ouro nº 4).
+     * São exatamente as filiais que a Visão Diretor deixou de mostrar em outra aba.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function filiaisForaDoSegmento(): array
+    {
+        $empresa = self::EMPRESA;
+        self::criarSegmentoDaEmpresa();
+
+        $linhas = DB::select(<<<SQL
+            SELECT CASE WHEN CHAR_LENGTH(c.cnpj_digitos) = 14 THEN LEFT(c.cnpj, 10) ELSE c.cod_cliente END AS empresa,
+                   se.nome AS segmento_empresa, v.filiais, v.total, v.empate,
+                   c.cod_cliente, c.loja, c.cnpj, c.razao_social, c.nome_fantasia,
+                   sc.nome AS segmento_cadastrado, cs.situacao, c.data_ultima_compra, c.cod_vendedor
+            FROM clientes c
+            JOIN vdu_segmento_empresa v ON v.empresa = {$empresa}
+            JOIN segmentos sc ON sc.codigo = c.cod_segmento
+            JOIN segmentos se ON se.codigo = v.seg
+            LEFT JOIN cnpj_situacoes cs ON cs.cnpj = c.cnpj_digitos
+            WHERE c.cod_segmento <> v.seg
+            ORDER BY v.empate > 1, v.total DESC, empresa, c.cod_cliente, c.loja
+            SQL);
+        DB::statement('DROP TEMPORARY TABLE vdu_segmento_empresa');
+
+        return array_map(fn ($l) => (array) $l, $linhas);
+    }
+
     /** Quando a tabela foi reconstruída pela última vez (null = nunca). */
     public function reconstruidoEm(): ?Carbon
     {
@@ -245,8 +322,8 @@ class UniversoDoSegmento
      * O Resumo: uma linha por segmento com clientes e leads por status, do maior segmento
      * para o menor (é também a ordem das abas). Uma varredura da tabela.
      *
-     * ⚠️ Cada número é o tile da aba daquele segmento — mesma tabela, mesma conta. Cliente
-     * com filiais em dois segmentos conta nos dois, como em `/carteira?segmento=X`.
+     * ⚠️ Cada número é o tile da aba daquele segmento — mesma tabela, mesma conta. Cada
+     * empresa conta num segmento só (o dela), então a soma das abas é o total de empresas.
      *
      * @return list<array{codigo: string, nome: string, total: int, clientes: int, leads: int, ativo: int, inativando: int, inativo: int, lead: int}>
      */
@@ -374,8 +451,7 @@ class UniversoDoSegmento
      * cliente no segmento errado, e procurar uma drogaria na aba Drogarias sem achá-la, por
      * estar cadastrada como supermercado, faz parecer que ela não existe. A busca procura em
      * todos os segmentos; a aba aberta só ordena (as linhas dela primeiro) e a tela marca o
-     * que está em outro segmento. Empresa com filiais em dois segmentos aparece duas vezes,
-     * uma por segmento — é a mesma informação que diz onde estão as outras filiais.
+     * que está em outro segmento. Cada empresa aparece uma vez, no segmento dela.
      * Tiles e lista continuam saindo desta mesma base, então continuam batendo.
      */
     private function base(string $segmento, string $busca, string $uf): Builder
@@ -503,7 +579,7 @@ class UniversoDoSegmento
                 'uf' => $l->uf,
                 'segmentoCodigo' => (string) $l->segmento_codigo,
                 'segmentoNome' => $segmentos[$l->segmento_codigo] ?? (string) $l->segmento_codigo,
-                // Filiais do cliente NESTE segmento. Lead não tem filial nossa: nulo ("—").
+                // Todas as filiais da empresa. Lead não tem filial nossa: nulo ("—").
                 'filiais' => $ehCliente ? (int) $l->lojas : null,
                 'status' => $ehCliente ? $this->statusResolver->statusPara($uc, $hoje) : 'lead',
                 'grupo' => $l->cliente_id ? ($grupos[$l->cliente_id] ?? null) : null,

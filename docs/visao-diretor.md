@@ -67,7 +67,7 @@ dele (não reabrir sem ele pedir):
   mesma empresa tinha 26 códigos no TOTVS.
 - **Colunas:** Nome (razão social em cima — única por empresa; marca e CNPJ da matriz embaixo) · Grupo
   (do TOTVS, o da matriz, lido na hora; CLIENTES DIVERSOS 9998 sai "—") · UF ·
-  Filiais (do segmento; lead "—") · Status (Ativo / Perdendo / A trabalhar / Lead) ·
+  Filiais (todas as da empresa; lead "—") · Status (Ativo / Perdendo / A trabalhar / Lead) ·
   Vendedor · Ações (mapa e cartão CNPJ). **Capital social sai da tela** mas continua
   ordenando a lista. Última compra também saiu.
 - **Nome fantasia = a marca**: trecho antes do primeiro "-" ou "(" do fantasia de cada
@@ -82,9 +82,22 @@ dele (não reabrir sem ele pedir):
   é aberta antes do `fetch`, senão o bloqueador de pop-up a barra.
 - **Resumo:** uma linha por segmento (Ativos, Perdendo, A trabalhar, Leads), do maior para
   o menor — é também a ordem das abas. Os números são os tiles de cada aba (teste).
+- **Um segmento por empresa (2026-10-15).** O cadastro do TOTVS tem filial no segmento
+  errado (AMPLA ENERGIA com 1 filial em Supermercadista, LOJAS RENNER com 1 em Drogarias), e
+  a regra anterior punha a empresa em toda aba onde tivesse ao menos uma filial. Agora ela
+  aparece só no segmento com MAIS filiais; no empate, o da matriz (/0001); sem matriz no
+  empate, o da filial cadastrada primeiro. A régua mora em
+  `UniversoDoSegmento::criarSegmentoDaEmpresa()`. ⚠️ Consequência aceita: a aba deixa de
+  bater com `/carteira?segmento=X`, que conta a filial onde ela está cadastrada.
+  Produção no dia: 978 empresas em mais de um segmento, 1.818 filiais fora do segmento da
+  própria empresa (600 delas em empresa empatada, a conferir).
+- **Lista para o Cadastro corrigir no TOTVS:** `php artisan visao-diretor:filiais-fora-do-segmento`
+  grava `storage/app/private/relatorios/filiais-fora-do-segmento-<data>.xlsx` — as filiais
+  com segmento diferente do da empresa, sem empate primeiro (coluna "Conferir (empate)").
+  Mesma régua da tela. Não envia nada.
 - **Invariantes testadas** (`UniversoDoSegmentoTest`): filiais de cada linha == Carteira
-  `?busca=<raiz>&segmento=X&agrupar=0` (o link da célula); soma das filiais da aba ==
-  Carteira do segmento por filial; tile == lista filtrada; Resumo == tiles.
+  `?busca=<raiz>&agrupar=0` (o link da célula); soma das filiais de todas as abas ==
+  Carteira inteira por filial; tile == lista filtrada; Resumo == tiles.
   ⚠️ O número de CLIENTES aqui (empresas) não é o da Carteira agrupada (códigos): unidades
   diferentes, de propósito.
 - **O import de leads parou de criar/ligar conta** (`totvs:import-leads`), e a carga da

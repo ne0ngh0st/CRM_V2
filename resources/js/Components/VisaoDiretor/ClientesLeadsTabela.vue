@@ -83,7 +83,7 @@ function hrefDaLinha(l) {
                     <td class="tbl-td tabular-nums" data-rotulo="Filiais">
                         <Link
                             v-if="l.filiais !== null"
-                            :href="route('carteira.index', { busca: l.buscaCarteira, segmento: l.segmentoCodigo, agrupar: 0 })"
+                            :href="route('carteira.index', { busca: l.buscaCarteira, agrupar: 0 })"
                             class="tbl-main font-semibold text-teal hover:underline"
                             title="Abrir estas filiais na Carteira"
                         >{{ formatInteiro(l.filiais) }}</Link>

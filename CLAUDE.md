@@ -3060,7 +3060,12 @@ nunca atuamos. Redes, contas e vínculos saíram da tela (Tony: "confusos e desn
 Detalhe em `docs/visao-diretor.md` §2, "Redesenho de 2026-10-14".
 
 - Tabela por segmento: **uma linha por EMPRESA** (raiz do CNPJ calculada só dentro de
-  `UniversoDoSegmento::reconstruir()`, nunca coluna — Regra nº 3) e por lead. Colunas:
+  `UniversoDoSegmento::reconstruir()`, nunca coluna — Regra nº 3) e por lead.
+- **Cada empresa numa aba só (2026-10-15)**: a do segmento em que ela tem mais filiais
+  (empate: o da matriz) — filial cadastrada no segmento errado (AMPLA em Supermercadista,
+  RENNER em Drogarias) não arrasta a empresa. A aba deixa de bater com
+  `/carteira?segmento=X`, de propósito. Lista das filiais erradas para o Cadastro:
+  `visao-diretor:filiais-fora-do-segmento`. Colunas:
   Nome (razão social em cima; marca e CNPJ embaixo), Grupo, UF, Filiais, Status, Vendedor,
   Ações (Google Maps com o endereço da Receita e cartão CNPJ). Capital social só ordena.
 - Lead de empresa que já é cliente (mesma raiz) não aparece.

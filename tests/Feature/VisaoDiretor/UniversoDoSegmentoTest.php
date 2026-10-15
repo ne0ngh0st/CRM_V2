@@ -3,6 +3,7 @@
 namespace Tests\Feature\VisaoDiretor;
 
 use App\Exports\ClientesLeadsSegmentoExport;
+use App\Exports\FiliaisForaDoSegmentoExport;
 use App\Models\Cliente;
 use App\Models\Exportacao;
 use App\Models\Lead;
@@ -22,8 +23,10 @@ use Tests\TestCase;
  *
  * O que estes testes protegem, em ordem de importância:
  *
- * 1. Uma empresa, uma linha: os códigos do TOTVS com a mesma raiz viram uma linha só (era o
- *    "Carrefour em duas páginas"), e as filiais somadas batem com a Carteira que o clique abre.
+ * 1. Uma empresa, uma linha, numa aba só: os códigos do TOTVS com a mesma raiz viram uma
+ *    linha (era o "Carrefour em duas páginas"), no segmento em que ela tem mais filiais (a
+ *    filial cadastrada no segmento errado não leva a empresa para outra aba), e as filiais
+ *    batem com a Carteira que o clique abre.
  * 2. Cada tile de status == a lista filtrada por ele, e o Resumo == os tiles de cada aba.
  * 3. Lead de empresa que já é cliente (mesma raiz) não aparece.
  * 4. O nome fantasia é a marca, não o de uma loja nem um marcador do cadastro.
@@ -142,15 +145,15 @@ class UniversoDoSegmentoTest extends TestCase
 
         $this->assertCount(1, $empresa);
         $linha = $empresa->first();
-        // As TRÊS filiais de drogaria, dos dois códigos.
-        $this->assertSame(3, $linha['filiais']);
+        // TODAS as filiais da empresa, dos dois códigos: 3 de drogaria + 1 de supermercado.
+        $this->assertSame(4, $linha['filiais']);
         // Âncora = matriz (/0001): é dela a razão social e o CNPJ.
         $this->assertSame('CLIENTE 000001', $linha['nome']);
         $this->assertSame('11.111.111/0001-01', $linha['documento']);
         // A última compra é a de TODAS as filiais da empresa (10 dias, pelo supermercado).
         $this->assertSame('ativo', $linha['status']);
-        // Em supermercado a mesma empresa aparece, com a filial de lá.
-        $this->assertSame(1, collect($this->lista([], '101')['dados'])->firstWhere('buscaCarteira', '11.111.111')['filiais']);
+        // A filial de supermercado não leva a empresa para aquela aba.
+        $this->assertNull(collect($this->lista([], '101')['dados'])->firstWhere('buscaCarteira', '11.111.111'));
     }
 
     public function test_filiais_batem_com_a_carteira_que_o_clique_abre(): void
@@ -163,15 +166,15 @@ class UniversoDoSegmentoTest extends TestCase
             }
             $this->assertSame(
                 $linha['filiais'],
-                $this->totalDaCarteira(['busca' => $linha['buscaCarteira'], 'segmento' => '109', 'agrupar' => 0]),
+                $this->totalDaCarteira(['busca' => $linha['buscaCarteira'], 'agrupar' => 0]),
                 "Filiais de {$linha['nome']} divergem da Carteira",
             );
         }
 
-        // E a soma das filiais da aba é a Carteira do segmento, por filial.
+        // Cada empresa numa aba só: a soma das filiais de todas as abas é a Carteira inteira.
         $this->assertSame(
-            $this->totalDaCarteira(['segmento' => '109', 'agrupar' => 0]),
-            collect($this->lista()['dados'])->sum('filiais'),
+            $this->totalDaCarteira(['agrupar' => 0]),
+            collect(['109', '101'])->sum(fn ($s) => collect($this->lista([], $s)['dados'])->sum('filiais')),
         );
     }
 
@@ -212,6 +215,84 @@ class UniversoDoSegmentoTest extends TestCase
         $this->assertSame('RAIA DROGASIL', $dados->firstWhere('buscaCarteira', '11.111.111')['grupo']);
         $this->assertNull($dados->firstWhere('buscaCarteira', '22.222.222')['grupo']);
         $this->assertNull($dados->firstWhere('tipo', 'lead')['grupo']);
+    }
+
+    // ─── Um segmento por empresa ────────────────────────────────────────────────
+
+    /**
+     * Filial cadastrada no segmento errado (Tony, 2026-10-15: AMPLA ENERGIA em
+     * Supermercadista, LOJAS RENNER em Drogarias): a empresa fica só no segmento em que tem
+     * mais filiais, e a soma das abas é o número de empresas.
+     */
+    public function test_filial_no_segmento_errado_nao_leva_a_empresa_para_outra_aba(): void
+    {
+        // Duas em supermercado, uma (a matriz!) em drogaria: vale a maioria, não a matriz.
+        $this->cliente('000030', '01', '109', '30303030000101', now()->subDays(5), 'AMPLA');
+        $this->cliente('000030', '02', '101', '30303030000202', now()->subDays(5), 'AMPLA');
+        $this->cliente('000030', '03', '101', '30303030000303', now()->subDays(5), 'AMPLA');
+        app(UniversoDoSegmento::class)->reconstruir();
+
+        $this->assertNull(collect($this->lista([], '109')['dados'])->firstWhere('buscaCarteira', '30.303.030'));
+        $this->assertSame(3, collect($this->lista([], '101')['dados'])->firstWhere('buscaCarteira', '30.303.030')['filiais']);
+
+        $empresas = (int) DB::table('clientes')->selectRaw('COUNT(DISTINCT LEFT(cnpj_digitos, 8)) n')->value('n');
+        $this->assertSame($empresas, collect(app(UniversoDoSegmento::class)->resumo())->sum('clientes'));
+    }
+
+    public function test_empate_fica_no_segmento_da_matriz(): void
+    {
+        // Uma filial em cada segmento: a matriz decide, nos dois sentidos (senão a ordem do
+        // código do segmento ou do id passaria por regra).
+        $this->cliente('000031', '02', '101', '31313131000202', now(), 'A');
+        $this->cliente('000031', '01', '109', '31313131000101', now(), 'A');
+        $this->cliente('000032', '02', '109', '32323232000202', now(), 'B');
+        $this->cliente('000032', '01', '101', '32323232000101', now(), 'B');
+        app(UniversoDoSegmento::class)->reconstruir();
+
+        $this->assertNotNull(collect($this->lista([], '109')['dados'])->firstWhere('buscaCarteira', '31.313.131'));
+        $this->assertNull(collect($this->lista([], '101')['dados'])->firstWhere('buscaCarteira', '31.313.131'));
+        $this->assertNotNull(collect($this->lista([], '101')['dados'])->firstWhere('buscaCarteira', '32.323.232'));
+        $this->assertNull(collect($this->lista([], '109')['dados'])->firstWhere('buscaCarteira', '32.323.232'));
+    }
+
+    public function test_lista_para_o_cadastro_traz_so_as_filiais_fora_do_segmento_da_empresa(): void
+    {
+        // Empate 3 × 3 (matriz em drogaria), MAIOR que a 11111111 (4 filiais): sem a regra
+        // "sem empate primeiro", ela viria antes pelo tamanho.
+        foreach (['02' => '101', '03' => '101', '04' => '101', '01' => '109', '05' => '109', '06' => '109'] as $loja => $seg) {
+            $this->cliente('000031', $loja, $seg, "3131313100{$loja}{$loja}", now(), 'A');
+        }
+
+        $linhas = collect(app(UniversoDoSegmento::class)->filiaisForaDoSegmento());
+
+        // A filial de supermercado da 11111111 (empresa de drogaria) e as três do empate.
+        $this->assertSame(
+            ['11.111.111/0003-03', '31.313.131/0002-02', '31.313.131/0003-03', '31.313.131/0004-04'],
+            $linhas->pluck('cnpj')->sort()->values()->all(),
+        );
+        $raia = $linhas->firstWhere('cnpj', '11.111.111/0003-03');
+        $this->assertSame(
+            ['DROGARIAS', 'SUPERMERCADISTA', 3, 4, 1],
+            [$raia['segmento_empresa'], $raia['segmento_cadastrado'], (int) $raia['filiais'], (int) $raia['total'], (int) $raia['empate']],
+        );
+        $this->assertSame(2, (int) $linhas->firstWhere('cnpj', '31.313.131/0002-02')['empate']);
+        // Sem empate primeiro: é o que o Cadastro corrige sem precisar conferir.
+        $this->assertSame('11.111.111/0003-03', $linhas->first()['cnpj']);
+
+        $export = new FiliaisForaDoSegmentoExport($linhas->all());
+        foreach ($export->array() as $linha) {
+            $this->assertCount(count($export->headings()), $linha);
+        }
+        $this->assertSame('Sim', $export->array()[1][4]);
+    }
+
+    public function test_comando_grava_a_planilha(): void
+    {
+        Storage::fake('local');
+
+        $this->artisan('visao-diretor:filiais-fora-do-segmento')->assertSuccessful();
+
+        Storage::disk('local')->assertExists('relatorios/filiais-fora-do-segmento-'.now()->format('Y-m-d').'.xlsx');
     }
 
     // ─── Leads ──────────────────────────────────────────────────────────────────
@@ -314,8 +395,8 @@ class UniversoDoSegmentoTest extends TestCase
     {
         app(UniversoDoSegmento::class)->reconstruir();
 
-        // Busca pelo fantasia de uma loja acha a empresa — nos DOIS segmentos em que ela tem filial.
-        $this->assertSame(['CLIENTE 000001', 'CLIENTE 000001'], collect($this->lista(['busca' => 'raia'])['dados'])->pluck('nome')->all());
+        // Busca pelo fantasia de uma loja acha a empresa — uma vez só, no segmento dela.
+        $this->assertSame(['CLIENTE 000001'], collect($this->lista(['busca' => 'raia'])['dados'])->pluck('nome')->all());
         $this->assertSame(4, $this->lista(['uf' => 'SP'])['linhas']->total());
         $this->assertSame(0, $this->lista(['uf' => 'RJ'])['linhas']->total());
     }
@@ -334,9 +415,9 @@ class UniversoDoSegmentoTest extends TestCase
         $this->assertTrue($naDrogaria['todosOsSegmentos']);
         $this->assertSame([['101', 'SUPERMERCADISTA']], collect($naDrogaria['dados'])->map(fn ($l) => [$l['segmentoCodigo'], $l['segmentoNome']])->all());
 
-        // A empresa com filiais nos dois segmentos: a linha da aba aberta primeiro, nas duas abas.
-        $this->assertSame(['109', '101'], collect($this->lista(['busca' => 'raia'], '109')['dados'])->pluck('segmentoCodigo')->all());
-        $this->assertSame(['101', '109'], collect($this->lista(['busca' => 'raia'], '101')['dados'])->pluck('segmentoCodigo')->all());
+        // A empresa com filiais nos dois segmentos: uma linha, a do segmento dela, nas duas abas.
+        $this->assertSame(['109'], collect($this->lista(['busca' => 'raia'], '109')['dados'])->pluck('segmentoCodigo')->all());
+        $this->assertSame(['109'], collect($this->lista(['busca' => 'raia'], '101')['dados'])->pluck('segmentoCodigo')->all());
 
         // Começo de palavra, com separador no termo ou no texto; "meio de palavra" não casa.
         $this->assertSame(1, $this->lista(['busca' => 'droga-errada'])['linhas']->total());
@@ -352,14 +433,14 @@ class UniversoDoSegmentoTest extends TestCase
         $raia = $this->lista(['busca' => 'raia']);
         $this->assertSame($raia['contagens']['total'], $raia['linhas']->total());
         $this->assertSame($raia['contagens']['ativo'], $this->lista(['busca' => 'raia', 'status' => 'ativo'])['linhas']->total());
-        // As duas linhas da empresa são ativas: o status é pela última compra de TODAS as filiais.
-        $this->assertSame(2, $raia['contagens']['ativo']);
+        // Ativa: o status é pela última compra de TODAS as filiais (a de supermercado, 10 dias).
+        $this->assertSame(1, $raia['contagens']['ativo']);
 
         // O Excel leva o mesmo recorte, com o segmento de cada linha na última coluna.
         $export = new ClientesLeadsSegmentoExport('109', ['busca' => 'raia']);
         $linhas = $export->array();
         $this->assertSame('Segmento', last($export->headings()));
-        $this->assertSame(['DROGARIAS', 'SUPERMERCADISTA'], array_map(fn ($l) => last($l), $linhas));
+        $this->assertSame(['DROGARIAS'], array_map(fn ($l) => last($l), $linhas));
     }
 
     /**
@@ -502,7 +583,7 @@ class UniversoDoSegmentoTest extends TestCase
         $export = new ClientesLeadsSegmentoExport('109', []);
         $linhas = $export->array();
         $this->assertSame(['CLIENTE 000001', 'RAIA', 'Cliente'], array_slice($linhas[0], 0, 3));
-        $this->assertSame(3, $linhas[0][6]);
+        $this->assertSame(4, $linhas[0][6]);
         $this->assertCount(count($export->headings()), $linhas[0]);
     }
 
