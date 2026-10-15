@@ -36,7 +36,7 @@
                     <tr>
                         <td align="center" style="background-color:#0F3A69; padding:28px 24px;">
                             @if ($logo)
-                                <img src="{{ $message->embed($logo) }}" alt="PALMA por Autopel" width="180" style="display:block; width:180px; max-width:180px; height:auto; border:0;">
+                                <img src="{{ $message->embed($logo) }}" alt="Autopel" width="180" style="display:block; width:180px; max-width:180px; height:auto; border:0;">
                             @else
                                 <span style="color:#ffffff; font-size:20px; font-weight:bold; letter-spacing:1px;">PALMA</span>
                             @endif

@@ -17,8 +17,8 @@ import { Link } from '@inertiajs/vue3';
 
             <Link href="/" class="relative z-10 self-start">
                 <img
-                    src="/images/palma/palma-logo-branco.svg"
-                    alt="PALMA por Autopel"
+                    src="/images/autopel-logo-white.png"
+                    alt="Autopel"
                     class="h-12 w-auto md:h-16"
                 />
             </Link>
