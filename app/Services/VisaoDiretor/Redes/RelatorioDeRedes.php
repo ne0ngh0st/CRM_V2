@@ -70,6 +70,10 @@ class RelatorioDeRedes
             $porRede[$v['rede']]['clientes'] = ($porRede[$v['rede']]['clientes'] ?? 0) + 1;
             $porRede[$v['rede']]['filiais'] = ($porRede[$v['rede']]['filiais'] ?? 0) + $c['filiais'];
             $porRede[$v['rede']]['ativos'] = ($porRede[$v['rede']]['ativos'] ?? 0) + ($ativo ? 1 : 0);
+            $porRede[$v['rede']]['vendedores'][$c['responsavel']] = ($porRede[$v['rede']]['vendedores'][$c['responsavel']] ?? 0) + 1;
+            if ($c['ultima_compra'] && $c['ultima_compra'] > ($porRede[$v['rede']]['ultima_compra'] ?? '')) {
+                $porRede[$v['rede']]['ultima_compra'] = $c['ultima_compra'];
+            }
 
             $vinculos[] = $this->linhaVinculo($redes[$v['rede']], 'Cliente', (string) $codigo, $c + [
                 'status' => $ativo ? self::ATIVO : self::A_TRABALHAR,
@@ -83,6 +87,7 @@ class RelatorioDeRedes
             }
 
             $porRede[$v['rede']]['leads'] = ($porRede[$v['rede']]['leads'] ?? 0) + 1;
+            $porRede[$v['rede']]['vendedores_lead'][$l['responsavel']] = ($porRede[$v['rede']]['vendedores_lead'][$l['responsavel']] ?? 0) + 1;
             $vinculos[] = $this->linhaVinculo($redes[$v['rede']], 'Lead', (string) $id, $l + [
                 'filiais' => null,
                 'ultima_compra' => null,
@@ -104,6 +109,8 @@ class RelatorioDeRedes
             $linha = [
                 'posicao' => $rede['posicao'],
                 'categoria' => CategoriasDeRede::rotulo($rede['categoria']),
+                'categoria_chave' => $rede['categoria'],
+                'data_base' => $rede['data_base'] ?? null,
                 'rede' => $rede['nome'],
                 'apelidos' => implode(', ', $rede['apelidos'] ?? []),
                 'linha_original' => $rede['linha_original'],
@@ -117,6 +124,9 @@ class RelatorioDeRedes
                 'leads' => $n['leads'] ?? 0,
                 'status' => ($n['ativos'] ?? 0) > 0 ? self::ATIVO : self::A_TRABALHAR,
                 'ambigua' => implode(', ', $ambigua[$i] ?? []),
+                // Sem cliente, o vendedor do lead; rede sem nada fica sem vendedor.
+                'vendedor' => $this->vendedorDaRede($n['vendedores'] ?? $n['vendedores_lead'] ?? []),
+                'ultima_compra' => $n['ultima_compra'] ?? null,
             ];
             $linhasRedes[] = $linha;
 
@@ -172,6 +182,24 @@ class RelatorioDeRedes
                 'sem_vinculo' => count($semVinculo),
             ],
         ];
+    }
+
+    /**
+     * O vendedor da rede é o que atende MAIS clientes dela; havendo outros, "+N" diz
+     * quantos (o nome de cada um está na aba Vínculos).
+     *
+     * @param  array<string, int>  $contagem  vendedor → clientes
+     */
+    private function vendedorDaRede(array $contagem): ?string
+    {
+        if ($contagem === []) {
+            return null;
+        }
+
+        arsort($contagem);
+        $outros = count($contagem) - 1;
+
+        return array_key_first($contagem).($outros > 0 ? " (+{$outros})" : '');
     }
 
     private function linhaVinculo(array $rede, string $tipo, string $codigo, array $d, string $nivel): array

@@ -25,6 +25,8 @@ class RedesMercadoVinculosExport implements WithMultipleSheets
         $data = fn (?string $d) => $d ? Carbon::parse($d)->format('d/m/Y') : '';
 
         return [
+            new RedesPorSegmentoSheet($r['redes']),
+
             $this->aba('Redes', [
                 'Posição', 'Categoria', 'Rede', 'Apelidos de busca', 'Linha da planilha', 'UF', 'Lojas no mercado',
                 'Qualidade do nº', 'Fonte', 'Clientes (códigos)', 'Filiais nossas', 'Clientes ativos', 'Leads', 'Status', 'Ambígua em',
