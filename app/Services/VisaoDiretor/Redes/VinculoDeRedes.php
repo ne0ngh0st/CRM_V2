@@ -69,7 +69,7 @@ class VinculoDeRedes
         $ambiguas = [];
         $candidatos = [];
         foreach ($redes as $i => $rede) {
-            $r = $this->porCliente->sugerir($alvos[$i], CategoriasDeRede::segmento($rede['categoria']), $catalogo);
+            $r = $this->porCliente->sugerir($alvos[$i], CategoriasDeRede::segmento($rede['categoria']), $catalogo, grupoDeOutroSegmento: true);
 
             if ($r['ambiguo']) {
                 $ambiguas[] = ['rede' => $i, 'tipo' => 'cliente'];

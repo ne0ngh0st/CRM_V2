@@ -150,9 +150,17 @@ class VinculoPorCliente
      * filial avulsa vale em qualquer segmento. O que segura o falso positivo aí são as
      * travas de nome (começo com fronteira de palavra, 6+ letras para palavra única).
      *
+     * `$grupoDeOutroSegmento` (página de redes do mercado): o grupo do TOTVS cujo nome, COMO
+     * ESCRITO (com a palavra de tipo), é o da rede, ou o começo dele com 2+ palavras, entra
+     * mesmo estando em outro segmento e mesmo que a rede tenha achado grupo no dela. O
+     * grupo é a classificação da própria Autopel: o 2109 se chama MILKY MOO e o único
+     * cliente dele está como Supermercadista; a rede na planilha é "MILKY MOO MILKSHAKES"
+     * (Tony, 2026-10-16). A palavra de tipo continua segurando "SUPERMERCADO CARIOCA" fora
+     * de "DROGARIAS CARIOCA". Desligado, o comportamento das contas antigas não muda.
+     *
      * @return array{grupos: list<string>, clientes: list<string>, ambiguo: bool, exemplos: list<string>}
      */
-    public function sugerir(string $nomeConta, ?string $codigoSegmento, array $catalogo): array
+    public function sugerir(string $nomeConta, ?string $codigoSegmento, array $catalogo, bool $grupoDeOutroSegmento = false): array
     {
         $casadas = [];
 
@@ -210,13 +218,14 @@ class VinculoPorCliente
                 if ($codigoSegmento === null || isset($catalogo['segmentosDoGrupo'][$grupo][$codigoSegmento])) {
                     $grupos[] = $grupo;
                     $exemplosDeGrupo[] = $nome;
-                } elseif ($alvoEscrito === $escrita) {
+                } elseif ($alvoEscrito === $escrita
+                    || ($grupoDeOutroSegmento && count($marca) >= 2 && str_starts_with($alvoEscrito, $escrita))) {
                     $deOutroSegmento[$grupo] = $nome;
                 }
             }
         }
 
-        if ($grupos === []) {
+        if ($grupos === [] || $grupoDeOutroSegmento) {
             foreach ($deOutroSegmento as $grupo => $nome) {
                 $grupos[] = (string) $grupo;
                 $exemplosDeGrupo[] = $nome;

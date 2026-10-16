@@ -145,6 +145,23 @@ class VinculoDeRedesTest extends TestCase
         $this->assertSame('ATACADÃO', $donos['000062']);
     }
 
+    /**
+     * Produção, 16/10/2026: o grupo 2109 MILKY MOO tem um cliente cadastrado como
+     * Supermercadista, e a rede na planilha é "MILKY MOO MILKSHAKES" (Alimentação). O grupo
+     * é a classificação da Autopel: entra. A palavra de tipo segura o falso positivo.
+     */
+    public function test_grupo_com_o_nome_da_rede_entra_de_outro_segmento(): void
+    {
+        GrupoCliente::create(['codigo' => '2109', 'nome' => 'MILKY MOO']);
+        GrupoCliente::create(['codigo' => '767', 'nome' => 'SUPERMERCADO CARIOCA']);
+        $this->filial('013142', '101', 'JF FOODSERVICE', ['cod_grupo' => '2109']);
+        $this->filial('000100', '101', 'MERCADO DA PRAIA', ['cod_grupo' => '767']);
+
+        $donos = $this->donos([$this->rede('MILKY MOO MILKSHAKES', 'alimentacao'), $this->rede('DROGARIAS CARIOCA', 'drogarias')]);
+
+        $this->assertSame(['013142' => 'MILKY MOO MILKSHAKES'], $donos);
+    }
+
     /** Mutação: deixar a expansão por raiz pegar código já ligado a outra rede. */
     public function test_mesma_empresa_nao_rouba_cliente_de_outra_rede(): void
     {
