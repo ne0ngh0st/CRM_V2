@@ -2,15 +2,16 @@
 
 namespace App\Http\Controllers\VisaoDiretor;
 
+use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Http\Controllers\Controller;
 use App\Models\Cliente;
 use App\Models\Lead;
 use App\Models\RedeMercado;
 use App\Models\RedeMercadoVinculo;
-use App\Services\VisaoDiretor\Redes\CategoriasDeRede;
 use App\Services\VisaoDiretor\Redes\MaioresRedes;
 use App\Services\VisaoDiretor\Redes\MaioresRedesResolver;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -24,6 +25,8 @@ use Inertia\Response;
  */
 class MaioresRedesController extends Controller
 {
+    use ExportaPlanilha;
+
     public function __construct(
         private readonly MaioresRedesResolver $resolver,
         private readonly MaioresRedes $redes,
@@ -32,19 +35,19 @@ class MaioresRedesController extends Controller
 
     public function index(Request $request): Response
     {
-        $filtros = [
-            'categoria' => array_key_exists((string) $request->query('categoria'), CategoriasDeRede::CATEGORIAS) ? (string) $request->query('categoria') : '',
-            // Whitelist: o status vem da URL e vira WHERE.
-            'status' => in_array($request->query('status'), [RedeMercado::STATUS_ATIVO, RedeMercado::STATUS_A_TRABALHAR], true) ? (string) $request->query('status') : '',
-            'uf' => preg_match('/^[A-Z]{2}$/', (string) $request->query('uf')) ? (string) $request->query('uf') : '',
-            'busca' => mb_substr(trim((string) $request->query('busca')), 0, 80),
-        ];
+        $filtros = MaioresRedesResolver::filtros($request->query());
 
         return Inertia::render('VisaoDiretor/MaioresRedes', [
             'resumo' => fn () => $this->resolver->resumo(),
             'lista' => fn () => $filtros['categoria'] === '' ? null : $this->resolver->lista($filtros['categoria'], $filtros),
             'filtros' => $filtros,
         ]);
+    }
+
+    /** O recorte da tela (aba e filtros; no Resumo, todas as redes) em Excel. */
+    public function exportar(Request $request): RedirectResponse
+    {
+        return $this->entregarPlanilha('maiores-redes', $request);
     }
 
     /** Os clientes e leads da rede, para a linha aberta. */

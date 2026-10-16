@@ -2,15 +2,19 @@
 
 namespace Tests\Feature\VisaoDiretor;
 
+use App\Exports\MaioresRedesExport;
 use App\Models\Cliente;
+use App\Models\Exportacao;
 use App\Models\RedeMercado;
 use App\Models\RedeMercadoVinculo;
 use App\Models\User;
 use App\Services\VisaoDiretor\Redes\MaioresRedes;
+use App\Services\VisaoDiretor\Redes\MaioresRedesResolver;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -185,5 +189,52 @@ class MaioresRedesTest extends TestCase
             ->assertJsonPath('clientes.0.status', 'ativo')
             ->assertJsonPath('clientes.1.status', 'a_trabalhar')
             ->assertJsonStructure(['clientes' => [['nome', 'responsavel', 'ultima_compra', 'status', 'nivel', 'cliente_id']], 'leads']);
+    }
+
+    // ─── Excel ──────────────────────────────────────────────────────────────────
+
+    /** O Excel leva o recorte da tela: as redes da lista e, de cada uma, o que a linha aberta mostra. */
+    public function test_excel_leva_o_recorte_da_tela(): void
+    {
+        Storage::fake('local');
+
+        $this->actingAs($this->admin)
+            ->post(route('visao-diretor.redes.exportar'), ['categoria' => 'alimentacao', 'status' => 'a_trabalhar'])
+            ->assertRedirect();
+
+        $exportacao = Exportacao::sole();
+        $this->assertSame(Exportacao::STATUS_PRONTO, $exportacao->status, "Erro: {$exportacao->erro}");
+        $this->assertSame(2, $exportacao->linhas);
+        Storage::disk('local')->assertExists($exportacao->caminho);
+
+        [$redes, $vinculos] = (new MaioresRedesExport(MaioresRedesResolver::filtros(['categoria' => 'alimentacao'])))->sheets();
+
+        // Mesma ordem da tela (maiores primeiro); cabeçalho e linha do mesmo tamanho.
+        $this->assertSame(['CACAU SHOW', 'KOPENHAGEN', 'BRASIL CACAU'], array_column($redes->array(), 2));
+        $this->assertCount(count($redes->headings()), $redes->array()[0]);
+        $this->assertSame([2, 2, 1, 'Ativo'], [$redes->array()[0][9], $redes->array()[0][10], $redes->array()[0][11], $redes->array()[0][15]]);
+
+        // Os vínculos na ordem da linha aberta (ativos primeiro).
+        $this->assertSame([['CACAU SHOW', '000010', 'Ativo'], ['CACAU SHOW', '000011', 'A trabalhar'], ['KOPENHAGEN', '000020', 'A trabalhar']],
+            array_map(fn ($l) => [$l[1], $l[3], $l[10]], $vinculos->array()));
+        $this->assertCount(count($vinculos->headings()), $vinculos->array()[0]);
+    }
+
+    /** No Resumo (sem aba), sai tudo. */
+    public function test_excel_do_resumo_leva_todas_as_redes(): void
+    {
+        Storage::fake('local');
+
+        $this->actingAs($this->admin)->post(route('visao-diretor.redes.exportar'))->assertRedirect();
+
+        $this->assertSame(3, Exportacao::sole()->linhas);
+    }
+
+    public function test_excel_exige_o_gate(): void
+    {
+        $vendedor = User::factory()->create(['is_active' => true]);
+        $vendedor->assignRole('vendedor');
+
+        $this->actingAs($vendedor)->post(route('visao-diretor.redes.exportar'))->assertForbidden();
     }
 }

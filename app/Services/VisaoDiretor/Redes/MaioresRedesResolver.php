@@ -6,6 +6,7 @@ use App\Models\RedeMercado;
 use App\Models\RedeMercadoVinculo;
 use App\Services\Cadastros\BuscaTitularidade;
 use App\Services\VisaoDiretor\TermoDeBusca;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -43,27 +44,64 @@ class MaioresRedesResolver
     }
 
     /**
-     * @param  array{status: string, busca: string, uf: string}  $filtros
-     * @return array{categoria: string, contagens: array{total: int, ativo: int, a_trabalhar: int}, linhas: list<array>}
+     * Os filtros da URL, validados. Uma definição só para a tela e para o Excel: o que a
+     * tela aceita como filtro é exatamente o que a planilha leva.
+     *
+     * @param  array<string, mixed>  $q
+     * @return array{categoria: string, status: string, uf: string, busca: string}
      */
-    public function lista(string $categoria, array $filtros): array
+    public static function filtros(array $q): array
     {
-        $base = RedeMercado::where('ativa', true)->where('categoria', $categoria)
+        return [
+            'categoria' => array_key_exists((string) ($q['categoria'] ?? ''), CategoriasDeRede::CATEGORIAS) ? (string) $q['categoria'] : '',
+            // Whitelist: o status vem da URL e vira WHERE.
+            'status' => in_array($q['status'] ?? null, [RedeMercado::STATUS_ATIVO, RedeMercado::STATUS_A_TRABALHAR], true) ? (string) $q['status'] : '',
+            'uf' => preg_match('/^[A-Z]{2}$/', (string) ($q['uf'] ?? '')) ? (string) $q['uf'] : '',
+            'busca' => mb_substr(trim((string) ($q['busca'] ?? '')), 0, 80),
+        ];
+    }
+
+    /**
+     * As redes do recorte (categoria vazia = todas), SEM o filtro de status: os tiles
+     * contam a faceta inteira. `ordenada()` aplica status e ordem.
+     *
+     * @param  array{categoria: string, status: string, busca: string, uf: string}  $filtros
+     */
+    private function base(array $filtros): Builder
+    {
+        return RedeMercado::where('ativa', true)
+            ->when($filtros['categoria'] !== '', fn ($q) => $q->where('categoria', $filtros['categoria']))
             ->when($filtros['uf'] !== '', fn ($q) => $q->where('uf', $filtros['uf']))
             ->when($filtros['busca'] !== '', function ($q) use ($filtros) {
                 $termo = '%'.str_replace(['%', '_'], ['\%', '\_'], mb_strtoupper(trim($filtros['busca']))).'%';
                 $q->where(fn ($w) => $w->where('nome', 'like', $termo)->orWhere('linha_original', 'like', $termo)->orWhere('vendedor', 'like', $termo));
             });
+    }
 
-        $c = (clone $base)->selectRaw("COUNT(*) as total, SUM(status = 'ativo') as ativo")->first();
+    /** O recorte com o status e na ordem da tela — a lista e o Excel saem daqui. */
+    public function consulta(array $filtros): Builder
+    {
+        return $this->base($filtros)
+            ->when($filtros['status'] !== '', fn ($q) => $q->where('status', $filtros['status']))
+            // Maiores primeiro; bandeira sem número de lojas no fim, na ordem da planilha.
+            // Com todas as categorias (Excel do Resumo), agrupadas na ordem das abas.
+            ->when($filtros['categoria'] === '', fn ($q) => $q->orderByRaw('FIELD(categoria, '.implode(',', array_fill(0, count(CategoriasDeRede::CATEGORIAS), '?')).')', array_keys(CategoriasDeRede::CATEGORIAS)))
+            ->orderByRaw('lojas IS NULL')->orderByDesc('lojas')->orderBy('posicao')->orderBy('id');
+    }
+
+    /**
+     * @param  array{status: string, busca: string, uf: string}  $filtros
+     * @return array{categoria: string, contagens: array{total: int, ativo: int, a_trabalhar: int}, linhas: list<array>}
+     */
+    public function lista(string $categoria, array $filtros): array
+    {
+        $filtros = ['categoria' => $categoria] + $filtros;
+
+        $c = $this->base($filtros)->selectRaw("COUNT(*) as total, SUM(status = 'ativo') as ativo")->first();
         $total = (int) $c->total;
         $ativo = (int) $c->ativo;
 
-        $redes = $base
-            ->when($filtros['status'] !== '', fn ($q) => $q->where('status', $filtros['status']))
-            // Maiores primeiro; bandeira sem número de lojas no fim, na ordem da planilha.
-            ->orderByRaw('lojas IS NULL')->orderByDesc('lojas')->orderBy('posicao')->orderBy('id')
-            ->get();
+        $redes = $this->consulta($filtros)->get();
 
         return [
             'categoria' => $categoria,

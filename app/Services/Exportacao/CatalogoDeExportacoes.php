@@ -8,6 +8,7 @@ use App\Exports\ClientesLeadsSegmentoExport;
 use App\Exports\EquipeExport;
 use App\Exports\LeadExport;
 use App\Exports\MaioresPorSegmentoExport;
+use App\Exports\MaioresRedesExport;
 use App\Exports\MetasExport;
 use App\Exports\OrcamentoExport;
 use App\Exports\PedidoAbertoExport;
@@ -25,6 +26,7 @@ use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
 use App\Services\Segmentos\EspecialistasDoSegmento;
+use App\Services\VisaoDiretor\Redes\MaioresRedesResolver;
 use App\Services\VisaoDiretor\UniversoDoSegmento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -76,6 +78,7 @@ class CatalogoDeExportacoes
         'cadastros-lead' => 'Solicitações de lead',
         'maiores-por-segmento' => 'Maiores por segmento',
         'clientes-leads-segmento' => 'Clientes e leads do segmento',
+        'maiores-redes' => 'Maiores redes',
     ];
 
     public function rotulo(string $recurso): string
@@ -110,6 +113,7 @@ class CatalogoDeExportacoes
                 => $this->cadastros($recurso, $request, $user),
             'maiores-por-segmento' => $this->maioresPorSegmento($request, $user),
             'clientes-leads-segmento' => $this->clientesLeadsSegmento($request, $user),
+            'maiores-redes' => $this->maioresRedes($request, $user),
 
             /*
              * ⚠️ Estoura em vez de cair num default. O recurso vem de um registro do banco
@@ -247,6 +251,23 @@ class CatalogoDeExportacoes
             "maiores-por-segmento-{$segmento}",
             // O mesmo total que a paginação da tela mostra, sem montar as linhas.
             app(UniversoDoSegmento::class)->lista($segmento, $filtros)['linhas']->total(),
+        );
+    }
+
+    /**
+     * Maiores redes (Visão Diretor): o recorte da tela; no Resumo, todas as redes. Mesmo
+     * gate e mesma razão das planilhas acima. As linhas contadas são as redes.
+     */
+    private function maioresRedes(Request $request, User $user): PlanoDeExportacao
+    {
+        abort_unless(Gate::forUser($user)->allows('ver-visao-diretor'), 403);
+
+        $filtros = MaioresRedesResolver::filtros($request->all());
+
+        return new PlanoDeExportacao(
+            new MaioresRedesExport($filtros),
+            $filtros['categoria'] === '' ? 'maiores-redes' : 'maiores-redes-'.str_replace('_', '-', $filtros['categoria']),
+            app(MaioresRedesResolver::class)->consulta($filtros)->count(),
         );
     }
 

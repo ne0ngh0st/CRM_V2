@@ -503,6 +503,17 @@ memória, Regra nº 3). Lead: mesma regra de nome; lead de empresa que já é cl
   na linha da rede; toda escrita termina em `MaioresRedes::recalcular()`. A página não agrega
   nada ao vivo. Vendedor da rede = o que atende mais clientes dela, "(+N)" quando há outros.
 
+### Excel da página
+
+Botão "Gerar Excel" no card do Resumo (todas as redes) e no cabeçalho da tabela de cada aba
+(a categoria com os filtros de status e busca). Recurso `maiores-redes` do
+`CatalogoDeExportacoes`, mesmo gate da seção. Duas abas: **Redes** (as colunas da tabela) e
+**Clientes e leads** (o que a linha aberta mostra de cada rede, com CNPJ e como vinculou).
+As redes saem de `MaioresRedesResolver::consulta()` (a query da lista, com os filtros de
+`MaioresRedesResolver::filtros()`, os mesmos da tela) e os vínculos de
+`MaioresRedes::vinculosDasRedes()` (o mesmo da linha aberta, em lote). Medido no dev: 893
+redes em ~70 ms, sem vínculos (o volume real de vínculos só existe em produção).
+
 ### Excel de revisão
 
 `php artisan visao-diretor:redes-vinculos` grava `storage/app/private/relatorios/

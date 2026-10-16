@@ -26,7 +26,8 @@ class RelatorioDeRedes
         VinculoDeRedes::MESMA_EMPRESA => 'Mesma empresa (CNPJ)',
     ];
 
-    private const QUALIDADES = [
+    /** Rótulo da qualidade do número de lojas. Também no Excel da página (`MaioresRedesExport`). */
+    public const QUALIDADES = [
         'atualizado' => 'Atualizado',
         'pesquisado' => 'Pesquisado (out/26)',
         'estimativa' => 'Estimativa',

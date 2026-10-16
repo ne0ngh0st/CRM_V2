@@ -18,6 +18,7 @@ import DarkCard from '@/Components/DarkCard.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import ResumoRedesCard from '@/Components/VisaoDiretor/ResumoRedesCard.vue';
 import RedesTabela from '@/Components/VisaoDiretor/RedesTabela.vue';
+import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
 import { formatInteiro } from '@/utils/formato';
 
 const props = defineProps({
@@ -94,6 +95,9 @@ function atualizouRede(n) {
     }
 }
 
+// A aba (categoria) é estrutural: não conta como filtro para o aviso do Excel.
+const temFiltrosAtivos = computed(() => Boolean(filtros.status || filtros.busca));
+
 const totalAtivas = computed(() => props.resumo.reduce((s, c) => s + c.ativo, 0));
 const totalRedes = computed(() => props.resumo.reduce((s, c) => s + c.total, 0));
 </script>
@@ -155,7 +159,11 @@ const totalRedes = computed(() => props.resumo.reduce((s, c) => s + c.total, 0))
                 :linhas="resumo"
                 :subtitulo="`${formatInteiro(totalAtivas)} de ${formatInteiro(totalRedes)} redes com cliente nosso ativo · clique para abrir a categoria`"
                 @abrir="trocarAba"
-            />
+            >
+                <template #actions>
+                    <ExportarExcelButton rota="visao-diretor.redes.exportar" :filtros="{}" :tem-filtros-ativos="false" />
+                </template>
+            </ResumoRedesCard>
 
             <template v-else>
                 <!-- Contam a categoria com a busca aplicada, ignorando o próprio filtro de status. -->
@@ -182,6 +190,9 @@ const totalRedes = computed(() => props.resumo.reduce((s, c) => s + c.total, 0))
                             <path d="M4 20V9l8-5 8 5v11" stroke-linejoin="round" />
                             <path d="M9 20v-6h6v6" stroke-linejoin="round" />
                         </svg>
+                    </template>
+                    <template #actions>
+                        <ExportarExcelButton rota="visao-diretor.redes.exportar" :filtros="filtros" :tem-filtros-ativos="temFiltrosAtivos" />
                     </template>
 
                     <p v-if="! tabela" class="px-3 py-10 text-center text-sm text-gray-400">Carregando…</p>

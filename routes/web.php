@@ -253,6 +253,7 @@ Route::middleware('auth')->group(function () {
         // Maiores redes do mercado (planilha da diretoria 2026). `busca` antes de `{rede}`.
         Route::get('/maiores-redes', [MaioresRedesController::class, 'index'])->name('redes.index');
         Route::get('/maiores-redes/busca', [MaioresRedesController::class, 'buscar'])->name('redes.busca');
+        Route::post('/maiores-redes/exportar', [MaioresRedesController::class, 'exportar'])->name('redes.exportar');
         Route::get('/maiores-redes/{rede}/vinculos', [MaioresRedesController::class, 'vinculos'])->name('redes.vinculos');
         Route::post('/maiores-redes/{rede}/vinculos', [MaioresRedesController::class, 'vincular'])->name('redes.vincular');
         Route::delete('/maiores-redes/{rede}/vinculos', [MaioresRedesController::class, 'remover'])->name('redes.remover');

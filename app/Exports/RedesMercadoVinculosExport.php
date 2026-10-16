@@ -3,11 +3,7 @@
 namespace App\Exports;
 
 use Illuminate\Support\Carbon;
-use Maatwebsite\Excel\Concerns\FromArray;
-use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
-use Maatwebsite\Excel\Concerns\WithStrictNullComparison;
-use Maatwebsite\Excel\Concerns\WithTitle;
 
 /**
  * Excel de revisão dos vínculos das redes do mercado (`visao-diretor:redes-vinculos`), para
@@ -63,29 +59,8 @@ class RedesMercadoVinculosExport implements WithMultipleSheets
         ];
     }
 
-    private function aba(string $titulo, array $cabecalho, array $linhas): object
+    private function aba(string $titulo, array $cabecalho, array $linhas): AbaSimples
     {
-        // WithStrictNullComparison: sem ele o zero sai como célula vazia ("0 clientes ativos").
-        return new class($titulo, $cabecalho, $linhas) implements FromArray, WithHeadings, WithStrictNullComparison, WithTitle
-        {
-            public function __construct(private string $titulo, private array $cabecalho, private array $linhas)
-            {
-            }
-
-            public function array(): array
-            {
-                return $this->linhas;
-            }
-
-            public function headings(): array
-            {
-                return $this->cabecalho;
-            }
-
-            public function title(): string
-            {
-                return $this->titulo;
-            }
-        };
+        return new AbaSimples($titulo, $cabecalho, $linhas);
     }
 }

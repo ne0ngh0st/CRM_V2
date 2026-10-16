@@ -165,28 +165,48 @@ class MaioresRedes
      */
     public function vinculosDa(RedeMercado $rede): array
     {
-        $vivos = $rede->vinculos()->where('recusado', false)->get();
+        return $this->vinculosDasRedes([$rede->id])[$rede->id];
+    }
+
+    /**
+     * Os clientes e leads vivos de várias redes de uma vez — a linha aberta (uma rede) e o
+     * Excel (o recorte inteiro) saem daqui, com o mesmo número de consultas para 1 ou 900.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array{clientes: list<array>, leads: list<array>}>  rede_id => vínculos
+     */
+    public function vinculosDasRedes(array $ids): array
+    {
+        $vivos = RedeMercadoVinculo::query()->where('recusado', false)->whereIn('rede_id', $ids ?: [0])
+            ->get(['rede_id', 'tipo', 'codigo', 'nivel']);
         $limite = $this->status->limiteAtivo()->toDateString();
 
-        $nivelDoCliente = $vivos->where('tipo', RedeMercadoVinculo::CLIENTE)->pluck('nivel', 'codigo');
-        $clientes = [];
-        foreach ($this->detalhe->clientes($nivelDoCliente->keys()->map(fn ($c) => (string) $c)->all()) as $codigo => $c) {
-            $clientes[] = $c + [
-                'codigo' => (string) $codigo,
-                'status' => $c['ultima_compra'] && $c['ultima_compra'] >= $limite ? RedeMercado::STATUS_ATIVO : RedeMercado::STATUS_A_TRABALHAR,
-                'nivel' => $nivelDoCliente[$codigo],
-            ];
-        }
-        // Ativos primeiro, depois a compra mais recente.
-        usort($clientes, fn ($a, $b) => [$b['status'] === RedeMercado::STATUS_ATIVO, $b['ultima_compra'] ?? ''] <=> [$a['status'] === RedeMercado::STATUS_ATIVO, $a['ultima_compra'] ?? '']);
+        $clientes = $this->detalhe->clientes($vivos->where('tipo', RedeMercadoVinculo::CLIENTE)->pluck('codigo')->map(fn ($c) => (string) $c)->unique()->values()->all());
+        $leads = $this->detalhe->leads($vivos->where('tipo', RedeMercadoVinculo::LEAD)->pluck('codigo')->map(fn ($id) => (int) $id)->unique()->values()->all());
 
-        $nivelDoLead = $vivos->where('tipo', RedeMercadoVinculo::LEAD)->pluck('nivel', 'codigo');
-        $leads = [];
-        foreach ($this->detalhe->leads($nivelDoLead->keys()->map(fn ($id) => (int) $id)->all()) as $id => $l) {
-            $leads[] = $l + ['id' => $id, 'status' => RedeMercado::STATUS_A_TRABALHAR, 'nivel' => $nivelDoLead[(string) $id]];
+        $saida = array_fill_keys($ids, ['clientes' => [], 'leads' => []]);
+        foreach ($vivos as $v) {
+            if ($v->tipo === RedeMercadoVinculo::CLIENTE) {
+                $c = $clientes[(string) $v->codigo] ?? null;
+                if ($c !== null) {
+                    $saida[$v->rede_id]['clientes'][] = $c + [
+                        'codigo' => (string) $v->codigo,
+                        'status' => $c['ultima_compra'] && $c['ultima_compra'] >= $limite ? RedeMercado::STATUS_ATIVO : RedeMercado::STATUS_A_TRABALHAR,
+                        'nivel' => $v->nivel,
+                    ];
+                }
+            } elseif (isset($leads[(int) $v->codigo])) {
+                $saida[$v->rede_id]['leads'][] = $leads[(int) $v->codigo] + ['id' => (int) $v->codigo, 'status' => RedeMercado::STATUS_A_TRABALHAR, 'nivel' => $v->nivel];
+            }
         }
 
-        return ['clientes' => $clientes, 'leads' => $leads];
+        foreach ($saida as &$rede) {
+            // Ativos primeiro, depois a compra mais recente.
+            usort($rede['clientes'], fn ($a, $b) => [$b['status'] === RedeMercado::STATUS_ATIVO, $b['ultima_compra'] ?? ''] <=> [$a['status'] === RedeMercado::STATUS_ATIVO, $a['ultima_compra'] ?? '']);
+        }
+        unset($rede);
+
+        return $saida;
     }
 
     /**
