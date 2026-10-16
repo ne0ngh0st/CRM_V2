@@ -41,7 +41,13 @@ class VinculoDeRedes
     }
 
     /**
+     * `$fixos` e `$recusados` vêm da tela (vínculo manual e remoção) e o motor os respeita:
+     * código fixo não é disputado por ninguém (mas a raiz dele ainda puxa os outros códigos
+     * da mesma empresa para a rede dele); par recusado (rede, código) nunca é refeito.
+     *
      * @param  list<array{nome: string, apelidos?: list<string>, categoria: string}>  $redes
+     * @param  array<string, int>  $fixos  "cliente:000123" / "lead:45" → índice da rede
+     * @param  array<string, true>  $recusados  "3|cliente:000123" (índice da rede | chave)
      * @return array{
      *     clientes: array<string, array{rede: int, nivel: string}>,
      *     leads: array<int, array{rede: int, nivel: string}>,
@@ -49,9 +55,11 @@ class VinculoDeRedes
      *     ambiguas: list<array{rede: int, tipo: string}>,
      * }
      */
-    public function calcular(array $redes): array
+    public function calcular(array $redes, array $fixos = [], array $recusados = []): array
     {
         $this->redes = $redes;
+        $this->fixos = $fixos;
+        $this->recusados = $recusados;
         $this->ufDoCodigo = $this->ufPorCodigo();
         $catalogo = $this->porCliente->catalogo();
         $codigosDoGrupo = [];
@@ -89,9 +97,16 @@ class VinculoDeRedes
         }
 
         $conflitos = [];
-        $clientes = $this->resolver($candidatos, $peso, 'cliente', $conflitos);
+        $clientes = $this->resolver($this->semDecididosPelaTela($candidatos, 'cliente'), $peso, 'cliente', $conflitos);
 
-        $empresa = $this->mesmaEmpresa($clientes, $peso, $conflitos);
+        $manuais = [];
+        foreach ($fixos as $chave => $rede) {
+            // Rede < 0: manual de rede arquivada — segura o código, mas não puxa a empresa.
+            if (str_starts_with($chave, 'cliente:') && $rede >= 0) {
+                $manuais[substr($chave, 8)] = ['rede' => $rede, 'nivel' => 'manual'];
+            }
+        }
+        $empresa = $this->mesmaEmpresa($clientes + $manuais, $peso, $conflitos);
         $clientes += $empresa;
 
         $leads = $this->leads($redes, $alvos, $peso, $ambiguas, $conflitos);
@@ -101,6 +116,44 @@ class VinculoDeRedes
 
     /** Quem casou o código pelo próprio nome ganha de quem só o trouxe junto com um grupo. */
     private const FORCA = [self::NOME => 3, self::GRUPO => 2, self::MESMA_EMPRESA => 1];
+
+    /** @var array<string, int> */
+    private array $fixos = [];
+
+    /** @var array<string, true> */
+    private array $recusados = [];
+
+    /**
+     * Tira dos candidatos o que a tela já decidiu: o código fixo (vínculo manual) sai da
+     * disputa; a rede recusada para aquele código sai da lista dele.
+     *
+     * @param  array<string, array<int, string>>  $candidatos
+     * @return array<string, array<int, string>>
+     */
+    private function semDecididosPelaTela(array $candidatos, string $tipo): array
+    {
+        foreach ($candidatos as $codigo => $porRede) {
+            $chave = $tipo.':'.($tipo === 'lead' ? substr((string) $codigo, 1) : $codigo);
+
+            if (isset($this->fixos[$chave])) {
+                unset($candidatos[$codigo]);
+
+                continue;
+            }
+
+            foreach (array_keys($porRede) as $i) {
+                if (isset($this->recusados[$i.'|'.$chave])) {
+                    unset($candidatos[$codigo][$i]);
+                }
+            }
+
+            if ($candidatos[$codigo] === []) {
+                unset($candidatos[$codigo]);
+            }
+        }
+
+        return $candidatos;
+    }
 
     /** @var list<array> as redes da rodada (uf, lojas), para o desempate */
     private array $redes = [];
@@ -247,6 +300,8 @@ class VinculoDeRedes
             }
         }
 
+        $candidatos = $this->semDecididosPelaTela($candidatos, 'cliente');
+
         // Raiz que já está em DUAS redes (a mesma empresa opera ATACADÃO e CARREFOUR BAIRRO):
         // o código sem nome de nenhuma das duas não tem como ser decidido. Fica de fora.
         foreach ($candidatos as $codigo => $porRede) {
@@ -310,7 +365,7 @@ class VinculoDeRedes
         }
 
         $saida = [];
-        foreach ($this->resolver($candidatos, $peso, 'lead', $conflitos) as $codigo => $v) {
+        foreach ($this->resolver($this->semDecididosPelaTela($candidatos, 'lead'), $peso, 'lead', $conflitos) as $codigo => $v) {
             $saida[(int) substr($codigo, 1)] = $v;
         }
 

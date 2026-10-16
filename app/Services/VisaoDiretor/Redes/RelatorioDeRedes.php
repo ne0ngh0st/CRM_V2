@@ -2,11 +2,8 @@
 
 namespace App\Services\VisaoDiretor\Redes;
 
-use App\Models\Cliente;
 use App\Services\Carteira\ClienteStatusResolver;
-use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Monta as abas do Excel de revisão dos vínculos (`visao-diretor:redes-vinculos`), a partir
@@ -40,7 +37,7 @@ class RelatorioDeRedes
     public function __construct(
         private readonly VinculoDeRedes $vinculo,
         private readonly ClienteStatusResolver $status,
-        private readonly NomeVendedorResolver $nomeVendedor,
+        private readonly DetalheDosVinculos $detalhe,
     ) {
     }
 
@@ -53,8 +50,8 @@ class RelatorioDeRedes
         $redes = $json['redes'];
         $r = $this->vinculo->calcular($redes);
 
-        $clientes = $this->clientes(array_keys($r['clientes']));
-        $leads = $this->leads(array_keys($r['leads']));
+        $clientes = $this->detalhe->clientes(array_keys($r['clientes']));
+        $leads = $this->detalhe->leads(array_keys($r['leads']));
         $limiteAtivo = $this->status->limiteAtivo();
 
         $porRede = [];
@@ -125,7 +122,7 @@ class RelatorioDeRedes
                 'status' => ($n['ativos'] ?? 0) > 0 ? self::ATIVO : self::A_TRABALHAR,
                 'ambigua' => implode(', ', $ambigua[$i] ?? []),
                 // Sem cliente, o vendedor do lead; rede sem nada fica sem vendedor.
-                'vendedor' => $this->vendedorDaRede($n['vendedores'] ?? $n['vendedores_lead'] ?? []),
+                'vendedor' => $this->detalhe->vendedorDaRede($n['vendedores'] ?? $n['vendedores_lead'] ?? []),
                 'ultima_compra' => $n['ultima_compra'] ?? null,
             ];
             $linhasRedes[] = $linha;
@@ -139,7 +136,7 @@ class RelatorioDeRedes
         foreach ($r['conflitos'] as $c) {
             $lead = $c['tipo'] === 'lead';
             $codigo = $lead ? substr($c['codigo'], 1) : $c['codigo'];
-            $detalhe = $lead ? ($this->leads([(int) $codigo])[(int) $codigo] ?? []) : ($this->clientes([$codigo])[$codigo] ?? []);
+            $detalhe = $lead ? ($this->detalhe->leads([(int) $codigo])[(int) $codigo] ?? []) : ($this->detalhe->clientes([$codigo])[$codigo] ?? []);
 
             $conflitos[] = [
                 'tipo' => $lead ? 'Lead' : 'Cliente',
@@ -184,24 +181,6 @@ class RelatorioDeRedes
         ];
     }
 
-    /**
-     * O vendedor da rede é o que atende MAIS clientes dela; havendo outros, "+N" diz
-     * quantos (o nome de cada um está na aba Vínculos).
-     *
-     * @param  array<string, int>  $contagem  vendedor → clientes
-     */
-    private function vendedorDaRede(array $contagem): ?string
-    {
-        if ($contagem === []) {
-            return null;
-        }
-
-        arsort($contagem);
-        $outros = count($contagem) - 1;
-
-        return array_key_first($contagem).($outros > 0 ? " (+{$outros})" : '');
-    }
-
     private function linhaVinculo(array $rede, string $tipo, string $codigo, array $d, string $nivel): array
     {
         return [
@@ -221,100 +200,4 @@ class RelatorioDeRedes
         ];
     }
 
-    /**
-     * Uma linha por código: a filial-âncora (a primeira que não é endereço de entrega) dá
-     * nome e CNPJ; o responsável é o vendedor com mais filiais do código.
-     *
-     * @param  list<string>  $codigos
-     * @return array<string, array{nome: string, fantasia: string, documento: ?string, filiais: int, responsavel: string, ultima_compra: ?string}>
-     */
-    private function clientes(array $codigos): array
-    {
-        $porCodigo = [];
-
-        foreach (array_chunk($codigos, 1000) as $lote) {
-            $filiais = DB::table('clientes')
-                ->whereIn('cod_cliente', $lote)
-                ->orderBy('cod_cliente')->orderBy('loja')
-                ->get(['cod_cliente', 'loja', 'razao_social', 'nome_fantasia', 'cnpj', 'cod_vendedor', 'data_ultima_compra']);
-
-            foreach ($filiais as $f) {
-                $codigo = (string) $f->cod_cliente;
-                $entrega = in_array(mb_substr((string) $f->loja, 0, 1), Cliente::PREFIXOS_ENTREGA, true);
-                $atual = $porCodigo[$codigo] ?? null;
-
-                if ($atual === null || ($atual['entrega'] && ! $entrega)) {
-                    $porCodigo[$codigo] = [
-                        'nome' => (string) $f->razao_social,
-                        'fantasia' => (string) $f->nome_fantasia,
-                        'documento' => $f->cnpj,
-                        'entrega' => $entrega,
-                        'filiais' => $atual['filiais'] ?? 0,
-                        'vendedores' => $atual['vendedores'] ?? [],
-                        'ultima_compra' => $atual['ultima_compra'] ?? null,
-                    ];
-                }
-
-                // Endereço de entrega não é loja (mesma régua da Carteira: "N filiais · M entregas").
-                $porCodigo[$codigo]['filiais'] += $entrega ? 0 : 1;
-                $porCodigo[$codigo]['vendedores'][(string) $f->cod_vendedor] = ($porCodigo[$codigo]['vendedores'][(string) $f->cod_vendedor] ?? 0) + 1;
-                if ($f->data_ultima_compra && ($porCodigo[$codigo]['ultima_compra'] === null || $f->data_ultima_compra > $porCodigo[$codigo]['ultima_compra'])) {
-                    $porCodigo[$codigo]['ultima_compra'] = $f->data_ultima_compra;
-                }
-            }
-        }
-
-        $principal = [];
-        foreach ($porCodigo as $codigo => $c) {
-            arsort($c['vendedores']);
-            $principal[$codigo] = (string) array_key_first($c['vendedores']);
-        }
-        $nomes = $this->nomeVendedor->porCodigo(array_values($principal));
-
-        $saida = [];
-        foreach ($porCodigo as $codigo => $c) {
-            $saida[$codigo] = [
-                'nome' => $c['nome'],
-                'fantasia' => $c['fantasia'],
-                'documento' => $c['documento'],
-                'filiais' => $c['filiais'],
-                'responsavel' => $nomes[$principal[$codigo]] ?? $principal[$codigo],
-                'ultima_compra' => $c['ultima_compra'] ? substr((string) $c['ultima_compra'], 0, 10) : null,
-            ];
-        }
-
-        return $saida;
-    }
-
-    /**
-     * @param  list<int>  $ids
-     * @return array<int, array{nome: string, fantasia: string, documento: ?string, responsavel: string}>
-     */
-    private function leads(array $ids): array
-    {
-        $saida = [];
-
-        foreach (array_chunk($ids, 1000) as $lote) {
-            $leads = DB::table('leads')
-                ->leftJoin('users', 'users.id', '=', 'leads.user_id')
-                ->whereIn('leads.id', $lote)
-                ->get(['leads.id', 'leads.nome', 'leads.razao_social', 'leads.nome_fantasia', 'leads.cnpj', 'leads.cod_vendedor', 'users.display_name', 'users.name']);
-
-            $nomes = $this->nomeVendedor->porCodigo($leads->pluck('cod_vendedor')->filter()->unique()->values());
-
-            foreach ($leads as $l) {
-                $saida[(int) $l->id] = [
-                    'nome' => (string) ($l->razao_social ?: $l->nome),
-                    'fantasia' => (string) ($l->nome_fantasia ?: ''),
-                    'documento' => $l->cnpj,
-                    // Quem atende é o vendedor do código, não o dono do lead (diretoria, 2026-10-07).
-                    'responsavel' => $l->cod_vendedor
-                        ? ($nomes[$l->cod_vendedor] ?? $l->cod_vendedor)
-                        : ($l->display_name ?: ($l->name ?: 'Sem vendedor')),
-                ];
-            }
-        }
-
-        return $saida;
-    }
 }
