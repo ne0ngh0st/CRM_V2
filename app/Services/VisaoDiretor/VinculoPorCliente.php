@@ -64,16 +64,29 @@ class VinculoPorCliente
      */
     public function catalogo(): array
     {
+        $linhas = DB::table('clientes')
+            ->select('cod_cliente', 'loja', 'cod_grupo', 'cod_segmento', 'razao_social', 'nome_fantasia')
+            ->orderBy('id')
+            ->cursor();
+
+        return $this->catalogoDe($linhas);
+    }
+
+    /**
+     * O mesmo catálogo a partir de outras linhas, no formato de `clientes` (cod_cliente,
+     * loja, cod_grupo, cod_segmento, razao_social, nome_fantasia). A página de redes do
+     * mercado usa para os LEADS (`VinculoDeRedes`): cada lead vira uma "filial" de código
+     * próprio, sem grupo, e passa pelas mesmas travas de nome.
+     *
+     * @param  iterable<object>  $linhas
+     */
+    public function catalogoDe(iterable $linhas, bool $comNomesDeGrupo = true): array
+    {
         $filiais = [];
         $indice = [];
         $porGrupo = [];
         $porCodigo = [];
         $segmentosDoGrupo = [];
-
-        $linhas = DB::table('clientes')
-            ->select('cod_cliente', 'loja', 'cod_grupo', 'cod_segmento', 'razao_social', 'nome_fantasia')
-            ->orderBy('id')
-            ->cursor();
 
         foreach ($linhas as $c) {
             // Endereço de entrega: o "nome fantasia" ali é rua ou bairro ("IPIRANGA", "RUA
@@ -115,7 +128,10 @@ class VinculoPorCliente
         // O NOME DO GRUPO também identifica: o grupo 1305 se chama KOPENHAGEM, e as lojas
         // dele, BABOO, BAIXADO, "KOP SP HOSPITAL…" — nenhuma casaria pelo nome (2026-10-09).
         $nomesDeGrupo = [];
-        foreach (DB::table('grupos_cliente')->whereNotIn('codigo', ContaEstrategicaVinculo::GRUPOS_PROIBIDOS)->get(['codigo', 'nome']) as $g) {
+        $grupos = $comNomesDeGrupo
+            ? DB::table('grupos_cliente')->whereNotIn('codigo', ContaEstrategicaVinculo::GRUPOS_PROIBIDOS)->get(['codigo', 'nome'])
+            : [];
+        foreach ($grupos as $g) {
             $marca = $this->nomes->marca((string) $g->nome);
             $grafia = $this->grafia($marca);
 
@@ -129,9 +145,14 @@ class VinculoPorCliente
     }
 
     /**
+     * `$codigoSegmento` nulo = a conta não tem segmento do TOTVS (Óticas, Beleza,
+     * Conveniência, Serviços na página de redes do mercado): a trava 3 não se aplica e a
+     * filial avulsa vale em qualquer segmento. O que segura o falso positivo aí são as
+     * travas de nome (começo com fronteira de palavra, 6+ letras para palavra única).
+     *
      * @return array{grupos: list<string>, clientes: list<string>, ambiguo: bool, exemplos: list<string>}
      */
-    public function sugerir(string $nomeConta, string $codigoSegmento, array $catalogo): array
+    public function sugerir(string $nomeConta, ?string $codigoSegmento, array $catalogo): array
     {
         $casadas = [];
 
@@ -150,7 +171,7 @@ class VinculoPorCliente
         $casadasPorGrupo = [];
         $grupoComSegmento = [];
 
-        $noSegmento = fn (int $i) => $casadas[$i] || $filiais[$i]['segmento'] === $codigoSegmento;
+        $noSegmento = fn (int $i) => $codigoSegmento === null || $casadas[$i] || $filiais[$i]['segmento'] === $codigoSegmento;
 
         foreach (array_keys($casadas) as $i) {
             $f = $filiais[$i];
@@ -186,7 +207,7 @@ class VinculoPorCliente
                     continue;
                 }
 
-                if (isset($catalogo['segmentosDoGrupo'][$grupo][$codigoSegmento])) {
+                if ($codigoSegmento === null || isset($catalogo['segmentosDoGrupo'][$grupo][$codigoSegmento])) {
                     $grupos[] = $grupo;
                     $exemplosDeGrupo[] = $nome;
                 } elseif ($alvoEscrito === $escrita) {
@@ -239,6 +260,20 @@ class VinculoPorCliente
             'ambiguo' => false,
             'exemplos' => array_values(array_slice(array_unique($exemplos), 0, 3)),
         ];
+    }
+
+    /**
+     * Quão específico é o nome: o tamanho, sem espaço, da maior das alternativas. Usado para
+     * desempatar duas redes que casam a mesma filial — "SHELL SELECT" ganha de "SHELL".
+     */
+    public function especificidade(string $nome): int
+    {
+        $maior = 0;
+        foreach ($this->alternativas($nome) as [$marca]) {
+            $maior = max($maior, strlen(implode('', $this->grafia($marca))));
+        }
+
+        return $maior;
     }
 
     /**

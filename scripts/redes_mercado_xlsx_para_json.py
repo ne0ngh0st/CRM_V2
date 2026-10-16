@@ -98,6 +98,18 @@ DECISOES = {
     390: [n("STOK CENTER")],
     511: [n("SUPERMERCADO LÍDER")],
     554: pular("Mesma rede da linha 396 (CARVALHO, PI)."),
+    # --- a mesma rede escrita duas vezes na planilha: fica a de cima do ranking
+    284: pular("Mesma rede da linha 186 (BACIO DI LATTE)."),
+    334: pular("Mesma rede da linha 198 (LOJAS TAQI), em outra categoria."),
+    352: pular("Mesma rede da linha 351 (MILIUM TEM DE TUDO)."),
+    434: pular("Mesma rede da linha 400 (SANTA LUCIA, ES)."),
+    518: pular("Mesma rede da linha 479 (COOP)."),
+    522: pular("Mesma rede da linha 478 (FARMÁCIA VALE VERDE)."),
+    560: pular("Mesma rede da linha 469 (BARBOSA SUPERMERCADOS)."),
+    614: pular("Mesma rede da linha 606 (SUPERMERCADOS MUNDIAL)."),
+    677: pular("Mesma rede da linha 643 (CASA RENA), em outra categoria."),
+    694: pular("Mesma rede da linha 535 (SUPERMERCADOS GUANABARA)."),
+    713: pular("Mesma empresa da linha 227 (C VALE), em outra categoria."),
     662: [n("COSTA ATACADÃO")],
     720: [n("OJO")],
     # --- bandeiras somadas: uma linha por bandeira

@@ -4487,19 +4487,6 @@
    "lojas_linha_original": 121
   },
   {
-   "posicao": 284,
-   "categoria": "alimentacao",
-   "nome": "BACCIO DI LATTE",
-   "apelidos": [],
-   "uf": "SP",
-   "lojas": 121,
-   "data_base": "até 2024",
-   "qualidade": "planilha_anterior",
-   "fonte": "Sem atualização pública localizada - confirmar",
-   "linha_original": "BACCIO DI LATTE",
-   "lojas_linha_original": 121
-  },
-  {
    "posicao": 285,
    "categoria": "rede_lojas",
    "nome": "LOJAS POMPÉIA",
@@ -5248,19 +5235,6 @@
    "lojas_linha_original": 85
   },
   {
-   "posicao": 334,
-   "categoria": "material_construcao",
-   "nome": "LOJAS TAQI",
-   "apelidos": [],
-   "uf": "RS",
-   "lojas": 85,
-   "data_base": "até 2024",
-   "qualidade": "planilha_anterior",
-   "fonte": "Sem atualização pública localizada - confirmar",
-   "linha_original": "LOJAS TAQI",
-   "lojas_linha_original": 85
-  },
-  {
    "posicao": 335,
    "categoria": "drogarias",
    "nome": "COMPRE CERTO",
@@ -5520,19 +5494,6 @@
    "qualidade": "planilha_anterior",
    "fonte": "Sem atualização pública localizada - confirmar",
    "linha_original": "MILIUM TEM DE TUDO",
-   "lojas_linha_original": 74
-  },
-  {
-   "posicao": 352,
-   "categoria": "rede_lojas",
-   "nome": "MILLIUM TEM DE TUDO",
-   "apelidos": [],
-   "uf": "SC",
-   "lojas": 74,
-   "data_base": "até 2024",
-   "qualidade": "planilha_anterior",
-   "fonte": "Sem atualização pública localizada - confirmar",
-   "linha_original": "MILLIUM TEM DE TUDO",
    "lojas_linha_original": 74
   },
   {
@@ -6671,19 +6632,6 @@
    "qualidade": "planilha_anterior",
    "fonte": "Sem atualização pública localizada - confirmar",
    "linha_original": "VAZ ESTACIONAMENTOS",
-   "lojas_linha_original": 43
-  },
-  {
-   "posicao": 434,
-   "categoria": "drogarias",
-   "nome": "FARMACIA SANTA LUCIA",
-   "apelidos": [],
-   "uf": "ES",
-   "lojas": 43,
-   "data_base": "até 2024",
-   "qualidade": "planilha_anterior",
-   "fonte": "Sem atualização pública localizada - confirmar",
-   "linha_original": "FARMACIA SANTA LUCIA",
    "lojas_linha_original": 43
   },
   {
@@ -7840,19 +7788,6 @@
    "lojas_linha_original": 31
   },
   {
-   "posicao": 518,
-   "categoria": "supermercados",
-   "nome": "COOP",
-   "apelidos": [],
-   "uf": "SP",
-   "lojas": 31,
-   "data_base": "2025",
-   "qualidade": "estimativa",
-   "fonte": "Planilha antiga; confirmar",
-   "linha_original": "COOP",
-   "lojas_linha_original": 31
-  },
-  {
    "posicao": 519,
    "categoria": "oticas",
    "nome": "ÓTICA ISABELA DIAS",
@@ -7889,19 +7824,6 @@
    "qualidade": "planilha_anterior",
    "fonte": "Sem atualização pública localizada - confirmar",
    "linha_original": "TACO BELL",
-   "lojas_linha_original": 30
-  },
-  {
-   "posicao": 522,
-   "categoria": "drogarias",
-   "nome": "FARMACIAS VALE VERDE",
-   "apelidos": [],
-   "uf": "PR",
-   "lojas": 30,
-   "data_base": "até 2024",
-   "qualidade": "planilha_anterior",
-   "fonte": "Sem atualização pública localizada - confirmar",
-   "linha_original": "FARMACIAS VALE VERDE",
    "lojas_linha_original": 30
   },
   {
@@ -8452,19 +8374,6 @@
    "qualidade": "planilha_anterior",
    "fonte": "Sem atualização pública localizada - confirmar",
    "linha_original": "DECIO AUTO POSTO",
-   "lojas_linha_original": 25
-  },
-  {
-   "posicao": 560,
-   "categoria": "supermercados",
-   "nome": "SUPERMERCADOS BARBOSA",
-   "apelidos": [],
-   "uf": "SP",
-   "lojas": 25,
-   "data_base": "2025",
-   "qualidade": "estimativa",
-   "fonte": "Planilha antiga tinha 21; confirmar",
-   "linha_original": "SUPERMERCADOS BARBOSA",
    "lojas_linha_original": 25
   },
   {
@@ -9180,19 +9089,6 @@
    "qualidade": "planilha_anterior",
    "fonte": "Aba 500+ antiga - confirmar",
    "linha_original": "TROPICAL CONVENIÊNCIA",
-   "lojas_linha_original": 20
-  },
-  {
-   "posicao": 614,
-   "categoria": "supermercados",
-   "nome": "SUPERMERCADO MUNDIAL",
-   "apelidos": [],
-   "uf": "RJ",
-   "lojas": 20,
-   "data_base": "dez/25",
-   "qualidade": "atualizado",
-   "fonte": "Ranking IRTT TOP 300 Varejo 2026",
-   "linha_original": "SUPERMERCADO MUNDIAL",
    "lojas_linha_original": 20
   },
   {
@@ -10054,19 +9950,6 @@
    "lojas_linha_original": 14
   },
   {
-   "posicao": 677,
-   "categoria": "rede_lojas",
-   "nome": "CASA RENA",
-   "apelidos": [],
-   "uf": "MG",
-   "lojas": 14,
-   "data_base": "até 2024",
-   "qualidade": "planilha_anterior",
-   "fonte": "Sem atualização pública localizada - confirmar",
-   "linha_original": "CASA RENA",
-   "lojas_linha_original": 14
-  },
-  {
    "posicao": 678,
    "categoria": "supermercados",
    "nome": "D'AVO",
@@ -10272,19 +10155,6 @@
    "qualidade": "atualizado",
    "fonte": "Ranking IRTT TOP 300 Varejo 2026",
    "linha_original": "SUPERMERCADOS GRICKI",
-   "lojas_linha_original": 12
-  },
-  {
-   "posicao": 694,
-   "categoria": "supermercados",
-   "nome": "SUPERMERCADO GUANABARA",
-   "apelidos": [],
-   "uf": "RS",
-   "lojas": 12,
-   "data_base": "dez/25",
-   "qualidade": "atualizado",
-   "fonte": "Ranking IRTT TOP 300 Varejo 2026",
-   "linha_original": "SUPERMERCADO GUANABARA",
    "lojas_linha_original": 12
   },
   {
@@ -10519,19 +10389,6 @@
    "qualidade": "planilha_anterior",
    "fonte": "Sem atualização pública localizada - confirmar",
    "linha_original": "ATACADAO DRYWALL",
-   "lojas_linha_original": 10
-  },
-  {
-   "posicao": 713,
-   "categoria": "supermercados",
-   "nome": "C. VALE SUPERMERCADOS",
-   "apelidos": [],
-   "uf": "PR",
-   "lojas": 10,
-   "data_base": "dez/25",
-   "qualidade": "atualizado",
-   "fonte": "Ranking IRTT TOP 300 Varejo 2026",
-   "linha_original": "C. VALE SUPERMERCADOS",
    "lojas_linha_original": 10
   },
   {
@@ -11873,9 +11730,64 @@
    "motivo": "BOB'S repetido (já está em Alimentação, linha 38): conferir se é outra rede."
   },
   {
+   "posicao": 284,
+   "linha_original": "BACCIO DI LATTE",
+   "motivo": "Mesma rede da linha 186 (BACIO DI LATTE)."
+  },
+  {
+   "posicao": 334,
+   "linha_original": "LOJAS TAQI",
+   "motivo": "Mesma rede da linha 198 (LOJAS TAQI), em outra categoria."
+  },
+  {
+   "posicao": 352,
+   "linha_original": "MILLIUM TEM DE TUDO",
+   "motivo": "Mesma rede da linha 351 (MILIUM TEM DE TUDO)."
+  },
+  {
+   "posicao": 434,
+   "linha_original": "FARMACIA SANTA LUCIA",
+   "motivo": "Mesma rede da linha 400 (SANTA LUCIA, ES)."
+  },
+  {
+   "posicao": 518,
+   "linha_original": "COOP",
+   "motivo": "Mesma rede da linha 479 (COOP)."
+  },
+  {
+   "posicao": 522,
+   "linha_original": "FARMACIAS VALE VERDE",
+   "motivo": "Mesma rede da linha 478 (FARMÁCIA VALE VERDE)."
+  },
+  {
    "posicao": 554,
    "linha_original": "CARVALHO SUPERSHOP E CARVALHO MECADÃO",
    "motivo": "Mesma rede da linha 396 (CARVALHO, PI)."
+  },
+  {
+   "posicao": 560,
+   "linha_original": "SUPERMERCADOS BARBOSA",
+   "motivo": "Mesma rede da linha 469 (BARBOSA SUPERMERCADOS)."
+  },
+  {
+   "posicao": 614,
+   "linha_original": "SUPERMERCADO MUNDIAL",
+   "motivo": "Mesma rede da linha 606 (SUPERMERCADOS MUNDIAL)."
+  },
+  {
+   "posicao": 677,
+   "linha_original": "CASA RENA",
+   "motivo": "Mesma rede da linha 643 (CASA RENA), em outra categoria."
+  },
+  {
+   "posicao": 694,
+   "linha_original": "SUPERMERCADO GUANABARA",
+   "motivo": "Mesma rede da linha 535 (SUPERMERCADOS GUANABARA)."
+  },
+  {
+   "posicao": 713,
+   "linha_original": "C. VALE SUPERMERCADOS",
+   "motivo": "Mesma empresa da linha 227 (C VALE), em outra categoria."
   }
  ]
 }
