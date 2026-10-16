@@ -111,6 +111,8 @@ dele (não reabrir sem ele pedir):
   `SugestaoDeVinculo`, `MaioresPorSegmentoResolver`, ranking ABRAS, rotas de escrita, os
   componentes Vue sem uso, o filtro `?conta_alvo=` da Carteira e dos Leads) e dropar as
   tabelas. Drop não tem volta — por isso ficou para depois.
+  ⚠️ **Desde 2026-10-16 `SugestaoDeVinculo`, `VinculoPorCliente`, `VinculoPorRazaoSocial`
+  e `TermoDeBusca` são usados pela página Maiores redes (§2b) e NÃO entram na Fase 2.**
 
 Medido no dev (14/10): tabela 44-54 ms, Resumo 110 ms, UFs 77 ms; reconstrução ~26 s
 (era ~14 s — o passo do fantasia por empresa). A busca segue em ~430 ms (a regex do
@@ -435,6 +437,84 @@ no dev): fim de todo `totvs:atualizar` (está em `AtualizadorTotvs::DERIVADOS`),
 `totvs:import-leads` e de hora em hora (:50), para o que muda entre importações.
 
 Testes: `tests/Feature/VisaoDiretor/UniversoDoSegmentoTest.php` (verificado por mutação).
+
+## 2b. Página: Maiores redes
+
+`/visao-diretor/maiores-redes` (2026-10-16). Das maiores redes do **mercado** (planilha
+`MAIORES POR SEGMENTO 2026.xlsx` da diretoria, aba BASE 2026), em quais a Autopel atua.
+Não é a Maiores por Segmento (que lista NOSSOS clientes por segmento do TOTVS) nem usa
+`contas_estrategicas` ("é outra coisa, não é pra juntar", Tony).
+
+### Decisões do Tony (2026-10-16)
+
+- Parêntese com o **dono** (`POSTOS SHELL (RAÍZEN)`) ou **descrição** (`SMART FIT
+  (ACADEMIAS)`): fica só a empresa. O dono não entra em nada, nem na vinculação.
+- **Bandeiras somadas viram uma linha cada** (Carrefour, Atacadão, Sam's Club). As lojas de
+  cada bandeira foram pesquisadas (out/2026); sem dado público, `sem_numero`.
+- **Franqueado conta** como loja da rede (vínculo pelo nome fantasia).
+- **Status: só Ativo e A trabalhar.** Rede Ativa = pelo menos um cliente ativo (290 dias);
+  lead, perdendo, inativo e rede sem ninguém = A trabalhar.
+- A linha da rede **abre** e mostra cada cliente/lead com responsável, última compra e
+  status — e é ali que admin/diretor **vinculam e tiram** clientes à mão.
+- Mesmo gate da seção (`ver-visao-diretor`).
+
+### Dados
+
+| O quê | Onde |
+|---|---|
+| A planilha limpa | `database/data/visao-diretor/redes-mercado-2026.json`, gerado por `scripts/redes_mercado_xlsx_para_json.py` (decisões linha a linha em `DECISOES`, lojas pesquisadas em `LOJAS`) |
+| As 11 categorias e o segmento TOTVS equivalente | `CategoriasDeRede` |
+| As redes e os contadores | `redes_mercado` |
+| Quem é de cada rede | `redes_mercado_vinculos` (`nivel` nome/grupo/mesma_empresa/manual, `recusado`) |
+| Motor de vínculo | `VinculoDeRedes` (única definição de "clientes desta rede") |
+| Escrita (carga, reconstrução, manual, contadores) | `MaioresRedes` |
+| Leitura da página | `MaioresRedesResolver` |
+| Linha de cliente/lead (nome, responsável, última compra) | `DetalheDosVinculos` |
+
+### O motor (`VinculoDeRedes`)
+
+Grão `cod_cliente` (o da Carteira agrupada; cada franqueado é um código). Níveis:
+**nome** (começo do fantasia/razão, travas do `VinculoPorCliente`), **grupo** do TOTVS
+(pelo nome ou maioria das filiais; 9998 nunca), **mesma_empresa** (raiz do CNPJ calculada em
+memória, Regra nº 3). Lead: mesma regra de nome; lead de empresa que já é cliente fica fora.
+
+- ⚠️ **Cada cliente pertence a UMA rede**, garantido pelo banco (coluna gerada `dono`
+  única). Desempate: nível (nome > grupo > empresa), nome mais específico (SHELL SELECT >
+  SHELL), UF da sede (só para nome/empresa — o grupo não se parte), rede maior. Empate em
+  tudo: fica fora (aba Conflitos do Excel de revisão).
+- ⚠️ **Categoria sem segmento TOTVS** (Conveniência, Beleza, Óticas, Serviços): a filial
+  vale em qualquer segmento; seguram as travas de nome.
+- ⚠️ **Grupo do TOTVS de outro segmento entra se o nome dele (com a palavra de tipo) é o da
+  rede, ou o começo dele com 2+ palavras** (`grupoDeOutroSegmento`). Caso real: grupo 2109
+  MILKY MOO, cliente cadastrado como Supermercadista, rede "MILKY MOO MILKSHAKES". A palavra
+  de tipo segura "SUPERMERCADO CARIOCA" fora de "DROGARIAS CARIOCA". Só nesta página.
+- Duplicatas da planilha (mesma rede escrita duas vezes) saem no JSON (`pular`).
+
+### Reconstrução e vínculo manual
+
+- `visao-diretor:importar-redes` (carga do JSON + vínculos) e `visao-diretor:vincular-redes`
+  (só vínculos). Este roda no fim do `totvs:atualizar` (`AtualizadorTotvs::DERIVADOS`).
+  Medido no dev: ~4,4 s para 893 redes.
+- ⚠️ **A reconstrução refaz só os vínculos do motor.** `manual` e `recusado` (feitos pela
+  tela) nunca são tocados: o código manual sai da disputa, o par recusado não é refeito.
+- Vincular move o cliente se ele estava em outra rede. Remover grava `recusado`.
+- Rede que sai do JSON numa recarga fica `ativa = false` (some da tela, vínculos guardados).
+- Os contadores (clientes, filiais, ativos, leads, vendedor, última compra, status) moram
+  na linha da rede; toda escrita termina em `MaioresRedes::recalcular()`. A página não agrega
+  nada ao vivo. Vendedor da rede = o que atende mais clientes dela, "(+N)" quando há outros.
+
+### Excel de revisão
+
+`php artisan visao-diretor:redes-vinculos` grava `storage/app/private/relatorios/
+maiores-redes-vinculos-<data>.xlsx`, só lendo: aba POR SEGMENTO 2026 (layout da planilha da
+diretoria + vendedor, última compra, status), Redes, Vínculos, Conflitos, Sem vínculo,
+Limpeza. Foi a prova pedida antes da tela existir.
+
+### Testes
+
+`VinculoDeRedesTest` (motor; mutações aplicadas: nível, UF, raiz do lead, segmento nulo) e
+`MaioresRedesTest` (gate, tiles = lista, manual e recusa sobrevivendo à reconstrução —
+verificado por mutação —, unicidade no banco, arquivamento).
 
 ## 3. Rollup de faturamento — `faturamento_cliente_mensal`
 

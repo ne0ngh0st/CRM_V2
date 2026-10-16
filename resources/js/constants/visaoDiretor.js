@@ -14,3 +14,20 @@ export const ROTULOS_STATUS_CONTA = { ...ROTULOS_STATUS_CARTEIRA, lead: 'Lead' }
 export const TONS_STATUS_CONTA = { ...TONS_STATUS_CARTEIRA, lead: 'neutral' };
 
 export const STATUS_CONTA = ['ativo', 'inativando', 'inativo', 'lead'];
+
+/*
+ * Maiores redes (redes do mercado): só dois status, decisão do Tony em 2026-10-16. A rede
+ * é Ativa com pelo menos um cliente ativo; lead, perdendo e inativo são "A trabalhar".
+ * ⚠️ `RelatorioDeRedes` (o Excel) usa os mesmos rótulos do lado do servidor.
+ */
+export const ROTULOS_STATUS_REDE = { ativo: 'Ativo', a_trabalhar: 'A trabalhar' };
+
+export const TONS_STATUS_REDE = { ativo: 'ok', a_trabalhar: 'warn' };
+
+/** Como o cliente entrou na rede (coluna `nivel` de `redes_mercado_vinculos`). */
+export const ROTULOS_NIVEL_VINCULO = {
+    nome: 'Pelo nome',
+    grupo: 'Grupo do TOTVS',
+    mesma_empresa: 'Mesma empresa (CNPJ)',
+    manual: 'Vinculado à mão',
+};

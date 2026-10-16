@@ -80,6 +80,7 @@ export const NAV_PRINCIPAL = [
         ativoEm: ['visao-diretor.*'],
         itens: [
             { chave: 'maiores-por-segmento', rotulo: 'Maiores por segmento', icone: 'segmentos', rota: 'visao-diretor.maiores.index', ativoEm: ['visao-diretor.maiores.*'], prefetch: 'hover' },
+            { chave: 'maiores-redes', rotulo: 'Maiores redes', icone: 'redes', rota: 'visao-diretor.redes.index', ativoEm: ['visao-diretor.redes.*'], prefetch: 'hover' },
         ],
     },
     {

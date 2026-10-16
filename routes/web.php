@@ -23,6 +23,7 @@ use App\Http\Controllers\SugestaoController;
 use App\Http\Controllers\TabelaPrecoController;
 use App\Http\Controllers\VisaoController;
 use App\Http\Controllers\VisaoDiretor\MaioresPorSegmentoController;
+use App\Http\Controllers\VisaoDiretor\MaioresRedesController;
 use App\Http\Controllers\VisaoGestorController;
 use Illuminate\Support\Facades\Route;
 
@@ -248,6 +249,13 @@ Route::middleware('auth')->group(function () {
         Route::delete('/maiores-por-segmento/contas/{conta}', [MaioresPorSegmentoController::class, 'destroy'])->name('maiores.destroy');
         Route::post('/maiores-por-segmento/sugestoes/{lead}/confirmar', [MaioresPorSegmentoController::class, 'confirmarSugestao'])->name('maiores.sugestao.confirmar');
         Route::post('/maiores-por-segmento/sugestoes/{lead}/recusar', [MaioresPorSegmentoController::class, 'recusarSugestao'])->name('maiores.sugestao.recusar');
+
+        // Maiores redes do mercado (planilha da diretoria 2026). `busca` antes de `{rede}`.
+        Route::get('/maiores-redes', [MaioresRedesController::class, 'index'])->name('redes.index');
+        Route::get('/maiores-redes/busca', [MaioresRedesController::class, 'buscar'])->name('redes.busca');
+        Route::get('/maiores-redes/{rede}/vinculos', [MaioresRedesController::class, 'vinculos'])->name('redes.vinculos');
+        Route::post('/maiores-redes/{rede}/vinculos', [MaioresRedesController::class, 'vincular'])->name('redes.vincular');
+        Route::delete('/maiores-redes/{rede}/vinculos', [MaioresRedesController::class, 'remover'])->name('redes.remover');
     });
 });
 

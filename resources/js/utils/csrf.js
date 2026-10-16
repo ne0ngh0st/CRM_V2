@@ -23,3 +23,18 @@ export function postJson(url, corpo = {}) {
         body: JSON.stringify(corpo),
     });
 }
+
+/** DELETE com corpo JSON, sessão e CSRF. Mesmo contrato do `postJson`. */
+export function deleteJson(url, corpo = {}) {
+    return fetch(url, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-XSRF-TOKEN': tokenCsrf(),
+        },
+        body: JSON.stringify(corpo),
+    });
+}

@@ -3081,6 +3081,24 @@ Primeira aba da Visão Diretor → Maiores por Segmento. Detalhe em `docs/visao-
   nunca pelo nome de marca** (Tony: "se não achou eles, o vínculo está fraco"). O nome de
   marca não achava Assaí/GPA/Sonda e puxava homônimo. Sem razão social, a rede fica Lead.
 
+### Maiores redes (redes do mercado) — 2026-10-16
+
+Página nova da Visão Diretor (`/visao-diretor/maiores-redes`): as maiores redes do país
+(planilha da diretoria 2026, 893 redes em 11 categorias), em quais a Autopel atua.
+**Detalhe, decisões e armadilhas em `docs/visao-diretor.md` §2b.** Aqui fica o essencial:
+
+- **Não é a Maiores por Segmento nem `contas_estrategicas`** — outra lista, outras tabelas
+  (`redes_mercado`, `redes_mercado_vinculos`). A planilha virou JSON versionado
+  (`database/data/visao-diretor/redes-mercado-2026.json`): dono e descrição saem do nome,
+  bandeiras somadas viram uma linha cada.
+- **Status só Ativo / A trabalhar.** Franqueado conta como loja da rede.
+- **Cada cliente em UMA rede só, garantido pelo banco** (coluna gerada `dono`).
+- `VinculoDeRedes` é o motor; `MaioresRedes` toda a escrita. `visao-diretor:vincular-redes`
+  roda no fim do `totvs:atualizar` e **nunca toca vínculo manual nem remoção** feitos pela
+  tela (admin/diretor vinculam e tiram na linha aberta da rede).
+- ⚠️ `SugestaoDeVinculo`, `VinculoPorCliente`, `VinculoPorRazaoSocial` e `TermoDeBusca`
+  são usados aqui: **não entram na Fase 2** de limpeza das redes antigas.
+
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão
