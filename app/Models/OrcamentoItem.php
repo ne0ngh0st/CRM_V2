@@ -28,6 +28,10 @@ class OrcamentoItem extends Model
         return [
             'calcula_ipi' => 'boolean',
             'etiqueta_calc' => 'array',
+            // 3 casas: o vendedor digita preço e quantidade assim (ex.: 0,125).
+            // decimal(12,2) arredondava a terceira casa em silêncio. Migration 2026_10_16_170000.
+            'quantidade' => 'decimal:3',
+            'valor_unitario' => 'decimal:3',
             // 4 casas para acompanhar `produtos.preco_tabela` (decimal(12,4) vindo do TOTVS).
             // Sem cast, o MySQL devolvia string e a comparação de desconto ficava sujeita a
             // coerção implícita. Ver a migration 2026_09_03_090000.

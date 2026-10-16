@@ -2,16 +2,28 @@
 // Estava copiada em Form.vue, ItensTabela.vue e OrcamentoSheet.vue — Regra de ouro nº 8.
 
 const MOEDA = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-const DECIMAL = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const MOEDA_UNITARIA = new Intl.NumberFormat('pt-BR', {
+    style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 3,
+});
+const DECIMAL = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 
-/** "R$ 1.234,56" — usado onde o símbolo faz falta (resumo financeiro, KPIs). */
+/** "R$ 1.234,56" — totais em centavos. */
 export function formatBRL(valor) {
     return MOEDA.format(valor || 0);
 }
 
 /**
- * "1.234,56" — sem símbolo. É o formato da tabela de itens: o "R$" aparece uma vez
- * no cabeçalho da coluna em vez de se repetir em toda célula.
+ * "R$ 1,235" — preço unitário e preço de tabela, que guardam até 3 casas.
+ * Total do documento continua em formatBRL (2 casas).
+ */
+export function formatBRLUnitario(valor) {
+    return MOEDA_UNITARIA.format(valor || 0);
+}
+
+/**
+ * "1.234,56" ou "1,235" — sem símbolo. Até 3 casas: quantidade e unitário
+ * do orçamento. Valor com 2 casas (total de linha) continua aparecendo com 2,
+ * porque o mínimo é 2 e a terceira só entra quando existe.
  */
 export function formatNumero(valor) {
     return DECIMAL.format(valor || 0);

@@ -21,6 +21,14 @@
     $vendedor = $orcamento->user->display_name ?: $orcamento->user->name;
     $contatoVendedor = collect([$orcamento->user->telefone, $orcamento->user->email])->filter()->implode(' · ');
     $moeda = fn ($v) => number_format((float) $v, 2, ',', '.');
+    // Quantidade e preço unitário guardam 3 casas. Total de linha e do documento
+    // continuam em centavos ($moeda): são round(qtd × unitário, 2).
+    $ate3 = function ($v) {
+        $n = round((float) $v, 3);
+        $milesimos = (int) round($n * 1000);
+
+        return number_format($n, ($milesimos % 10) === 0 ? 2 : 3, ',', '.');
+    };
 @endphp
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -277,14 +285,14 @@
                     <td class="meio">{{ str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT) }}</td>
                     <td class="cod">{{ $item['codProduto'] ?: '—' }}</td>
                     <td>{{ $item['descricao'] }}</td>
-                    <td class="num">{{ $moeda($item['quantidade']) }}</td>
+                    <td class="num">{{ $ate3($item['quantidade']) }}</td>
                     @if ($ehProduto)
-                        <td class="num">{{ $moeda($item['valorUnitarioSemIpi']) }}</td>
-                        <td class="num">{{ $moeda($item['valorUnitarioComIpi']) }}</td>
+                        <td class="num">{{ $ate3($item['valorUnitarioSemIpi']) }}</td>
+                        <td class="num">{{ $ate3($item['valorUnitarioComIpi']) }}</td>
                         <td class="num">{{ $moeda($item['valorTotalSemIpi']) }}</td>
                         <td class="num">{{ $moeda($item['valorTotalComIpi']) }}</td>
                     @else
-                        <td class="num">{{ $moeda($item['valorUnitarioComIpi']) }}</td>
+                        <td class="num">{{ $ate3($item['valorUnitarioComIpi']) }}</td>
                         <td class="num">{{ $moeda($item['valorTotalComIpi']) }}</td>
                     @endif
                 </tr>

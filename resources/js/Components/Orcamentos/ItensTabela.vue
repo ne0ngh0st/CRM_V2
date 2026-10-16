@@ -77,6 +77,22 @@ function atualizarItem(idx, campo, valor) {
     atualizar(copia);
 }
 
+/**
+ * Quantidade e valor unitário aceitam 3 casas. `step="0.01"` fazia o navegador
+ * recusar o terceiro dígito (stepMismatch) e o salvar não acontecia.
+ * O corte é aqui, no texto digitado: um `step="0.001"` ainda barra alguns
+ * valores por erro de ponto flutuante, do mesmo jeito silencioso.
+ */
+function limitarCasas(valor) {
+    const texto = String(valor);
+    const ponto = texto.indexOf('.');
+    if (ponto === -1 || texto.length - ponto - 1 <= 3) {
+        return texto;
+    }
+
+    return texto.slice(0, ponto + 4);
+}
+
 // A matemática de IPI mora em utils/orcamento.js (espelho do OrcamentoCalculoService do
 // PHP). Não reimplementar aqui — ver Regra de ouro nº 8.
 function participaIpi(item) {
@@ -239,10 +255,10 @@ const tdBase = 'px-2 py-1.5 align-middle';
                                     :value="item.quantidade"
                                     type="number"
                                     min="0.01"
-                                    step="0.01"
+                                    step="any"
                                     required
                                     class="doc-campo text-right"
-                                    @input="atualizarItem(idx, 'quantidade', $event.target.value)"
+                                    @input="atualizarItem(idx, 'quantidade', limitarCasas($event.target.value))"
                                 />
                             </td>
 
@@ -255,10 +271,10 @@ const tdBase = 'px-2 py-1.5 align-middle';
                                         :value="item.valor_unitario"
                                         type="number"
                                         min="0"
-                                        step="0.01"
+                                        step="any"
                                         required
                                         class="doc-campo text-right"
-                                        @input="atualizarItem(idx, 'valor_unitario', $event.target.value)"
+                                        @input="atualizarItem(idx, 'valor_unitario', limitarCasas($event.target.value))"
                                     />
                                 </td>
                                 <td :class="tdBase" class="text-right text-[0.8rem] text-gray-500">
@@ -274,10 +290,10 @@ const tdBase = 'px-2 py-1.5 align-middle';
                                         :value="item.valor_unitario"
                                         type="number"
                                         min="0"
-                                        step="0.01"
+                                        step="any"
                                         required
                                         class="doc-campo text-right"
-                                        @input="atualizarItem(idx, 'valor_unitario', $event.target.value)"
+                                        @input="atualizarItem(idx, 'valor_unitario', limitarCasas($event.target.value))"
                                     />
                                 </td>
                                 <td :class="tdBase" class="text-right text-[0.8rem] font-semibold text-navy">

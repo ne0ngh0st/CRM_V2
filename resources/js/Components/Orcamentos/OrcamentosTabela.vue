@@ -9,6 +9,7 @@ import {
     TONS_VALIDADE_ORCAMENTO,
 } from '@/constants/orcamentos.js';
 import { podeCompartilharArquivo, baixarComoArquivo, compartilharArquivo } from '@/utils/compartilhar.js';
+import { formatBRLUnitario } from '@/utils/formato.js';
 
 const props = defineProps({
     orcamentos: { type: Array, required: true },
@@ -36,7 +37,7 @@ function rotuloItens(qtd) {
 }
 
 function formatQuantidade(valor) {
-    return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(valor);
+    return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(valor);
 }
 
 function pdfUrl(orcamento, download) {
@@ -301,8 +302,8 @@ async function compartilharPdf(orcamento) {
                                                     <span v-if="item.codProduto" class="text-gray-400">{{ item.codProduto }} · </span>{{ item.descricao }}
                                                 </td>
                                                 <td class="tbl-itens-td" data-rotulo="Qtd.">{{ formatQuantidade(item.quantidade) }}</td>
-                                                <td class="tbl-itens-td" data-rotulo="Vlr. unit.">{{ formatBRL(item.valorUnitario) }}</td>
-                                                <td class="tbl-itens-td" data-rotulo="Preço tabela">{{ item.precoTabela !== null ? formatBRL(item.precoTabela) : '—' }}</td>
+                                                <td class="tbl-itens-td" data-rotulo="Vlr. unit.">{{ formatBRLUnitario(item.valorUnitario) }}</td>
+                                                <td class="tbl-itens-td" data-rotulo="Preço tabela">{{ item.precoTabela !== null ? formatBRLUnitario(item.precoTabela) : '—' }}</td>
                                                 <td class="tbl-itens-td font-medium text-gray-800" data-rotulo="Vlr. total">{{ formatBRL(item.valorTotal) }}</td>
                                             </tr>
                                         </tbody>
