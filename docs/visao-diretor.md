@@ -552,13 +552,19 @@ protótipo (Farmácias São Paulo → Drogaria São Paulo; Rio Park → Allpark)
 para julgar, 90%+ de acerto. "Batem pelo grupo" também conta como acerto: Extrafarma →
 Pague Menos, Tumelero → Telhanorte, Pacheco → DPSP.
 
-**Tela**: coluna **Receita** (situação do CNPJ da rede; embaixo, "N filiais nossas
-irregulares"), tile **CNPJ irregular** que filtra (`?receita=irregular`: a rede OU uma filial
-de cliente nosso dela não ativa — `SituacaoCadastral::irregular()`, a régua da Carteira), e
-na linha aberta o bloco **CNPJ da rede na Receita** com **Corrigir CNPJ** (outro CNPJ, ou
-"Sem CNPJ único"). Excel: 7 colunas novas na aba Redes e "Filiais com CNPJ irregular" na de
-clientes.
+**Tela**: coluna **Receita** com o veredito da rede NO MERCADO (`SituacaoDaRede`, gravado
+em `redes_mercado.situacao_rede` por `recalcular()`): **Ativa** (empresa ATIVA, ou 3+ lojas
+ativas com o nome — franquia, marca que seguiu com outra empresa), **Rede fechada** (só
+empresa baixada/inapta e nenhuma loja ativa com o nome) ou **Sem informação**; embaixo, o
+tamanho dela hoje na Receita. Tile/filtro **Rede fechada** (`?receita=fechada`). Na linha
+aberta, o bloco **CNPJ da rede na Receita** com **Corrigir CNPJ** (outro CNPJ, ou "Sem CNPJ
+único"). Excel: colunas da Receita e "Situação da rede" na aba Redes.
 
+- ⚠️ **É pesquisa de mercado: as filiais dos NOSSOS clientes não entram no veredito**
+  (Tony, 2026-10-17). A 1ª versão contava "filiais nossas irregulares" e chegou a propor
+  "cadastro desatualizado" — errado: o Burger King compra da gente com o CNPJ antigo (BGK)
+  baixado, e a Raia tem 102 fechadas em 4.062. O contador `filiais_cnpj_irregular` segue
+  calculado e só aparece no Excel.
 - ⚠️ **O informado à mão a carga não sobrescreve** (`cnpj_confianca = manual`). "Sem CNPJ
   único" também é manual, com `cnpj` nulo.
 - ⚠️ A correção usa o cartão CNPJ (`CartaoCnpjService::consultar`) para conferir que o CNPJ

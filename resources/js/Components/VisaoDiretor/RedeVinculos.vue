@@ -232,9 +232,6 @@ async function vincular(item) {
                             <td class="tbl-itens-td tbl-td-titulo">
                                 <Link :href="route('carteira.detalhes', c.cliente_id)" class="tbl-main text-teal hover:underline sm:max-w-[320px]" :title="c.nome">{{ c.nome }}</Link>
                                 <span class="tbl-sub">{{ c.fantasia || '—' }} · {{ c.codigo }}{{ c.documento ? ' · ' + c.documento : '' }}</span>
-                                <span v-if="c.filiais_irregulares" class="tbl-sub !text-red-700" title="Filiais com CNPJ não ativo na Receita (baixado, inapto, suspenso…)">
-                                    {{ c.filiais_irregulares }} {{ c.filiais_irregulares === 1 ? 'filial com CNPJ irregular' : 'filiais com CNPJ irregular' }}
-                                </span>
                             </td>
                             <td class="tbl-itens-td tabular-nums" data-rotulo="Filiais">{{ formatInteiro(c.filiais) }}</td>
                             <td class="tbl-itens-td" data-rotulo="Responsável" :title="c.responsavel">{{ nomeCurto(c.responsavel) || '—' }}</td>

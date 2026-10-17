@@ -296,7 +296,7 @@ class CnpjDasRedes
      * - O resto (casamento fraco) não grava CNPJ: **Não identificado**.
      *
      * @return array<int, array{confianca: string, cnpj: ?string, razao_social: ?string, lojas_ativas: ?int,
-     *     matriz: ?array{cnpj: string, situacao: string, data: ?string, cnae: ?string}, capital: ?string, porte: ?string}>
+     *     matriz: ?array{cnpj: string, situacao: string, data: ?string, cnae: ?string}, capital: ?string, porte: ?string, lojas_com_nome_ativas: int}>
      */
     public function resultado(): array
     {
@@ -313,7 +313,9 @@ class CnpjDasRedes
                 }
             }
 
-            $vazio = ['confianca' => self::NAO_IDENTIFICADA, 'cnpj' => null, 'razao_social' => null, 'lojas_ativas' => null, 'matriz' => null, 'capital' => null, 'porte' => null];
+            $vazio = ['confianca' => self::NAO_IDENTIFICADA, 'cnpj' => null, 'razao_social' => null, 'lojas_ativas' => null, 'matriz' => null, 'capital' => null, 'porte' => null,
+                // Lojas ATIVAS com o nome, de qualquer empresa: é o que diz que uma franquia existe.
+                'lojas_com_nome_ativas' => $this->ativosComNome[$id] ?? 0];
             $matriz = $melhor !== null ? ($this->matrizes[$melhor] ?? null) : null;
 
             if ($matriz === null) {
@@ -349,6 +351,7 @@ class CnpjDasRedes
                     'matriz' => $matriz,
                     'capital' => $empresa['capital'] ?? null,
                     'porte' => $empresa['porte'] ?? null,
+                    'lojas_com_nome_ativas' => $ativosComNome,
                 ];
         }
 

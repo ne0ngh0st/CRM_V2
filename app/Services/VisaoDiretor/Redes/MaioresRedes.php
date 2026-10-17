@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\DB;
  *   `recusado` vêm da tela e nunca são tocados — a rede não "desaprende" o que alguém
  *   corrigiu. Roda no fim do `totvs:atualizar` (clientes novos, última compra nova).
  * - **Contadores** (`recalcular()`) moram na linha da rede para a página não agregar nada
- *   ao vivo. Toda escrita aqui termina recalculando as redes que mexeu.
+ *   ao vivo — inclusive o veredito `situacao_rede` (`SituacaoDaRede`). Toda escrita aqui
+ *   termina recalculando as redes que mexeu.
  * - **CNPJ da rede** (`gravarCnpjs()`, da carga `visao-diretor:cnpj-das-redes`, e
  *   `informarCnpj()`, da tela). O informado à mão (`CnpjDasRedes::MANUAL`) a carga não toca.
  */
@@ -176,27 +177,32 @@ class MaioresRedes
         $situacoes = [];
 
         DB::transaction(function () use ($resultado, $referencia, &$contagem, &$situacoes) {
-            RedeMercado::whereIn('id', array_keys($resultado) ?: [0])
-                ->where(fn ($q) => $q->whereNull('cnpj_confianca')->orWhere('cnpj_confianca', '!=', CnpjDasRedes::MANUAL))
-                ->get()
+            RedeMercado::whereIn('id', array_keys($resultado) ?: [0])->get()
                 ->each(function (RedeMercado $rede) use ($resultado, $referencia, &$contagem, &$situacoes) {
                     $r = $resultado[$rede->id];
-                    $rede->forceFill([
-                        'cnpj' => $r['cnpj'],
-                        'cnpj_razao_social' => $r['razao_social'] ? mb_substr($r['razao_social'], 0, 150) : null,
-                        'cnpj_confianca' => $r['confianca'],
-                        'cnpj_lojas_ativas' => $r['lojas_ativas'],
-                        'cnpj_referencia' => $referencia,
-                        'cnpj_user_id' => null,
-                    ])->save();
+                    // As lojas com o nome no mercado valem também para a rede corrigida à mão.
+                    $rede->forceFill(['cnpj_lojas_com_nome_ativas' => $r['lojas_com_nome_ativas']]);
 
-                    $contagem[$r['confianca']] = ($contagem[$r['confianca']] ?? 0) + 1;
-                    if ($r['matriz'] !== null) {
-                        $situacoes[$r['cnpj']] = [$r['matriz']['situacao'], $r['matriz']['data'], $r['matriz']['cnae'], $r['capital'], $r['porte']];
+                    if ($rede->cnpj_confianca !== CnpjDasRedes::MANUAL) {
+                        $rede->forceFill([
+                            'cnpj' => $r['cnpj'],
+                            'cnpj_razao_social' => $r['razao_social'] ? mb_substr($r['razao_social'], 0, 150) : null,
+                            'cnpj_confianca' => $r['confianca'],
+                            'cnpj_lojas_ativas' => $r['lojas_ativas'],
+                            'cnpj_referencia' => $referencia,
+                            'cnpj_user_id' => null,
+                        ]);
+                        $contagem[$r['confianca']] = ($contagem[$r['confianca']] ?? 0) + 1;
+                        if ($r['matriz'] !== null) {
+                            $situacoes[$r['cnpj']] = [$r['matriz']['situacao'], $r['matriz']['data'], $r['matriz']['cnae'], $r['capital'], $r['porte']];
+                        }
                     }
+
+                    $rede->save();
                 });
 
             $this->situacoes->registrarDaBase($situacoes, $referencia);
+            $this->recalcular();
         });
 
         return $contagem;
@@ -216,6 +222,8 @@ class MaioresRedes
             'cnpj_referencia' => null,
             'cnpj_user_id' => $userId,
         ])->save();
+
+        $this->recalcular([$rede->id]);
     }
 
     /**
@@ -309,9 +317,13 @@ class MaioresRedes
             unset($n);
         }
 
-        RedeMercado::query()->when($ids !== null, fn ($q) => $q->whereIn('id', $ids))->get()->each(function (RedeMercado $rede) use ($porRede) {
+        $redes = RedeMercado::query()->when($ids !== null, fn ($q) => $q->whereIn('id', $ids))->get();
+        $situacaoDoCnpj = $this->situacoes->situacoes($redes->pluck('cnpj')->filter()->all());
+
+        $redes->each(function (RedeMercado $rede) use ($porRede, $situacaoDoCnpj) {
             $n = $porRede[$rede->id] ?? [];
             $rede->forceFill([
+                'situacao_rede' => SituacaoDaRede::de($rede->cnpj, $situacaoDoCnpj[$rede->cnpj] ?? null, $rede->cnpj_lojas_com_nome_ativas),
                 'clientes' => $n['clientes'] ?? 0,
                 'filiais' => $n['filiais'] ?? 0,
                 'filiais_cnpj_irregular' => $n['irregulares'] ?? 0,

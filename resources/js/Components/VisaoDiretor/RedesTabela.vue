@@ -6,16 +6,15 @@
  *
  * Vendedor da rede = o que atende mais clientes dela; "(+N)" quando há outros.
  *
- * Coluna Receita: a situação do CNPJ da PRÓPRIA rede (achado na base aberta pelo
- * `visao-diretor:cnpj-das-redes`, ou informado à mão na linha aberta) e, embaixo, quantas
- * filiais dos NOSSOS clientes dela estão com CNPJ irregular. Quem decide o que é irregular
- * é o servidor; aqui só se desenha.
+ * Coluna Receita: a rede NO MERCADO existe? (`SituacaoDaRede`, decidido no servidor) —
+ * Ativa, Rede fechada ou Sem informação, com o tamanho dela hoje na Receita embaixo. É
+ * pesquisa de mercado: as filiais dos NOSSOS clientes não entram (Tony, 2026-10-17).
  */
 import { ref } from 'vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import RedeVinculos from '@/Components/VisaoDiretor/RedeVinculos.vue';
-import { ROTULOS_STATUS_REDE, TONS_STATUS_REDE } from '@/constants/visaoDiretor';
-import { ROTULOS_SITUACAO_RECEITA, TONS_SITUACAO_RECEITA, dataDaSituacao } from '@/constants/receita.js';
+import { ROTULOS_STATUS_REDE, TONS_SITUACAO_REDE, TONS_STATUS_REDE } from '@/constants/visaoDiretor';
+import { ROTULOS_SITUACAO_RECEITA, dataDaSituacao } from '@/constants/receita.js';
 import { formatDataCurta, formatInteiro } from '@/utils/formato';
 
 defineProps({
@@ -31,15 +30,21 @@ function alternar(id) {
 }
 
 function tituloReceita(r) {
-    if (! r.cnpj) return r.cnpjConfiancaRotulo;
     const desde = dataDaSituacao(r.cnpjSituacaoData);
     return [
-        r.cnpjRazaoSocial,
-        r.cnpj,
-        r.cnpjSituacao ? `${ROTULOS_SITUACAO_RECEITA[r.cnpjSituacao] ?? r.cnpjSituacao}${desde ? ` desde ${desde}` : ''}` : 'Situação ainda não carregada',
-        r.cnpjConfiancaRotulo,
-        r.cnpjLojasAtivas !== null ? `${formatInteiro(r.cnpjLojasAtivas)} lojas ativas na Receita` : null,
+        r.situacaoRedeRotulo,
+        r.cnpj ? `${r.cnpjRazaoSocial ?? ''} · ${r.cnpj}` : r.cnpjConfiancaRotulo,
+        r.cnpjSituacao ? `Empresa ${ROTULOS_SITUACAO_RECEITA[r.cnpjSituacao] ?? r.cnpjSituacao}${desde ? ` desde ${desde}` : ''}` : null,
+        r.lojasComNomeAtivas ? `${formatInteiro(r.lojasComNomeAtivas)} lojas ativas com o nome na Receita` : null,
     ].filter(Boolean).join('\n');
+}
+
+// Origem da informação, na linha de baixo.
+function origemReceita(r) {
+    if (r.cnpjLojasAtivas) return `${formatInteiro(r.cnpjLojasAtivas)} lojas ativas`;
+    if (r.lojasComNomeAtivas) return `${formatInteiro(r.lojasComNomeAtivas)} lojas com o nome`;
+
+    return null;
 }
 
 const QUALIDADE = {
@@ -59,7 +64,7 @@ const QUALIDADE = {
                     <th class="tbl-th">UF</th>
                     <th class="tbl-th" title="Lojas da rede no Brasil (planilha da diretoria)">Lojas</th>
                     <th class="tbl-th" title="Data do número de lojas">Base</th>
-                    <th class="tbl-th" title="Situação do CNPJ da rede na Receita e filiais nossas com CNPJ irregular">Receita</th>
+                    <th class="tbl-th" title="A rede existe no mercado? (Receita)">Receita</th>
                     <th class="tbl-th" title="Clientes nossos desta rede (códigos) e filiais">Nossos clientes</th>
                     <th class="tbl-th">Vendedor</th>
                     <th class="tbl-th">Última compra</th>
@@ -83,15 +88,8 @@ const QUALIDADE = {
                         </td>
                         <td class="tbl-td text-xs" data-rotulo="Base">{{ r.dataBase || '—' }}</td>
                         <td class="tbl-td" data-rotulo="Receita" :title="tituloReceita(r)">
-                            <StatusPill v-if="r.cnpj && r.cnpjSituacao" :tone="TONS_SITUACAO_RECEITA[r.cnpjSituacao] ?? 'neutral'" size="sm">
-                                {{ ROTULOS_SITUACAO_RECEITA[r.cnpjSituacao] ?? r.cnpjSituacao }}
-                            </StatusPill>
-                            <span v-else-if="r.cnpj" class="text-xs text-gray-500">{{ r.cnpj }}</span>
-                            <span v-else-if="r.cnpjConfianca === 'franquia'" class="text-xs text-gray-400">Franquia</span>
-                            <span v-else class="text-gray-400">—</span>
-                            <span v-if="r.filiaisCnpjIrregular" class="tbl-sub !text-red-700">
-                                {{ formatInteiro(r.filiaisCnpjIrregular) }} {{ r.filiaisCnpjIrregular === 1 ? 'filial nossa irregular' : 'filiais nossas irregulares' }}
-                            </span>
+                            <StatusPill :tone="TONS_SITUACAO_REDE[r.situacaoRede]" size="sm">{{ r.situacaoRedeRotulo }}</StatusPill>
+                            <span v-if="origemReceita(r)" class="tbl-sub">{{ origemReceita(r) }}</span>
                         </td>
                         <td class="tbl-td tabular-nums" data-rotulo="Nossos clientes">
                             <template v-if="r.clientes || r.leads">

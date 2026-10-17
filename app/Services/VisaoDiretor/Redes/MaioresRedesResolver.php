@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\DB;
  *
  * Status de rede: só **Ativo** e **A trabalhar** (Tony, 2026-10-16). Os tiles contam a
  * categoria inteira com a busca/UF aplicadas e SEM o filtro de status (um filtro não se
- * aplica à faceta que ele controla — mesma regra do card da Carteira). O tile "CNPJ
- * irregular" idem, com o filtro da Receita.
+ * aplica à faceta que ele controla — mesma regra do card da Carteira). Os tiles da Receita
+ * (`SituacaoDaRede::DE_ATENCAO`) idem, com o filtro deles.
  */
 class MaioresRedesResolver
 {
@@ -56,8 +56,8 @@ class MaioresRedesResolver
     public static function filtros(array $q): array
     {
         return [
-            // 'irregular' = a rede ou um cliente nosso dela com CNPJ não ativo na Receita.
-            'receita' => ($q['receita'] ?? null) === 'irregular' ? 'irregular' : '',
+            // O veredito da rede na Receita (`SituacaoDaRede::DE_ATENCAO`). Whitelist: vira WHERE.
+            'receita' => in_array($q['receita'] ?? null, SituacaoDaRede::DE_ATENCAO, true) ? (string) $q['receita'] : '',
             'categoria' => array_key_exists((string) ($q['categoria'] ?? ''), CategoriasDeRede::CATEGORIAS) ? (string) $q['categoria'] : '',
             // Whitelist: o status vem da URL e vira WHERE.
             'status' => in_array($q['status'] ?? null, [RedeMercado::STATUS_ATIVO, RedeMercado::STATUS_A_TRABALHAR], true) ? (string) $q['status'] : '',
@@ -77,24 +77,11 @@ class MaioresRedesResolver
         return RedeMercado::where('ativa', true)
             ->when($filtros['categoria'] !== '', fn ($q) => $q->where('categoria', $filtros['categoria']))
             ->when($filtros['uf'] !== '', fn ($q) => $q->where('uf', $filtros['uf']))
-            ->when(($filtros['receita'] ?? '') === 'irregular', fn ($q) => $this->comCnpjIrregular($q))
+            ->when(($filtros['receita'] ?? '') !== '', fn ($q) => $q->where('situacao_rede', $filtros['receita']))
             ->when($filtros['busca'] !== '', function ($q) use ($filtros) {
                 $termo = '%'.str_replace(['%', '_'], ['\%', '\_'], mb_strtoupper(trim($filtros['busca']))).'%';
                 $q->where(fn ($w) => $w->where('nome', 'like', $termo)->orWhere('linha_original', 'like', $termo)->orWhere('vendedor', 'like', $termo));
             });
-    }
-
-    /**
-     * Rede com o CNPJ dela não ativo na Receita, OU com filial de cliente nosso nessa
-     * situação. "Não ativo" é `SituacaoCadastral::irregular()` — a mesma régua da Carteira.
-     * Só há CNPJ gravado quando a busca confia nele (ou foi informado à mão).
-     */
-    private function comCnpjIrregular(Builder $q): Builder
-    {
-        return $q->where(fn ($w) => $w->where('filiais_cnpj_irregular', '>', 0)
-            ->orWhereExists(fn ($e) => $e->selectRaw('1')->from('cnpj_situacoes')
-                ->whereColumn('cnpj_situacoes.cnpj', 'redes_mercado.cnpj')
-                ->whereRaw(SituacaoCadastral::sqlIrregular('cnpj_situacoes.situacao'))));
     }
 
     /**
@@ -111,8 +98,10 @@ class MaioresRedesResolver
             'cnpjConfiancaRotulo' => CnpjDasRedes::CONFIANCAS[$r->cnpj_confianca] ?? null,
             'cnpjSituacao' => $r->cnpj ? ($situacao['situacao'] ?? null) : null,
             'cnpjSituacaoData' => $r->cnpj ? ($situacao['data'] ?? null) : null,
-            'cnpjIrregular' => $r->cnpj !== null && SituacaoCadastral::irregular($situacao['situacao'] ?? null),
             'cnpjLojasAtivas' => $r->cnpj_lojas_ativas,
+            'lojasComNomeAtivas' => $r->cnpj_lojas_com_nome_ativas,
+            'situacaoRede' => $r->situacao_rede ?? SituacaoDaRede::SEM_INFORMACAO,
+            'situacaoRedeRotulo' => SituacaoDaRede::ROTULOS[$r->situacao_rede ?? SituacaoDaRede::SEM_INFORMACAO],
             'filiaisCnpjIrregular' => $r->filiais_cnpj_irregular,
         ];
     }
@@ -136,7 +125,7 @@ class MaioresRedesResolver
 
     /**
      * @param  array{status: string, busca: string, uf: string, receita: string}  $filtros
-     * @return array{categoria: string, contagens: array{total: int, ativo: int, a_trabalhar: int, irregular: int}, linhas: list<array>}
+     * @return array{categoria: string, contagens: array{total: int, ativo: int, a_trabalhar: int, fechada: int}, linhas: list<array>}
      */
     public function lista(string $categoria, array $filtros): array
     {
@@ -146,15 +135,17 @@ class MaioresRedesResolver
         $total = (int) $c->total;
         $ativo = (int) $c->ativo;
 
-        // O tile da Receita conta o recorte SEM o próprio filtro (mesma regra do status).
-        $irregular = $this->base(['receita' => 'irregular'] + $filtros)->count();
+        // Os tiles da Receita contam o recorte SEM o próprio filtro (mesma regra do status).
+        $porSituacao = $this->base(['receita' => ''] + $filtros)->groupBy('situacao_rede')
+            ->selectRaw('situacao_rede, COUNT(*) as n')->pluck('n', 'situacao_rede');
 
         $redes = $this->consulta($filtros)->get();
         $situacoes = $this->situacoesDas($redes);
 
         return [
             'categoria' => $categoria,
-            'contagens' => ['total' => $total, 'ativo' => $ativo, 'a_trabalhar' => $total - $ativo, 'irregular' => $irregular],
+            'contagens' => ['total' => $total, 'ativo' => $ativo, 'a_trabalhar' => $total - $ativo]
+                + array_map(fn ($s) => (int) ($porSituacao[$s] ?? 0), array_combine(SituacaoDaRede::DE_ATENCAO, SituacaoDaRede::DE_ATENCAO)),
             'linhas' => $redes->map(fn (RedeMercado $r) => self::receita($r, $situacoes[$r->cnpj] ?? null) + [
                 'id' => $r->id,
                 'posicao' => $r->posicao,

@@ -31,3 +31,6 @@ export const ROTULOS_NIVEL_VINCULO = {
     mesma_empresa: 'Mesma empresa (CNPJ)',
     manual: 'Vinculado à mão',
 };
+
+// Veredito da rede na Receita (`SituacaoDaRede`). O rótulo vem pronto do servidor; aqui só a cor.
+export const TONS_SITUACAO_REDE = { ativa: 'ok', fechada: 'danger', sem_informacao: 'neutral' };

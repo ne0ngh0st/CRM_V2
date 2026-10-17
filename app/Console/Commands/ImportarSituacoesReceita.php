@@ -8,6 +8,7 @@ use App\Services\Receita\PorteEmpresa;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\Normalizador;
 use App\Services\Totvs\Relatorios;
+use App\Services\VisaoDiretor\Redes\MaioresRedes;
 use App\Services\VisaoDiretor\ContaDoLead;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -122,6 +123,9 @@ class ImportarSituacoesReceita extends Command
             $this->line("  {$situacao}: {$total}");
         }
         $this->info('Leads que voltaram (CNPJ regularizado na Receita): '.$leads['reativados']);
+
+        // O veredito das Maiores redes depende da situação do CNPJ da rede e das filiais.
+        app(MaioresRedes::class)->recalcular();
 
         $classificacao = $segmentos->classificar();
         $this->info('Leads que ganharam segmento pelo CNAE: '.array_sum($classificacao['classificados']));

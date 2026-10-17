@@ -39,6 +39,7 @@ class MaioresRedesExport implements WithMultipleSheets
         'Base', 'Fonte', 'Clientes (códigos)', 'Filiais nossas', 'Clientes ativos', 'Leads', 'Vendedor', 'Última compra', 'Status',
         'CNPJ da rede', 'Razão social (Receita)', 'Situação na Receita', 'Situação desde', 'Confiança do CNPJ',
         'Lojas ativas da empresa (Receita)', 'Filiais nossas com CNPJ irregular',
+        'Situação da rede', 'Lojas ativas com o nome (Receita, qualquer empresa)',
     ];
 
     public const CABECALHO_VINCULOS = [
@@ -111,6 +112,8 @@ class MaioresRedesExport implements WithMultipleSheets
             $receita['cnpjConfiancaRotulo'] ?? '',
             $receita['cnpjLojasAtivas'] ?? '',
             $receita['filiaisCnpjIrregular'],
+            $receita['situacaoRedeRotulo'],
+            $receita['lojasComNomeAtivas'] ?? '',
         ];
     }
 

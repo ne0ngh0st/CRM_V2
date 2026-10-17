@@ -74,9 +74,13 @@ function filtrarStatus(status) {
     visitar();
 }
 
-// "CNPJ irregular": a rede ou um cliente nosso dela com CNPJ não ativo na Receita.
-function filtrarReceita() {
-    filtros.receita = filtros.receita ? '' : 'irregular';
+// Veredito da rede na Receita (`SituacaoDaRede::DE_ATENCAO`): clicar aplica, de novo remove.
+const TILES_RECEITA = [
+    { situacao: 'fechada', tom: 'danger', rotulo: 'Rede fechada', titulo: 'Só achou empresa baixada ou inapta na Receita, e nenhuma loja ativa com o nome' },
+];
+
+function filtrarReceita(situacao) {
+    filtros.receita = filtros.receita === situacao ? '' : situacao;
     visitar();
 }
 
@@ -189,13 +193,15 @@ const totalRedes = computed(() => props.resumo.reduce((s, c) => s + c.total, 0))
                         @click="filtrarStatus(t.status)"
                     />
                     <KpiTile
-                        :value="formatInteiro(tabela?.contagens.irregular ?? 0)"
-                        label="CNPJ irregular"
-                        tone="danger"
+                        v-for="t in TILES_RECEITA"
+                        :key="t.situacao"
+                        :value="formatInteiro(tabela?.contagens[t.situacao] ?? 0)"
+                        :label="t.rotulo"
+                        :tone="t.tom"
                         botao
-                        :ativo="filtros.receita === 'irregular'"
-                        title="A rede ou um cliente nosso dela com CNPJ baixado, inapto ou suspenso na Receita"
-                        @click="filtrarReceita"
+                        :ativo="filtros.receita === t.situacao"
+                        :title="t.titulo"
+                        @click="filtrarReceita(t.situacao)"
                     />
                 </div>
 

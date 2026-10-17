@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\VisaoDiretor\Redes\CnpjDasRedes;
 use App\Services\VisaoDiretor\Redes\MaioresRedes;
 use App\Services\VisaoDiretor\Redes\MaioresRedesResolver;
+use App\Services\VisaoDiretor\Redes\SituacaoDaRede;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -198,20 +199,36 @@ class CnpjDasRedesTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('visao-diretor.redes.index', ['categoria' => 'estacionamentos']))
             ->assertInertia(fn (Assert $p) => $p
-                ->where('lista.contagens.irregular', 1)
+                ->where('lista.contagens.fechada', 1)
                 ->where('lista.linhas.0.cnpj', '33.333.333/0001-00')
                 ->where('lista.linhas.0.cnpjSituacao', 'INAPTA')
-                ->where('lista.linhas.0.cnpjIrregular', true)
+                ->where('lista.linhas.0.situacaoRede', SituacaoDaRede::FECHADA)
                 ->where('lista.linhas.0.cnpjConfiancaRotulo', CnpjDasRedes::CONFIANCAS[CnpjDasRedes::SO_FECHADAS]));
 
         // Drogarias: ALFA ativa, DELTA ativa → o filtro não traz nenhuma.
         $this->actingAs($this->admin)
-            ->get(route('visao-diretor.redes.index', ['categoria' => 'drogarias', 'receita' => 'irregular']))
-            ->assertInertia(fn (Assert $p) => $p->where('lista.contagens.irregular', 0)->has('lista.linhas', 0));
+            ->get(route('visao-diretor.redes.index', ['categoria' => 'drogarias', 'receita' => 'fechada']))
+            ->assertInertia(fn (Assert $p) => $p->where('lista.contagens.fechada', 0)->has('lista.linhas', 0));
     }
 
-    public function test_filial_de_cliente_com_cnpj_irregular_conta_na_rede_e_entra_no_filtro(): void
+    /** Franquia não tem CNPJ único, mas as lojas ativas com o nome provam que ela existe. */
+    public function test_franquia_com_lojas_ativas_e_rede_ativa(): void
     {
+        $this->carregar();
+
+        $gama = $this->rede_('GAMA BURGER');
+        $this->assertSame(12, $gama->cnpj_lojas_com_nome_ativas);
+        $this->assertSame(SituacaoDaRede::ATIVA, $gama->situacao_rede);
+        $this->assertSame(SituacaoDaRede::FECHADA, $this->rede_('BETA PARK')->situacao_rede);
+    }
+
+    /**
+     * É pesquisa de MERCADO: filial nossa com CNPJ fechado não fecha a rede (o Burger King
+     * compra da gente com o CNPJ antigo baixado). O contador existe, o veredito não o usa.
+     */
+    public function test_filial_nossa_fechada_nao_fecha_a_rede(): void
+    {
+        $this->carregar();
         foreach (['0001' => '12345678000190', '0002' => '12345678000270'] as $loja => $cnpj) {
             Cliente::create([
                 'cod_cliente' => '000777', 'loja' => $loja, 'razao_social' => 'DELTA DROGARIAS LTDA', 'nome_fantasia' => 'DROGARIA DELTA',
@@ -223,15 +240,16 @@ class CnpjDasRedesTest extends TestCase
             ['cnpj' => '12345678000190', 'situacao' => 'ATIVA', 'fonte' => 'receita_base', 'atualizado_em' => now()],
             ['cnpj' => '12345678000270', 'situacao' => 'BAIXADA', 'fonte' => 'receita_base', 'atualizado_em' => now()],
         ]);
+        DB::table('cnpj_situacoes')->where('cnpj', '12345678000190')->update(['situacao' => 'BAIXADA']);
         app(MaioresRedes::class)->reconstruir();
 
         $delta = $this->rede_('DROGARIA DELTA');
-        $this->assertSame(1, $delta->filiais_cnpj_irregular);
-        $this->assertSame(1, app(MaioresRedes::class)->vinculosDa($delta)['clientes'][0]['filiais_irregulares']);
+        $this->assertSame(2, $delta->filiais_cnpj_irregular);
+        $this->assertSame(SituacaoDaRede::ATIVA, $delta->situacao_rede);
 
         $this->actingAs($this->admin)
-            ->get(route('visao-diretor.redes.index', ['categoria' => 'drogarias', 'receita' => 'irregular']))
-            ->assertInertia(fn (Assert $p) => $p->has('lista.linhas', 1)->where('lista.linhas.0.nome', 'DROGARIA DELTA'));
+            ->get(route('visao-diretor.redes.index', ['categoria' => 'drogarias', 'receita' => 'fechada']))
+            ->assertInertia(fn (Assert $p) => $p->has('lista.linhas', 0));
     }
 
     public function test_corrigir_cnpj_pela_tela_usa_o_cartao_e_vira_manual(): void
