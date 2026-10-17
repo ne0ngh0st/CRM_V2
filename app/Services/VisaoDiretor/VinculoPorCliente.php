@@ -287,10 +287,12 @@ class VinculoPorCliente
 
     /**
      * "ASFAR / DESCONTO FACIL" são duas marcas da mesma conta; cada uma é procurada.
+     * Pública para o `CnpjDasRedes`, que procura as redes na base da Receita com a
+     * mesma regra de nome.
      *
      * @return list<array{0: list<string>, 1: string}> marca e `escrita()` de cada parte
      */
-    private function alternativas(string $nome): array
+    public function alternativas(string $nome): array
     {
         $saida = [];
 
@@ -374,13 +376,14 @@ class VinculoPorCliente
      * comum; nome de conta curto não — a conta foi escrita pela diretoria.
      *
      * Recebe o nome escrito (para `identifica()`) e a `grafia()` (para comparar).
+     * Pública para o `CnpjDasRedes` (a conta é a rede; o "cliente", o nome na Receita).
      *
      * @param  list<string>  $conta
      * @param  list<string>  $contaGrafia
      * @param  list<string>  $cliente
      * @param  list<string>  $clienteGrafia
      */
-    private function casa(array $conta, array $contaGrafia, array $cliente, array $clienteGrafia): bool
+    public function casa(array $conta, array $contaGrafia, array $cliente, array $clienteGrafia): bool
     {
         $clienteECurto = strlen(implode('', $clienteGrafia)) < strlen(implode('', $contaGrafia));
         [$curtoEscrito, $curto, $longo] = $clienteECurto

@@ -38,3 +38,18 @@ export function deleteJson(url, corpo = {}) {
         body: JSON.stringify(corpo),
     });
 }
+
+/** PUT de JSON com sessão e CSRF. Mesmo contrato do `postJson`. */
+export function putJson(url, corpo = {}) {
+    return fetch(url, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-XSRF-TOKEN': tokenCsrf(),
+        },
+        body: JSON.stringify(corpo),
+    });
+}

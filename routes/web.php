@@ -257,6 +257,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/maiores-redes/{rede}/vinculos', [MaioresRedesController::class, 'vinculos'])->name('redes.vinculos');
         Route::post('/maiores-redes/{rede}/vinculos', [MaioresRedesController::class, 'vincular'])->name('redes.vincular');
         Route::delete('/maiores-redes/{rede}/vinculos', [MaioresRedesController::class, 'remover'])->name('redes.remover');
+        Route::put('/maiores-redes/{rede}/cnpj', [MaioresRedesController::class, 'informarCnpj'])->middleware('throttle:30,1')->name('redes.cnpj');
     });
 });
 

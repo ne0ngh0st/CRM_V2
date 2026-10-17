@@ -146,6 +146,19 @@ Schedule::command(\App\Console\Commands\ImportarSituacoesReceita::class)
     ->name('receita-situacoes');
 
 /*
+ * CNPJ das redes do mercado (Visão Diretor → Maiores redes) na mesma base aberta: qual
+ * empresa é dona de cada rede e se ela está baixada ou inapta. Duas horas depois da carga
+ * acima, que costuma levar meia hora. Também não faz nada se o mês já foi processado.
+ * Baixa os 20 zips (~6,5 GB) e só apaga no fim — lê cada um duas vezes.
+ */
+Schedule::command(\App\Console\Commands\AcharCnpjDasRedes::class)
+    ->weeklyOn(0, '06:00')
+    ->onOneServer()
+    ->withoutOverlapping(360)
+    ->runInBackground()
+    ->name('cnpj-das-redes');
+
+/*
  * Atualização dos dados do TOTVS (clientes, faturamento, pedidos).
  *
  * O Tony gera os relatórios no TOTVS e sobe com `infra/enviar-relatorios-totvs.sh`;

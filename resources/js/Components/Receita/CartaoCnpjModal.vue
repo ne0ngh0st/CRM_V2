@@ -5,6 +5,7 @@ import StatusPill from '@/Components/StatusPill.vue';
 import BotaoInativacao from '@/Components/Receita/BotaoInativacao.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import EnderecoLink from '@/Components/Endereco/EnderecoLink.vue';
+import { TONS_SITUACAO_RECEITA } from '@/constants/receita.js';
 
 /*
  * "Verificar cartão CNPJ": o cartão da Receita da filial, lado a lado com o que o
@@ -32,9 +33,7 @@ const mostrarSecundarios = ref(false);
 
 const FONTES = { brasilapi: 'BrasilAPI', minhareceita: 'Minha Receita', cnpja: 'CNPJá' };
 
-// ATIVA é a única situação em que a empresa pode comprar; o resto pede atenção, e
-// BAIXADA/NULA significam que ela deixou de existir.
-const TOM_SITUACAO = { ATIVA: 'ok', SUSPENSA: 'warn', INAPTA: 'warn', BAIXADA: 'danger', NULA: 'danger' };
+const TOM_SITUACAO = TONS_SITUACAO_RECEITA;
 
 // Rótulo de campo: mesma gramática micro-maiúscula dos filtros do PageHero.
 const ROTULO = 'mb-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-gray-400';

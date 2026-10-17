@@ -514,6 +514,66 @@ As redes saem de `MaioresRedesResolver::consulta()` (a query da lista, com os fi
 `MaioresRedes::vinculosDasRedes()` (o mesmo da linha aberta, em lote). Medido no dev: 893
 redes em ~70 ms, sem vínculos (o volume real de vínculos só existe em produção).
 
+### CNPJ da rede na Receita (2026-10-17)
+
+Pedido do Tony: saber se as redes estão com o CNPJ **baixado ou inapto**. Opção escolhida:
+achar o CNPJ da PRÓPRIA rede (a empresa dona das lojas), não só olhar os nossos clientes —
+a maioria das 893 redes não tem cliente nosso.
+
+| O quê | Onde |
+|---|---|
+| Regra de escolha (nome, ramo, lojas vivas, confiança) | `CnpjDasRedes` |
+| Carga (arquivos, gravação) | `visao-diretor:cnpj-das-redes` (`AcharCnpjDasRedes`), domingo 06:00 |
+| Download e leitura da base aberta | `App\Services\Receita\BaseAberta` (compartilhado com `receita:importar-situacoes`) |
+| Prefixos de CNAE de cada categoria | `CategoriasDeRede::CATEGORIAS[...]['cnaes']` |
+| CNPJ, razão, confiança, lojas ativas | colunas `cnpj*` de `redes_mercado` |
+| Situação do CNPJ | `cnpj_situacoes` (a carga grava a matriz; a carga semanal mantém) |
+| Filiais NOSSAS com CNPJ irregular | contador `redes_mercado.filiais_cnpj_irregular` (`recalcular()`) |
+
+**Como escolhe** (protótipo validado contra os vínculos de produção em 2026-10-16):
+1. Razão social começando com a marca da rede (Empresas) → raízes candidatas.
+2. Lojas com a marca no nome fantasia, OU de uma raiz da etapa 1 (Estabelecimentos). Conta
+   por rede e raiz as lojas **ativas no ramo** da categoria (CNAE).
+3. Vence a empresa com mais **lojas vivas** no ramo: incorporada ou fechada perde para a
+   que opera (Lojas Americanas antiga, baixada × Americanas S.A.).
+4. Confiança: **Confiável** (3+ lojas vivas e 40%+ das lojas ativas com o nome, ou 30%+ das
+   lojas da planilha), **Franquia** (o nome em 10+ lojas e ninguém domina — não grava CNPJ),
+   **Provável**, **Só achou empresa fechada** (candidata a rede fechada), **Não
+   identificado** (não grava CNPJ). `Informado à mão` vem da tela.
+
+A regra de nome é a do vínculo de clientes (`VinculoPorCliente::alternativas()`/`casa()`,
+públicas por isso): a rede é a "conta", o nome da Receita é o "cliente".
+
+**Validação** (protótipo, 2026-10-16): das 214 redes "confiáveis" com cliente nosso
+vinculado, **172 (80%) batem** com a raiz do CNPJ dos clientes; das 42 que não batem, ~20 são
+o CRM ligando a rede a um homônimo ou empresa já baixada, ~17 são clientes ligados pelo
+grupo do TOTVS numa empresa sem o nome da rede (não dá para julgar), ~5 são erro do
+protótipo (Farmácias São Paulo → Drogaria São Paulo; Rio Park → Allpark). Entre o que dá
+para julgar, 90%+ de acerto. "Batem pelo grupo" também conta como acerto: Extrafarma →
+Pague Menos, Tumelero → Telhanorte, Pacheco → DPSP.
+
+**Tela**: coluna **Receita** (situação do CNPJ da rede; embaixo, "N filiais nossas
+irregulares"), tile **CNPJ irregular** que filtra (`?receita=irregular`: a rede OU uma filial
+de cliente nosso dela não ativa — `SituacaoCadastral::irregular()`, a régua da Carteira), e
+na linha aberta o bloco **CNPJ da rede na Receita** com **Corrigir CNPJ** (outro CNPJ, ou
+"Sem CNPJ único"). Excel: 7 colunas novas na aba Redes e "Filiais com CNPJ irregular" na de
+clientes.
+
+- ⚠️ **O informado à mão a carga não sobrescreve** (`cnpj_confianca = manual`). "Sem CNPJ
+  único" também é manual, com `cnpj` nulo.
+- ⚠️ A correção usa o cartão CNPJ (`CartaoCnpjService::consultar`) para conferir que o CNPJ
+  existe e trazer a razão social; com as fontes fora do ar, salva mesmo assim e a situação
+  chega na carga semanal (o `receita:importar-situacoes` inclui `redes_mercado.cnpj` nos
+  CNPJs de interesse).
+- ⚠️ **A carga lê cada zip DUAS vezes** (empresas → lojas → empresas das finalistas →
+  matrizes), então baixa os 20 de uma vez: ~6,5 GB de disco até o fim (a app-2 tem 22 GB
+  livres). Só as ~5 raízes que disputam cada rede seguem para a etapa 3 — sem isso seriam
+  400 mil empresas na memória. Medido em dev (base 2026-10, zips no disco): **20,6 min**
+  (690 + 386 + 53 + 103 s), resultado idêntico ao protótipo.
+- Limitações conhecidas: franquia não tem "o CNPJ da rede"; bandeira de outra empresa
+  (Carrefour Express) costuma sair Não identificado; nome genérico pode pegar homônimo
+  (Bio Ritmo → escola de natação). É para isso que existe a correção manual.
+
 ### Excel de revisão
 
 `php artisan visao-diretor:redes-vinculos` grava `storage/app/private/relatorios/
@@ -525,7 +585,9 @@ Limpeza. Foi a prova pedida antes da tela existir.
 
 `VinculoDeRedesTest` (motor; mutações aplicadas: nível, UF, raiz do lead, segmento nulo) e
 `MaioresRedesTest` (gate, tiles = lista, manual e recusa sobrevivendo à reconstrução —
-verificado por mutação —, unicidade no banco, arquivamento).
+verificado por mutação —, unicidade no banco, arquivamento) e `CnpjDasRedesTest` (empresa
+viva × antiga baixada, só fechada, franquia, loja fora do ramo, manual preservado, dry-run,
+filtro e contador de filiais irregulares, correção pela tela, Excel).
 
 ## 3. Rollup de faturamento — `faturamento_cliente_mensal`
 

@@ -31,6 +31,7 @@ const filtros = reactive({
     categoria: props.filtros.categoria || '',
     status: props.filtros.status || '',
     busca: props.filtros.busca || '',
+    receita: props.filtros.receita || '',
 });
 
 const carregando = ref(false);
@@ -40,6 +41,7 @@ function visitar() {
         categoria: filtros.categoria || undefined,
         status: filtros.status || undefined,
         busca: filtros.busca || undefined,
+        receita: filtros.receita || undefined,
     }, {
         preserveState: true,
         preserveScroll: true,
@@ -57,7 +59,7 @@ function onBusca() {
 }
 
 function trocarAba(categoria) {
-    Object.assign(filtros, { categoria, status: '', busca: '' });
+    Object.assign(filtros, { categoria, status: '', busca: '', receita: '' });
     visitar();
 }
 
@@ -69,6 +71,12 @@ const TILES = [
 
 function filtrarStatus(status) {
     filtros.status = filtros.status === status ? '' : status;
+    visitar();
+}
+
+// "CNPJ irregular": a rede ou um cliente nosso dela com CNPJ não ativo na Receita.
+function filtrarReceita() {
+    filtros.receita = filtros.receita ? '' : 'irregular';
     visitar();
 }
 
@@ -86,7 +94,8 @@ function atualizouRede(n) {
 
     const antes = linha.status;
     Object.assign(linha, n);
-    if (antes !== n.status) {
+    // A correção do CNPJ devolve só os campos da Receita, sem status.
+    if (n.status && antes !== n.status) {
         const c = tabela.value.contagens;
         c[antes] -= 1;
         c[n.status] += 1;
@@ -96,7 +105,7 @@ function atualizouRede(n) {
 }
 
 // A aba (categoria) é estrutural: não conta como filtro para o aviso do Excel.
-const temFiltrosAtivos = computed(() => Boolean(filtros.status || filtros.busca));
+const temFiltrosAtivos = computed(() => Boolean(filtros.status || filtros.busca || filtros.receita));
 
 const totalAtivas = computed(() => props.resumo.reduce((s, c) => s + c.ativo, 0));
 const totalRedes = computed(() => props.resumo.reduce((s, c) => s + c.total, 0));
@@ -178,6 +187,15 @@ const totalRedes = computed(() => props.resumo.reduce((s, c) => s + c.total, 0))
                         botao
                         :ativo="filtros.status === t.status"
                         @click="filtrarStatus(t.status)"
+                    />
+                    <KpiTile
+                        :value="formatInteiro(tabela?.contagens.irregular ?? 0)"
+                        label="CNPJ irregular"
+                        tone="danger"
+                        botao
+                        :ativo="filtros.receita === 'irregular'"
+                        title="A rede ou um cliente nosso dela com CNPJ baixado, inapto ou suspenso na Receita"
+                        @click="filtrarReceita"
                     />
                 </div>
 

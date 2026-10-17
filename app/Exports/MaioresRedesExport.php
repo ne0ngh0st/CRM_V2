@@ -37,17 +37,19 @@ class MaioresRedesExport implements WithMultipleSheets
     public const CABECALHO_REDES = [
         'Categoria', 'Posição na planilha', 'Rede', 'Linha da planilha', 'UF', 'Lojas no mercado', 'Qualidade do nº',
         'Base', 'Fonte', 'Clientes (códigos)', 'Filiais nossas', 'Clientes ativos', 'Leads', 'Vendedor', 'Última compra', 'Status',
+        'CNPJ da rede', 'Razão social (Receita)', 'Situação na Receita', 'Situação desde', 'Confiança do CNPJ',
+        'Lojas ativas da empresa (Receita)', 'Filiais nossas com CNPJ irregular',
     ];
 
     public const CABECALHO_VINCULOS = [
         'Categoria', 'Rede', 'Tipo', 'Código', 'Razão social', 'Nome fantasia', 'CNPJ', 'Filiais',
-        'Responsável', 'Última compra', 'Status', 'Como vinculou',
+        'Responsável', 'Última compra', 'Status', 'Como vinculou', 'Filiais com CNPJ irregular',
     ];
 
     /**
      * Guarda só o recorte: as linhas são montadas em `sheets()`, quando o arquivo é gerado.
      *
-     * @param  array{categoria: string, status: string, uf: string, busca: string}  $filtros
+     * @param  array{categoria: string, status: string, uf: string, busca: string, receita: string}  $filtros
      */
     public function __construct(private readonly array $filtros)
     {
@@ -57,12 +59,13 @@ class MaioresRedesExport implements WithMultipleSheets
     {
         $redes = app(MaioresRedesResolver::class)->consulta($this->filtros)->get();
         $vinculos = app(MaioresRedes::class)->vinculosDasRedes($redes->modelKeys());
+        $situacoes = app(MaioresRedesResolver::class)->situacoesDas($redes);
 
         $linhasRedes = [];
         $linhasVinculos = [];
 
         foreach ($redes as $r) {
-            $linhasRedes[] = $this->linhaRede($r);
+            $linhasRedes[] = $this->linhaRede($r, $situacoes[$r->cnpj] ?? null);
 
             foreach ($vinculos[$r->id]['clientes'] as $c) {
                 $linhasVinculos[] = $this->linhaVinculo($r, 'Cliente', $c['codigo'], $c);
@@ -78,8 +81,12 @@ class MaioresRedesExport implements WithMultipleSheets
         ];
     }
 
-    public function linhaRede(RedeMercado $r): array
+    /** @param  array{situacao: string, data: ?string}|null  $situacao */
+    public function linhaRede(RedeMercado $r, ?array $situacao = null): array
     {
+        // Mesma leitura da tela, para os dois dizerem a mesma coisa.
+        $receita = MaioresRedesResolver::receita($r, $situacao);
+
         return [
             CategoriasDeRede::rotulo($r->categoria),
             $r->posicao,
@@ -97,6 +104,13 @@ class MaioresRedesExport implements WithMultipleSheets
             $r->vendedor ?? '',
             $r->ultima_compra?->format('d/m/Y') ?? '',
             self::ROTULOS_STATUS[$r->status] ?? $r->status,
+            $receita['cnpj'] ?? '',
+            $receita['cnpjRazaoSocial'] ?? '',
+            $receita['cnpjSituacao'] ?? '',
+            $receita['cnpjSituacaoData'] ? Carbon::parse($receita['cnpjSituacaoData'])->format('d/m/Y') : '',
+            $receita['cnpjConfiancaRotulo'] ?? '',
+            $receita['cnpjLojasAtivas'] ?? '',
+            $receita['filiaisCnpjIrregular'],
         ];
     }
 
@@ -116,6 +130,7 @@ class MaioresRedesExport implements WithMultipleSheets
             $d['ultima_compra'] ? Carbon::parse($d['ultima_compra'])->format('d/m/Y') : '',
             self::ROTULOS_STATUS[$d['status']] ?? $d['status'],
             self::ROTULOS_NIVEL[$d['nivel']] ?? $d['nivel'],
+            $d['filiais_irregulares'] ?? '',
         ];
     }
 }

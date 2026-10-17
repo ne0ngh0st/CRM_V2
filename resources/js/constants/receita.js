@@ -12,6 +12,10 @@ export const ROTULOS_SITUACAO_RECEITA = {
     INEXISTENTE: 'Inexistente',
 };
 
+// ATIVA é a única situação em que a empresa pode comprar; o resto pede atenção, e
+// BAIXADA/NULA significam que ela deixou de existir. Tom do `StatusPill`.
+export const TONS_SITUACAO_RECEITA = { ATIVA: 'ok', SUSPENSA: 'warn', INAPTA: 'warn', BAIXADA: 'danger', NULA: 'danger', INEXISTENTE: 'danger' };
+
 // Valores do filtro "Receita" da Carteira — whitelist em `CarteiraController::FILTROS_RECEITA`.
 // Só "irregular", por latência: ver o docblock da constante no controller.
 export const FILTROS_RECEITA = {

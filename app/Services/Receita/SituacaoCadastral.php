@@ -249,6 +249,33 @@ class SituacaoCadastral
     }
 
     /**
+     * Situações lidas da base aberta FORA da carga mensal (hoje: a matriz de cada rede do
+     * mercado, `visao-diretor:cnpj-das-redes`). Mesmo formato do que a carga grava, com a
+     * mesma fonte e referência — para a tela, um CNPJ só tem uma situação.
+     *
+     * @param  array<string, array{0: string, 1: ?string, 2: ?string, 3: ?string, 4: ?string}>  $linhas
+     *         cnpj => [situação, data, CNAE, capital, porte]
+     */
+    public function registrarDaBase(array $linhas, string $referencia): void
+    {
+        $agora = now();
+
+        foreach (array_chunk($linhas, 1000, true) as $lote) {
+            $registros = [];
+            foreach ($lote as $cnpj => [$situacao, $data, $cnae, $capital, $porte]) {
+                $registros[] = [
+                    'cnpj' => (string) $cnpj, 'situacao' => $situacao, 'data_situacao' => $data, 'cnae_principal' => $cnae,
+                    'capital_social' => $capital, 'porte' => $porte,
+                    'fonte' => self::FONTE_BASE, 'referencia' => $referencia, 'atualizado_em' => $agora,
+                ];
+            }
+
+            DB::table('cnpj_situacoes')->upsert($registros, ['cnpj'],
+                ['situacao', 'data_situacao', 'cnae_principal', 'capital_social', 'porte', 'fonte', 'referencia', 'atualizado_em']);
+        }
+    }
+
+    /**
      * Acerta os leads da base de prospecção com a situação conhecida na Receita, nos dois
      * sentidos:
      *

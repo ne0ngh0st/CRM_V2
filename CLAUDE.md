@@ -3098,6 +3098,12 @@ Página nova da Visão Diretor (`/visao-diretor/maiores-redes`): as maiores rede
   tela (admin/diretor vinculam e tiram na linha aberta da rede).
 - ⚠️ `SugestaoDeVinculo`, `VinculoPorCliente`, `VinculoPorRazaoSocial` e `TermoDeBusca`
   são usados aqui: **não entram na Fase 2** de limpeza das redes antigas.
+- **CNPJ da rede na Receita (2026-10-17)**: `visao-diretor:cnpj-das-redes` (domingo 06:00,
+  depois da carga da Receita) acha a empresa DONA de cada rede na base aberta (`CnpjDasRedes`)
+  e grava a situação da matriz no `cnpj_situacoes`. Coluna "Receita" e tile/filtro "CNPJ
+  irregular" (a rede ou filial de cliente nosso dela não ativa). Correção à mão na linha
+  aberta, que a carga **nunca** sobrescreve. Franquia não grava CNPJ. Validação e
+  limitações em `docs/visao-diretor.md` §2b.
 
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado

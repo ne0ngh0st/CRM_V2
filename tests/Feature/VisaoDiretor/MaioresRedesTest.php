@@ -102,7 +102,7 @@ class MaioresRedesTest extends TestCase
             ->get(route('visao-diretor.redes.index', ['categoria' => 'alimentacao', 'status' => 'a_trabalhar']))
             ->assertInertia(fn (Assert $p) => $p
                 ->component('VisaoDiretor/MaioresRedes')
-                ->where('lista.contagens', ['total' => 3, 'ativo' => 1, 'a_trabalhar' => 2])
+                ->where('lista.contagens', ['total' => 3, 'ativo' => 1, 'a_trabalhar' => 2, 'irregular' => 0])
                 ->has('lista.linhas', 2)
                 ->where('lista.linhas.0.nome', 'KOPENHAGEN')
                 ->where('resumo', fn ($r) => collect($r)->firstWhere('categoria', 'alimentacao')['ativo'] === 1));

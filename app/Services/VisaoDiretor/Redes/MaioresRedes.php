@@ -5,6 +5,7 @@ namespace App\Services\VisaoDiretor\Redes;
 use App\Models\RedeMercado;
 use App\Models\RedeMercadoVinculo;
 use App\Services\Carteira\ClienteStatusResolver;
+use App\Services\Receita\SituacaoCadastral;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\DB;
  *   corrigiu. Roda no fim do `totvs:atualizar` (clientes novos, última compra nova).
  * - **Contadores** (`recalcular()`) moram na linha da rede para a página não agregar nada
  *   ao vivo. Toda escrita aqui termina recalculando as redes que mexeu.
+ * - **CNPJ da rede** (`gravarCnpjs()`, da carga `visao-diretor:cnpj-das-redes`, e
+ *   `informarCnpj()`, da tela). O informado à mão (`CnpjDasRedes::MANUAL`) a carga não toca.
  */
 class MaioresRedes
 {
@@ -23,6 +26,7 @@ class MaioresRedes
         private readonly VinculoDeRedes $vinculo,
         private readonly DetalheDosVinculos $detalhe,
         private readonly ClienteStatusResolver $status,
+        private readonly SituacaoCadastral $situacoes,
     ) {
     }
 
@@ -159,6 +163,62 @@ class MaioresRedes
     }
 
     /**
+     * Grava o resultado da carga (`CnpjDasRedes::resultado()`) e a situação da matriz de
+     * cada rede no `cnpj_situacoes` (a resposta única a "este CNPJ está ativo?"). Rede com
+     * CNPJ informado à mão fica como está.
+     *
+     * @param  array<int, array{confianca: string, cnpj: ?string, razao_social: ?string, lojas_ativas: ?int, matriz: ?array, capital: ?string, porte: ?string}>  $resultado
+     * @return array<string, int>  confiança => redes gravadas
+     */
+    public function gravarCnpjs(array $resultado, string $referencia): array
+    {
+        $contagem = [];
+        $situacoes = [];
+
+        DB::transaction(function () use ($resultado, $referencia, &$contagem, &$situacoes) {
+            RedeMercado::whereIn('id', array_keys($resultado) ?: [0])
+                ->where(fn ($q) => $q->whereNull('cnpj_confianca')->orWhere('cnpj_confianca', '!=', CnpjDasRedes::MANUAL))
+                ->get()
+                ->each(function (RedeMercado $rede) use ($resultado, $referencia, &$contagem, &$situacoes) {
+                    $r = $resultado[$rede->id];
+                    $rede->forceFill([
+                        'cnpj' => $r['cnpj'],
+                        'cnpj_razao_social' => $r['razao_social'] ? mb_substr($r['razao_social'], 0, 150) : null,
+                        'cnpj_confianca' => $r['confianca'],
+                        'cnpj_lojas_ativas' => $r['lojas_ativas'],
+                        'cnpj_referencia' => $referencia,
+                        'cnpj_user_id' => null,
+                    ])->save();
+
+                    $contagem[$r['confianca']] = ($contagem[$r['confianca']] ?? 0) + 1;
+                    if ($r['matriz'] !== null) {
+                        $situacoes[$r['cnpj']] = [$r['matriz']['situacao'], $r['matriz']['data'], $r['matriz']['cnae'], $r['capital'], $r['porte']];
+                    }
+                });
+
+            $this->situacoes->registrarDaBase($situacoes, $referencia);
+        });
+
+        return $contagem;
+    }
+
+    /**
+     * O CNPJ da rede à mão (correção pela tela). `null` = "esta rede não tem um CNPJ
+     * único" (franquia, bandeira de outra empresa) — também é decisão, e a carga respeita.
+     */
+    public function informarCnpj(RedeMercado $rede, ?string $cnpj, ?string $razaoSocial, ?int $userId): void
+    {
+        $rede->forceFill([
+            'cnpj' => $cnpj,
+            'cnpj_razao_social' => $cnpj && $razaoSocial ? mb_substr($razaoSocial, 0, 150) : null,
+            'cnpj_confianca' => CnpjDasRedes::MANUAL,
+            'cnpj_lojas_ativas' => null,
+            'cnpj_referencia' => null,
+            'cnpj_user_id' => $userId,
+        ])->save();
+    }
+
+    /**
      * Os clientes e leads vivos da rede, como a linha aberta da página os mostra.
      *
      * @return array{clientes: list<array>, leads: list<array>}
@@ -236,6 +296,7 @@ class MaioresRedes
                 }
                 $n['clientes'] = ($n['clientes'] ?? 0) + 1;
                 $n['filiais'] = ($n['filiais'] ?? 0) + $c['filiais'];
+                $n['irregulares'] = ($n['irregulares'] ?? 0) + $c['filiais_irregulares'];
                 $n['ativos'] = ($n['ativos'] ?? 0) + (int) ($c['ultima_compra'] && $c['ultima_compra'] >= $limite);
                 $n['vendedores'][$c['responsavel']] = ($n['vendedores'][$c['responsavel']] ?? 0) + 1;
                 if ($c['ultima_compra'] && $c['ultima_compra'] > ($n['ultima_compra'] ?? '')) {
@@ -253,6 +314,7 @@ class MaioresRedes
             $rede->forceFill([
                 'clientes' => $n['clientes'] ?? 0,
                 'filiais' => $n['filiais'] ?? 0,
+                'filiais_cnpj_irregular' => $n['irregulares'] ?? 0,
                 'clientes_ativos' => $n['ativos'] ?? 0,
                 'leads' => $n['leads'] ?? 0,
                 'ultima_compra' => $n['ultima_compra'] ?? null,

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Leads\SegmentoDosLeads;
+use App\Services\Receita\BaseAberta;
 use App\Services\Receita\PorteEmpresa;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\Normalizador;
@@ -10,9 +11,7 @@ use App\Services\Totvs\Relatorios;
 use App\Services\VisaoDiretor\ContaDoLead;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use RuntimeException;
-use Throwable;
 use ZipArchive;
 
 /**
@@ -24,7 +23,7 @@ use ZipArchive;
  *
  * A base tem ~65 milhões de estabelecimentos em 10 zips (~5 GB). O comando NÃO grava a
  * base: grava só a situação dos CNPJs que interessam ao CRM (clientes, leads e a base de
- * prospecção que ainda vai ser importada). Cada zip é baixado, varrido em streaming e
+ * prospecção que ainda vai ser importada, e o CNPJ das redes do mercado). Cada zip é baixado, varrido em streaming e
  * apagado antes do próximo — o disco precisa aguentar UM arquivo (~2,3 GB no maior).
  *
  * ⚠️ CNPJ de interesse que não aparece em NENHUM dos 10 arquivos vira INEXISTENTE — e
@@ -150,6 +149,8 @@ class ImportarSituacoesReceita extends Command
             ->cursor()->each(fn ($c) => $adicionar($c->cnpj));
         DB::table('leads')->whereNotNull('cnpj')->orderBy('id')->select('cnpj')
             ->cursor()->each(fn ($l) => $adicionar($l->cnpj));
+        // O CNPJ das redes do mercado (Maiores redes), achado ou informado à mão.
+        DB::table('redes_mercado')->whereNotNull('cnpj')->pluck('cnpj')->each(fn ($c) => $adicionar($c));
 
         // A base de prospecção que AINDA vai ser importada: sem ela, o lead novo chegaria
         // sem situação conhecida e o import teria que segurá-lo até a próxima carga.
@@ -281,9 +282,7 @@ class ImportarSituacoesReceita extends Command
             while (($linha = fgets($stream)) !== false) {
                 $linhas++;
 
-                $raiz = $linha[0] === '"' && ($linha[9] ?? '') === '"'
-                    ? substr($linha, 1, 8)
-                    : str_pad(str_getcsv($linha, ';', '"', '')[0] ?? '', 8, '0', STR_PAD_LEFT);
+                $raiz = BaseAberta::raiz($linha);
 
                 if (! isset($raizes[$raiz])) {
                     continue;
@@ -376,40 +375,11 @@ class ImportarSituacoesReceita extends Command
 
     private function referenciaMaisRecente(): string
     {
-        $resposta = $this->webdav()->withHeaders(['Depth' => '1'])
-            ->send('PROPFIND', config('receita.base.webdav').'/')->throw();
-
-        preg_match_all('#/(\d{4}-\d{2})/</d:href>#', $resposta->body(), $m);
-
-        if ($m[1] === []) {
-            throw new RuntimeException('Não achei nenhum mês publicado na base aberta da Receita.');
-        }
-
-        sort($m[1]);
-
-        return end($m[1]);
+        return app(BaseAberta::class)->referenciaMaisRecente();
     }
 
     private function baixar(string $referencia, int $indice, string $tipo = 'Estabelecimentos'): string
     {
-        $pasta = config('receita.base.diretorio');
-        @mkdir($pasta, 0775, true);
-        $destino = "{$pasta}/{$tipo}{$indice}.zip";
-        $url = config('receita.base.webdav')."/{$referencia}/{$tipo}{$indice}.zip";
-
-        try {
-            $this->webdav()->timeout(3600)->withOptions(['sink' => $destino])->get($url)->throw();
-        } catch (Throwable $e) {
-            @unlink($destino);
-            throw new RuntimeException("Falha ao baixar {$url}: {$e->getMessage()}", 0, $e);
-        }
-
-        return $destino;
-    }
-
-    private function webdav(): \Illuminate\Http\Client\PendingRequest
-    {
-        // Compartilhamento público do Nextcloud da Receita: o token do link é o usuário.
-        return Http::withBasicAuth((string) config('receita.base.token'), '')->connectTimeout(30);
+        return app(BaseAberta::class)->baixar($referencia, $indice, $tipo);
     }
 }

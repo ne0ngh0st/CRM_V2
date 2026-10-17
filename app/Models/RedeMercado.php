@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  *
  * ⚠️ Os contadores (clientes, ativos, vendedor, última compra, status) são DERIVADOS dos
  * vínculos e ficam fora do `$fillable` de propósito: só `MaioresRedes::recalcular()` grava.
+ * O CNPJ da rede (`cnpj*`) também: só `MaioresRedes::gravarCnpjs()` e `informarCnpj()`.
  */
 class RedeMercado extends Model
 {

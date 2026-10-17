@@ -9,12 +9,17 @@
  *
  * ⚠️ Remover grava a recusa: a reconstrução automática não religa ESTE cliente a ESTA
  * rede. Vincular move o cliente se ele estava em outra (cada cliente, uma rede só).
+ *
+ * No topo, o CNPJ da PRÓPRIA rede na Receita, com a correção à mão: outro CNPJ, ou "sem
+ * CNPJ único" (franquia, bandeira de outra empresa). O informado à mão a carga mensal não
+ * sobrescreve.
  */
 import { onMounted, ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import StatusPill from '@/Components/StatusPill.vue';
 import { ROTULOS_NIVEL_VINCULO, ROTULOS_STATUS_REDE, TONS_STATUS_REDE } from '@/constants/visaoDiretor';
-import { deleteJson, postJson } from '@/utils/csrf';
+import { ROTULOS_SITUACAO_RECEITA, TONS_SITUACAO_RECEITA, dataDaSituacao } from '@/constants/receita.js';
+import { deleteJson, postJson, putJson } from '@/utils/csrf';
 import { formatDataCurta, formatInteiro, nomeCurto } from '@/utils/formato';
 
 const props = defineProps({
@@ -64,6 +69,30 @@ async function remover(tipo, codigo) {
     }
 }
 
+// ─── CNPJ da rede ────────────────────────────────────────────────────────────
+const editandoCnpj = ref(false);
+const cnpjDigitado = ref('');
+const erroCnpj = ref('');
+
+async function salvarCnpj(cnpj) {
+    erroCnpj.value = '';
+    ocupado.value = true;
+    try {
+        const r = await putJson(route('visao-diretor.redes.cnpj', props.rede.id), { cnpj });
+        const corpo = await r.json().catch(() => ({}));
+        if (! r.ok) {
+            erroCnpj.value = corpo.message || 'Não foi possível salvar o CNPJ.';
+
+            return;
+        }
+        editandoCnpj.value = false;
+        cnpjDigitado.value = '';
+        emit('atualizou', corpo.rede);
+    } finally {
+        ocupado.value = false;
+    }
+}
+
 // ─── Vincular ────────────────────────────────────────────────────────────────
 const termo = ref('');
 const resultados = ref([]);
@@ -107,6 +136,47 @@ async function vincular(item) {
     <div class="space-y-3 bg-gray-50/70 px-3 py-3 text-left">
         <p v-if="erro" class="text-xs text-red-700">{{ erro }}</p>
         <p v-if="! dados && ! erro" class="text-xs text-gray-400">Carregando…</p>
+
+        <!-- CNPJ da própria rede na Receita. -->
+        <div class="flex flex-wrap items-start gap-x-6 gap-y-2 rounded border border-gray-200 bg-white px-3 py-2">
+            <div class="min-w-0">
+                <p class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">CNPJ da rede na Receita</p>
+                <template v-if="rede.cnpj">
+                    <p class="text-xs font-medium text-gray-800">{{ rede.cnpjRazaoSocial || 'Razão social não informada' }}</p>
+                    <p class="flex flex-wrap items-center gap-2 text-[0.68rem] text-gray-500">
+                        <span class="tabular-nums">{{ rede.cnpj }}</span>
+                        <StatusPill v-if="rede.cnpjSituacao" :tone="TONS_SITUACAO_RECEITA[rede.cnpjSituacao] ?? 'neutral'" size="sm">
+                            {{ ROTULOS_SITUACAO_RECEITA[rede.cnpjSituacao] ?? rede.cnpjSituacao }}{{ dataDaSituacao(rede.cnpjSituacaoData) ? ` desde ${dataDaSituacao(rede.cnpjSituacaoData)}` : '' }}
+                        </StatusPill>
+                        <span v-else>situação chega na próxima carga da Receita</span>
+                        <span>· {{ rede.cnpjConfiancaRotulo }}</span>
+                        <span v-if="rede.cnpjLojasAtivas !== null">· {{ formatInteiro(rede.cnpjLojasAtivas) }} lojas ativas</span>
+                    </p>
+                </template>
+                <p v-else class="text-xs text-gray-500">
+                    {{ rede.cnpjConfianca === 'franquia'
+                        ? 'Franquia: cada loja é de um franqueado, não há um CNPJ da rede.'
+                        : rede.cnpjConfianca === 'manual' ? 'Sem CNPJ único (definido à mão).' : 'Não identificado na base da Receita.' }}
+                </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <template v-if="editandoCnpj">
+                    <input
+                        v-model="cnpjDigitado"
+                        type="text"
+                        inputmode="numeric"
+                        placeholder="CNPJ da matriz"
+                        class="min-h-11 w-44 rounded border-gray-300 py-1 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
+                        @keydown.enter.prevent="salvarCnpj(cnpjDigitado)"
+                    />
+                    <button type="button" class="rounded border border-teal px-2 py-1 text-xs font-medium text-teal hover:bg-teal/10 disabled:opacity-50" :disabled="ocupado || ! cnpjDigitado.trim()" @click="salvarCnpj(cnpjDigitado)">Salvar</button>
+                    <button type="button" class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50" :disabled="ocupado" title="Franquia ou bandeira de outra empresa" @click="salvarCnpj(null)">Sem CNPJ único</button>
+                    <button type="button" class="px-1 text-xs text-gray-400 hover:text-gray-600" @click="editandoCnpj = false; erroCnpj = ''">Cancelar</button>
+                </template>
+                <button v-else type="button" class="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50" @click="editandoCnpj = true">Corrigir CNPJ</button>
+            </div>
+            <p v-if="erroCnpj" class="w-full text-xs text-red-700">{{ erroCnpj }}</p>
+        </div>
 
         <template v-if="dados">
             <!-- Vincular à mão: cliente (nome, CNPJ ou código) ou lead. -->
@@ -162,6 +232,9 @@ async function vincular(item) {
                             <td class="tbl-itens-td tbl-td-titulo">
                                 <Link :href="route('carteira.detalhes', c.cliente_id)" class="tbl-main text-teal hover:underline sm:max-w-[320px]" :title="c.nome">{{ c.nome }}</Link>
                                 <span class="tbl-sub">{{ c.fantasia || '—' }} · {{ c.codigo }}{{ c.documento ? ' · ' + c.documento : '' }}</span>
+                                <span v-if="c.filiais_irregulares" class="tbl-sub !text-red-700" title="Filiais com CNPJ não ativo na Receita (baixado, inapto, suspenso…)">
+                                    {{ c.filiais_irregulares }} {{ c.filiais_irregulares === 1 ? 'filial com CNPJ irregular' : 'filiais com CNPJ irregular' }}
+                                </span>
                             </td>
                             <td class="tbl-itens-td tabular-nums" data-rotulo="Filiais">{{ formatInteiro(c.filiais) }}</td>
                             <td class="tbl-itens-td" data-rotulo="Responsável" :title="c.responsavel">{{ nomeCurto(c.responsavel) || '—' }}</td>

@@ -3,6 +3,7 @@
 namespace App\Services\VisaoDiretor\Redes;
 
 use App\Models\Cliente;
+use App\Services\Receita\SituacaoCadastral;
 use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Support\Facades\DB;
 
@@ -39,8 +40,11 @@ class DetalheDosVinculos
      * Uma linha por código: a filial-âncora (a primeira que não é endereço de entrega) dá
      * nome e CNPJ; o responsável é o vendedor com mais filiais do código.
      *
+     * `filiais_irregulares`: lojas (não endereço de entrega) com o CNPJ conhecido e não
+     * ATIVO na Receita (`SituacaoCadastral::irregular()`), pelo `cnpj_situacoes`.
+     *
      * @param  list<string>  $codigos
-     * @return array<string, array{cliente_id: int, nome: string, fantasia: string, documento: ?string, filiais: int, responsavel: string, ultima_compra: ?string}>
+     * @return array<string, array{cliente_id: int, nome: string, fantasia: string, documento: ?string, filiais: int, filiais_irregulares: int, responsavel: string, ultima_compra: ?string}>
      */
     public function clientes(array $codigos): array
     {
@@ -48,9 +52,11 @@ class DetalheDosVinculos
 
         foreach (array_chunk($codigos, 1000) as $lote) {
             $filiais = DB::table('clientes')
-                ->whereIn('cod_cliente', $lote)
-                ->orderBy('cod_cliente')->orderBy('loja')
-                ->get(['id', 'cod_cliente', 'loja', 'razao_social', 'nome_fantasia', 'cnpj', 'cod_vendedor', 'data_ultima_compra']);
+                ->leftJoin('cnpj_situacoes', 'cnpj_situacoes.cnpj', '=', 'clientes.cnpj_digitos')
+                ->whereIn('clientes.cod_cliente', $lote)
+                ->orderBy('clientes.cod_cliente')->orderBy('clientes.loja')
+                ->get(['clientes.id', 'clientes.cod_cliente', 'clientes.loja', 'clientes.razao_social', 'clientes.nome_fantasia', 'clientes.cnpj',
+                    'clientes.cod_vendedor', 'clientes.data_ultima_compra', 'cnpj_situacoes.situacao']);
 
             foreach ($filiais as $f) {
                 $codigo = (string) $f->cod_cliente;
@@ -65,6 +71,7 @@ class DetalheDosVinculos
                         'documento' => $f->cnpj,
                         'entrega' => $entrega,
                         'filiais' => $atual['filiais'] ?? 0,
+                        'filiais_irregulares' => $atual['filiais_irregulares'] ?? 0,
                         'vendedores' => $atual['vendedores'] ?? [],
                         'ultima_compra' => $atual['ultima_compra'] ?? null,
                     ];
@@ -72,6 +79,7 @@ class DetalheDosVinculos
 
                 // Endereço de entrega não é loja (mesma régua da Carteira: "N filiais · M entregas").
                 $porCodigo[$codigo]['filiais'] += $entrega ? 0 : 1;
+                $porCodigo[$codigo]['filiais_irregulares'] += (int) (! $entrega && SituacaoCadastral::irregular($f->situacao));
                 $porCodigo[$codigo]['vendedores'][(string) $f->cod_vendedor] = ($porCodigo[$codigo]['vendedores'][(string) $f->cod_vendedor] ?? 0) + 1;
                 if ($f->data_ultima_compra && ($porCodigo[$codigo]['ultima_compra'] === null || $f->data_ultima_compra > $porCodigo[$codigo]['ultima_compra'])) {
                     $porCodigo[$codigo]['ultima_compra'] = $f->data_ultima_compra;
@@ -95,6 +103,7 @@ class DetalheDosVinculos
                 'fantasia' => $c['fantasia'],
                 'documento' => $c['documento'],
                 'filiais' => $c['filiais'],
+                'filiais_irregulares' => $c['filiais_irregulares'],
                 'responsavel' => $nomes[$principal[$codigo]] ?? $principal[$codigo],
                 'ultima_compra' => $c['ultima_compra'] ? substr((string) $c['ultima_compra'], 0, 10) : null,
             ];

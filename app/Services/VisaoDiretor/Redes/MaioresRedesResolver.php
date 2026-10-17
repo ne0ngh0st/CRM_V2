@@ -5,6 +5,8 @@ namespace App\Services\VisaoDiretor\Redes;
 use App\Models\RedeMercado;
 use App\Models\RedeMercadoVinculo;
 use App\Services\Cadastros\BuscaTitularidade;
+use App\Services\Receita\SituacaoCadastral;
+use App\Services\Totvs\Normalizador;
 use App\Services\VisaoDiretor\TermoDeBusca;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +17,8 @@ use Illuminate\Support\Facades\DB;
  *
  * Status de rede: só **Ativo** e **A trabalhar** (Tony, 2026-10-16). Os tiles contam a
  * categoria inteira com a busca/UF aplicadas e SEM o filtro de status (um filtro não se
- * aplica à faceta que ele controla — mesma regra do card da Carteira).
+ * aplica à faceta que ele controla — mesma regra do card da Carteira). O tile "CNPJ
+ * irregular" idem, com o filtro da Receita.
  */
 class MaioresRedesResolver
 {
@@ -48,11 +51,13 @@ class MaioresRedesResolver
      * tela aceita como filtro é exatamente o que a planilha leva.
      *
      * @param  array<string, mixed>  $q
-     * @return array{categoria: string, status: string, uf: string, busca: string}
+     * @return array{categoria: string, status: string, uf: string, busca: string, receita: string}
      */
     public static function filtros(array $q): array
     {
         return [
+            // 'irregular' = a rede ou um cliente nosso dela com CNPJ não ativo na Receita.
+            'receita' => ($q['receita'] ?? null) === 'irregular' ? 'irregular' : '',
             'categoria' => array_key_exists((string) ($q['categoria'] ?? ''), CategoriasDeRede::CATEGORIAS) ? (string) $q['categoria'] : '',
             // Whitelist: o status vem da URL e vira WHERE.
             'status' => in_array($q['status'] ?? null, [RedeMercado::STATUS_ATIVO, RedeMercado::STATUS_A_TRABALHAR], true) ? (string) $q['status'] : '',
@@ -72,10 +77,50 @@ class MaioresRedesResolver
         return RedeMercado::where('ativa', true)
             ->when($filtros['categoria'] !== '', fn ($q) => $q->where('categoria', $filtros['categoria']))
             ->when($filtros['uf'] !== '', fn ($q) => $q->where('uf', $filtros['uf']))
+            ->when(($filtros['receita'] ?? '') === 'irregular', fn ($q) => $this->comCnpjIrregular($q))
             ->when($filtros['busca'] !== '', function ($q) use ($filtros) {
                 $termo = '%'.str_replace(['%', '_'], ['\%', '\_'], mb_strtoupper(trim($filtros['busca']))).'%';
                 $q->where(fn ($w) => $w->where('nome', 'like', $termo)->orWhere('linha_original', 'like', $termo)->orWhere('vendedor', 'like', $termo));
             });
+    }
+
+    /**
+     * Rede com o CNPJ dela não ativo na Receita, OU com filial de cliente nosso nessa
+     * situação. "Não ativo" é `SituacaoCadastral::irregular()` — a mesma régua da Carteira.
+     * Só há CNPJ gravado quando a busca confia nele (ou foi informado à mão).
+     */
+    private function comCnpjIrregular(Builder $q): Builder
+    {
+        return $q->where(fn ($w) => $w->where('filiais_cnpj_irregular', '>', 0)
+            ->orWhereExists(fn ($e) => $e->selectRaw('1')->from('cnpj_situacoes')
+                ->whereColumn('cnpj_situacoes.cnpj', 'redes_mercado.cnpj')
+                ->whereRaw(SituacaoCadastral::sqlIrregular('cnpj_situacoes.situacao'))));
+    }
+
+    /**
+     * O CNPJ da rede como a tela e o Excel o mostram.
+     *
+     * @param  array{situacao: string, data: ?string}|null  $situacao  de `SituacaoCadastral::detalhes()`
+     */
+    public static function receita(RedeMercado $r, ?array $situacao): array
+    {
+        return [
+            'cnpj' => Normalizador::documento($r->cnpj),
+            'cnpjRazaoSocial' => $r->cnpj_razao_social,
+            'cnpjConfianca' => $r->cnpj_confianca,
+            'cnpjConfiancaRotulo' => CnpjDasRedes::CONFIANCAS[$r->cnpj_confianca] ?? null,
+            'cnpjSituacao' => $r->cnpj ? ($situacao['situacao'] ?? null) : null,
+            'cnpjSituacaoData' => $r->cnpj ? ($situacao['data'] ?? null) : null,
+            'cnpjIrregular' => $r->cnpj !== null && SituacaoCadastral::irregular($situacao['situacao'] ?? null),
+            'cnpjLojasAtivas' => $r->cnpj_lojas_ativas,
+            'filiaisCnpjIrregular' => $r->filiais_cnpj_irregular,
+        ];
+    }
+
+    /** @return array<string, array{situacao: string, data: ?string}> */
+    public function situacoesDas(iterable $redes): array
+    {
+        return app(SituacaoCadastral::class)->detalhes(collect($redes)->pluck('cnpj')->filter()->all());
     }
 
     /** O recorte com o status e na ordem da tela — a lista e o Excel saem daqui. */
@@ -90,8 +135,8 @@ class MaioresRedesResolver
     }
 
     /**
-     * @param  array{status: string, busca: string, uf: string}  $filtros
-     * @return array{categoria: string, contagens: array{total: int, ativo: int, a_trabalhar: int}, linhas: list<array>}
+     * @param  array{status: string, busca: string, uf: string, receita: string}  $filtros
+     * @return array{categoria: string, contagens: array{total: int, ativo: int, a_trabalhar: int, irregular: int}, linhas: list<array>}
      */
     public function lista(string $categoria, array $filtros): array
     {
@@ -101,12 +146,16 @@ class MaioresRedesResolver
         $total = (int) $c->total;
         $ativo = (int) $c->ativo;
 
+        // O tile da Receita conta o recorte SEM o próprio filtro (mesma regra do status).
+        $irregular = $this->base(['receita' => 'irregular'] + $filtros)->count();
+
         $redes = $this->consulta($filtros)->get();
+        $situacoes = $this->situacoesDas($redes);
 
         return [
             'categoria' => $categoria,
-            'contagens' => ['total' => $total, 'ativo' => $ativo, 'a_trabalhar' => $total - $ativo],
-            'linhas' => $redes->map(fn (RedeMercado $r) => [
+            'contagens' => ['total' => $total, 'ativo' => $ativo, 'a_trabalhar' => $total - $ativo, 'irregular' => $irregular],
+            'linhas' => $redes->map(fn (RedeMercado $r) => self::receita($r, $situacoes[$r->cnpj] ?? null) + [
                 'id' => $r->id,
                 'posicao' => $r->posicao,
                 'nome' => $r->nome,
