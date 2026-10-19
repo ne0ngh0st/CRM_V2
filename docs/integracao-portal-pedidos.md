@@ -1040,6 +1040,13 @@ O que mudou por causa disso:
 - **Resultado vai para quem clicou** (recusa/sem resposta só para ele; pedido criado para
   ele e para o dono).
 
+## 4.14 Nova pré-condição: o aceite do cliente — 2026-10-15
+
+"Transformar em pedido" passou a exigir, além da margem aprovada (`status_gestor`), o
+**aceite do cliente** (`orcamentos.resposta_cliente = 'aprovado'`), registrado pelo
+vendedor. A regra mora em `Orcamento::bloqueioDoPedido()`, usada pela rota (403) e pela
+frase do botão desabilitado. Nada muda no payload nem na API.
+
 ## 5. Lacunas de schema — medidas, não estimadas
 
 Números tirados do `palma_v2` de desenvolvimento em 2026-09-09 (1.864 orçamentos,

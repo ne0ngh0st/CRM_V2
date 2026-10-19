@@ -97,18 +97,10 @@ class OrcamentoController extends Controller
         $listaQuery = fn () => $this->baseQuery($request);
         $kpisQuery = fn () => $this->baseQuery($request, comFacetas: false);
 
-        $kpis = [
-            'total' => (clone $kpisQuery())->count(),
-            'valorTotal' => (float) (clone $kpisQuery())->sum('valor_total'),
-            'aguardandoSupervisor' => (clone $kpisQuery())->where('status_gestor', 'pendente')->where('nivel_aprovacao', 'supervisor')->count(),
-            'aguardandoDiretor' => (clone $kpisQuery())->where('status_gestor', 'pendente')->where('nivel_aprovacao', 'diretor')->count(),
-            'aprovados' => (clone $kpisQuery())->where('status_gestor', 'aprovado')->count(),
-            'valorAprovado' => (float) (clone $kpisQuery())->where('status_gestor', 'aprovado')->sum('valor_total'),
-            'rejeitados' => (clone $kpisQuery())->where('status_gestor', 'rejeitado')->count(),
-        ];
+        $kpis = $this->kpis($kpisQuery());
 
         $orcamentos = $listaQuery()
-            ->with(['user:id,name,display_name', 'aprovadoPor:id,name,display_name', 'itens'])
+            ->with(['user:id,name,display_name', 'aprovadoPor:id,name,display_name', 'respostaClientePor:id,name,display_name', 'itens'])
             ->latest()
             ->paginate(20)
             ->withQueryString();
@@ -138,6 +130,13 @@ class OrcamentoController extends Controller
             'aprovadoPorNome' => $o->aprovadoPor ? ($o->aprovadoPor->display_name ?: $o->aprovadoPor->name) : null,
             'aprovadoEm' => optional($o->aprovado_em)->format('d/m/Y H:i'),
             'motivoRejeicao' => $o->motivo_rejeicao,
+            'respostaCliente' => $o->resposta_cliente,
+            'respostaClienteRotulo' => $o->rotuloRespostaCliente(),
+            'motivoRecusaCliente' => $o->motivo_recusa_cliente,
+            'motivoRecusaClienteTexto' => $o->motivo_recusa_cliente_texto,
+            'respostaClientePorNome' => $o->respostaClientePor ? ($o->respostaClientePor->display_name ?: $o->respostaClientePor->name) : null,
+            'respostaClienteEm' => optional($o->resposta_cliente_em)->format('d/m/Y H:i'),
+            'podeRegistrarRespostaCliente' => ! $o->foiEnviadoAoPortal() && $this->podeRegistrarRespostaCliente($user, $o),
             'criadoEm' => $o->created_at->format('d/m/Y'),
             'podeDecidir' => $o->status_gestor === 'pendente' && $this->podeDecidir($user, $o->nivel_aprovacao),
             'podeEditar' => $o->user_id === $user->id || in_array($role, ['admin', 'diretor'], true),
@@ -149,15 +148,11 @@ class OrcamentoController extends Controller
                 && $o->portal_pedido_id === null
                 && $this->podeEnviarAoPortal($user, $o),
             /*
-             * 🚧 Botão desabilitado com "Em breve": quem já teria a função se ela não
-             * estivesse em homologação. Mostrar desabilitado em vez de esconder é
-             * deliberado — avisa que a função existe e está chegando, em vez de a tela
-             * mudar do nada quando liberar.
+             * Botão DESABILITADO com a frase do que falta (margem, aceite do cliente ou o
+             * "em breve" da homologação). Mostrar desabilitado em vez de esconder é
+             * deliberado: diz ao vendedor o que destrava o pedido.
              */
-            'portalEmBreve' => $portalHabilitado
-                && $o->portal_pedido_id === null
-                && ! $this->podeEnviarAoPortal($user, $o)
-                && $this->podeVerBotaoDoPortal($user, $o),
+            'portalBloqueio' => $portalHabilitado ? $this->bloqueioDoBotaoDoPortal($user, $o) : null,
             'portalPedidoId' => $o->portal_pedido_id,
             'portalErro' => $o->portal_erro,
             // Data que o ERP sugeriu ao recusar a anterior: o modal mostra a recusa e já
@@ -188,6 +183,7 @@ class OrcamentoController extends Controller
             // A lista inteira só vai quando o modal do Portal existe nesta tela.
             'condicoesPagamento' => $portalHabilitado ? CondicoesPagamento::opcoes() : [],
             'podeExcluir' => in_array($role, ['admin', 'diretor'], true),
+            'motivosRecusaCliente' => Orcamento::MOTIVOS_RECUSA_CLIENTE,
             'orcamentos' => $orcamentos,
             'kpis' => $kpis,
             'filaAprovacao' => self::FILA_POR_PERFIL[$role] ?? null,
@@ -195,6 +191,7 @@ class OrcamentoController extends Controller
                 'busca' => $busca,
                 'status' => $status,
                 'nivel' => $nivel,
+                'etapa' => (string) $request->string('etapa'),
                 'data_inicio' => $dataInicio,
                 'data_fim' => $dataFim,
                 'ver' => (string) $request->string('ver'),
@@ -268,6 +265,12 @@ class OrcamentoController extends Controller
             $query->where('nivel_aprovacao', $nivel);
         }
 
+        // Etapa do funil. Whitelist: valor fora da lista é ignorado, não vira condição.
+        $etapa = (string) $request->string('etapa');
+        if ($comFacetas && array_key_exists($etapa, Orcamento::ETAPAS)) {
+            $query->whereRaw('('.Orcamento::sqlEtapa().') = ?', [$etapa]);
+        }
+
         if ($dataInicio !== '') {
             $query->whereDate('created_at', '>=', $dataInicio);
         }
@@ -277,6 +280,50 @@ class OrcamentoController extends Controller
         }
 
         return $query;
+    }
+
+    /**
+     * O funil: quantidade e valor por etapa, numa varredura só (`GROUP BY` da expressão de
+     * `Orcamento::sqlEtapa()`). Como cada orçamento cai numa etapa só, `etapas` soma `total`.
+     *
+     * Além do funil, as duas contagens da fila de aprovação (o "com você" do diretor e do
+     * supervisor), que são um recorte DENTRO de "aguardando margem".
+     *
+     * ⚠️ Recebe a query SEM as facetas que o funil desenha (etapa, margem, nível): um
+     * filtro não se aplica à faceta que ele controla — mesma regra do card da Carteira.
+     *
+     * @return array{total: int, valorTotal: float, aguardandoSupervisor: int, aguardandoDiretor: int, etapas: list<array{chave: string, rotulo: string, qtd: int, valor: float}>}
+     */
+    private function kpis(Builder $query): array
+    {
+        $linhas = $query->toBase()
+            ->selectRaw('('.Orcamento::sqlEtapa().") AS etapa,
+                COUNT(*) AS qtd,
+                COALESCE(SUM(valor_total), 0) AS valor,
+                COALESCE(SUM(status_gestor = 'pendente' AND nivel_aprovacao = 'supervisor'), 0) AS aguardando_supervisor,
+                COALESCE(SUM(status_gestor = 'pendente' AND nivel_aprovacao = 'diretor'), 0) AS aguardando_diretor")
+            // Pela expressão, não pelo alias: o only_full_group_by daqui já recusou alias.
+            ->groupByRaw(Orcamento::sqlEtapa())
+            ->get()
+            ->keyBy('etapa');
+
+        $etapas = [];
+        foreach (Orcamento::ETAPAS as $chave => $rotulo) {
+            $etapas[] = [
+                'chave' => $chave,
+                'rotulo' => $rotulo,
+                'qtd' => (int) ($linhas[$chave]->qtd ?? 0),
+                'valor' => (float) ($linhas[$chave]->valor ?? 0),
+            ];
+        }
+
+        return [
+            'total' => (int) $linhas->sum('qtd'),
+            'valorTotal' => (float) $linhas->sum('valor'),
+            'aguardandoSupervisor' => (int) $linhas->sum('aguardando_supervisor'),
+            'aguardandoDiretor' => (int) $linhas->sum('aguardando_diretor'),
+            'etapas' => $etapas,
+        ];
     }
 
     /**
@@ -299,7 +346,7 @@ class OrcamentoController extends Controller
             return null;
         }
 
-        if ($request->filled('status') || $request->filled('nivel')) {
+        if ($request->filled('status') || $request->filled('nivel') || $request->filled('etapa')) {
             return null;
         }
 
@@ -453,9 +500,49 @@ class OrcamentoController extends Controller
 
             $this->salvarItens($orcamento, $data['itens']);
             $this->recalcularAprovacao($orcamento, novo: false);
+
+            /*
+             * Editou depois do aceite: o cliente aceitou OUTRO documento (preço e itens
+             * podem ter mudado), então volta a "aguardando". Depois de virar pedido não
+             * mexe — o aceite é o registro de um pedido que já existe.
+             */
+            if ($orcamento->resposta_cliente !== null && ! $orcamento->foiEnviadoAoPortal()) {
+                $orcamento->limparRespostaCliente();
+            }
         });
 
         return redirect()->route('orcamentos.index');
+    }
+
+    /**
+     * O vendedor registra se o cliente aceitou o orçamento — a qualquer momento, com a
+     * margem aprovada ou não. Recusa exige motivo; "Outros" exige texto. Depois de virar
+     * pedido trava (409): o aceite passa a ser o registro de um pedido que existe.
+     */
+    public function registrarRespostaCliente(Request $request, Orcamento $orcamento): RedirectResponse
+    {
+        $user = $request->user();
+        abort_unless($this->podeRegistrarRespostaCliente($user, $orcamento), 403);
+        abort_if($orcamento->foiEnviadoAoPortal(), 409);
+
+        $dados = $request->validate([
+            'resposta' => ['required', Rule::in(Orcamento::RESPOSTAS_CLIENTE)],
+            'motivo' => ['nullable', 'required_if:resposta,recusado', Rule::in(array_keys(Orcamento::MOTIVOS_RECUSA_CLIENTE))],
+            'motivo_texto' => ['nullable', 'required_if:motivo,outros', 'string', 'max:500'],
+        ], [
+            'resposta.required' => 'Diga se o cliente aceitou ou não.',
+            'motivo.required_if' => 'Escolha o motivo da recusa.',
+            'motivo_texto.required_if' => 'Descreva o motivo da recusa.',
+        ]);
+
+        $orcamento->registrarRespostaCliente(
+            $user,
+            $dados['resposta'],
+            $dados['motivo'] ?? null,
+            isset($dados['motivo_texto']) ? trim($dados['motivo_texto']) : null,
+        );
+
+        return back();
     }
 
     public function aprovar(Request $request, Orcamento $orcamento): RedirectResponse
@@ -958,9 +1045,20 @@ class OrcamentoController extends Controller
         return now()->addMonthsNoOverflow((int) config('portal.entrega_max_meses'))->toDateString();
     }
 
+    /** Dono do orçamento, ou admin/diretor — a mesma regra de quem edita. */
+    private function podeRegistrarRespostaCliente(User $user, Orcamento $orcamento): bool
+    {
+        return $orcamento->user_id === $user->id
+            || in_array($user->getRoleNames()->first(), ['admin', 'diretor'], true);
+    }
+
+    /**
+     * ⚠️ Margem aprovada E cliente aceitou (`bloqueioDoPedido()`). A mesma função guarda a
+     * rota e decide o botão — se só o botão soubesse da trava, um POST direto passaria.
+     */
     private function podeEnviarAoPortal(User $user, Orcamento $orcamento): bool
     {
-        if ($orcamento->status_gestor !== 'aprovado') {
+        if ($orcamento->bloqueioDoPedido() !== null) {
             return false;
         }
 
@@ -978,9 +1076,27 @@ class OrcamentoController extends Controller
      */
     private function podeVerBotaoDoPortal(User $user, Orcamento $orcamento): bool
     {
-        return $orcamento->status_gestor === 'aprovado'
-            && ($orcamento->user_id === $user->id
-                || in_array($user->getRoleNames()->first(), ['admin', 'diretor'], true));
+        return $orcamento->user_id === $user->id
+            || in_array($user->getRoleNames()->first(), ['admin', 'diretor'], true);
+    }
+
+    /**
+     * Frase do botão "Transformar em pedido" DESABILITADO — null quando ele não aparece
+     * desabilitado (está liberado, já virou pedido, ou a pessoa nem o veria).
+     *
+     * Diz QUAL das duas aprovações falta; só cai no "em breve" da homologação quando as
+     * duas já estão dadas.
+     */
+    private function bloqueioDoBotaoDoPortal(User $user, Orcamento $orcamento): ?string
+    {
+        if ($orcamento->foiEnviadoAoPortal()
+            || $this->podeEnviarAoPortal($user, $orcamento)
+            || ! $this->podeVerBotaoDoPortal($user, $orcamento)) {
+            return null;
+        }
+
+        return $orcamento->bloqueioDoPedido()
+            ?? 'Transformar em pedido — em breve (em homologação com o time).';
     }
 
     private function podeDecidir(User $user, string $nivel): bool

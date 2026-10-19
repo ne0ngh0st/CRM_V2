@@ -2,9 +2,10 @@
 import { ref } from 'vue';
 import StatusPill from '@/Components/StatusPill.vue';
 import {
-    ROTULOS_STATUS_ORCAMENTO,
     TONS_STATUS_ORCAMENTO,
     ROTULOS_NIVEL_APROVACAO,
+    rotuloMargem,
+    tomRespostaCliente,
     ROTULOS_VALIDADE_ORCAMENTO,
     TONS_VALIDADE_ORCAMENTO,
 } from '@/constants/orcamentos.js';
@@ -16,7 +17,7 @@ const props = defineProps({
     podeExcluir: { type: Boolean, default: false },
 });
 
-defineEmits(['editar', 'copiar', 'aprovar', 'rejeitar', 'excluir', 'enviar-ao-portal']);
+defineEmits(['editar', 'copiar', 'aprovar', 'rejeitar', 'excluir', 'enviar-ao-portal', 'resposta-cliente']);
 
 const expandido = ref(null);
 
@@ -90,8 +91,9 @@ async function compartilharPdf(orcamento) {
                     <th class="tbl-th">Valor Total</th>
                     <th class="tbl-th">Desconto</th>
                     <th class="tbl-th">Itens</th>
-                    <th class="tbl-th">Nível</th>
-                    <th class="tbl-th">Status</th>
+                    <th class="tbl-th" title="Aprovação interna do desconto (supervisor ou diretor)">Margem</th>
+                    <th class="tbl-th" title="Aceite do cliente, registrado pelo vendedor">Cliente</th>
+                    <th class="tbl-th" title="Pedido no SIC">Pedido</th>
                     <th class="tbl-th">Validade</th>
                     <th class="tbl-th">Criado em</th>
                     <th class="tbl-th">Ações</th>
@@ -118,13 +120,46 @@ async function compartilharPdf(orcamento) {
                         <td class="tbl-td font-medium text-gray-800" data-rotulo="Valor total">{{ formatBRL(orcamento.valorTotal) }}</td>
                         <td class="tbl-td font-medium text-gray-800" data-rotulo="Desconto máx.">{{ formatDesconto(orcamento.descontoPctMax) }}</td>
                         <td class="tbl-td" data-rotulo="Itens">{{ rotuloItens(orcamento.itens.length) }}</td>
-                        <td class="tbl-td" data-rotulo="Nível">
-                            <StatusPill :tone="orcamento.nivelAprovacao === 'diretor' ? 'danger' : orcamento.nivelAprovacao === 'supervisor' ? 'warn' : 'neutral'" size="sm">
-                                {{ ROTULOS_NIVEL_APROVACAO[orcamento.nivelAprovacao] }}
+                        <td class="tbl-td" data-rotulo="Margem">
+                            <StatusPill
+                                :tone="TONS_STATUS_ORCAMENTO[orcamento.statusGestor]"
+                                size="sm"
+                                :title="`Nível de aprovação: ${ROTULOS_NIVEL_APROVACAO[orcamento.nivelAprovacao]}`"
+                            >
+                                {{ rotuloMargem(orcamento.statusGestor, orcamento.nivelAprovacao) }}
                             </StatusPill>
                         </td>
-                        <td class="tbl-td" data-rotulo="Status">
-                            <StatusPill :tone="TONS_STATUS_ORCAMENTO[orcamento.statusGestor]" size="sm">{{ ROTULOS_STATUS_ORCAMENTO[orcamento.statusGestor] }}</StatusPill>
+                        <td class="tbl-td" data-rotulo="Cliente">
+                            <StatusPill
+                                :tone="tomRespostaCliente(orcamento.respostaCliente)"
+                                size="sm"
+                                :title="orcamento.respostaClientePorNome
+                                    ? `${orcamento.respostaClienteRotulo} — registrado por ${orcamento.respostaClientePorNome} em ${orcamento.respostaClienteEm}`
+                                    : (orcamento.respostaClienteRotulo ?? 'O vendedor ainda não registrou a resposta do cliente')"
+                            >
+                                <span class="inline-block truncate align-bottom sm:max-w-[140px]">{{ orcamento.respostaClienteRotulo ?? 'Aguardando' }}</span>
+                            </StatusPill>
+                        </td>
+                        <td class="tbl-td" data-rotulo="Pedido">
+                            <!-- O número é a única referência que liga este orçamento ao
+                                 pedido do outro lado — a API não tem consulta. -->
+                            <span
+                                v-if="orcamento.portalPedidoId"
+                                class="inline-flex items-center whitespace-nowrap rounded border border-green-300 bg-green-50 px-1.5 text-[0.65rem] font-medium leading-5 text-green-700"
+                                :title="`Pedido criado no SIC em ${orcamento.portalEnviadoEm}` + (orcamento.portalEntregaPrevista
+                                    ? ` · entrega prevista ${orcamento.portalEntregaPrevista.split('-').reverse().join('/')}`
+                                    : '')"
+                            >
+                                nº {{ orcamento.portalPedidoId }}
+                            </span>
+                            <span
+                                v-else-if="orcamento.portalErro"
+                                class="inline-flex items-center rounded border border-red-300 bg-red-50 px-1.5 text-[0.65rem] font-medium leading-5 text-red-700"
+                                :title="orcamento.portalErro"
+                            >
+                                falhou
+                            </span>
+                            <span v-else class="text-gray-300">—</span>
                         </td>
                         <td class="tbl-td" data-rotulo="Validade">
                             <StatusPill :tone="TONS_VALIDADE_ORCAMENTO[orcamento.validadeSituacao]" size="sm">
@@ -210,6 +245,22 @@ async function compartilharPdf(orcamento) {
                                     </svg>
                                 </button>
                                 <!--
+                                    Aceite do cliente. Cyan, o mesmo de "agendar": as duas
+                                    registram uma interação com o cliente.
+                                -->
+                                <button
+                                    v-if="orcamento.podeRegistrarRespostaCliente"
+                                    type="button"
+                                    title="Registrar a resposta do cliente"
+                                    class="tbl-acao tbl-acao-cyan"
+                                    @click="$emit('resposta-cliente', orcamento)"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M20 12a8 8 0 0 1-11.8 7L4 20l1-4.2A8 8 0 1 1 20 12Z" stroke-linecap="round" stroke-linejoin="round" />
+                                        <path d="m9 12 2 2 4-4" stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
+                                </button>
+                                <!--
                                     Âmbar porque a função é a mesma família de "enviar
                                     p/ setor": manda o documento para FORA do CRM. A
                                     Regra de ouro nº 5 permite cor repetida entre
@@ -234,10 +285,15 @@ async function compartilharPdf(orcamento) {
                                     em que liberar. O estado desabilitado vem do token
                                     `.tbl-acao:disabled`, não de classes soltas aqui.
                                 -->
+                                <!--
+                                    Desabilitado com a frase do que falta: margem,
+                                    aceite do cliente, ou o "em breve" da homologação.
+                                    O estado vem do token `.tbl-acao:disabled`.
+                                -->
                                 <button
-                                    v-else-if="orcamento.portalEmBreve"
+                                    v-else-if="orcamento.portalBloqueio"
                                     type="button"
-                                    title="Transformar em pedido — em breve (em homologação com o time)"
+                                    :title="`Transformar em pedido — ${orcamento.portalBloqueio}`"
                                     class="tbl-acao tbl-acao-amber"
                                     disabled
                                 >
@@ -245,27 +301,6 @@ async function compartilharPdf(orcamento) {
                                         <path d="M21 3 10.5 13.5M21 3l-6.5 18-4-8-8-4L21 3Z" stroke-linecap="round" stroke-linejoin="round" />
                                     </svg>
                                 </button>
-                                <!--
-                                    Já virou pedido: some o botão e entra o número, que
-                                    é a única referência que liga este orçamento ao
-                                    pedido do outro lado — a API não tem consulta.
-                                -->
-                                <span
-                                    v-else-if="orcamento.portalPedidoId"
-                                    class="inline-flex items-center rounded border border-green-300 bg-green-50 px-1.5 text-[0.65rem] font-medium leading-5 text-green-700"
-                                    :title="`Pedido criado no Portal em ${orcamento.portalEnviadoEm}` + (orcamento.portalEntregaPrevista
-                                        ? ` · entrega prevista ${orcamento.portalEntregaPrevista.split('-').reverse().join('/')}`
-                                        : '')"
-                                >
-                                    nº {{ orcamento.portalPedidoId }}
-                                </span>
-                                <span
-                                    v-else-if="orcamento.portalErro"
-                                    class="inline-flex items-center rounded border border-red-300 bg-red-50 px-1.5 text-[0.65rem] font-medium leading-5 text-red-700"
-                                    :title="orcamento.portalErro"
-                                >
-                                    falhou
-                                </span>
                                 <button
                                     v-if="podeExcluir"
                                     type="button"
@@ -281,7 +316,7 @@ async function compartilharPdf(orcamento) {
                         </td>
                     </tr>
                     <tr v-if="expandido === orcamento.id" class="bg-gray-50">
-                        <td colspan="11" class="tbl-td-expansao p-2 sm:p-4">
+                        <td colspan="12" class="tbl-td-expansao p-2 sm:p-4">
                             <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
                                 <div class="lg:col-span-2">
                                     <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens do orçamento</p>
@@ -321,8 +356,15 @@ async function compartilharPdf(orcamento) {
                                             <dt class="text-gray-400">Forma pagto.</dt>
                                             <dd class="text-right">{{ orcamento.formaPagamento ?? '—' }}</dd>
                                         </div>
+                                        <div v-if="orcamento.respostaClienteRotulo" class="flex flex-col gap-1">
+                                            <dt class="text-gray-400">Resposta do cliente</dt>
+                                            <dd :class="orcamento.respostaCliente === 'recusado' ? 'text-red-600' : 'text-green-700'">
+                                                {{ orcamento.respostaClienteRotulo }}
+                                                <span v-if="orcamento.respostaClientePorNome" class="text-gray-400">· {{ orcamento.respostaClientePorNome }}, {{ orcamento.respostaClienteEm }}</span>
+                                            </dd>
+                                        </div>
                                         <div v-if="orcamento.aprovadoPorNome" class="flex justify-between gap-2">
-                                            <dt class="text-gray-400">Decidido por</dt>
+                                            <dt class="text-gray-400">Margem decidida por</dt>
                                             <dd class="text-right">{{ orcamento.aprovadoPorNome }} · {{ orcamento.aprovadoEm }}</dd>
                                         </div>
                                         <div v-if="orcamento.motivoRejeicao" class="flex flex-col gap-1">

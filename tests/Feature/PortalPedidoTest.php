@@ -92,6 +92,11 @@ class PortalPedidoTest extends TestCase
             'status_gestor' => $sobrescreve['status'] ?? 'aprovado',
         ]);
 
+        // Pedido exige o aceite do cliente (2026-10-15). Fora do fillable de propósito.
+        $orcamento->forceFill([
+            'resposta_cliente' => array_key_exists('respostaCliente', $sobrescreve) ? $sobrescreve['respostaCliente'] : 'aprovado',
+        ])->save();
+
         OrcamentoItem::create([
             'orcamento_id' => $orcamento->id,
             'cod_produto' => 'V23730',
@@ -214,13 +219,13 @@ class PortalPedidoTest extends TestCase
         $this->actingAs($vendedor)
             ->get(route('orcamentos.index'))
             ->assertInertia(fn ($page) => $page
-                ->where('orcamentos.data.0.portalEmBreve', true)
+                ->where('orcamentos.data.0.portalBloqueio', 'Transformar em pedido — em breve (em homologação com o time).')
                 ->where('orcamentos.data.0.podeEnviarAoPortal', false));
 
         $this->actingAs($this->admin())
             ->get(route('orcamentos.index'))
             ->assertInertia(fn ($page) => $page
-                ->where('orcamentos.data.0.portalEmBreve', false)
+                ->where('orcamentos.data.0.portalBloqueio', null)
                 ->where('orcamentos.data.0.podeEnviarAoPortal', true));
     }
 

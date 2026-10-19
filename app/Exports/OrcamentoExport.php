@@ -22,7 +22,7 @@ class OrcamentoExport implements FromQuery, WithHeadings, WithMapping, WithChunk
 
     public function headings(): array
     {
-        return ['Cliente', 'CNPJ', 'Vendedor', 'Valor Total', 'Nível', 'Status', 'Validade', 'Criado em'];
+        return ['Cliente', 'CNPJ', 'Vendedor', 'Valor Total', 'Nível', 'Margem', 'Cliente aceitou?', 'Pedido SIC', 'Validade', 'Criado em'];
     }
 
     /** @param  Orcamento  $orcamento */
@@ -43,6 +43,8 @@ class OrcamentoExport implements FromQuery, WithHeadings, WithMapping, WithChunk
                 'rejeitado' => 'Rejeitado',
                 default => 'Pendente',
             },
+            $orcamento->rotuloRespostaCliente() ?? 'Aguardando',
+            $orcamento->portal_pedido_id,
             optional($orcamento->data_validade)->format('d/m/Y'),
             $orcamento->created_at->format('d/m/Y'),
         ];

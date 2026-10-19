@@ -146,8 +146,10 @@ class OrcamentoFilaAprovacaoTest extends TestCase
                 ->where('kpis.total', 15)
                 ->where('kpis.aguardandoDiretor', 3)
                 ->where('kpis.aguardandoSupervisor', 2)
-                ->where('kpis.aprovados', 4)
-                ->where('kpis.rejeitados', 5)
+                ->where('kpis.etapas.0.chave', 'aguardando_margem')
+                ->where('kpis.etapas.0.qtd', 6)
+                ->where('kpis.etapas.1.qtd', 4)
+                ->where('kpis.etapas.4.qtd', 5)
                 ->where('orcamentos.total', 3));
     }
 
@@ -164,8 +166,9 @@ class OrcamentoFilaAprovacaoTest extends TestCase
             'status' => 'pendente',
             'nivel' => 'diretor',
         ]), 'tile aguard. diretor');
-        $this->assertSame($kpis['aprovados'], $this->totalDaLista(['status' => 'aprovado']), 'tile aprovados');
-        $this->assertSame($kpis['rejeitados'], $this->totalDaLista(['status' => 'rejeitado']), 'tile rejeitados');
+        foreach ($kpis['etapas'] as $etapa) {
+            $this->assertSame($etapa['qtd'], $this->totalDaLista(['etapa' => $etapa['chave']]), "etapa {$etapa['chave']}");
+        }
     }
 
     public function test_busca_continua_valendo_no_card(): void

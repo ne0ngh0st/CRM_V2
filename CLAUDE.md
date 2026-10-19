@@ -348,7 +348,7 @@ Mudou bastante coisa:
 - **Calculadora de precificação de etiqueta** (`Components/Etiquetas/EtiquetaCalculadora.vue`, endpoint `POST /orcamentos/etiquetas/calcular`) — **estritamente admin-only** (tela e endpoint; o legado tinha o endpoint de custo liberado pra bem mais perfis que a tela, corrigido aqui). Fórmula por m² (`App\Services\Etiquetas\EtiquetaPrecificadorService`, réplica fiel do legado): `custo_total = preco_m2_materia_prima × (largura_total_m × metros_rolo)`, `preco_sugerido = custo_total / 0.7`. **Quirk herdado do legado, não corrigido de propósito** (fora do escopo combinado): a "margem bruta %" exibida compara o preço de venda POR ETIQUETA contra o custo do ROLO INTEIRO — unidades diferentes, pode dar números absurdos (ex.: -69542%) se a quantidade pedida for bem menor que o rendimento do rolo. Os dois indicadores de "throughput" (etiquetas/rolo vs. metros necessários pra qtd pedida) também nunca são cruzados/validados entre si, igual no legado. Vale revisitar se incomodar no uso real.
 - **Matéria-prima de etiqueta** — CRUD completo admin-only (`EtiquetaMateriaPrimaController`, tabela `etiquetas_materia_prima`: categoria/fabricante/cód/desc/largura/preço R$ por m²/ativo), acessível em `/orcamentos/materia-prima` (link só aparece pro admin na página de Orçamentos). Sem seeder — Tony cadastra os dados reais de custo pela própria tela.
 - **Busca de cliente/produto no formulário**: `GET /orcamentos/busca-clientes` (busca em `Cliente` + `Lead::visivel()`, retorna nome/cnpj/telefone/email/estado/cep — sem endereço/número/bairro/cidade, que nem o legado nem o `clientes` atual têm estruturado) e `GET /orcamentos/busca-produtos` (busca em `Produto`, autocompleta código+descrição+preço de tabela no item).
-- **Aprovação do cliente** (separada da aprovação interna gestor/diretor) — decisão do Tony: **fora de escopo**, não construído.
+- ~~**Aprovação do cliente** — fora de escopo.~~ **Entrou em 2026-10-15** — ver "Aceite do cliente no orçamento" abaixo.
 - Campos novos em `orcamentos`: `observacoes`, `variacao_producao_personalizado`, `prazo_producao`, `garantia_imagem`, `texto_importante` (os 3 últimos vêm pré-preenchidos com o texto padrão do legado, editáveis).
 
 ### Sistema de Notificações — construído em 2026-07-28
@@ -2323,8 +2323,9 @@ esperadas e números medidos: **`docs/power-bi.md`**. Aqui fica o que muda decis
   legado.
 - ⚠️ **O contrato de colunas é o TMDL do modelo**, copiado para o `ViewsBiTest`. Nome de coluna
   errado não quebra nada no CRM; quebra o relatório no primeiro refresh.
-- **Decisões do Tony nesta data** (não reabrir): orçamentos saem com `status` vazio (o CRM não
-  tem aprovação do cliente, e usar a do gestor inflaria a "Taxa de Conversão"); `REPRES` é o
+- **Decisões do Tony nesta data** (não reabrir): orçamentos saem com `status` vazio (usar a
+  aprovação do gestor inflaria a "Taxa de Conversão"; desde 2026-10-15 `status_cliente` e
+  `data_aprovacao_cliente` vêm do aceite do cliente); `REPRES` é o
   nome do vendedor; filial passou a ser gravada em `pedidos` (`FILIAL` dos relatórios 200/232).
 - ⚠️ **Status do lead no BI é a situação do CLIENTE** (ativo/inativando/inativo/prospect), não a
   etapa do funil — é o que a medida "Resumo Clientes Multilinha" conta.
@@ -2657,6 +2658,40 @@ Orçamento antigo ganha a condição SUGERIDA a partir do texto (91% dos de prod
 reconhecidos). Lista nova do Protheus: `condicoes-pagamento:importar <xlsx> --json`.
 ✅ Homologado com o pedido 1134 (condição e tipo de nota conferidos na tela do
 Portal). Detalhe em §4.12 do doc da integração.
+
+### Aceite do cliente no orçamento: trava do "Transformar em pedido" — 2026-10-15
+
+O orçamento passou a ter DUAS aprovações, com nomes que dizem o que são:
+**Margem** (`status_gestor`, aprovação interna do desconto) e **aceite do Cliente**
+(`resposta_cliente`, que o próprio vendedor registra). **Pedido no SIC só com as duas.**
+
+- `resposta_cliente` (`aprovado` | `recusado` | null = aguardando) + motivo da lista
+  `Orcamento::MOTIVOS_RECUSA_CLIENTE` (preço, prazo, concorrente, desistiu, sem retorno,
+  Outros — "Outros" exige texto). Registrado **a qualquer momento**, com a margem
+  aprovada ou não (decisão do Tony). `PATCH /orcamentos/{id}/resposta-cliente`, dono ou
+  admin/diretor; depois de virar pedido, 409.
+- 🚨 **A trava mora em `Orcamento::bloqueioDoPedido()`** — a rota (`podeEnviarAoPortal`) e
+  a frase do botão desabilitado (`portalBloqueio`) leem dali. Não pôr a regra no Vue.
+- **Editar o orçamento zera o aceite** (o cliente aceitou outro documento), exceto depois
+  de virar pedido.
+- Colunas da tabela: **Margem** (nível no tooltip) · **Cliente** · **Pedido** (nº do SIC,
+  que antes ficava escondido na coluna Ações). Filtro "Status" virou "Margem" com a mesma
+  chave `status=` (link salvo continua valendo).
+- **Os KPIs viraram um FUNIL** (`Components/Orcamentos/FunilOrcamentos.vue`): Aguardando
+  margem → Aguardando cliente → Pronto p/ pedido → Virou pedido, e Perdido à parte, com
+  quantidade e valor; clicar filtra (`etapa=`). Dois desenhos de tiles por dimensão foram
+  recusados pelo Tony ("mais confunde") — os tiles se sobrepunham e não somavam.
+  🚨 **Cada orçamento cai em UMA etapa só**, então as etapas somam o total. A regra é
+  `Orcamento::sqlEtapa()` (CASE), única definição: conta o funil (`GROUP BY` da expressão,
+  não do alias) e filtra a lista. A ordem dos WHEN é a precedência: pedido > perdido
+  (margem rejeitada OU cliente recusou) > margem pendente > aguardando cliente > pronto.
+  Diretor/supervisor veem "N aguardando a sua aprovação" (a fila) embaixo do funil.
+- Migration preenche `aprovado` em quem JÁ virou pedido. Os ~1.900 históricos do legado
+  nascem "aguardando" (o legado tinha `status_cliente`, o import pontual não trouxe).
+- BI: `vw_bi_fato_orcamentos.status_cliente`/`data_aprovacao_cliente` deixam de ser NULL.
+- ⚠️ O card de orçamentos do **Painel** (`DashboardBlocos`, `OrcamentosStatsCard`) ainda
+  diz "Aprovados"/"Valor aprovado" no sentido de margem — não foi mexido.
+- Testes: `OrcamentoRespostaClienteTest`.
 
 ### O 232 virou a fonte da venda; o 200 só dá a etapa — 2026-09-25
 

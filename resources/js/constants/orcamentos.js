@@ -10,6 +10,36 @@ export const TONS_STATUS_ORCAMENTO = {
     rejeitado: 'danger',
 };
 
+/*
+ * Coluna/filtro "Margem": é o mesmo `status_gestor`, com o nível na frase quando pendente
+ * ("Aguarda diretor"). O nome diz o que a aprovação do gestor é — aprovação de desconto —
+ * para não ser confundida com o aceite do cliente.
+ */
+export function rotuloMargem(status, nivel) {
+    if (status === 'pendente') {
+        return nivel === 'diretor' ? 'Aguarda diretor' : 'Aguarda supervisor';
+    }
+    if (status === 'aprovado') {
+        return nivel === 'nenhum' ? 'Aprovada (automática)' : 'Aprovada';
+    }
+
+    return 'Rejeitada';
+}
+
+export const ROTULOS_MARGEM_FILTRO = {
+    pendente: 'Pendente',
+    aprovado: 'Aprovada',
+    rejeitado: 'Rejeitada',
+};
+
+// Aceite do cliente (o rótulo da linha vem pronto do servidor). Tom por `resposta_cliente` (null = aguardando).
+export function tomRespostaCliente(resposta) {
+    if (resposta === 'aprovado') return 'ok';
+    if (resposta === 'recusado') return 'danger';
+
+    return 'neutral';
+}
+
 export const ROTULOS_NIVEL_APROVACAO = {
     nenhum: 'Nenhum',
     supervisor: 'Supervisor',

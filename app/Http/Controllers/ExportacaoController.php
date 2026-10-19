@@ -108,6 +108,7 @@ class ExportacaoController extends Controller
             'aderencia' => 'Aderência',
             'origem' => 'Origem',
             'nivel' => 'Nível',
+            'etapa' => 'Etapa',
             'perfil' => 'Perfil',
             'tipo' => 'Tipo',
             'faixa' => 'Faixa',

@@ -5,19 +5,24 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
 import FilterField from '@/Components/FilterField.vue';
-import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
 import OrcamentosTabela from '@/Components/Orcamentos/OrcamentosTabela.vue';
 import RejeitarOrcamentoModal from '@/Components/Orcamentos/RejeitarOrcamentoModal.vue';
 import ExcluirOrcamentoModal from '@/Components/Orcamentos/ExcluirOrcamentoModal.vue';
 import TransformarEmPedidoModal from '@/Components/Orcamentos/TransformarEmPedidoModal.vue';
+import FunilOrcamentos from '@/Components/Orcamentos/FunilOrcamentos.vue';
+import RespostaClienteModal from '@/Components/Orcamentos/RespostaClienteModal.vue';
 import ExportarExcelButton from '@/Components/ExportarExcelButton.vue';
-import { ROTULOS_STATUS_ORCAMENTO, ROTULOS_NIVEL_APROVACAO } from '@/constants/orcamentos.js';
+import {
+    ROTULOS_MARGEM_FILTRO,
+    ROTULOS_NIVEL_APROVACAO,
+} from '@/constants/orcamentos.js';
 import { contarFiltrosAtivos } from '@/utils/filtros';
 
 const props = defineProps({
     role: String,
     podeExcluir: Boolean,
+    motivosRecusaCliente: { type: Object, default: () => ({}) },
     portalHabilitado: { type: Boolean, default: false },
     portalEntregaMaxima: { type: String, default: '' },
     condicoesPagamento: { type: Array, default: () => [] },
@@ -32,6 +37,7 @@ const filtros = reactive({
     busca: props.filtros.busca || '',
     status: props.filtros.status || '',
     nivel: props.filtros.nivel || '',
+    etapa: props.filtros.etapa || '',
     data_inicio: props.filtros.data_inicio || '',
     data_fim: props.filtros.data_fim || '',
     visao_supervisor: props.visao.visaoSupervisor || '',
@@ -55,7 +61,7 @@ function onBuscaInput() {
 
 function limparFiltros() {
     Object.assign(filtros, {
-        busca: '', status: '', nivel: '', data_inicio: '', data_fim: '',
+        busca: '', status: '', nivel: '', etapa: '', data_inicio: '', data_fim: '',
         visao_supervisor: '', visao_vendedor: '',
     });
     aplicarFiltros();
@@ -69,9 +75,17 @@ function limparFiltros() {
  * do Excel responde outra pergunta ("o arquivo sai recortado?") e aí a busca conta.
  */
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
-    'status', 'nivel', 'data_inicio', 'data_fim',
+    'status', 'nivel', 'etapa', 'data_inicio', 'data_fim',
     'visao_supervisor', 'visao_vendedor',
 ]));
+
+/*
+ * As dimensões que o funil DESENHA. Uma etapa está aplicada quando o recorte dela é
+ * exatamente o da tela (as outras facetas vazias) — um recorte por vez, e o número da
+ * etapa bate com a lista que ela abre.
+ */
+const FACETAS = ['status', 'nivel', 'etapa'];
+const semFacetas = () => FACETAS.every((chave) => !filtros[chave]);
 
 const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
 
@@ -93,18 +107,17 @@ const recorteDaFila = computed(() => {
     const fila = props.filaAprovacao;
     if (!fila) return false;
 
-    return filtros.status === fila.status && filtros.nivel === fila.nivel;
+    return filtros.status === fila.status && filtros.nivel === fila.nivel
+        && !filtros.etapa;
 });
 
 const subtituloHero = computed(() => (
     recorteDaFila.value
         ? 'Fila de aprovação — só o que precisa da sua decisão.'
-        : 'Aprovação interna por nível de desconto — supervisor ou diretor conforme a regra de negócio.'
+        : 'Vira pedido no SIC com a margem aprovada e o aceite do cliente registrado.'
 ));
 
-const vendoTodos = computed(() => (
-    props.filtros.ver === 'todos' && !filtros.status && !filtros.nivel
-));
+const vendoTodos = computed(() => props.filtros.ver === 'todos' && semFacetas());
 
 function hrefOrcamentos(recorte) {
     return route('orcamentos.index', {
@@ -119,11 +132,10 @@ function hrefOrcamentos(recorte) {
 
 function facetaAtiva(recorte) {
     if (recorte.ver === 'todos') {
-        return vendoTodos.value || (!props.filaAprovacao && !filtros.status && !filtros.nivel);
+        return vendoTodos.value || (!props.filaAprovacao && semFacetas());
     }
 
-    return Object.entries(recorte).every(([chave, valor]) => (filtros[chave] || '') === valor)
-        && (recorte.nivel ? true : !filtros.nivel);
+    return FACETAS.every((chave) => (filtros[chave] || '') === (recorte[chave] || ''));
 }
 
 function hrefFaceta(recorte) {
@@ -137,6 +149,25 @@ function hrefFaceta(recorte) {
 
     return hrefOrcamentos(recorte);
 }
+
+// Etapas do funil com o link e o estado de cada uma — o componente só desenha.
+const etapasDoFunil = computed(() => props.kpis.etapas.map((etapa) => ({
+    ...etapa,
+    href: hrefFaceta({ etapa: etapa.chave }),
+    ativo: facetaAtiva({ etapa: etapa.chave }),
+})));
+
+// "N aguardando a sua aprovação": a fila de quem aprova, dentro de "Aguardando margem".
+const comVoce = computed(() => {
+    const fila = props.filaAprovacao;
+    if (!fila) return null;
+
+    return {
+        qtd: fila.nivel === 'diretor' ? props.kpis.aguardandoDiretor : props.kpis.aguardandoSupervisor,
+        href: hrefFaceta(fila),
+        ativo: facetaAtiva(fila),
+    };
+});
 
 function formatBRL(valor) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
@@ -154,6 +185,13 @@ function abrirRejeitar(orcamento) {
 function abrirExcluir(orcamento) {
     orcamentoAtivo.value = orcamento;
     modalExcluir.value = true;
+}
+
+const modalResposta = ref(false);
+
+function abrirRespostaCliente(orcamento) {
+    orcamentoAtivo.value = orcamento;
+    modalResposta.value = true;
 }
 
 function aprovar(orcamento) {
@@ -193,49 +231,6 @@ function enviarAoPortal(orcamento) {
                     <template #subtitle>
                         {{ subtituloHero }}
                     </template>
-                    <template #meta>
-                        <KpiTile
-                            :value="kpis.total"
-                            label="Total"
-                            :href="hrefFaceta({ ver: 'todos' })"
-                            :ativo="facetaAtiva({ ver: 'todos' })"
-                        />
-                        <KpiTile
-                            :value="kpis.aguardandoSupervisor"
-                            label="Aguard. supervisor"
-                            tone="warn"
-                            :href="hrefFaceta({ status: 'pendente', nivel: 'supervisor' })"
-                            :ativo="facetaAtiva({ status: 'pendente', nivel: 'supervisor' })"
-                        />
-                        <KpiTile
-                            :value="kpis.aguardandoDiretor"
-                            label="Aguard. diretor"
-                            tone="warn"
-                            :href="hrefFaceta({ status: 'pendente', nivel: 'diretor' })"
-                            :ativo="facetaAtiva({ status: 'pendente', nivel: 'diretor' })"
-                        />
-                        <KpiTile
-                            :value="kpis.aprovados"
-                            label="Aprovados"
-                            tone="ok"
-                            :href="hrefFaceta({ status: 'aprovado' })"
-                            :ativo="facetaAtiva({ status: 'aprovado' })"
-                        />
-                        <KpiTile
-                            :value="kpis.rejeitados"
-                            label="Rejeitados"
-                            tone="danger"
-                            :href="hrefFaceta({ status: 'rejeitado' })"
-                            :ativo="facetaAtiva({ status: 'rejeitado' })"
-                        />
-                        <KpiTile
-                            :value="formatBRL(kpis.valorAprovado)"
-                            label="Valor aprovado"
-                            compact
-                            :href="hrefFaceta({ status: 'aprovado' })"
-                            :ativo="facetaAtiva({ status: 'aprovado' })"
-                        />
-                    </template>
                     <template #filtrosFixos>
                         <div class="flex w-full flex-col gap-1 sm:min-w-[200px] sm:max-w-[280px] sm:flex-1">
                             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
@@ -250,9 +245,10 @@ function enviarAoPortal(orcamento) {
                     </template>
 
                     <template #filtros>
-                        <FilterField label="Status" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; aplicarFiltros(); }">
-                            <option value="">Todos</option>
-                            <option v-for="(rotulo, valor) in ROTULOS_STATUS_ORCAMENTO" :key="valor" :value="valor">{{ rotulo }}</option>
+                        <!-- Chave `status` mantida: link salvo de antes continua valendo. -->
+                        <FilterField label="Margem" :model-value="filtros.status" @update:model-value="(v) => { filtros.status = v; aplicarFiltros(); }">
+                            <option value="">Todas</option>
+                            <option v-for="(rotulo, valor) in ROTULOS_MARGEM_FILTRO" :key="valor" :value="valor">{{ rotulo }}</option>
                         </FilterField>
 
                         <FilterField label="Nível" :model-value="filtros.nivel" @update:model-value="(v) => { filtros.nivel = v; aplicarFiltros(); }">
@@ -295,6 +291,13 @@ function enviarAoPortal(orcamento) {
                         </button>
                     </template>
                 </PageHero>
+
+                <FunilOrcamentos
+                    :etapas="etapasDoFunil"
+                    :total="kpis.total"
+                    :valor-total="kpis.valorTotal"
+                    :com-voce="comVoce"
+                />
 
                 <DarkCard title="Orçamentos" :subtitle="contagemDeOrcamentos">
                     <template #icon>
@@ -347,6 +350,7 @@ function enviarAoPortal(orcamento) {
                         @rejeitar="abrirRejeitar"
                         @excluir="abrirExcluir"
                         @enviar-ao-portal="enviarAoPortal"
+                        @resposta-cliente="abrirRespostaCliente"
                     />
                     <p v-else class="text-sm text-gray-400">
                         {{ recorteDaFila
@@ -363,6 +367,7 @@ function enviarAoPortal(orcamento) {
 
         <RejeitarOrcamentoModal :show="modalRejeitar" :orcamento="orcamentoAtivo" @close="modalRejeitar = false" />
         <ExcluirOrcamentoModal :show="modalExcluir" :orcamento="orcamentoAtivo" @close="modalExcluir = false" />
+        <RespostaClienteModal :show="modalResposta" :orcamento="orcamentoAtivo" :motivos="motivosRecusaCliente" @close="modalResposta = false" />
 
         <TransformarEmPedidoModal
             :show="modalPortal"

@@ -16,6 +16,44 @@ class Orcamento extends Model
      */
     public const TIPOS_VENDA = ['consumo', 'revenda', 'servico'];
 
+    /**
+     * Aceite do CLIENTE — o vendedor registra. Nulo = aguardando resposta.
+     *
+     * ⚠️ Não confundir com `status_gestor`, que é a aprovação de MARGEM (desconto). São
+     * independentes: o cliente pode aceitar com a margem ainda na fila. Para virar pedido
+     * valem as duas (ver `bloqueioDoPedido()`).
+     */
+    public const RESPOSTAS_CLIENTE = ['aprovado', 'recusado'];
+
+    /**
+     * Motivos de recusa do cliente. Lista fixa (dá para agregar no BI) + "Outros", que
+     * exige texto. Rótulos saem prontos do servidor; o front não tem cópia deste mapa.
+     */
+    public const MOTIVOS_RECUSA_CLIENTE = [
+        'preco' => 'Preço',
+        'prazo' => 'Prazo de entrega',
+        'concorrente' => 'Fechou com concorrente',
+        'desistiu' => 'Cliente desistiu da compra',
+        'sem_retorno' => 'Sem retorno do cliente',
+        'outros' => 'Outros',
+    ];
+
+    /**
+     * Etapa do orçamento no caminho até o pedido — o funil da tela de Orçamentos.
+     *
+     * 🚨 Cada orçamento cai em EXATAMENTE UMA etapa (ver `sqlEtapa()`), e é isso que faz o
+     * funil somar o total. A primeira versão eram tiles soltos por dimensão (margem,
+     * cliente, pedido) que se sobrepunham e o Tony recusou: "mais confunde".
+     * A ordem aqui é a ordem da tela.
+     */
+    public const ETAPAS = [
+        'aguardando_margem' => 'Aguardando margem',
+        'aguardando_cliente' => 'Aguardando cliente',
+        'pronto' => 'Pronto p/ pedido',
+        'pedido' => 'Virou pedido',
+        'perdido' => 'Perdido',
+    ];
+
     protected $fillable = [
         'user_id',
         'lead_id',
@@ -23,7 +61,9 @@ class Orcamento extends Model
          * Vínculo real com `clientes`, necessário para resolver o `clientId` do Portal
          * (o de-para é por cod_cliente + loja). ⚠️ As colunas `portal_*` NÃO entram no
          * fillable de propósito: quem escreve nelas é o GeradorDePedidoNoPortal e mais
-         * ninguém — mesmo raciocínio de `clientes.data_ultimo_contato`.
+         * ninguém — mesmo raciocínio de `clientes.data_ultimo_contato`. As de
+         * `resposta_cliente*` também ficam de fora: quem escreve é
+         * `registrarRespostaCliente()` / `limparRespostaCliente()`.
          */
         'cliente_id',
         'cliente_nome',
@@ -65,6 +105,7 @@ class Orcamento extends Model
             'portal_payload' => 'array',
             'portal_resposta' => 'array',
             'portal_enviado_em' => 'datetime',
+            'resposta_cliente_em' => 'datetime',
         ];
     }
 
@@ -76,6 +117,11 @@ class Orcamento extends Model
     public function aprovadoPor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'aprovado_por_id');
+    }
+
+    public function respostaClientePor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'resposta_cliente_por_id');
     }
 
     /** De qual lead este orçamento saiu, quando saiu de um. */
@@ -113,6 +159,91 @@ class Orcamento extends Model
         return ! $this->foiEnviadoAoPortal()
             && filled($this->portal_idempotency_key)
             && is_array($this->portal_payload);
+    }
+
+    /**
+     * Por que este orçamento ainda NÃO pode virar pedido — null quando pode.
+     *
+     * É a frase que a tela mostra no botão desabilitado e a regra que a rota aplica: as
+     * duas leem daqui, para não dizerem coisas diferentes.
+     */
+    public function bloqueioDoPedido(): ?string
+    {
+        if ($this->status_gestor === 'rejeitado') {
+            return 'A margem foi rejeitada.';
+        }
+
+        if ($this->status_gestor !== 'aprovado') {
+            return 'Falta a aprovação de margem.';
+        }
+
+        if ($this->resposta_cliente !== 'aprovado') {
+            return 'Falta registrar o aceite do cliente.';
+        }
+
+        return null;
+    }
+
+    /**
+     * A etapa como expressão SQL — a ÚNICA definição dela: conta o funil e filtra a lista.
+     *
+     * ⚠️ A ordem dos WHEN é a regra de precedência, e é o que torna as etapas exclusivas:
+     * pedido vence tudo (virou pedido, acabou); depois perdido (margem rejeitada OU cliente
+     * recusou — um "não" basta); depois a margem pendente (aceite antecipado do cliente
+     * continua esperando a margem); depois o aceite. Reordenar muda os números sem erro.
+     */
+    public static function sqlEtapa(): string
+    {
+        return "CASE
+            WHEN portal_pedido_id IS NOT NULL THEN 'pedido'
+            WHEN status_gestor = 'rejeitado' OR resposta_cliente = 'recusado' THEN 'perdido'
+            WHEN status_gestor = 'pendente' THEN 'aguardando_margem'
+            WHEN resposta_cliente IS NULL THEN 'aguardando_cliente'
+            ELSE 'pronto'
+        END";
+    }
+
+    /** "Aceitou", "Recusou: Preço", "Recusou: <texto do Outros>" — null quando aguardando. */
+    public function rotuloRespostaCliente(): ?string
+    {
+        if ($this->resposta_cliente === 'aprovado') {
+            return 'Aceitou';
+        }
+
+        if ($this->resposta_cliente !== 'recusado') {
+            return null;
+        }
+
+        $motivo = $this->motivo_recusa_cliente === 'outros' && filled($this->motivo_recusa_cliente_texto)
+            ? $this->motivo_recusa_cliente_texto
+            : (self::MOTIVOS_RECUSA_CLIENTE[$this->motivo_recusa_cliente] ?? 'sem motivo');
+
+        return 'Recusou: '.$motivo;
+    }
+
+    public function registrarRespostaCliente(User $por, string $resposta, ?string $motivo, ?string $texto): void
+    {
+        $recusou = $resposta === 'recusado';
+
+        $this->forceFill([
+            'resposta_cliente' => $resposta,
+            'motivo_recusa_cliente' => $recusou ? $motivo : null,
+            'motivo_recusa_cliente_texto' => $recusou && $motivo === 'outros' ? $texto : null,
+            'resposta_cliente_por_id' => $por->id,
+            'resposta_cliente_em' => now(),
+        ])->save();
+    }
+
+    /** Volta a "aguardando". Usado quando o orçamento é editado: o cliente aceitou outro documento. */
+    public function limparRespostaCliente(): void
+    {
+        $this->forceFill([
+            'resposta_cliente' => null,
+            'motivo_recusa_cliente' => null,
+            'motivo_recusa_cliente_texto' => null,
+            'resposta_cliente_por_id' => null,
+            'resposta_cliente_em' => null,
+        ])->save();
     }
 
     public function itens(): HasMany

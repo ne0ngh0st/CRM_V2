@@ -418,7 +418,7 @@ class ViewsBi
                 o.tipo_produto_servico,
                 o.valor_total,
                 CAST(NULL AS CHAR(20)) AS status,
-                CAST(NULL AS CHAR(20)) AS status_cliente,
+                o.resposta_cliente AS status_cliente,
                 o.status_gestor,
                 o.motivo_rejeicao AS motivo_recusa,
                 o.forma_pagamento,
@@ -430,7 +430,7 @@ class ViewsBi
                 END AS origem_cliente,
                 o.created_at AS data_criacao,
                 o.data_validade,
-                CAST(NULL AS DATETIME) AS data_aprovacao_cliente,
+                CASE WHEN o.resposta_cliente = \'aprovado\' THEN o.resposta_cliente_em END AS data_aprovacao_cliente,
                 o.aprovado_em AS data_aprovacao_gestor
             FROM '.self::a('orcamentos').' o
             LEFT JOIN '.self::a('clientes').' c ON c.id = o.cliente_id
