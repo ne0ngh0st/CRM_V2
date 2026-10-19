@@ -140,6 +140,7 @@ const fieldClass = 'mt-1 block w-full rounded border-gray-300 text-xs focus:bord
                                 <option value="kpr">KPR</option>
                                 <option value="termobank">TERMOBANK</option>
                                 <option value="termoticket">Termoticket</option>
+                                <option value="offset">Offset</option>
                             </select>
                         </div>
                         <div>
@@ -150,6 +151,7 @@ const fieldClass = 'mt-1 block w-full rounded border-gray-300 text-xs focus:bord
                             </select>
                             <p class="mt-1 text-[0.65rem] leading-3 text-gray-400">
                                 O título TOTVS segue a gramatura: 44 → TS KPH BC · 48 → TÉRMICO · 55 → TERMOSCRIPT.
+                                Papel Offset entra no título como OFFSET.
                             </p>
                         </div>
                     </div>

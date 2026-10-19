@@ -320,7 +320,7 @@ class CadastroController extends Controller
             'personalizacao' => ['nullable', Rule::in(['personalizada', 'sem_impressao'])],
             'unidade_venda' => ['nullable', Rule::in(['caixa', 'unidade'])],
             'quantidade_caixa' => ['nullable', 'integer', 'min:0'],
-            'papel' => ['nullable', Rule::in(['termicco', 'termoscript', 'kpr', 'termobank', 'termoticket'])],
+            'papel' => ['nullable', Rule::in(['termicco', 'termoscript', 'kpr', 'termobank', 'termoticket', 'offset'])],
             'gramatura' => ['nullable', Rule::in(['44', '48', '55', '72', '105', '167'])],
             'largura' => ['nullable', Rule::in(['50', '55', '57', '58', '60', '69', '76', '80', '82', '88', '100', '104', '105', '110', '111', '112', '210', '400'])],
             'metragem' => ['nullable', 'numeric', 'min:0'],

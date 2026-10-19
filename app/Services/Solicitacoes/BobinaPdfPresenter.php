@@ -37,6 +37,8 @@ class BobinaPdfPresenter
         'termoscript' => 'Termoscript',
         'kpr' => 'KPR',
         'termobank' => 'Termobank',
+        'termoticket' => 'Termoticket',
+        'offset' => 'Offset',
     ];
 
     /** O NCM faz parte do rótulo no legado — é o que o Cadastro usa pra abrir o item. */

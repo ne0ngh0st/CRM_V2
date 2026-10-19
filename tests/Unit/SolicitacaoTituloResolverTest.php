@@ -63,6 +63,12 @@ class SolicitacaoTituloResolverTest extends TestCase
             'BOBINA TERMOTICKET 57X22M CLIENTE X',
             $this->resolver->bobina('CLIENTE X', 'termoticket', '57', '22', '105'),
         );
+
+        // Offset não é térmico: a gramatura 48 não pode rebatizar o item.
+        $this->assertSame(
+            'BOBINA OFFSET 80X30M CLIENTE X',
+            $this->resolver->bobina('CLIENTE X', 'offset', '80', '30', '48'),
+        );
     }
 
     public function test_bobina_formata_dimensoes(): void

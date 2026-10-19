@@ -31,6 +31,7 @@ class SolicitacaoTituloResolver
         'kpr' => 'KPR',
         'termobank' => 'TERMOBANK',
         'termoticket' => 'TERMOTICKET',
+        'offset' => 'OFFSET',
     ];
 
     public function bobina(
@@ -42,7 +43,12 @@ class SolicitacaoTituloResolver
     ): string {
         $partes = ['BOBINA'];
 
-        $tipoPapel = $this->nomenclaturaPorGramatura($gramatura) ?? $this->nomePapel($papel);
+        // 44/48/55 nomeiam papel térmico. Offset com essas gramaturas viraria
+        // "BOBINA TERMICO" e o Cadastro abriria o item errado no TOTVS.
+        $papelNome = $this->nomePapel($papel);
+        $tipoPapel = strtolower((string) $papel) === 'offset'
+            ? $papelNome
+            : ($this->nomenclaturaPorGramatura($gramatura) ?? $papelNome);
 
         if ($tipoPapel) {
             $partes[] = $tipoPapel;

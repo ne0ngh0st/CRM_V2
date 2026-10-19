@@ -46,6 +46,25 @@ class SolicitacaoTituloTest extends TestCase
         );
     }
 
+    /** Offset é papel válido e o título não herda o nome térmico da gramatura. */
+    public function test_bobina_offset_entra_no_titulo(): void
+    {
+        $this->actingAs($this->vendedor())
+            ->post(route('cadastros.bobinas.store'), [
+                'nomenclatura' => 'CLIENTE X',
+                'papel' => 'offset',
+                'gramatura' => '48',
+                'largura' => '80',
+                'metragem' => 30,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $bobina = SolicitacaoBobina::sole();
+        $this->assertSame('offset', $bobina->papel);
+        $this->assertSame('BOBINA OFFSET 80X30M CLIENTE X', $bobina->titulo_padronizado);
+    }
+
     public function test_titulo_da_etiqueta_usa_a_metragem_e_ignora_a_saida_de_rolo(): void
     {
         $this->actingAs($this->vendedor())
