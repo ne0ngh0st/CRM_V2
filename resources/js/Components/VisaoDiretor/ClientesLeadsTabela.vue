@@ -29,9 +29,18 @@ defineProps({
 // Os dois botões da linha: quem abre o cartão/mapa é a página (`MaioresPorSegmento.vue`).
 const emit = defineEmits(['cartao-cnpj', 'mapa']);
 
-function hrefDaLinha(l) {
+// Rede do ranking da ABRAS (aba Supermercadista) ou rede da Maiores redes que juntou
+// várias empresas: os clientes dela, na Carteira.
+function hrefDaLinha(l, extra = {}) {
+    if (l.contaId) {
+        return route('carteira.index', { conta_alvo: l.contaId, ...extra });
+    }
+    if (l.redeId) {
+        return route('carteira.index', { rede_alvo: l.redeId, ...extra });
+    }
+
     return l.tipo === 'cliente'
-        ? route('carteira.index', { busca: l.buscaCarteira })
+        ? route('carteira.index', { busca: l.buscaCarteira, ...extra })
         : route('leads.index', { busca: l.documento || l.nome });
 }
 </script>
@@ -60,11 +69,21 @@ function hrefDaLinha(l) {
                         14/10/2026). Embaixo a marca e o CNPJ.
                     -->
                     <td class="tbl-td tbl-td-titulo">
-                        <Link :href="hrefDaLinha(l)" class="tbl-main text-teal hover:underline sm:max-w-[380px]" :title="l.nome">
-                            <span class="mr-1 tabular-nums text-gray-400">{{ posicaoInicial + i }}.</span>{{ l.nome }}
-                        </Link>
+                        <!-- Rede sem cliente nosso não tem para onde levar. -->
+                        <component
+                            :is="l.contaId && l.tipo === 'lead' ? 'span' : Link"
+                            :href="l.contaId && l.tipo === 'lead' ? undefined : hrefDaLinha(l)"
+                            class="tbl-main sm:max-w-[380px]"
+                            :class="l.contaId && l.tipo === 'lead' ? 'text-gray-700' : 'text-teal hover:underline'"
+                            :title="l.nome"
+                        >
+                            <!-- Na aba Supermercadista o número é a posição no ranking da ABRAS. -->
+                            <span class="mr-1 tabular-nums text-gray-400" :title="l.posicao ? 'Posição no ranking ABRAS' : null">{{ l.posicao ?? posicaoInicial + i }}.</span>{{ l.nome }}
+                        </component>
                         <span v-if="l.nomeFantasia" class="tbl-sub mx-auto truncate sm:max-w-[380px]" :title="l.nomeFantasia">{{ l.nomeFantasia }}</span>
-                        <span class="tbl-sub">{{ l.documento || 'sem CNPJ' }} · {{ l.tipo === 'lead' ? 'Lead' : 'Cliente' }}</span>
+                        <span v-if="l.contaId" class="tbl-sub">{{ l.documento ? `${l.documento} · ` : '' }}Rede do ranking ABRAS</span>
+                        <span v-else-if="l.redeId" class="tbl-sub">Rede · {{ formatInteiro(l.empresas) }} empresas</span>
+                        <span v-else class="tbl-sub">{{ l.documento || 'sem CNPJ' }} · {{ l.tipo === 'lead' ? 'Lead' : 'Cliente' }}</span>
                     </td>
                     <td class="tbl-td" data-rotulo="Grupo">
                         <span v-if="l.grupo" class="tbl-trunc sm:max-w-[200px]" :title="l.grupo">{{ l.grupo }}</span>
@@ -83,7 +102,7 @@ function hrefDaLinha(l) {
                     <td class="tbl-td tabular-nums" data-rotulo="Filiais">
                         <Link
                             v-if="l.filiais !== null"
-                            :href="route('carteira.index', { busca: l.buscaCarteira, agrupar: 0 })"
+                            :href="hrefDaLinha(l, { agrupar: 0 })"
                             class="tbl-main font-semibold text-teal hover:underline"
                             title="Abrir estas filiais na Carteira"
                         >{{ formatInteiro(l.filiais) }}</Link>
@@ -102,7 +121,7 @@ function hrefDaLinha(l) {
                             <button
                                 type="button"
                                 class="tbl-acao tbl-acao-teal"
-                                :title="l.temCnpj ? 'Ver no Google Maps (endereço da Receita)' : 'Sem CNPJ: sem endereço da Receita'"
+                                :title="l.temCnpj ? 'Ver no Google Maps (endereço da Receita)' : l.redeId ? 'Rede com várias empresas: abra as filiais na Carteira' : 'Sem CNPJ: sem endereço da Receita'"
                                 :disabled="! l.temCnpj"
                                 @click="emit('mapa', l)"
                             >
@@ -114,7 +133,7 @@ function hrefDaLinha(l) {
                             <button
                                 type="button"
                                 class="tbl-acao tbl-acao-navy"
-                                :title="l.temCnpj ? 'Verificar cartão CNPJ' : 'Sem CNPJ de 14 dígitos'"
+                                :title="l.temCnpj ? 'Verificar cartão CNPJ' : l.redeId ? 'Rede com várias empresas: cada uma tem o seu CNPJ' : 'Sem CNPJ de 14 dígitos'"
                                 :disabled="! l.temCnpj"
                                 @click="emit('cartao-cnpj', l)"
                             >

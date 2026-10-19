@@ -37,6 +37,9 @@ class ContaEstrategica extends Model
     protected $casts = [
         'filiais_mercado' => 'integer',
         'ordem' => 'integer',
+        'posicao_abras' => 'integer',
+        'faturamento_abras' => 'integer',
+        'faturamento_abras_ano' => 'integer',
         'vinculos_versao' => 'integer',
     ];
 

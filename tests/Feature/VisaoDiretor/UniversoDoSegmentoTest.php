@@ -46,15 +46,15 @@ class UniversoDoSegmentoTest extends TestCase
         $this->admin->assignRole('admin');
 
         Segmento::create(['codigo' => '109', 'nome' => 'DROGARIAS']);
-        Segmento::create(['codigo' => '101', 'nome' => 'SUPERMERCADISTA']);
+        Segmento::create(['codigo' => '104', 'nome' => 'REDE DE LOJAS']);
 
         $hoje = now();
         // Empresa 11111111: DOIS códigos no TOTVS. Duas filiais em drogaria (velhas) pelo
-        // 000001, uma em drogaria pelo 000006 e uma em supermercado (recente).
+        // 000001, uma em drogaria pelo 000006 e uma em rede de lojas (recente).
         $this->cliente('000001', '01', '109', '11111111000101', $hoje->copy()->subDays(400), 'RAIA - CENTRO');
         $this->cliente('000001', '02', '109', '11111111000202', $hoje->copy()->subDays(500), 'RAIA - SUL');
         $this->cliente('000006', '01', '109', '11111111000404', $hoje->copy()->subDays(450), 'ENTREGA');
-        $this->cliente('000001', '03', '101', '11111111000303', $hoje->copy()->subDays(10), 'RAIA MERCADO');
+        $this->cliente('000001', '03', '104', '11111111000303', $hoje->copy()->subDays(10), 'RAIA MERCADO');
         // 000002: perdendo; 000003: nunca comprou; 000004: ativo, sem capital na Receita.
         $this->cliente('000002', '01', '109', '22222222000101', $hoje->copy()->subDays(300));
         $this->cliente('000003', '01', '109', '33333333000101', null);
@@ -145,15 +145,15 @@ class UniversoDoSegmentoTest extends TestCase
 
         $this->assertCount(1, $empresa);
         $linha = $empresa->first();
-        // TODAS as filiais da empresa, dos dois códigos: 3 de drogaria + 1 de supermercado.
+        // TODAS as filiais da empresa, dos dois códigos: 3 de drogaria + 1 de rede de lojas.
         $this->assertSame(4, $linha['filiais']);
         // Âncora = matriz (/0001): é dela a razão social e o CNPJ.
         $this->assertSame('CLIENTE 000001', $linha['nome']);
         $this->assertSame('11.111.111/0001-01', $linha['documento']);
-        // A última compra é a de TODAS as filiais da empresa (10 dias, pelo supermercado).
+        // A última compra é a de TODAS as filiais da empresa (10 dias, pelo rede de lojas).
         $this->assertSame('ativo', $linha['status']);
-        // A filial de supermercado não leva a empresa para aquela aba.
-        $this->assertNull(collect($this->lista([], '101')['dados'])->firstWhere('buscaCarteira', '11.111.111'));
+        // A filial de rede de lojas não leva a empresa para aquela aba.
+        $this->assertNull(collect($this->lista([], '104')['dados'])->firstWhere('buscaCarteira', '11.111.111'));
     }
 
     public function test_filiais_batem_com_a_carteira_que_o_clique_abre(): void
@@ -174,8 +174,103 @@ class UniversoDoSegmentoTest extends TestCase
         // Cada empresa numa aba só: a soma das filiais de todas as abas é a Carteira inteira.
         $this->assertSame(
             $this->totalDaCarteira(['agrupar' => 0]),
-            collect(['109', '101'])->sum(fn ($s) => collect($this->lista([], $s)['dados'])->sum('filiais')),
+            collect(['109', '104'])->sum(fn ($s) => collect($this->lista([], $s)['dados'])->sum('filiais')),
         );
+    }
+
+    // ─── Empresas da mesma rede (Maiores redes) viram uma linha ────────────────
+
+    private function rede(string $nome, array $codigos, bool $recusado = false): int
+    {
+        $id = DB::table('redes_mercado')->insertGetId([
+            'categoria' => 'drogarias', 'posicao' => 1, 'nome' => $nome, 'qualidade' => 'alta',
+            'linha_original' => $nome, 'ativa' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        foreach ($codigos as $codigo) {
+            DB::table('redes_mercado_vinculos')->insert([
+                'rede_id' => $id, 'tipo' => 'cliente', 'codigo' => $codigo, 'nivel' => 'nome',
+                'recusado' => $recusado, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        return $id;
+    }
+
+    public function test_empresas_da_mesma_rede_viram_uma_linha_com_o_nome_da_rede(): void
+    {
+        // Três empresas (11111111 pelos dois códigos, 22222222 e 44444444) numa rede.
+        $rede = $this->rede('DROGARIA GRANDE', ['000001', '000002', '000004']);
+        app(UniversoDoSegmento::class)->reconstruir();
+
+        $dados = collect($this->lista()['dados']);
+        $linha = $dados->firstWhere('redeId', $rede);
+
+        $this->assertNotNull($linha);
+        $this->assertSame('DROGARIA GRANDE', $linha['nome']);
+        // 4 filiais da 11111111 (inclusive a do 000006, mesma raiz) + 1 + 1.
+        $this->assertSame(6, $linha['filiais']);
+        $this->assertSame('ativo', $linha['status']);
+        $this->assertSame(3, $linha['empresas']);
+        // A âncora pode ser um franqueado: nem a razão social nem o CNPJ dela vão na linha.
+        $this->assertNull($linha['nomeFantasia']);
+        $this->assertNull($linha['documento']);
+        $this->assertFalse($linha['temCnpj']);
+        // As linhas das empresas saíram.
+        $empresas = $dados->whereNull('redeId');
+        $this->assertNull($empresas->firstWhere('buscaCarteira', '11.111.111'));
+        $this->assertNull($empresas->firstWhere('buscaCarteira', '22.222.222'));
+        $this->assertNull($empresas->firstWhere('buscaCarteira', '44.444.444'));
+        $this->assertNotNull($empresas->firstWhere('buscaCarteira', '33.333.333'));
+        $this->assertCount(1, $dados->where('redeId', $rede));
+    }
+
+    public function test_filiais_da_rede_batem_com_a_carteira_que_o_clique_abre(): void
+    {
+        $rede = $this->rede('DROGARIA GRANDE', ['000001', '000002']);
+        app(UniversoDoSegmento::class)->reconstruir();
+
+        $linha = collect($this->lista()['dados'])->firstWhere('redeId', $rede);
+
+        $this->assertSame($linha['filiais'], $this->totalDaCarteira(['rede_alvo' => $rede, 'agrupar' => 0]));
+        // Juntar não perde nem duplica filial: a soma das abas continua a Carteira inteira.
+        $this->assertSame(
+            $this->totalDaCarteira(['agrupar' => 0]),
+            collect(['109', '104'])->sum(fn ($s) => collect($this->lista([], $s)['dados'])->sum('filiais')),
+        );
+    }
+
+    public function test_rede_com_uma_empresa_so_ou_vinculo_recusado_nao_junta(): void
+    {
+        $sozinha = $this->rede('SO UMA', ['000001', '000006']);
+        $recusada = $this->rede('RECUSADA', ['000002', '000004'], recusado: true);
+        app(UniversoDoSegmento::class)->reconstruir();
+
+        $dados = collect($this->lista()['dados']);
+
+        $this->assertNull($dados->firstWhere('redeId', $sozinha));
+        $this->assertNull($dados->firstWhere('redeId', $recusada));
+        $this->assertNotNull($dados->firstWhere('buscaCarteira', '11.111.111'));
+        $this->assertNotNull($dados->firstWhere('buscaCarteira', '22.222.222'));
+        // Rede sem linha juntada não abre a carteira inteira na Carteira.
+        $this->assertSame(0, $this->totalDaCarteira(['rede_alvo' => $sozinha, 'agrupar' => 0]));
+    }
+
+    public function test_filtro_de_rede_na_carteira_so_vale_para_a_visao_diretor(): void
+    {
+        $rede = $this->rede('DROGARIA GRANDE', ['000001', '000002']);
+        app(UniversoDoSegmento::class)->reconstruir();
+
+        $supervisor = User::factory()->create(['is_active' => true]);
+        $supervisor->assignRole('supervisor');
+
+        $this->actingAs($supervisor)
+            ->get(route('carteira.index', ['rede_alvo' => $rede]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('filtros.redeAlvo', null));
+
+        $this->actingAs($this->admin)
+            ->get(route('carteira.index', ['rede_alvo' => $rede]))
+            ->assertInertia(fn (Assert $page) => $page->where('filtros.redeAlvo.nome', 'DROGARIA GRANDE'));
     }
 
     public function test_nome_fantasia_e_a_marca_e_ignora_marcador_do_cadastro(): void
@@ -226,14 +321,14 @@ class UniversoDoSegmentoTest extends TestCase
      */
     public function test_filial_no_segmento_errado_nao_leva_a_empresa_para_outra_aba(): void
     {
-        // Duas em supermercado, uma (a matriz!) em drogaria: vale a maioria, não a matriz.
+        // Duas em rede de lojas, uma (a matriz!) em drogaria: vale a maioria, não a matriz.
         $this->cliente('000030', '01', '109', '30303030000101', now()->subDays(5), 'AMPLA');
-        $this->cliente('000030', '02', '101', '30303030000202', now()->subDays(5), 'AMPLA');
-        $this->cliente('000030', '03', '101', '30303030000303', now()->subDays(5), 'AMPLA');
+        $this->cliente('000030', '02', '104', '30303030000202', now()->subDays(5), 'AMPLA');
+        $this->cliente('000030', '03', '104', '30303030000303', now()->subDays(5), 'AMPLA');
         app(UniversoDoSegmento::class)->reconstruir();
 
         $this->assertNull(collect($this->lista([], '109')['dados'])->firstWhere('buscaCarteira', '30.303.030'));
-        $this->assertSame(3, collect($this->lista([], '101')['dados'])->firstWhere('buscaCarteira', '30.303.030')['filiais']);
+        $this->assertSame(3, collect($this->lista([], '104')['dados'])->firstWhere('buscaCarteira', '30.303.030')['filiais']);
 
         $empresas = (int) DB::table('clientes')->selectRaw('COUNT(DISTINCT LEFT(cnpj_digitos, 8)) n')->value('n');
         $this->assertSame($empresas, collect(app(UniversoDoSegmento::class)->resumo())->sum('clientes'));
@@ -243,15 +338,15 @@ class UniversoDoSegmentoTest extends TestCase
     {
         // Uma filial em cada segmento: a matriz decide, nos dois sentidos (senão a ordem do
         // código do segmento ou do id passaria por regra).
-        $this->cliente('000031', '02', '101', '31313131000202', now(), 'A');
+        $this->cliente('000031', '02', '104', '31313131000202', now(), 'A');
         $this->cliente('000031', '01', '109', '31313131000101', now(), 'A');
         $this->cliente('000032', '02', '109', '32323232000202', now(), 'B');
-        $this->cliente('000032', '01', '101', '32323232000101', now(), 'B');
+        $this->cliente('000032', '01', '104', '32323232000101', now(), 'B');
         app(UniversoDoSegmento::class)->reconstruir();
 
         $this->assertNotNull(collect($this->lista([], '109')['dados'])->firstWhere('buscaCarteira', '31.313.131'));
-        $this->assertNull(collect($this->lista([], '101')['dados'])->firstWhere('buscaCarteira', '31.313.131'));
-        $this->assertNotNull(collect($this->lista([], '101')['dados'])->firstWhere('buscaCarteira', '32.323.232'));
+        $this->assertNull(collect($this->lista([], '104')['dados'])->firstWhere('buscaCarteira', '31.313.131'));
+        $this->assertNotNull(collect($this->lista([], '104')['dados'])->firstWhere('buscaCarteira', '32.323.232'));
         $this->assertNull(collect($this->lista([], '109')['dados'])->firstWhere('buscaCarteira', '32.323.232'));
     }
 
@@ -259,20 +354,20 @@ class UniversoDoSegmentoTest extends TestCase
     {
         // Empate 3 × 3 (matriz em drogaria), MAIOR que a 11111111 (4 filiais): sem a regra
         // "sem empate primeiro", ela viria antes pelo tamanho.
-        foreach (['02' => '101', '03' => '101', '04' => '101', '01' => '109', '05' => '109', '06' => '109'] as $loja => $seg) {
+        foreach (['02' => '104', '03' => '104', '04' => '104', '01' => '109', '05' => '109', '06' => '109'] as $loja => $seg) {
             $this->cliente('000031', $loja, $seg, "3131313100{$loja}{$loja}", now(), 'A');
         }
 
         $linhas = collect(app(UniversoDoSegmento::class)->filiaisForaDoSegmento());
 
-        // A filial de supermercado da 11111111 (empresa de drogaria) e as três do empate.
+        // A filial de rede de lojas da 11111111 (empresa de drogaria) e as três do empate.
         $this->assertSame(
             ['11.111.111/0003-03', '31.313.131/0002-02', '31.313.131/0003-03', '31.313.131/0004-04'],
             $linhas->pluck('cnpj')->sort()->values()->all(),
         );
         $raia = $linhas->firstWhere('cnpj', '11.111.111/0003-03');
         $this->assertSame(
-            ['DROGARIAS', 'SUPERMERCADISTA', 3, 4, 1],
+            ['DROGARIAS', 'REDE DE LOJAS', 3, 4, 1],
             [$raia['segmento_empresa'], $raia['segmento_cadastrado'], (int) $raia['filiais'], (int) $raia['total'], (int) $raia['empate']],
         );
         $this->assertSame(2, (int) $linhas->firstWhere('cnpj', '31.313.131/0002-02')['empate']);
@@ -391,7 +486,7 @@ class UniversoDoSegmentoTest extends TestCase
 
         $resumo = collect(app(UniversoDoSegmento::class)->resumo())->keyBy('codigo');
 
-        foreach (['109', '101'] as $segmento) {
+        foreach (['109', '104'] as $segmento) {
             $tiles = $this->lista([], $segmento)['contagens'];
             foreach (['total', 'clientes', 'leads', 'ativo', 'inativando', 'inativo', 'lead', 'conquistar'] as $chave) {
                 $this->assertSame($tiles[$chave], $resumo[$segmento][$chave], "Resumo {$segmento}.{$chave}");
@@ -399,7 +494,7 @@ class UniversoDoSegmentoTest extends TestCase
         }
 
         // Do maior segmento para o menor (é também a ordem das abas).
-        $this->assertSame(['109', '101'], $resumo->pluck('codigo')->take(2)->all());
+        $this->assertSame(['109', '104'], $resumo->pluck('codigo')->take(2)->all());
     }
 
     public function test_busca_e_uf(): void
@@ -418,17 +513,17 @@ class UniversoDoSegmentoTest extends TestCase
      */
     public function test_busca_procura_em_todos_os_segmentos_e_a_aba_vem_primeiro(): void
     {
-        // Uma drogaria cadastrada como supermercado.
-        $this->cliente('000009', '01', '101', '99999999000101', now()->subDays(5), 'DROGA ERRADA');
+        // Uma drogaria cadastrada como rede de lojas.
+        $this->cliente('000009', '01', '104', '99999999000101', now()->subDays(5), 'DROGA ERRADA');
         app(UniversoDoSegmento::class)->reconstruir();
 
         $naDrogaria = $this->lista(['busca' => 'droga errada']);
         $this->assertTrue($naDrogaria['todosOsSegmentos']);
-        $this->assertSame([['101', 'SUPERMERCADISTA']], collect($naDrogaria['dados'])->map(fn ($l) => [$l['segmentoCodigo'], $l['segmentoNome']])->all());
+        $this->assertSame([['104', 'REDE DE LOJAS']], collect($naDrogaria['dados'])->map(fn ($l) => [$l['segmentoCodigo'], $l['segmentoNome']])->all());
 
         // A empresa com filiais nos dois segmentos: uma linha, a do segmento dela, nas duas abas.
         $this->assertSame(['109'], collect($this->lista(['busca' => 'raia'], '109')['dados'])->pluck('segmentoCodigo')->all());
-        $this->assertSame(['109'], collect($this->lista(['busca' => 'raia'], '101')['dados'])->pluck('segmentoCodigo')->all());
+        $this->assertSame(['109'], collect($this->lista(['busca' => 'raia'], '104')['dados'])->pluck('segmentoCodigo')->all());
 
         // Começo de palavra, com separador no termo ou no texto; "meio de palavra" não casa.
         $this->assertSame(1, $this->lista(['busca' => 'droga-errada'])['linhas']->total());
@@ -444,7 +539,7 @@ class UniversoDoSegmentoTest extends TestCase
         $raia = $this->lista(['busca' => 'raia']);
         $this->assertSame($raia['contagens']['total'], $raia['linhas']->total());
         $this->assertSame($raia['contagens']['ativo'], $this->lista(['busca' => 'raia', 'status' => 'ativo'])['linhas']->total());
-        // Ativa: o status é pela última compra de TODAS as filiais (a de supermercado, 10 dias).
+        // Ativa: o status é pela última compra de TODAS as filiais (a de rede de lojas, 10 dias).
         $this->assertSame(1, $raia['contagens']['ativo']);
 
         // O Excel leva o mesmo recorte, com o segmento de cada linha na última coluna.

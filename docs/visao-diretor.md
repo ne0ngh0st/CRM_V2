@@ -113,6 +113,43 @@ dele (não reabrir sem ele pedir):
   tabelas. Drop não tem volta — por isso ficou para depois.
   ⚠️ **Desde 2026-10-16 `SugestaoDeVinculo`, `VinculoPorCliente`, `VinculoPorRazaoSocial`
   e `TermoDeBusca` são usados pela página Maiores redes (§2b) e NÃO entram na Fase 2.**
+  ⚠️ **Desde 2026-10-19 também ficam: `ContaEstrategica` + vínculos, `ClientesDaConta`, o
+  ranking ABRAS e o `?conta_alvo=` da Carteira** — são a aba Supermercadista.
+
+- **Supermercadista = só o ranking da ABRAS (Tony, 2026-10-19).** Uma linha por rede com
+  `contas_estrategicas.posicao_abras` (gravada pelo `diretor:importar-ranking-abras`), na
+  ordem do ranking, com o número da posição na frente do nome. Filiais, status e capital
+  vêm dos clientes ligados à rede (`ClientesDaConta`), e o clique abre
+  `/carteira?conta_alvo=`. Rede sem cliente nosso aparece como Lead. Saem da aba o
+  supermercado fora do ranking, a conta criada à mão e os leads do segmento; a empresa
+  ligada a uma rede sai também da aba em que estava. Regra em
+  `UniversoDoSegmento::trocarSupermercadistaPeloRanking()`.
+  ⚠️ Consequência aceita: a soma das filiais das abas deixa de ser a Carteira inteira.
+  ⚠️ **O Excel do 101 é outra lista** (a pesquisa, 2026-10-19): clientes do segmento, leads
+  de sistema e prospecção que não são essa empresa, e redes da ABRAS que não ligaram
+  nenhuma delas. A tela segue só o ranking. Lojas ativas na Receita e faturamento anual
+  (ABRAS primeiro; fora dela, o que a web declarou, com a URL guardada) só existem nessa
+  planilha. Ver "Planilha de pesquisa" abaixo.
+
+- **Nas outras abas, empresas da mesma rede da Maiores redes viram UMA linha (Tony,
+  2026-10-19).** RAIA DROGASIL (89 empresas, 4.873 filiais no dev), CHIQUINHO SORVETES
+  (1.086 franqueados), O BOTICÁRIO… Vale todo vínculo de cliente não recusado (nome, grupo,
+  produto, mesma empresa, manual); cada empresa vai para a rede que tem mais filiais dela, e
+  só junta rede com 2+ empresas. Regra em `UniversoDoSegmento::juntarPorRede()`, que roda
+  depois da troca da Supermercadista (a rede da ABRAS vence).
+  - A linha leva o nome da rede, `rede_id` e `empresas`; filiais, última compra, capital
+    (maior) e porte (maior) são da rede inteira; vendedor, grupo e UF de fallback vêm da
+    **âncora** (a empresa com mais filiais). ⚠️ Razão social e CNPJ da âncora NÃO aparecem
+    (a âncora pode ser um franqueado), e Maps/cartão CNPJ ficam desligados na linha.
+  - A aba é a do segmento com mais filiais da rede.
+  - O clique abre `/carteira?rede_alvo=<id>` (gate `ver-visao-diretor`, como o
+    `conta_alvo`). As filiais saem de `visao_diretor_universo_filiais`, escrita só pelo
+    `reconstruir()` e lida só por `FiliaisDaRede` — por isso as filiais da linha batem com a
+    Carteira e a soma das abas continua sendo a Carteira inteira (fora a Supermercadista).
+  - ⚠️ Ordem no `totvs:atualizar`: `vincular-redes` ANTES de `reconstruir-universo`.
+    Vínculo editado à mão na Maiores redes só aparece aqui na reconstrução seguinte.
+  - ⚠️ Buscar pelo CNPJ de uma empresa-membro não acha a linha da rede (só a âncora fica
+    gravada); pelo nome da rede, acha.
 
 Medido no dev (14/10): tabela 44-54 ms, Resumo 110 ms, UFs 77 ms; reconstrução ~26 s
 (era ~14 s — o passo do fantasia por empresa). A busca segue em ~430 ms (a regex do
@@ -303,7 +340,10 @@ php artisan diretor:importar-ranking-abras --dry-run --detalhe
   das nossas filiais) ao lado da razão social da ABRAS. "S.S. COMÉRCIO DE ALIMENTOS" virou
   "S.S. COMÉRCIO" porque, sem palavra de marca, o nome casava qualquer "Comércio de
   Alimentos" da base. Ranking do ano seguinte: gerar outro JSON e rodar de novo.
-- ⚠️ **Sem faturamento** — nem na tela nem no arquivo (decisão do Tony, 2026-10-08).
+- ⚠️ **A tela segue sem faturamento** (decisão do Tony, 2026-10-08). O JSON e a planilha de
+  pesquisa do 101 guardam o número do PDF, já em reais (cabeçalho "Faturamento (R$)"; o
+  ranking de 2026 publica o exercício de 2025). Quem não está no ranking fica com o que a
+  web declarou, ou com a célula vazia — vazio não é zero.
 - Idempotente pela chave de nome da prospecção (`chaveDeNome`): rodar de novo atualiza a
   posição (= `ordem`) e não duplica; nome, observação e UF já preenchidos não mudam. Conta
   da aba fora do ranking vai para depois dele.
@@ -338,6 +378,30 @@ lido pela carga mensal no campo 11 do Estabelecimentos e gravado também pelo ca
 - Produção (08/10): 4.296 dos 14.101 leads `sistema` ativos eram supermercado/mercearia;
   o resto é calçados, entrega e logística. Assaí, GPA e Sonda foram ligados à mão (grupos
   60 e 10, códigos 000911 e 005507): o nome do ranking não bate com o do cliente.
+
+### Planilha de pesquisa do supermercadista (2026-10-19)
+
+O Excel `maiores-por-segmento-101` não é a tela. A tela continua só o ranking. A planilha
+lista o segmento inteiro: uma linha por empresa cliente (raiz calculada na hora, nunca
+coluna), os leads `sistema` e `prospeccao` do segmento que não são essa empresa, e a rede
+da ABRAS que não ligou nenhuma delas. Quem já é cliente aparece uma vez, na linha da
+empresa, com a posição na frente do nome e o faturamento da rede.
+
+- **Lojas ativas na Receita** não é a coluna Filiais (essa é o que está no TOTVS). A carga
+  `receita:importar-situacoes` conta, no zip inteiro, estabelecimento ATIVO com CNAE de
+  loja (o mapa de `SegmentoDosLeads`) e grava o total em `cnpj_situacoes.lojas_receita`,
+  repetido em cada CNPJ da raiz. `--arquivo` não mexe nessa coluna: um zip só zeraria o
+  que está nos outros. A primeira vez pede `--forcar`. Rede sem CNPJ fica em branco.
+- **Faturamento anual** vem de `faturamento_mercado`. A ABRAS prevalece
+  (`diretor:importar-ranking-abras` copia o número da conta para a âncora). Quem não está
+  lá entra por `pesquisa:faturamento-mercado` (Firecrawl, país BR): o número que a página
+  declara como faturamento ou receita bruta, do ano mais recente, com a URL. Capital
+  social, média de setor e número sem ano ficam de fora. Já consultada e sem número não
+  é buscada de novo até o ano seguinte. O Excel não dispara busca.
+- ⚠️ O faturamento da rede é o publicado pela ABRAS, mesmo que a contagem de lojas só
+  alcance as raízes que já são cliente ou lead nosso. Holding com bandeira em outro CNPJ
+  não soma loja que a gente não conhece.
+- As outras abas continuam saindo de `UniversoDoSegmento::tudo()` e terminam em `Segmento`.
 
 ### Uma tabela por segmento: redes, clientes e leads (2026-10-13)
 
@@ -465,7 +529,8 @@ Não é a Maiores por Segmento (que lista NOSSOS clientes por segmento do TOTVS)
 | A planilha limpa | `database/data/visao-diretor/redes-mercado-2026.json`, gerado por `scripts/redes_mercado_xlsx_para_json.py` (decisões linha a linha em `DECISOES`, lojas pesquisadas em `LOJAS`) |
 | As 11 categorias e o segmento TOTVS equivalente | `CategoriasDeRede` |
 | As redes e os contadores | `redes_mercado` |
-| Quem é de cada rede | `redes_mercado_vinculos` (`nivel` nome/grupo/mesma_empresa/manual, `recusado`) |
+| Quem é de cada rede | `redes_mercado_vinculos` (`nivel` nome/grupo/produto/mesma_empresa/manual, `recusado`) |
+| Quem comprou qual produto | `faturamento_cliente_produto` (escrita: `FaturamentoMensalRollup`) |
 | Motor de vínculo | `VinculoDeRedes` (única definição de "clientes desta rede") |
 | Escrita (carga, reconstrução, manual, contadores) | `MaioresRedes` |
 | Leitura da página | `MaioresRedesResolver` |
@@ -475,11 +540,31 @@ Não é a Maiores por Segmento (que lista NOSSOS clientes por segmento do TOTVS)
 
 Grão `cod_cliente` (o da Carteira agrupada; cada franqueado é um código). Níveis:
 **nome** (começo do fantasia/razão, travas do `VinculoPorCliente`), **grupo** do TOTVS
-(pelo nome ou maioria das filiais; 9998 nunca), **mesma_empresa** (raiz do CNPJ calculada em
-memória, Regra nº 3). Lead: mesma regra de nome; lead de empresa que já é cliente fica fora.
+(pelo nome ou maioria das filiais; 9998 nunca), **produto** (comprou produto personalizado
+com o nome da rede, ver abaixo; só para quem o nome e o grupo não ligaram), **mesma_empresa** (raiz do CNPJ
+calculada em memória, Regra nº 3). Lead: mesma regra de nome; lead de empresa que já é
+cliente fica fora.
+
+**Vínculo por produto personalizado (2026-10-19).** A bobina "BOBINA TS KPH BC 80X80M MAX
+MUFFATO" diz de quem é o código que a compra, mesmo com razão e fantasia que não lembram a
+rede. `VinculoPorProduto` lê `faturamento_cliente_produto` (quem já comprou qual produto,
+só nota com valor positivo), escrita pelo `FaturamentoMensalRollup` no fim de todo
+`totvs:atualizar`. ⚠️ Nunca ler `faturamentos` para isso: a busca na descrição levou 41 s.
+Travas: marca = nome da rede sem palavra de tipo nas pontas (SUPER, IRMÃOS, ATACADISTA…),
+5+ letras; palavras inteiras e seguidas na descrição; produto com mais de 300 compradores
+não é personalizado; marca em mais de 100 produtos é palavra de produto; marca no nome de
+mais de 15 empresas da base é nome comum (TROPICAL, TREVO, MASTER, DINIZ…); comprador com
+filial no segmento da rede; código que compra produto de duas redes sem produto em comum é
+revenda/gráfica e fica fora (Conflitos). Vale também na aba Supermercadista (ABRAS), somado
+à razão social, sem tirar código que a razão social pôs em outra conta.
+- ⚠️ A tabela nasce vazia: depois do deploy, UMA vez,
+ `php artisan faturamento:rollup-mensal --desde=2018-01`. A rodada horária só refaz o mês
+ corrente e o anterior.
+- Nota cancelada depois não tira o par (a tabela só acumula). Aceito: quem comprou a
+ bobina com o nome da rede é da rede.
 
 - ⚠️ **Cada cliente pertence a UMA rede**, garantido pelo banco (coluna gerada `dono`
-  única). Desempate: nível (nome > grupo > empresa), nome mais específico (SHELL SELECT >
+  única). Desempate: nível (nome > grupo > empresa; produto só preenche quem ficou sem rede), nome mais específico (SHELL SELECT >
   SHELL), UF da sede (só para nome/empresa — o grupo não se parte), rede maior. Empate em
   tudo: fica fora (aba Conflitos do Excel de revisão).
 - ⚠️ **Categoria sem segmento TOTVS** (Conveniência, Beleza, Óticas, Serviços): a filial

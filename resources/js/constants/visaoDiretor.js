@@ -28,6 +28,7 @@ export const TONS_STATUS_REDE = { ativo: 'ok', a_trabalhar: 'warn' };
 export const ROTULOS_NIVEL_VINCULO = {
     nome: 'Pelo nome',
     grupo: 'Grupo do TOTVS',
+    produto: 'Produto com o nome',
     mesma_empresa: 'Mesma empresa (CNPJ)',
     manual: 'Vinculado à mão',
 };

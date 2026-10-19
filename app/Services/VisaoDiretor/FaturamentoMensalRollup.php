@@ -6,7 +6,10 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Dono ÚNICO da escrita em `faturamento_cliente_mensal` — o faturamento por cliente e mês
+ * Dono ÚNICO da escrita em `faturamento_cliente_mensal` e `faturamento_cliente_produto`
+ * (quem já comprou qual produto, para o `VinculoPorProduto`).
+ *
+ * `faturamento_cliente_mensal` é o faturamento por cliente e mês
  * que a Visão Diretor lê em vez de agregar `faturamentos` ao vivo (~10 s por conta, ver a
  * migration `2026_09_18_110000`).
  *
@@ -73,6 +76,31 @@ class FaturamentoMensalRollup
                     AND cod_cliente IS NOT NULL
                   GROUP BY cod_cliente',
                 [$inicio->toDateString(), now(), $inicio->toDateString(), $fim->toDateString()],
+            );
+
+            // Quem comprou qual produto (vínculo por produto personalizado). Só acumula:
+            // a nota de devolução (valor negativo) não entra, e nota cancelada depois não
+            // tira o par — um cliente que comprou a bobina com o nome da rede continua
+            // sendo da rede.
+            DB::statement(
+                'INSERT INTO faturamento_cliente_produto (cod_produto, cod_cliente, descricao, primeira_emissao, ultima_emissao, calculado_em)
+                 SELECT n.cod_produto, n.cod_cliente, n.descricao, n.primeira, n.ultima, ?
+                   FROM (
+                        SELECT cod_produto, cod_cliente, MAX(produto_desc) AS descricao,
+                               MIN(data_emissao) AS primeira, MAX(data_emissao) AS ultima
+                          FROM faturamentos
+                         WHERE data_emissao BETWEEN ? AND ?
+                           AND cod_cliente IS NOT NULL
+                           AND cod_produto IS NOT NULL
+                           AND valor_total > 0
+                         GROUP BY cod_produto, cod_cliente
+                   ) AS n
+                 ON DUPLICATE KEY UPDATE
+                    descricao = n.descricao,
+                    primeira_emissao = LEAST(faturamento_cliente_produto.primeira_emissao, n.primeira),
+                    ultima_emissao = GREATEST(faturamento_cliente_produto.ultima_emissao, n.ultima),
+                    calculado_em = NOW()',
+                [now(), $inicio->toDateString(), $fim->toDateString()],
             );
         });
     }

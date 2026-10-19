@@ -3,6 +3,7 @@
 namespace App\Services\VisaoDiretor\Redes;
 
 use App\Services\VisaoDiretor\VinculoPorCliente;
+use App\Services\VisaoDiretor\VinculoPorProduto;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -16,6 +17,10 @@ use Illuminate\Support\Facades\DB;
  *   franqueado conta como loja da rede).
  * - `grupo`: o grupo do TOTVS casa pelo nome ou pela maioria das filiais; entram todos os
  *   códigos do grupo. 9998 nunca.
+ * - `produto`: o código comprou (faturado) produto personalizado com o nome da rede
+ *   ("BOBINA ... MAX MUFFATO"), pelas travas do `VinculoPorProduto`. Só liga código que nem
+ *   o nome nem o grupo ligaram a rede alguma: disputando com eles, levava ATACADAO S.A para
+ *   o Extra (descoberta de 19/10). Por isso só ganha de `mesma_empresa`.
  * - `mesma_empresa`: código com a maioria das filiais na mesma raiz de CNPJ de um código já
  *   ligado à rede. A raiz é calculada em memória (Regra de ouro nº 3).
  *
@@ -36,8 +41,12 @@ class VinculoDeRedes
 
     public const MESMA_EMPRESA = 'mesma_empresa';
 
-    public function __construct(private readonly VinculoPorCliente $porCliente)
-    {
+    public const PRODUTO = 'produto';
+
+    public function __construct(
+        private readonly VinculoPorCliente $porCliente,
+        private readonly VinculoPorProduto $porProduto,
+    ) {
     }
 
     /**
@@ -97,6 +106,27 @@ class VinculoDeRedes
         }
 
         $conflitos = [];
+
+        $produto = $this->porProduto->casar(array_map(fn ($rede) => [
+            'termos' => array_merge([$rede['nome']], $rede['apelidos'] ?? []),
+            'segmento' => CategoriasDeRede::segmento($rede['categoria']),
+        ], $redes));
+        foreach ($produto['clientes'] as $codigo => $porRede) {
+            // Só liga quem nem o nome nem o grupo ligaram a rede alguma: na descoberta de
+            // 19/10 o produto disputando com nome levava ATACADAO S.A para o Extra.
+            if (isset($candidatos[$codigo])) {
+                continue;
+            }
+            foreach ($porRede as $i) {
+                $candidatos[$codigo][$i] = self::PRODUTO;
+            }
+        }
+        foreach ($produto['revendas'] as $codigo => $porRede) {
+            if (! isset($candidatos[$codigo])) {
+                $conflitos[] = ['tipo' => 'cliente', 'codigo' => (string) $codigo, 'nivel' => self::PRODUTO, 'redes' => $porRede, 'decidido' => null];
+            }
+        }
+
         $clientes = $this->resolver($this->semDecididosPelaTela($candidatos, 'cliente'), $peso, 'cliente', $conflitos);
 
         $manuais = [];
@@ -115,7 +145,7 @@ class VinculoDeRedes
     }
 
     /** Quem casou o código pelo próprio nome ganha de quem só o trouxe junto com um grupo. */
-    private const FORCA = [self::NOME => 3, self::GRUPO => 2, self::MESMA_EMPRESA => 1];
+    private const FORCA = [self::NOME => 3, self::PRODUTO => 3, self::GRUPO => 2, self::MESMA_EMPRESA => 1];
 
     /** @var array<string, int> */
     private array $fixos = [];

@@ -6,7 +6,8 @@ Ranking ABRAS (PDF da associação) -> database/data/visao-diretor/ranking-abras
 Consumido por `php artisan diretor:importar-ranking-abras`. Ver docs/visao-diretor.md,
 "Aba Supermercadista".
 
-- O faturamento é DESCARTADO (decisão do Tony, 2026-10-08: sem faturamento na página).
+- O faturamento (coluna "Faturamento (R$)", já em reais) é gravado. A tela não mostra;
+  a planilha de pesquisa do segmento 101 lê esse número.
 - Com --base, as posições que já existem no JSON atual mantêm `nome` e `razoes` curados à
   mão (o nome curto de "CARREFOUR COMÉRCIO E INDÚSTRIA" é "CARREFOUR"); as novas ganham o
   nome derivado da razão social, sem sufixo societário. Quem decide se um nome é genérico
@@ -22,7 +23,8 @@ import sys
 from pypdf import PdfReader
 
 # " 1.014 956 AUTOSSERVICO W. L. LTDA. - ME ES 1.675.203"
-LINHA = re.compile(r"^\s*([\d.]+)\s+([\d.]+|Nova)\s+(.+?)\s+([A-Z]{2})\s+[\d][\d .]*$")
+# O PDF às vezes parte o milhar ("17 .530.890.000"). O valor já é em reais.
+LINHA = re.compile(r"^\s*([\d.]+)\s+([\d.]+|Nova)\s+(.+?)\s+([A-Z]{2})\s+([\d][\d .]*)$")
 
 SUFIXOS = re.compile(
     r"(\s*[-–]\s*(ME|EPP)\.?|\s+(LTDA|LIMITADA)\.?|\s+S[./]?\s?A\.?|\s+EIRELI|\s+EIRELE|\s+(ME|EPP)\.?"
@@ -32,7 +34,7 @@ SUFIXOS = re.compile(
 
 
 def numero(s: str) -> int:
-    return int(s.replace(".", ""))
+    return int(re.sub(r"\D", "", s))
 
 
 def nome_curto(razao: str) -> str:
@@ -53,7 +55,7 @@ def extrair(pdf: str) -> list[dict]:
                 linhas.append(m.groups())
 
     ranking, esperada = [], 1
-    for pos, pos25, razao, uf in linhas:
+    for pos, pos25, razao, uf, fat in linhas:
         p = numero(pos)
         if p != esperada:
             if str(esperada).endswith(str(p)):
@@ -66,6 +68,7 @@ def extrair(pdf: str) -> list[dict]:
             "posicao_2025": None if pos25 == "Nova" else numero(pos25),
             "razao_social": re.sub(r"\s+", " ", razao).strip(),
             "uf": uf,
+            "faturamento": numero(fat),
         })
         esperada += 1
 
@@ -99,7 +102,7 @@ def main() -> None:
             antigo = None
         item = {**r, "nome": antigo["nome"] if antigo else nome_curto(r["razao_social"])}
         # Ordem das chaves igual à do JSON curado (diff legível).
-        item = {k: item[k] for k in ("posicao", "posicao_2025", "razao_social", "nome", "uf")}
+        item = {k: item[k] for k in ("posicao", "posicao_2025", "razao_social", "nome", "uf", "faturamento")}
         if antigo and antigo.get("razoes"):
             item["razoes"] = antigo["razoes"]
         ranking.append(item)
@@ -119,7 +122,10 @@ def main() -> None:
         json.dump({
             "fonte": f"Ranking ABRAS 2026 — todas as {len(ranking)} posições, extraídas por "
                      "scripts/abras_pdf_para_json.py (posicao_2025 nulo = entrou no ranking este "
-                     "ano). `razoes` = razões sociais conhecidas quando a ABRAS publica só a marca.",
+                     "ano). `razoes` = razões sociais conhecidas quando a ABRAS publica só a marca. "
+                     "`faturamento` é a coluna Faturamento (R$) do PDF, já em reais.",
+            # O cabeçalho do PDF não nomeia o exercício; o ranking 2026 publica o ano anterior.
+            "ano_faturamento": 2025,
             "ranking": ranking,
         }, f, ensure_ascii=False, indent=2)
         f.write("\n")

@@ -27,6 +27,7 @@ use App\Services\Potencial\FamiliaProduto;
 use App\Services\Potencial\PotencialCarteiraResolver;
 use App\Services\Vendedores\NomeVendedorResolver;
 use App\Services\VisaoDiretor\ClientesDaConta;
+use App\Services\VisaoDiretor\FiliaisDaRede;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -53,6 +54,7 @@ class CarteiraController extends Controller
         private readonly PotencialCarteiraResolver $potencial,
         private readonly NomeVendedorResolver $nomeVendedor,
         private readonly ClientesDaConta $clientesDaConta,
+        private readonly FiliaisDaRede $filiaisDaRede,
         private readonly MapaDaCarteira $mapa,
         private readonly Mesorregioes $mesorregioes,
         private readonly SituacaoCadastral $situacaoReceita,
@@ -185,6 +187,8 @@ class CarteiraController extends Controller
             // Id + VERSÃO dos vínculos: editar a conta na Visão Diretor muda a chave, e o
             // total cacheado não fica 10 min atrás do número que a pessoa acabou de clicar.
             'conta_alvo' => $this->assinaturaContaAlvo($request) ?? '',
+            // Id + reconstrução da Maiores por Segmento, que é quando as filiais mudam.
+            'rede_alvo' => $this->assinaturaRedeAlvo($request) ?? '',
         ], fn (string $v, string $k) => $v !== '' && ! in_array($k, $exceto, true), ARRAY_FILTER_USE_BOTH);
 
         if ($filtros === []) {
@@ -381,6 +385,8 @@ class CarteiraController extends Controller
                 // "limpar", pelo mesmo motivo do `semFamilia`: recorte invisível parece
                 // lista quebrada.
                 'contaAlvo' => $this->contaAlvoParaTela($request),
+                // Rede da Maiores redes (linha juntada da Maiores por Segmento). Mesma faixa.
+                'redeAlvo' => $this->redeAlvoParaTela($request),
                 // Vem do clique numa bolha do mapa. `{cod, nome}` ou null — anunciado por
                 // faixa com "limpar", como os dois recortes acima.
                 'municipio' => $this->municipioParaTela($request),
@@ -528,6 +534,10 @@ class CarteiraController extends Controller
 
         if (($contaAlvo = $this->contaAlvoId($request)) !== null) {
             $this->clientesDaConta->aplicar($query, $contaAlvo);
+        }
+
+        if (($redeAlvo = $this->redeAlvoId($request)) !== null) {
+            $this->filiaisDaRede->aplicar($query, $redeAlvo);
         }
 
         /*
@@ -856,7 +866,38 @@ class CarteiraController extends Controller
      */
     private function contaAlvoId(Request $request): ?int
     {
-        $bruto = (string) $request->string('conta_alvo');
+        return $this->idDaVisaoDiretor($request, 'conta_alvo');
+    }
+
+    /**
+     * O id do filtro `?rede_alvo=` (a linha juntada de uma rede na Maiores por Segmento),
+     * com o mesmo gate do `conta_alvo`. As filiais saem de `FiliaisDaRede`, a mesma tabela
+     * que gerou o número da linha.
+     */
+    private function redeAlvoId(Request $request): ?int
+    {
+        return $this->idDaVisaoDiretor($request, 'rede_alvo');
+    }
+
+    private function assinaturaRedeAlvo(Request $request): ?string
+    {
+        $id = $this->redeAlvoId($request);
+
+        return $id === null ? null : $this->filiaisDaRede->assinatura($id);
+    }
+
+    /** @return array{id: int, nome: string}|null */
+    private function redeAlvoParaTela(Request $request): ?array
+    {
+        $id = $this->redeAlvoId($request);
+        $nome = $id === null ? null : $this->filiaisDaRede->nome($id);
+
+        return $nome === null ? null : ['id' => $id, 'nome' => $nome];
+    }
+
+    private function idDaVisaoDiretor(Request $request, string $parametro): ?int
+    {
+        $bruto = (string) $request->string($parametro);
 
         if ($bruto === '' || ! ctype_digit($bruto)) {
             return null;

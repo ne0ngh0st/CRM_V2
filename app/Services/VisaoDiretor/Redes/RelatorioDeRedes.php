@@ -23,6 +23,7 @@ class RelatorioDeRedes
     private const NIVEIS = [
         VinculoDeRedes::NOME => 'Nome',
         VinculoDeRedes::GRUPO => 'Grupo do TOTVS',
+        VinculoDeRedes::PRODUTO => 'Produto com o nome',
         VinculoDeRedes::MESMA_EMPRESA => 'Mesma empresa (CNPJ)',
     ];
 

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Liga uma rede do mercado a um cliente (`cod_cliente`, todas as filiais) ou a um lead.
  *
- * - `nivel` diz como: `nome`, `grupo`, `mesma_empresa` (o motor, `VinculoDeRedes`) ou
+ * - `nivel` diz como: `nome`, `grupo`, `produto`, `mesma_empresa` (o motor, `VinculoDeRedes`) ou
  *   `manual` (a tela). A reconstrução refaz os do motor e NUNCA toca `manual` nem `recusado`.
  * - `recusado` = alguém tirou pela tela: o motor não liga de novo este código a esta rede.
  * - A coluna gerada `dono` (migration) impede o mesmo cliente vivo em duas redes.

@@ -26,6 +26,8 @@ use App\Models\User;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
 use App\Services\Segmentos\EspecialistasDoSegmento;
+use App\Models\Segmento;
+use App\Services\VisaoDiretor\PesquisaSupermercadista;
 use App\Services\VisaoDiretor\Redes\MaioresRedesResolver;
 use App\Services\VisaoDiretor\UniversoDoSegmento;
 use Illuminate\Http\Request;
@@ -249,8 +251,9 @@ class CatalogoDeExportacoes
         return new PlanoDeExportacao(
             new ClientesLeadsSegmentoExport($segmento, $filtros),
             "maiores-por-segmento-{$segmento}",
-            // O mesmo total que a paginação da tela mostra, sem montar as linhas.
-            app(UniversoDoSegmento::class)->lista($segmento, $filtros)['linhas']->total(),
+            $segmento === Segmento::CODIGO_SUPERMERCADISTA
+                ? app(PesquisaSupermercadista::class)->contar($filtros)
+                : app(UniversoDoSegmento::class)->lista($segmento, $filtros)['linhas']->total(),
         );
     }
 

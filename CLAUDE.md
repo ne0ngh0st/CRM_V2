@@ -3057,6 +3057,13 @@ Detalhe em `docs/visao-diretor.md` §2, "Redesenho de 2026-10-14".
   Nome (razão social em cima; marca e CNPJ embaixo), Grupo, UF, Filiais, Status, Vendedor,
   Ações (Google Maps com o endereço da Receita e cartão CNPJ). Capital social só ordena.
 - Lead de empresa que já é cliente (mesma raiz) não aparece.
+- **Exceção (2026-10-19): a aba Supermercadista é SÓ o ranking da ABRAS** — uma linha por
+ rede (`contas_estrategicas.posicao_abras`), na ordem do ranking, com os clientes ligados
+ pela razão social; o resto do segmento sai da página. `docs/visao-diretor.md`.
+- **Nas outras abas, empresas da mesma rede da Maiores redes viram UMA linha (2026-10-19)**
+ com o nome da rede (`juntarPorRede()`); o clique abre `/carteira?rede_alvo=`, que lê
+ `visao_diretor_universo_filiais` via `FiliaisDaRede` — as filiais batem com a Carteira.
+ ⚠️ `vincular-redes` roda ANTES de `reconstruir-universo` no `totvs:atualizar`.
 - ⚠️ **Fase 2 pendente**: apagar o código das redes e dropar as tabelas depois do OK do
   dono. Até lá as rotas de escrita e os serviços existem sem uso pela tela.
 
@@ -3104,6 +3111,13 @@ Página nova da Visão Diretor (`/visao-diretor/maiores-redes`): as maiores rede
   irregular" (a rede ou filial de cliente nosso dela não ativa). Correção à mão na linha
   aberta, que a carga **nunca** sobrescreve. Franquia não grava CNPJ. Validação e
   limitações em `docs/visao-diretor.md` §2b.
+- **Nível `produto` (2026-10-19)**: quem comprou produto personalizado com o nome da rede
+ ("BOBINA … MAX MUFFATO") entra na rede, mas só se o nome e o grupo não a puseram em
+ rede nenhuma (disputando com eles, o produto trocava 85 clientes de rede). Também na aba
+ Supermercadista (ABRAS), somado à razão social. `VinculoPorProduto` lê
+ `faturamento_cliente_produto` (derivada, escrita pelo `FaturamentoMensalRollup`), nunca
+ `faturamentos`. ⚠️ Nasce vazia: rodar UMA vez `faturamento:rollup-mensal --desde=2018-01`
+ depois do deploy. Travas em `docs/visao-diretor.md` §2b.
 
 ## Pendências
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\Leads\SegmentoDosLeads;
 use App\Services\Receita\BaseAberta;
+use App\Services\Receita\LojasNaReceita;
 use App\Services\Receita\PorteEmpresa;
 use App\Services\Receita\SituacaoCadastral;
 use App\Services\Totvs\Normalizador;
@@ -68,6 +69,17 @@ class ImportarSituacoesReceita extends Command
         $interesse = $this->cnpjsDeInteresse();
         $this->line('CNPJs de interesse: '.number_format(count($interesse), 0, ',', '.'));
 
+        /*
+         * Lojas ativas por raiz, só na varredura inteira. Um --arquivo é um pedaço da base:
+         * gravar a contagem dali zeraria as lojas que estão nos outros zips. A raiz fica
+         * só em memória (Regra de ouro nº 3).
+         */
+        $lojas = null;
+        if ($locais === []) {
+            $lojas = array_fill_keys(array_keys(LojasNaReceita::raizes()), 0);
+            $this->line('Empresas supermercadistas para contar loja: '.number_format(count($lojas), 0, ',', '.'));
+        }
+
         $achados = [];
         $arquivos = $locais !== [] ? $locais : range(0, (int) config('receita.base.arquivos') - 1);
 
@@ -76,7 +88,7 @@ class ImportarSituacoesReceita extends Command
             $caminho = is_int($arquivo) ? $this->baixar($referencia, $arquivo) : $arquivo;
 
             try {
-                $linhas = $this->varrer($caminho, $interesse, $achados);
+                $linhas = $this->varrer($caminho, $interesse, $achados, $lojas);
             } finally {
                 if (is_int($arquivo)) {
                     @unlink($caminho);
@@ -116,6 +128,11 @@ class ImportarSituacoesReceita extends Command
         }
 
         $this->gravar($achados, $inexistentes, $referencia, $empresas);
+
+        if ($lojas !== null) {
+            LojasNaReceita::gravar($lojas);
+            $this->info('Lojas ativas na Receita gravadas para '.number_format(count($lojas), 0, ',', '.').' empresas.');
+        }
 
         $leads = $situacoes->sincronizarLeads();
         $this->info('Leads da base de prospecção tirados do CRM (CNPJ não ativo): '.array_sum($leads['excluidos']));
@@ -179,8 +196,9 @@ class ImportarSituacoesReceita extends Command
      *
      * @param  array<string, true>  $interesse
      * @param  array<string, array{0: string, 1: ?string, 2: ?string}>  $achados
+     * @param  array<string, int>|null  $lojas  raiz → lojas ativas; null = esta varredura não conta
      */
-    private function varrer(string $caminho, array $interesse, array &$achados): int
+    private function varrer(string $caminho, array $interesse, array &$achados, ?array &$lojas = null): int
     {
         $zip = new ZipArchive;
         if ($zip->open($caminho) !== true || $zip->numFiles < 1) {
@@ -202,17 +220,25 @@ class ImportarSituacoesReceita extends Command
                 $cnpj = $linha[0] === '"' && ($linha[9] ?? '') === '"'
                     ? substr($linha, 1, 8).substr($linha, 12, 4).substr($linha, 19, 2)
                     : $this->cnpjPorCsv($linha);
+                $raiz = substr($cnpj, 0, 8);
 
-                if (! isset($interesse[$cnpj])) {
+                $interessa = isset($interesse[$cnpj]);
+                $contaLoja = $lojas !== null && isset($lojas[$raiz]);
+                if (! $interessa && ! $contaLoja) {
                     continue;
                 }
 
                 $campos = str_getcsv($linha, ';', '"', '');
-                $achados[$cnpj] = [
-                    SituacaoCadastral::deCodigo($campos[5] ?? ''),
-                    SituacaoCadastral::data($campos[6] ?? null),
-                    self::cnae($campos[11] ?? null),
-                ];
+                if ($interessa) {
+                    $achados[$cnpj] = [
+                        SituacaoCadastral::deCodigo($campos[5] ?? ''),
+                        SituacaoCadastral::data($campos[6] ?? null),
+                        self::cnae($campos[11] ?? null),
+                    ];
+                }
+                if ($contaLoja && LojasNaReceita::eLoja($campos[5] ?? '', self::cnae($campos[11] ?? null))) {
+                    $lojas[$raiz]++;
+                }
             }
         } finally {
             fclose($stream);

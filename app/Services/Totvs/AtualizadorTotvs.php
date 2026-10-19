@@ -70,10 +70,11 @@ class AtualizadorTotvs
      */
     public const DERIVADOS = [
         'faturamento:rollup-mensal',
-        // Lista de clientes e leads por segmento da Visão Diretor (status sai da última compra).
-        'visao-diretor:reconstruir-universo',
         // Maiores redes: cliente novo e última compra nova mudam vínculo e status da rede.
         'visao-diretor:vincular-redes',
+        // Lista de clientes e leads por segmento da Visão Diretor (status sai da última compra).
+        // ⚠️ Depois dos vínculos: as empresas de uma rede viram uma linha só por eles.
+        'visao-diretor:reconstruir-universo',
     ];
 
     private const ARQUIVO_MARCADOR = '.ultima-importacao';

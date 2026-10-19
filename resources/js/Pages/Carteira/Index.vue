@@ -72,6 +72,8 @@ const filtros = reactive({
     // Vem da Visão Diretor → Maiores por Segmento. Também sem campo na
     // barra: é anunciado pela faixa acima da tabela, com "limpar".
     conta_alvo: props.filtros.contaAlvo?.id ? String(props.filtros.contaAlvo.id) : '',
+    // A linha de uma rede juntada da Maiores por Segmento. Mesma faixa com "limpar".
+    rede_alvo: props.filtros.redeAlvo?.id ? String(props.filtros.redeAlvo.id) : '',
     // Código IBGE, vindo do clique numa bolha do mapa. Sem campo na barra: faixa com "limpar".
     // Código da mesorregião, vindo do clique numa região do mapa. Sem campo na barra:
     // faixa com "limpar" e "voltar ao mapa".
@@ -283,7 +285,7 @@ function abrirCartaoCnpj(cliente) {
  * — e aí a busca conta.
  */
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
-    'estado', 'segmento', 'status', 'aderencia', 'receita', 'sem_familia', 'conta_alvo', 'mesorregiao',
+    'estado', 'segmento', 'status', 'aderencia', 'receita', 'sem_familia', 'conta_alvo', 'rede_alvo', 'mesorregiao',
     'visao_supervisor', 'visao_vendedor',
 ]));
 
@@ -296,6 +298,11 @@ function limparSemFamilia() {
 
 function limparContaAlvo() {
     filtros.conta_alvo = '';
+    aplicarFiltros();
+}
+
+function limparRedeAlvo() {
+    filtros.rede_alvo = '';
     aplicarFiltros();
 }
 </script>
@@ -515,6 +522,24 @@ function limparContaAlvo() {
                             type="button"
                             class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
                             @click="limparContaAlvo"
+                        >
+                            Limpar recorte
+                        </button>
+                    </div>
+
+                    <div
+                        v-if="filtros.rede_alvo && props.filtros.redeAlvo"
+                        class="flex flex-wrap items-center justify-between gap-2 rounded border border-teal/40 bg-teal/10 px-3 py-2"
+                    >
+                        <p class="text-sm text-gray-700">
+                            Mostrando apenas os clientes da rede
+                            <strong class="font-semibold">{{ props.filtros.redeAlvo.nome }}</strong>
+                            (Visão Diretor → Maiores por segmento).
+                        </p>
+                        <button
+                            type="button"
+                            class="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-100"
+                            @click="limparRedeAlvo"
                         >
                             Limpar recorte
                         </button>

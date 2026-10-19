@@ -8,7 +8,9 @@ use App\Models\Lead;
 use App\Models\Segmento;
 use App\Services\VisaoDiretor\ClientesDaConta;
 use App\Services\VisaoDiretor\ContaDoLead;
+use App\Services\VisaoDiretor\FaturamentoDeMercado;
 use App\Services\VisaoDiretor\SugestaoDeVinculo;
+use App\Services\VisaoDiretor\VinculoPorProduto;
 use App\Services\VisaoDiretor\VinculoPorRazaoSocial;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -24,13 +26,16 @@ use Throwable;
  * está no ranking continua só como lead, em /leads.
  *
  * O arquivo guarda o nome CURTO de cada rede (o que aparece na tela e o que casa com o nome
- * das nossas filiais) ao lado da razão social da ABRAS, e NÃO guarda o faturamento: a
- * diretoria tirou faturamento desta página (18/09) e não quis de volta (08/10).
+ * das nossas filiais) ao lado da razão social da ABRAS. O faturamento do PDF (já em reais,
+ * coluna "Faturamento (R$)") entra na conta e em `faturamento_mercado` — a tela não mostra;
+ * quem lê é a planilha de pesquisa do segmento 101.
  *
  * Depois de criar as contas:
  *   1. `VinculoPorRazaoSocial` liga os clientes pela razão social (a da ABRAS e as do campo
  *      `razoes`, para quem a ABRAS publica só a marca) + CNPJ raiz, SUBSTITUINDO as
  *      sugestões que a conta tinha. Conta com vínculo manual nunca é tocada;
+ *   1b. `VinculoPorProduto` soma quem compra produto personalizado com o nome da rede
+ *      (a razão social do Muffato não casa nada, a bobina "MAX MUFFATO" casa);
  *   2. `ContaDoLead::sugerirParaLeadsSemConta()` sugere a rede dos leads já classificados.
  *
  * ⚠️ NÃO usa a sugestão pelo nome das filiais (`VinculoPorCliente`), e LIMPA a que a conta
@@ -58,7 +63,7 @@ class ImportarRankingAbras extends Command
 
     protected $description = 'Contas da aba Supermercadista (Visão Diretor) a partir do ranking da ABRAS';
 
-    public function handle(SugestaoDeVinculo $nomes, ContaDoLead $contaDoLead, VinculoPorRazaoSocial $porRazao, ClientesDaConta $clientesDaConta): int
+    public function handle(SugestaoDeVinculo $nomes, ContaDoLead $contaDoLead, VinculoPorRazaoSocial $porRazao, VinculoPorProduto $porProduto, ClientesDaConta $clientesDaConta, FaturamentoDeMercado $faturamento): int
     {
         $arquivo = base_path((string) $this->option('arquivo'));
         $limite = (int) $this->option('limite');
@@ -70,7 +75,13 @@ class ImportarRankingAbras extends Command
             return self::FAILURE;
         }
 
-        $ranking = collect(json_decode((string) file_get_contents($arquivo), true)['ranking'] ?? [])
+        $json = json_decode((string) file_get_contents($arquivo), true);
+        $anoFaturamento = (int) ($json['ano_faturamento'] ?? 0);
+        if ($anoFaturamento < 1990) {
+            $anoFaturamento = (int) date('Y') - 1;
+        }
+
+        $ranking = collect($json['ranking'] ?? [])
             ->sortBy('posicao')
             ->when($limite > 0, fn ($r) => $r->take($limite))
             ->values();
@@ -116,6 +127,13 @@ class ImportarRankingAbras extends Command
                 $atualizadas += $conta->exists ? 1 : 0;
 
                 $conta->ordem = (int) $r['posicao'];
+                // É o que põe a rede na aba Supermercadista (`UniversoDoSegmento`), que é só o ranking.
+                $conta->posicao_abras = (int) $r['posicao'];
+                // JSON antigo, sem a chave, não apaga um faturamento que a carga anterior gravou.
+                if (isset($r['faturamento']) && is_numeric($r['faturamento'])) {
+                    $conta->faturamento_abras = (int) $r['faturamento'];
+                    $conta->faturamento_abras_ano = $anoFaturamento;
+                }
                 if (blank($conta->uf) && filled($r['uf'])) {
                     $conta->uf = $r['uf'];
                 }
@@ -129,7 +147,13 @@ class ImportarRankingAbras extends Command
             $ultima = $depois;
             foreach ($existentes as $c) {
                 if (! isset($doRanking[$c->id])) {
-                    $c->forceFill(['ordem' => ++$depois])->save();
+                    $c->forceFill([
+                        'ordem' => ++$depois,
+                        'posicao_abras' => null,
+                        'faturamento_abras' => null,
+                        'faturamento_abras_ano' => null,
+                    ])->save();
+                    $faturamento->limparAbras($c->id);
                 }
             }
 
@@ -149,6 +173,8 @@ class ImportarRankingAbras extends Command
             $ligados = []; // conta_id → códigos, para o --detalhe
             $homonimos = [];
 
+            $contas = [];
+            $razaoDaConta = [];
             foreach ($doRanking as $id => $r) {
                 $conta = ContaEstrategica::with('vinculos')->find($id);
 
@@ -157,10 +183,41 @@ class ImportarRankingAbras extends Command
                 }
 
                 $razoes = [$r['razao_social'], ...($r['razoes'] ?? [])];
-                $codigos = $porRazao->clientes($razoes, $catalogo, $r['uf'] ?? null);
-                if (count($codigos) < count($porRazao->clientes($razoes, $catalogo))) {
+                $razaoDaConta[$id] = $porRazao->clientes($razoes, $catalogo, $r['uf'] ?? null);
+                if (count($razaoDaConta[$id]) < count($porRazao->clientes($razoes, $catalogo))) {
                     $homonimos[] = "#{$r['posicao']} {$r['nome']}";
                 }
+                $contas[$id] = $conta;
+            }
+
+            // Produto personalizado com o nome da rede ("BOBINA ... MAX MUFFATO"). Só soma:
+            // código que a razão social já pôs em outra conta, ou que casa produto de duas
+            // contas, fica com a razão social / fora.
+            $donoPelaRazao = [];
+            foreach ($razaoDaConta as $id => $codigos) {
+                foreach ($codigos as $c) {
+                    $donoPelaRazao[$c] = $id;
+                }
+            }
+            $produto = $porProduto->casar(array_map(fn (array $r) => [
+                'termos' => [$r['nome'], $r['razao_social'], ...($r['razoes'] ?? [])],
+                'segmento' => Segmento::CODIGO_SUPERMERCADISTA,
+            ], array_intersect_key($doRanking, $contas)));
+            $pelaProduto = 0;
+            foreach ($produto['clientes'] as $codigo => $porConta) {
+                $codigo = (string) $codigo;
+                if (count($porConta) !== 1 || (isset($donoPelaRazao[$codigo]) && $donoPelaRazao[$codigo] !== $porConta[0])) {
+                    continue;
+                }
+                if (! in_array($codigo, $razaoDaConta[$porConta[0]], true)) {
+                    $razaoDaConta[$porConta[0]][] = $codigo;
+                    $pelaProduto++;
+                }
+            }
+
+            foreach ($contas as $id => $conta) {
+                $r = $doRanking[$id];
+                $codigos = $razaoDaConta[$id];
 
                 if ($codigos === []) {
                     // A sugestão que houver veio do nome de marca: sem razão social, sai.
@@ -183,7 +240,10 @@ class ImportarRankingAbras extends Command
             }
 
             $this->newLine();
-            $this->info("Clientes pela razão social + CNPJ raiz: {$pelaRazao} redes · {$codigosPelaRazao} códigos");
+            $this->info("Clientes pela razão social + CNPJ raiz: {$pelaRazao} redes · {$codigosPelaRazao} códigos (dos quais {$pelaProduto} pelo produto personalizado)");
+            if ($produto['revendas'] !== []) {
+                $this->warn('Compram produto de mais de uma rede (revenda/gráfica), não ligados: '.implode(', ', array_keys($produto['revendas'])));
+            }
             if ($homonimos !== []) {
                 $this->warn('Razão social igual em outro estado, descartada como homônimo: '.count($homonimos).' redes');
                 foreach ($homonimos as $l) {
@@ -193,6 +253,10 @@ class ImportarRankingAbras extends Command
             if ($limpas > 0) {
                 $this->warn("Sugestões por nome removidas (razão social não casou): {$limpas} redes");
             }
+
+            // Copia o faturamento da ABRAS para a âncora de cada empresa ligada. Rede sem
+            // CNPJ fica na chave da própria conta. Dentro da transação: o dry-run desfaz.
+            $faturamento->propagar($doRanking, $razaoDaConta, $anoFaturamento);
 
             if ($this->option('detalhe')) {
                 $this->detalhar($ligados, $doRanking);

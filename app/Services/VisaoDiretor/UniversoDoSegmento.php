@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\DB;
  * - **cliente** = EMPRESA (raiz do CNPJ), numa aba só: a do segmento em que ela tem mais
  *   filiais (`criarSegmentoDaEmpresa()`, desde 2026-10-15). Filiais e status contam TODAS
  *   as filiais dela; o status é o da última compra, o mesmo corte da pill da Carteira.
+ *   Empresas da mesma rede da Maiores redes viram uma linha só (`juntarPorRede()`).
  * - **lead** = lead visível do segmento (por nome), fora da etapa "Outros", cujo CNPJ NÃO
  *   é de cliente (CNPJ exato, a regra do import de leads).
  * A ordem é o capital social da Receita, que não aparece na tela.
@@ -50,7 +51,12 @@ class UniversoDoSegmento
     /** Nome fantasia que é marcador interno do cadastro do TOTVS, não marca (regex, sem caixa). */
     private const FANTASIA_DE_CADASTRO = '^(ENTREGA|ALMOX|RECEBIMENTO|COBRAN|O MESMO|MATRIZ|FILIAL|DEP[OÓ]SITO|CD( |$|-)|LOJA [0-9])|BAIXAD|INAPT|INATIV';
 
-    private const EMPRESA ="CASE WHEN CHAR_LENGTH(c.cnpj_digitos) = 14 THEN LEFT(c.cnpj_digitos, 8) ELSE CONCAT('#', c.cod_cliente) END";
+    /**
+     * Chave da empresa na query: os 8 primeiros dígitos do CNPJ, calculados — nunca uma
+     * coluna (Regra de ouro nº 3). Pública porque a planilha de pesquisa do supermercadista
+     * agrupa pela mesma chave.
+     */
+    public const EMPRESA = "CASE WHEN CHAR_LENGTH(c.cnpj_digitos) = 14 THEN LEFT(c.cnpj_digitos, 8) ELSE CONCAT('#', c.cod_cliente) END";
 
     /**
      * Refaz a tabela inteira. Tudo numa transação: quem lê no meio continua vendo a versão
@@ -163,6 +169,9 @@ class UniversoDoSegmento
                 SQL);
             DB::statement('DROP TEMPORARY TABLE vdu_fantasia');
 
+            $this->trocarSupermercadistaPeloRanking($agora);
+            $this->juntarPorRede($agora);
+
             /*
              * ⚠️ O CNPJ do lead pode vir com máscara e sem o zero que o Excel come; os
              * dígitos são normalizados aqui como `Normalizador::digitosCnpj()` faz (12-13
@@ -200,12 +209,13 @@ class UniversoDoSegmento
                     FROM leads
                     WHERE status <> 'excluido' AND etapa <> 'outros' AND segmento IS NOT NULL
                 ) l
-                JOIN segmentos s ON s.nome = l.segmento
+                -- Supermercadista é só o ranking da ABRAS (`trocarSupermercadistaPeloRanking()`).
+                JOIN segmentos s ON s.nome = l.segmento AND s.codigo <> ?
                 LEFT JOIN cnpj_situacoes cs ON cs.cnpj = l.digitos
                 WHERE l.digitos IS NULL
                    OR (CHAR_LENGTH(l.digitos) = 14 AND NOT EXISTS (SELECT 1 FROM vdu_raiz_cliente r WHERE r.raiz = LEFT(l.digitos, 8)))
                    OR (CHAR_LENGTH(l.digitos) <> 14 AND NOT EXISTS (SELECT 1 FROM clientes c WHERE c.cnpj_digitos = l.digitos))
-                SQL, [$agora]);
+                SQL, [$agora, Segmento::CODIGO_SUPERMERCADISTA]);
             DB::statement('DROP TEMPORARY TABLE vdu_raiz_cliente');
 
             self::preencherBusca();
@@ -215,6 +225,216 @@ class UniversoDoSegmento
                 'leads' => DB::table('visao_diretor_universo')->where('tipo', 'lead')->count(),
             ];
         });
+    }
+
+    /**
+     * A aba Supermercadista é SÓ o ranking da ABRAS (Tony, 2026-10-19): uma linha por rede
+     * do ranking (`contas_estrategicas.posicao_abras`), na ordem dele, e nenhuma outra.
+     *
+     * - Os clientes da rede são os de `ClientesDaConta` (os vínculos que o
+     *   `diretor:importar-ranking-abras` faz pela razão social, ou os manuais) — a mesma
+     *   definição do `?conta_alvo=` da Carteira, que é o que o clique na linha abre. Filiais,
+     *   última compra (status) e capital são desses clientes; a âncora segue a régua da
+     *   linha de empresa (filial ativa na Receita, matriz, menor id).
+     * - Rede sem cliente nosso vira linha de tipo `lead` (status "Lead", sem filiais).
+     * - Sai a linha de EMPRESA de Supermercadista, e sai a empresa de qualquer aba que esteja
+     *   ligada a uma rede do ranking — ela já está dentro da linha da rede, e cada empresa
+     *   continua aparecendo numa aba só.
+     * - Os leads de Supermercadista não entram (filtro no INSERT dos leads).
+     *
+     * ⚠️ Consequência aceita: o supermercado que não está no ranking some da página (continua
+     * na Carteira e nos Leads), e a soma das filiais das abas deixa de ser a Carteira inteira.
+     */
+    private function trocarSupermercadistaPeloRanking(Carbon $agora): void
+    {
+        $empresa = self::EMPRESA;
+        $empresaA = str_replace('c.', 'a.', $empresa);
+        $segmento = Segmento::CODIGO_SUPERMERCADISTA;
+
+        $contas = DB::table('contas_estrategicas as ce')
+            ->join('segmentos as s', 's.id', '=', 'ce.segmento_id')
+            ->where('s.codigo', $segmento)
+            ->whereNotNull('ce.posicao_abras')
+            ->pluck('ce.id')
+            ->all();
+
+        DB::statement('DROP TEMPORARY TABLE IF EXISTS vdu_rede_cliente');
+        DB::statement('CREATE TEMPORARY TABLE vdu_rede_cliente (conta_id BIGINT UNSIGNED, cliente_id BIGINT UNSIGNED, PRIMARY KEY (conta_id, cliente_id))');
+        // UNION distinto: o par não se repete (ver `paresDeTodasAsContas()`).
+        DB::table('vdu_rede_cliente')->insertUsing(
+            ['conta_id', 'cliente_id'],
+            DB::query()->fromSub(app(ClientesDaConta::class)->paresDeTodasAsContas($contas), 'p')->select('conta_id', 'cliente_id'),
+        );
+
+        // As empresas das redes, com chave: o DELETE casa por igualdade, não por subconsulta.
+        DB::statement('DROP TEMPORARY TABLE IF EXISTS vdu_rede_empresa');
+        DB::statement('CREATE TEMPORARY TABLE vdu_rede_empresa (empresa VARCHAR(30) PRIMARY KEY) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+        DB::insert(<<<SQL
+            INSERT IGNORE INTO vdu_rede_empresa (empresa)
+            SELECT DISTINCT {$empresa} FROM vdu_rede_cliente r JOIN clientes c ON c.id = r.cliente_id
+            SQL);
+
+        DB::delete(<<<SQL
+            DELETE u FROM visao_diretor_universo u
+            JOIN clientes a ON a.id = u.cliente_id
+            LEFT JOIN vdu_rede_empresa e ON e.empresa = {$empresaA}
+            WHERE u.tipo = 'cliente' AND (u.segmento_codigo = ? OR e.empresa IS NOT NULL)
+            SQL, [$segmento]);
+        DB::statement('DROP TEMPORARY TABLE vdu_rede_empresa');
+
+        DB::insert(<<<'SQL'
+            INSERT INTO visao_diretor_universo
+                (segmento_codigo, tipo, conta_id, posicao, cliente_id, nome, uf, lojas,
+                 data_ultima_compra, capital_social, capital_ordem, reconstruido_em)
+            SELECT ?, IF(COUNT(c.id) > 0, 'cliente', 'lead'), ce.id, ce.posicao_abras,
+                   SUBSTRING_INDEX(GROUP_CONCAT(c.id ORDER BY COALESCE(cs.situacao, 'ATIVA') <> 'ATIVA', SUBSTRING(c.cnpj_digitos, 9, 4) = '0001' DESC, c.id), ',', 1),
+                   ce.nome, NULLIF(ce.uf, ''), COUNT(c.id),
+                   MAX(c.data_ultima_compra), MAX(cs.capital_social), COALESCE(MAX(cs.capital_social), -1), ?
+            FROM contas_estrategicas ce
+            JOIN segmentos s ON s.id = ce.segmento_id AND s.codigo = ?
+            LEFT JOIN vdu_rede_cliente r ON r.conta_id = ce.id
+            LEFT JOIN clientes c ON c.id = r.cliente_id
+            LEFT JOIN cnpj_situacoes cs ON cs.cnpj = c.cnpj_digitos
+            WHERE ce.posicao_abras IS NOT NULL
+            GROUP BY ce.id, ce.posicao_abras, ce.nome, ce.uf
+            SQL, [$segmento, $agora, $segmento]);
+        DB::statement('DROP TEMPORARY TABLE vdu_rede_cliente');
+
+        // Razão social, CNPJ, vendedor (e a UF, se a ABRAS não trouxe) são da âncora.
+        DB::update(<<<'SQL'
+            UPDATE visao_diretor_universo u
+            JOIN clientes a ON a.id = u.cliente_id
+            SET u.razao_social = a.razao_social,
+                u.cod_cliente = a.cod_cliente,
+                u.documento = a.cnpj,
+                u.uf = COALESCE(u.uf, NULLIF(a.estado, '')),
+                u.cod_vendedor = NULLIF(a.cod_vendedor, '')
+            WHERE u.conta_id IS NOT NULL
+            SQL);
+    }
+
+    /**
+     * As empresas de uma mesma rede da Maiores redes viram UMA linha, com o nome da rede
+     * (Tony, 2026-10-19: "Raia" em dez linhas, uma por razão social, não dizia nada ao dono).
+     *
+     * - A rede de cada empresa sai dos vínculos de `redes_mercado_vinculos` (cliente, não
+     *   recusado, rede ativa) — todos os níveis: nome, grupo, produto, mesma empresa, manual.
+     *   Empresa com códigos em duas redes fica na que tem mais filiais dela.
+     * - Só junta rede com DUAS ou mais empresas; com uma só, a linha da empresa já é ela.
+     * - A linha da rede é a soma das linhas das empresas: filiais, última compra, capital.
+     *   Segmento = o que soma mais filiais entre elas (cada rede numa aba só); âncora = a
+     *   empresa com mais filiais.
+     * - As filiais que a linha conta vão para `visao_diretor_universo_filiais`, e é ESSA
+     *   tabela que a Carteira filtra no `?rede_alvo=` (`FiliaisDaRede`). Contagem e lista
+     *   saem da mesma fonte: o número clicado bate com a lista aberta.
+     *
+     * Roda depois de `trocarSupermercadistaPeloRanking()`: só junta linhas de empresa que
+     * sobraram (a aba Supermercadista e as empresas das redes da ABRAS já saíram).
+     *
+     * ⚠️ Os passos passam por tabelas TEMPORÁRIAS separadas porque o MySQL não reabre a
+     * mesma temporária duas vezes num statement ("Can't reopen table").
+     */
+    private function juntarPorRede(Carbon $agora): void
+    {
+        $empresa = self::EMPRESA;
+        $empresaA = str_replace('c.', 'a.', $empresa);
+        $charset = 'DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
+
+        DB::table('visao_diretor_universo_filiais')->delete();
+
+        DB::statement('DROP TEMPORARY TABLE IF EXISTS vdu_empresa_linha');
+        DB::statement("CREATE TEMPORARY TABLE vdu_empresa_linha (empresa VARCHAR(30) PRIMARY KEY, universo_id BIGINT UNSIGNED, seg VARCHAR(10), lojas INT) {$charset}");
+        DB::insert(<<<SQL
+            INSERT IGNORE INTO vdu_empresa_linha (empresa, universo_id, seg, lojas)
+            SELECT {$empresaA}, u.id, u.segmento_codigo, u.lojas
+            FROM visao_diretor_universo u
+            JOIN clientes a ON a.id = u.cliente_id
+            WHERE u.tipo = 'cliente' AND u.conta_id IS NULL
+            SQL);
+
+        DB::statement('DROP TEMPORARY TABLE IF EXISTS vdu_empresa_rede');
+        DB::statement("CREATE TEMPORARY TABLE vdu_empresa_rede (empresa VARCHAR(30) PRIMARY KEY, rede_id BIGINT UNSIGNED, KEY (rede_id)) {$charset}");
+        DB::insert(<<<SQL
+            INSERT INTO vdu_empresa_rede (empresa, rede_id)
+            SELECT empresa, rede_id FROM (
+                SELECT e.empresa, v.rede_id,
+                       ROW_NUMBER() OVER (PARTITION BY e.empresa ORDER BY COUNT(*) DESC, v.rede_id) AS rn
+                FROM redes_mercado_vinculos v
+                JOIN redes_mercado r ON r.id = v.rede_id AND r.ativa = 1
+                JOIN clientes c ON c.cod_cliente = v.codigo
+                JOIN vdu_empresa_linha e ON e.empresa = {$empresa}
+                WHERE v.tipo = 'cliente' AND v.recusado = 0
+                GROUP BY e.empresa, v.rede_id
+            ) t WHERE rn = 1
+            SQL);
+
+        DB::statement('DROP TEMPORARY TABLE IF EXISTS vdu_rede_junta');
+        DB::statement('CREATE TEMPORARY TABLE vdu_rede_junta (rede_id BIGINT UNSIGNED PRIMARY KEY)');
+        DB::insert('INSERT INTO vdu_rede_junta (rede_id) SELECT rede_id FROM vdu_empresa_rede GROUP BY rede_id HAVING COUNT(*) >= 2');
+        DB::delete('DELETE er FROM vdu_empresa_rede er LEFT JOIN vdu_rede_junta j ON j.rede_id = er.rede_id WHERE j.rede_id IS NULL');
+        DB::statement('DROP TEMPORARY TABLE vdu_rede_junta');
+
+        DB::insert(<<<SQL
+            INSERT INTO visao_diretor_universo_filiais (rede_id, cliente_id)
+            SELECT er.rede_id, c.id FROM clientes c JOIN vdu_empresa_rede er ON er.empresa = {$empresa}
+            SQL);
+
+        DB::statement('DROP TEMPORARY TABLE IF EXISTS vdu_rede_linha');
+        DB::statement("CREATE TEMPORARY TABLE vdu_rede_linha (rede_id BIGINT UNSIGNED PRIMARY KEY, seg VARCHAR(10), empresas INT, lojas INT, uc DATE, cap DECIMAL(18,2), porte VARCHAR(10), ancora BIGINT UNSIGNED) {$charset}");
+        DB::insert(<<<'SQL'
+            INSERT INTO vdu_rede_linha (rede_id, empresas, lojas, uc, cap, porte, ancora)
+            SELECT er.rede_id, COUNT(*), SUM(u.lojas), MAX(u.data_ultima_compra), MAX(u.capital_social),
+                   ELT(MAX(FIELD(u.porte, 'ME', 'EPP', 'DEMAIS')), 'ME', 'EPP', 'DEMAIS'),
+                   SUBSTRING_INDEX(GROUP_CONCAT(u.cliente_id ORDER BY u.lojas DESC, u.capital_ordem DESC, u.id), ',', 1)
+            FROM vdu_empresa_rede er
+            JOIN vdu_empresa_linha e ON e.empresa = er.empresa
+            JOIN visao_diretor_universo u ON u.id = e.universo_id
+            GROUP BY er.rede_id
+            SQL);
+        DB::update(<<<'SQL'
+            UPDATE vdu_rede_linha l
+            JOIN (
+                SELECT rede_id, seg FROM (
+                    SELECT er.rede_id, e.seg,
+                           ROW_NUMBER() OVER (PARTITION BY er.rede_id ORDER BY SUM(e.lojas) DESC, MAX(e.lojas) DESC, e.seg) AS rn
+                    FROM vdu_empresa_rede er
+                    JOIN vdu_empresa_linha e ON e.empresa = er.empresa
+                    GROUP BY er.rede_id, e.seg
+                ) t WHERE rn = 1
+            ) s ON s.rede_id = l.rede_id
+            SET l.seg = s.seg
+            SQL);
+
+        DB::delete(<<<'SQL'
+            DELETE u FROM visao_diretor_universo u
+            JOIN vdu_empresa_linha e ON e.universo_id = u.id
+            JOIN vdu_empresa_rede er ON er.empresa = e.empresa
+            SQL);
+
+        DB::insert(<<<'SQL'
+            INSERT INTO visao_diretor_universo
+                (segmento_codigo, tipo, rede_id, empresas, cliente_id, nome, uf, lojas,
+                 data_ultima_compra, capital_social, capital_ordem, porte, reconstruido_em)
+            SELECT l.seg, 'cliente', r.id, l.empresas, l.ancora, r.nome, NULLIF(r.uf, ''), l.lojas,
+                   l.uc, l.cap, COALESCE(l.cap, -1), l.porte, ?
+            FROM vdu_rede_linha l
+            JOIN redes_mercado r ON r.id = l.rede_id
+            SQL, [$agora]);
+
+        DB::update(<<<'SQL'
+            UPDATE visao_diretor_universo u
+            JOIN clientes a ON a.id = u.cliente_id
+            SET u.razao_social = a.razao_social,
+                u.cod_cliente = a.cod_cliente,
+                u.documento = a.cnpj,
+                u.uf = COALESCE(u.uf, NULLIF(a.estado, '')),
+                u.cod_vendedor = NULLIF(a.cod_vendedor, '')
+            WHERE u.rede_id IS NOT NULL
+            SQL);
+
+        DB::statement('DROP TEMPORARY TABLE vdu_rede_linha');
+        DB::statement('DROP TEMPORARY TABLE vdu_empresa_rede');
+        DB::statement('DROP TEMPORARY TABLE vdu_empresa_linha');
     }
 
     /**
@@ -450,6 +670,11 @@ class UniversoDoSegmento
             $query->orderByRaw('segmento_codigo <> ?', [$segmento]);
         }
 
+        // Supermercadista é o ranking da ABRAS: a ordem dele (`trocarSupermercadistaPeloRanking()`).
+        if ($segmento === Segmento::CODIGO_SUPERMERCADISTA) {
+            $query->orderBy('posicao');
+        }
+
         return $query->orderByDesc('capital_ordem')->orderByDesc('id');
     }
 
@@ -582,18 +807,35 @@ class UniversoDoSegmento
                 // A âncora (matriz) e o lead: são o que os botões de cartão CNPJ e mapa usam.
                 'clienteId' => $l->cliente_id,
                 'leadId' => $l->lead_id,
-                'temCnpj' => strlen($digitos) === 14,
+                'temCnpj' => ! $l->rede_id && strlen($digitos) === 14,
                 /*
                  * A linha do cliente é a EMPRESA (raiz do CNPJ), que pode ter mais de um
                  * código no TOTVS. A Carteira busca CNPJ por trecho, então a raiz mascarada
                  * ("45.543.915") abre todas as filiais dela; sem CNPJ, o código.
                  */
                 'buscaCarteira' => strlen($digitos) === 14 ? substr((string) $l->documento, 0, 10) : $l->cod_cliente,
+                // Rede do ranking da ABRAS (aba Supermercadista): a posição e a conta, que é o
+                // que o clique abre na Carteira (`?conta_alvo=`).
+                'posicao' => $l->posicao !== null ? (int) $l->posicao : null,
+                'contaId' => $l->conta_id,
+                // Rede da Maiores redes que juntou várias empresas (`juntarPorRede()`): o
+                // clique abre as filiais dela na Carteira (`?rede_alvo=`).
+                'redeId' => $l->rede_id,
+                'empresas' => $l->empresas !== null ? (int) $l->empresas : null,
                 'nome' => $l->nome,
                 'razaoSocial' => $l->razao_social,
-                // Fantasia só quando diz algo a mais que a razão social.
-                'nomeFantasia' => $l->nome_fantasia && mb_strtoupper($l->nome_fantasia) !== mb_strtoupper($l->nome) ? $l->nome_fantasia : null,
-                'documento' => $l->documento,
+                /*
+                 * Fantasia só quando diz algo a mais que a razão social. Na rede da ABRAS o
+                 * nome é o do ranking, e embaixo vai a razão social da âncora. Na rede juntada
+                 * nenhum dos dois: a âncora pode ser um franqueado ("PATRICIA FERNANDA… LTDA"
+                 * sob CHIQUINHO SORVETES), e o CNPJ dele não é o da rede.
+                 */
+                'nomeFantasia' => match (true) {
+                    (bool) $l->rede_id => null,
+                    (bool) $l->conta_id => $l->razao_social && mb_strtoupper($l->razao_social) !== mb_strtoupper($l->nome) ? $l->razao_social : null,
+                    default => $l->nome_fantasia && mb_strtoupper($l->nome_fantasia) !== mb_strtoupper($l->nome) ? $l->nome_fantasia : null,
+                },
+                'documento' => $l->rede_id ? null : $l->documento,
                 'uf' => $l->uf,
                 'segmentoCodigo' => (string) $l->segmento_codigo,
                 'segmentoNome' => $segmentos[$l->segmento_codigo] ?? (string) $l->segmento_codigo,
