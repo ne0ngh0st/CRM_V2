@@ -290,19 +290,23 @@ class PortalPedidoTest extends TestCase
     public function test_job_grava_o_numero_do_pedido_e_avisa(): void
     {
         Http::fake([
-            '*/v1/api/orders' => Http::response(['payload' => ['id' => 4512]], 201),
+            '*/v1/api/orders' => Http::response(['payload' => ['id' => 4512, 'status' => 'AWAITING_APPROVAL']], 201),
         ]);
 
         [$vendedor, $orcamento] = $this->cenario();
+        $admin = $this->admin();
         $gerador = app(GeradorDePedidoNoPortal::class);
 
         $gerador->preparar($orcamento, '2026-10-15');
-        $gerador->enviar($orcamento->fresh());
+        $gerador->enviar($orcamento->fresh(), $admin);
 
         $orcamento->refresh();
         $this->assertSame(4512, $orcamento->portal_pedido_id);
         $this->assertNull($orcamento->portal_erro);
         $this->assertNotNull($orcamento->portal_enviado_em);
+        // O webhook de status (SIC → CRM) avisa quem clicou; e parte do status da criação.
+        $this->assertSame($admin->id, $orcamento->portal_enviado_por_id);
+        $this->assertSame('AWAITING_APPROVAL', $orcamento->portal_status);
 
         $this->assertDatabaseHas('notificacoes', [
             'user_id' => $vendedor->id,

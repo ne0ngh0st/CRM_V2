@@ -105,6 +105,7 @@ class Orcamento extends Model
             'portal_payload' => 'array',
             'portal_resposta' => 'array',
             'portal_enviado_em' => 'datetime',
+            'portal_status_em' => 'datetime',
             'resposta_cliente_em' => 'datetime',
         ];
     }
@@ -140,6 +141,32 @@ class Orcamento extends Model
     public function cliente(): BelongsTo
     {
         return $this->belongsTo(Cliente::class);
+    }
+
+    /**
+     * Status do pedido no SIC, como o webhook manda. Status desconhecido aparece cru —
+     * a lista exata ainda não veio do time do Portal, e um status novo não pode sumir.
+     */
+    public const ROTULOS_STATUS_PORTAL = [
+        'AWAITING_APPROVAL' => 'Aguardando aprovação',
+        'APPROVED' => 'Aprovado',
+        'REJECTED' => 'Recusado',
+        'REFUSED' => 'Recusado',
+        'CANCELED' => 'Cancelado',
+        'CANCELLED' => 'Cancelado',
+    ];
+
+    /** Status em que o pedido não segue: o aviso sai em vermelho. */
+    public const STATUS_PORTAL_RECUSA = ['REJECTED', 'REFUSED', 'CANCELED', 'CANCELLED'];
+
+    public static function rotuloStatusPortal(?string $status): ?string
+    {
+        return $status === null ? null : (self::ROTULOS_STATUS_PORTAL[$status] ?? $status);
+    }
+
+    public function pedidoRecusadoNoPortal(): bool
+    {
+        return in_array($this->portal_status, self::STATUS_PORTAL_RECUSA, true);
     }
 
     /** Já foi transformado em pedido no Portal? */

@@ -118,7 +118,11 @@ class GeradorDePedidoNoPortal
         $orcamento->forceFill([
             'portal_pedido_id' => $resultado['id'],
             'portal_resposta' => $resultado['dados'],
+            'portal_status' => $resultado['dados']['status'] ?? null,
+            'portal_status_motivo' => null,
+            'portal_status_em' => now(),
             'portal_enviado_em' => now(),
+            'portal_enviado_por_id' => $solicitante?->id,
             'portal_erro' => null,
         ])->save();
 
@@ -151,6 +155,50 @@ class GeradorDePedidoNoPortal
         $orcamento->forceFill(['portal_erro' => $mensagem])->save();
 
         $this->avisar($orcamento, sucesso: false, detalhe: $mensagem, solicitante: $solicitante);
+    }
+
+    /**
+     * O SIC avisou que o pedido mudou de status (webhook). Devolve false quando o status
+     * é o mesmo que já está gravado — retry do lado deles não gera um segundo aviso.
+     *
+     * Avisa o dono do orçamento e quem clicou em "Transformar em pedido". ⚠️ Sem
+     * `referenciaTipo` na notificação: a dedupe do NotificacaoService engoliria o
+     * segundo status do mesmo orçamento (aprovado depois de reaberto, por exemplo).
+     */
+    public function registrarStatus(Orcamento $orcamento, string $status, ?string $motivo): bool
+    {
+        $motivo = filled($motivo) ? mb_substr(trim($motivo), 0, 2000) : null;
+
+        if ($orcamento->portal_status === $status && $orcamento->portal_status_motivo === $motivo) {
+            return false;
+        }
+
+        $orcamento->forceFill([
+            'portal_status' => $status,
+            'portal_status_motivo' => $motivo,
+            'portal_status_em' => now(),
+        ])->save();
+
+        $orcamento->loadMissing('user');
+        $enviadoPor = $orcamento->portal_enviado_por_id !== null ? User::find($orcamento->portal_enviado_por_id) : null;
+        $recusa = $orcamento->pedidoRecusadoNoPortal();
+        $rotulo = mb_strtolower((string) Orcamento::rotuloStatusPortal($status));
+
+        foreach (collect([$orcamento->user, $enviadoPor])->filter()->unique('id') as $destinatario) {
+            $deOutro = $destinatario->id !== $orcamento->user_id && $orcamento->user !== null
+                ? ' ('.($orcamento->user->display_name ?: $orcamento->user->name).')'
+                : '';
+
+            $this->notificacoes->notificar(
+                destinatario: $destinatario,
+                tipo: $recusa ? 'portal_pedido_recusado' : 'portal_pedido_status',
+                titulo: "Pedido nº {$orcamento->portal_pedido_id} {$rotulo} no SIC — orçamento #{$orcamento->id}{$deOutro}",
+                mensagem: $motivo ?? $orcamento->cliente_nome,
+                link: route('orcamentos.index'),
+            );
+        }
+
+        return true;
     }
 
     /**

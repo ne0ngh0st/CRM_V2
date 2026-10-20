@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\SicPedidoWebhookController;
 use App\Http\Controllers\WordpressLeadWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,4 +27,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('throttle:120,1')->group(function () {
     Route::any('/webhooks/wordpress-leads', WordpressLeadWebhookController::class)
         ->name('webhooks.wordpress-leads');
+
+    Route::post('/webhooks/sic-pedidos', SicPedidoWebhookController::class)
+        ->name('webhooks.sic-pedidos');
 });

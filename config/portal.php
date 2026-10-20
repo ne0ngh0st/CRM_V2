@@ -36,6 +36,17 @@ return [
 
     /*
     |---------------------------------------------------------------------------
+    | Chave do webhook de status (SIC → CRM)
+    |---------------------------------------------------------------------------
+    | O SIC chama `/webhooks/sic-pedidos` quando um pedido sai da fila de aprovação,
+    | mandando esta chave no `Authorization: Bearer`. É NOSSA (combinado com o
+    | Philipe em 2026-10-20), não o token da API deles. Vazia, o webhook responde
+    | 503 — é o estado de quem ainda não combinou a chave.
+    */
+    'webhook_token' => (string) env('PORTAL_WEBHOOK_TOKEN', ''),
+
+    /*
+    |---------------------------------------------------------------------------
     | Prazo máximo da data de entrega desejada
     |---------------------------------------------------------------------------
     | Decisão do Tony (2026-10-07): pedido com entrega mais de 3 meses à frente é

@@ -145,12 +145,18 @@ async function compartilharPdf(orcamento) {
                                  pedido do outro lado — a API não tem consulta. -->
                             <span
                                 v-if="orcamento.portalPedidoId"
-                                class="inline-flex items-center whitespace-nowrap rounded border border-green-300 bg-green-50 px-1.5 text-[0.65rem] font-medium leading-5 text-green-700"
+                                class="inline-flex flex-col items-center whitespace-nowrap rounded border px-1.5 text-[0.65rem] font-medium leading-4"
+                                :class="orcamento.portalRecusado
+                                    ? 'border-red-300 bg-red-50 text-red-700'
+                                    : 'border-green-300 bg-green-50 text-green-700'"
                                 :title="`Pedido criado no SIC em ${orcamento.portalEnviadoEm}` + (orcamento.portalEntregaPrevista
                                     ? ` · entrega prevista ${orcamento.portalEntregaPrevista.split('-').reverse().join('/')}`
-                                    : '')"
+                                    : '') + (orcamento.portalStatusRotulo
+                                    ? ` · ${orcamento.portalStatusRotulo} em ${orcamento.portalStatusEm}` : '')
+                                    + (orcamento.portalStatusMotivo ? ` · motivo: ${orcamento.portalStatusMotivo}` : '')"
                             >
                                 nº {{ orcamento.portalPedidoId }}
+                                <span v-if="orcamento.portalStatusRotulo" class="font-normal">{{ orcamento.portalStatusRotulo }}</span>
                             </span>
                             <span
                                 v-else-if="orcamento.portalErro"

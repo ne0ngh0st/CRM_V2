@@ -161,6 +161,11 @@ class OrcamentoController extends Controller
             'portalEnviadoEm' => optional($o->portal_enviado_em)->format('d/m/Y H:i'),
             // O que o ERP decidiu, não o que foi pedido (ver GeradorDePedidoNoPortal).
             'portalEntregaPrevista' => $o->portal_resposta['deliveryTime'] ?? null,
+            // O que o SIC decidiu depois de criado (webhook) — rótulo pronto do servidor.
+            'portalStatusRotulo' => Orcamento::rotuloStatusPortal($o->portal_status),
+            'portalStatusMotivo' => $o->portal_status_motivo,
+            'portalStatusEm' => optional($o->portal_status_em)->format('d/m/Y H:i'),
+            'portalRecusado' => $o->pedidoRecusadoNoPortal(),
             // Próximo clique reenvia o corpo congelado: o modal não pede data nova.
             'portalReenvio' => $o->temEnvioIncertoAoPortal(),
             'itens' => $o->itens->map(fn (OrcamentoItem $i) => [

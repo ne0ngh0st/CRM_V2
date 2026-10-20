@@ -1047,6 +1047,32 @@ O que mudou por causa disso:
 vendedor. A regra mora em `Orcamento::bloqueioDoPedido()`, usada pela rota (403) e pela
 frase do botão desabilitado. Nada muda no payload nem na API.
 
+## 4.15 O SIC avisa quando o pedido sai da fila de aprovação — 2026-10-20
+
+Até aqui o 201 da criação era a última notícia: a API não tem consulta, e um pedido que
+a Laís recusa nunca chega ao TOTVS. Combinado com o Philipe: o SIC chama um webhook
+NOSSO a cada aceite/recusa.
+
+```
+POST https://crm.autopel.online/webhooks/sic-pedidos
+Authorization: Bearer <PORTAL_WEBHOOK_TOKEN>
+{ "orderId": 4512, "status": "REJECTED", "reason": "…" }
+```
+
+- `orderId` é o id devolvido na criação; `orderReference` (`ORC-77`) serve de alternativa.
+- Grava `portal_status`/`portal_status_motivo`/`portal_status_em` e avisa no sino o dono
+  do orçamento e quem clicou (`portal_enviado_por_id`, gravado no envio desde esta data).
+  Mesmo status+motivo repetido não avisa de novo.
+- Pedido desconhecido → 200 `ignorado` (pedido digitado no SIC também pode disparar).
+  Chave errada 401, sem chave configurada 503, corpo inválido 422 em JSON.
+- Status conhecidos e rótulos em `Orcamento::ROTULOS_STATUS_PORTAL`; recusa em
+  `STATUS_PORTAL_RECUSA`. ⚠️ Os nomes exatos dos status do SIC ainda não foram
+  confirmados; status desconhecido aparece cru e não fica vermelho.
+- A chave é nossa e mora só no `.env` dos dois nós. Testar de fora sem efeito colateral:
+  mandar um `orderId` inexistente e esperar `ignorado`.
+- ⚠️ Em aberto: o recusado continua contando como "Virou pedido" no funil e o botão
+  "Transformar em pedido" continua travado (o orçamento ainda tem `portal_pedido_id`).
+
 ## 5. Lacunas de schema — medidas, não estimadas
 
 Números tirados do `palma_v2` de desenvolvimento em 2026-09-09 (1.864 orçamentos,
