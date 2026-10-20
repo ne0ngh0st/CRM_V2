@@ -206,6 +206,68 @@ class PedidosFonteDaVendaTest extends TestCase
         $this->assertSame(['990013'], Pedido::query()->naCarteiraAberta()->pluck('numero_pedido')->all());
     }
 
+    /**
+     * O 232 do mês da emissão fica velho e a nota sai depois. A data vem do 198,
+     * e é a da última nota. Valor e status continuam os do 232.
+     */
+    public function test_nota_preenche_a_data_de_quem_saiu_do_200(): void
+    {
+        $this->pedido('990010', '2026-08-14');
+        $this->pedido('990011', '2026-08-22', valor: 16107.0);
+        $this->nota('990011', '2026-09-10', 100.0);
+        $this->nota('990011', '2026-09-16', 15945.93);
+
+        $this->escreverRelatorio200([['990010', 'PEDIDO 990010 INCLUIDO NA CARGA 190050']]);
+        $this->artisan('totvs:import-pedidos-abertos')
+            ->expectsOutputToContain('preenchida pela nota')
+            ->assertSuccessful();
+
+        $pedido = Pedido::where('numero_pedido', '990011')->firstOrFail();
+        $this->assertSame('2026-09-16', $pedido->data_faturamento->toDateString());
+        $this->assertEqualsWithDelta(16107.0, (float) $pedido->valor_total, 0.001);
+        $this->assertSame(StatusPedidoResolver::DESCONHECIDO, $pedido->status);
+        $this->assertNotContains('990011', Pedido::query()->naCarteiraAberta()->pluck('numero_pedido')->all());
+    }
+
+    /** Nota parcial de pedido que o 200 ainda lista não pode fechar o pedido. */
+    public function test_nota_parcial_nao_fecha_pedido_que_ainda_esta_no_200(): void
+    {
+        $this->pedido('990020', '2026-08-14', valor: 500.0);
+        $this->nota('990020', '2026-09-01', 100.0);
+
+        $this->escreverRelatorio200([['990020', 'PEDIDO 990020 INCLUIDO NA CARGA 190050']]);
+        $this->artisan('totvs:import-pedidos-abertos')->assertSuccessful();
+
+        $pedido = Pedido::where('numero_pedido', '990020')->firstOrFail();
+        $this->assertNull($pedido->data_faturamento);
+        $this->assertContains('990020', Pedido::query()->naCarteiraAberta()->pluck('numero_pedido')->all());
+    }
+
+    /**
+     * A hora seguinte relê o 232 velho e zera a data. O 200, que roda depois, devolve.
+     */
+    public function test_232_velho_nao_segura_a_data_que_a_nota_ja_deu(): void
+    {
+        $this->pedido('990010', '2026-08-14');
+        $this->pedido('990011', '2026-08-22', valor: 16107.0);
+        $this->nota('990011', '2026-09-16', 15945.93);
+
+        $this->escreverRelatorio200([['990010', 'PEDIDO 990010 INCLUIDO NA CARGA 190050']]);
+        $this->artisan('totvs:import-pedidos-abertos')->assertSuccessful();
+
+        $this->escreverRelatorio232([
+            ['PEDIDO' => '990011', 'DT_EMISSAO' => '22/08/2026', 'VLR_TOTAL' => '16.107,00'] + self::ABERTA,
+        ]);
+        $this->artisan('totvs:import-pedidos-emitidos')->assertSuccessful();
+        $this->assertNull(Pedido::where('numero_pedido', '990011')->firstOrFail()->data_faturamento);
+
+        $this->artisan('totvs:import-pedidos-abertos')->assertSuccessful();
+
+        $deVolta = Pedido::where('numero_pedido', '990011')->firstOrFail();
+        $this->assertSame('2026-09-16', $deVolta->data_faturamento->toDateString());
+        $this->assertEqualsWithDelta(16107.0, (float) $deVolta->valor_total, 0.001);
+    }
+
     /** Um 200 vazio ou truncado não pode esconder a carteira inteira. */
     public function test_200_sem_nenhum_pedido_do_crm_nao_esconde_nada(): void
     {
@@ -218,6 +280,18 @@ class PedidosFonteDaVendaTest extends TestCase
             ->assertSuccessful();
 
         $this->assertSame(['990014'], Pedido::query()->naCarteiraAberta()->pluck('numero_pedido')->all());
+    }
+
+    private function nota(string $pedido, string $data, float $valor): void
+    {
+        DB::table('faturamentos')->insert([
+            'pedido' => $pedido,
+            'data_emissao' => $data,
+            'cod_vendedor' => '010585',
+            'valor_total' => $valor,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function pedido(string $numero, string $data, ?string $faturadoEm = null, float $valor = 100.0, ?string $status = null): void

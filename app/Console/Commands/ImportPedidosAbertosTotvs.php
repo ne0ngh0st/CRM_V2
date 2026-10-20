@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Pedidos\DataFaturamentoPelaNota;
 use App\Services\Pedidos\StatusPedidoResolver;
 use App\Services\Totvs\ClientesLookup;
 use App\Services\Totvs\Normalizador;
@@ -27,6 +28,10 @@ use Illuminate\Support\Facades\DB;
  * marcado `fora_do_200` e some de `/pedidos-abertos`, que volta a ser espelho do 200.
  * Sem apagar nem dar baixa — a venda continua sendo do 232. Ver marcarForaDo200().
  *
+ * A data de faturamento, quando o 232 do mês ficou velho, vem da nota já gravada em
+ * `faturamentos` ({@see DataFaturamentoPelaNota}). O 200 sozinho não distingue nota de
+ * cancelamento e não inventa essa data. Pedido que ainda está no 200 não é fechado.
+ *
  * ⚠️ O STATUS DO PEDIDO SAI DO `HISTORICO`, e este comentário já disse o contrário.
  * Ele mandava não adivinhar status a partir da frase, porque a redação poderia mudar —
  * e o efeito foi todo pedido em aberto entrar como `pendente_totvs`, deixando a tela com
@@ -46,8 +51,10 @@ class ImportPedidosAbertosTotvs extends Command
 
     protected $description = 'Importa os pedidos em aberto do relatório 200 do TOTVS, direto do arquivo';
 
-    public function __construct(private readonly StatusPedidoResolver $status)
-    {
+    public function __construct(
+        private readonly StatusPedidoResolver $status,
+        private readonly DataFaturamentoPelaNota $dataFaturamentoPelaNota,
+    ) {
         parent::__construct();
     }
 
@@ -162,12 +169,18 @@ class ImportPedidosAbertosTotvs extends Command
         if ($dryRun) {
             $this->info('[dry-run] Atualizaria a etapa de '.number_format(count($atualizar), 0, ',', '.').' pedidos em aberto.');
         } else {
-            DB::transaction(function () use ($atualizar) {
+            $comNota = 0;
+            DB::transaction(function () use ($atualizar, &$comNota) {
                 $this->gravar($atualizar);
                 $this->marcarForaDo200($atualizar);
+                $comNota = $this->dataFaturamentoPelaNota->aplicar();
             });
 
             $this->info('Etapa atualizada em '.number_format(count($atualizar), 0, ',', '.').' pedidos em aberto.');
+
+            if ($comNota > 0) {
+                $this->line('Data de faturamento preenchida pela nota (pedido fora do 200): '.number_format($comNota, 0, ',', '.'));
+            }
 
             $fora = DB::table('pedidos')->whereNull('data_faturamento')->where('fora_do_200', true)
                 ->selectRaw('COUNT(*) as n, COALESCE(SUM(valor_total), 0) as valor')->first();
@@ -178,7 +191,7 @@ class ImportPedidosAbertosTotvs extends Command
                     number_format((int) $fora->n, 0, ',', '.'),
                     number_format((float) $fora->valor, 2, ',', '.')
                 ));
-                $this->line('  → faturados ou cancelados depois do último 232 do mês deles. Somem da venda só quando o 232 daquele mês for gerado de novo.');
+                $this->line('  → sem nota no faturamento. Cancelado, ou nota que o 198 ainda não trouxe.');
             }
         }
 
