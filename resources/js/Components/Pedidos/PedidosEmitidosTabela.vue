@@ -1,8 +1,6 @@
 <script setup>
 import { ref } from 'vue';
 import StatusPill from '@/Components/StatusPill.vue';
-import StatusPedidoPill from '@/Components/Pedidos/StatusPedidoPill.vue';
-import MovimentoTotvs from '@/Components/Pedidos/MovimentoTotvs.vue';
 
 defineProps({
     pedidos: { type: Array, required: true },
@@ -35,7 +33,6 @@ function formatQuantidade(valor) {
                     <th class="tbl-th">Data Pedido</th>
                     <th class="tbl-th">Faturamento</th>
                     <th class="tbl-th">Valor Total</th>
-                    <th class="tbl-th">Status</th>
                     <th class="tbl-th">Itens</th>
                 </tr>
             </thead>
@@ -69,13 +66,10 @@ function formatQuantidade(valor) {
                             </StatusPill>
                         </td>
                         <td class="tbl-td font-medium text-gray-800" data-rotulo="Valor total">{{ formatBRL(pedido.valorTotal) }}</td>
-                        <td class="tbl-td" data-rotulo="Status">
-                            <StatusPedidoPill :status="pedido.status" :rotulo="pedido.statusRotulo" />
-                        </td>
                         <td class="tbl-td tbl-td-oculto">{{ pedido.itens.length }}</td>
                     </tr>
                     <tr v-if="expandido === pedido.id" class="bg-gray-50">
-                        <td colspan="9" class="tbl-td-expansao p-2 sm:p-4">
+                        <td colspan="8" class="tbl-td-expansao p-2 sm:p-4">
                             <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
                                 <div class="lg:col-span-2">
                                     <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens do pedido</p>
@@ -107,8 +101,6 @@ function formatQuantidade(valor) {
                                     </div>
                                 </div>
                                 <div class="space-y-4">
-                                    <MovimentoTotvs :movimento="pedido.movimento" :movimento-em="pedido.movimentoEm" />
-
                                     <div>
                                         <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Detalhes</p>
                                         <dl class="mt-2 space-y-1.5 text-xs text-gray-600">

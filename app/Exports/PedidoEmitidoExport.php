@@ -3,7 +3,6 @@
 namespace App\Exports;
 
 use App\Models\Pedido;
-use App\Services\Pedidos\StatusPedidoResolver;
 use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -16,12 +15,8 @@ class PedidoEmitidoExport implements FromQuery, WithHeadings, WithMapping, WithC
 {
     private Collection $nomesPorCodVendedor;
 
-    private readonly StatusPedidoResolver $status;
-
     public function __construct(private readonly Builder $query)
     {
-        $this->status = new StatusPedidoResolver;
-
         // Inclui quem NAO tem conta no CRM (ex-funcionario, licitacao/SAC, e os baldes
         // do proprio TOTVS): sem isso a coluna Vendedor sai com o codigo cru para 27%
         // da base. O `?? $codigo` do `map()` e o ultimo degrau - ver o resolver.
@@ -35,7 +30,7 @@ class PedidoEmitidoExport implements FromQuery, WithHeadings, WithMapping, WithC
 
     public function headings(): array
     {
-        return ['Pedido', 'Cliente', 'CNPJ', 'Vendedor', 'Data Pedido', 'Faturamento', 'Valor Total', 'Status', 'Movimento no TOTVS', 'Movimento em', 'Itens'];
+        return ['Pedido', 'Cliente', 'CNPJ', 'Vendedor', 'Data Pedido', 'Faturamento', 'Valor Total', 'Itens'];
     }
 
     /** @param  Pedido  $pedido */
@@ -49,17 +44,6 @@ class PedidoEmitidoExport implements FromQuery, WithHeadings, WithMapping, WithC
             optional($pedido->data_pedido)->format('d/m/Y'),
             optional($pedido->data_faturamento)->format('d/m/Y') ?: 'Em aberto',
             (float) $pedido->valor_total,
-            /*
-             * ⚠️ O RÓTULO, nunca o valor do enum. A planilha vai para fora do
-             * sistema e ninguém de fora sabe o que é `bloqueio_estoque`. Vem do
-             * mesmo resolver que alimenta a tela, então os dois nunca divergem.
-             *
-             * Movimento não reconhecido não vira texto inventado: a célula fica
-             * vazia e o texto cru do TOTVS aparece na coluna ao lado.
-             */
-            $this->status->rotulo($pedido->status),
-            $pedido->historico_totvs,
-            optional($pedido->historico_em)->format('d/m/Y H:i'),
             $pedido->itens_count,
         ];
     }

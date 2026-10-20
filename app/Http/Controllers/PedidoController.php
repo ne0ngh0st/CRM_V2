@@ -341,7 +341,6 @@ class PedidoController extends Controller
             'condicaoPagamento' => $p->condicao_pagamento,
             'faturado' => $p->data_faturamento !== null,
             'valorTotal' => (float) $p->valor_total,
-            ...$this->statusPedido->paraTela($p),
             'itens' => $p->itens->map(fn ($item) => [
                 'codProduto' => $item->cod_produto,
                 'descricao' => $item->descricao,
