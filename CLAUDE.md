@@ -2693,6 +2693,12 @@ O orçamento passou a ter DUAS aprovações, com nomes que dizem o que são:
   diz "Aprovados"/"Valor aprovado" no sentido de margem — não foi mexido.
 - Testes: `OrcamentoRespostaClienteTest`.
 
+**O SIC avisa aceite/recusa (2026-10-20).** `POST /webhooks/sic-pedidos`
+(`SicPedidoWebhookController`, Bearer `PORTAL_WEBHOOK_TOKEN`) grava `portal_status`,
+motivo e data no orçamento e avisa no sino o dono e quem enviou. Detalhe e armadilhas em
+`docs/integracao-portal-pedidos.md` §4.15. ⚠️ Os nomes dos status do SIC ainda não foram
+confirmados, e o recusado continua contando como "Virou pedido" no funil.
+
 ### O 232 virou a fonte da venda; o 200 só dá a etapa — 2026-09-25
 
 Setembro/2026 saía **R$ 61,5 mi no CRM e no BI contra R$ 58,4 mi no Excel do 232**. O
@@ -2720,6 +2726,24 @@ em aberto que o 200 (três dias mais velho) ainda não tinha.
 - ⚠️ O §10.2 de `docs/importacao-dados-legado.md` ("o 200 prevalece no empate") descreve o
   desenho ANTIGO.
 - Testes: `PedidosFonteDaVendaTest` (8). ⚠️ Não verificados por mutação (feito às pressas).
+
+**Depois disso (2026-09-29 e 2026-10-20), o 200 também diz quem SAIU da carteira:**
+- **`pedidos.fora_do_200`**: pedido em aberto no CRM que não está no 200 é marcado e some
+  de `/pedidos-abertos` (`Pedido::scopeNaCarteiraAberta()`), que volta a ser espelho do
+  200. Não apaga nem dá baixa — o 200 não distingue nota de cancelamento. Escrito só pelo
+  import do 200 (fora do `$fillable`). A view de abertos do BI usa o mesmo corte.
+- **A baixa vem da nota** (`App\Services\Pedidos\DataFaturamentoPelaNota`, no fim do
+  import do 200): pedido `fora_do_200` com nota em `faturamentos` ganha
+  `data_faturamento` = última nota e `status = faturado`. Motivo: o 232 é recorte pela
+  data de EMISSÃO, então a nota que sai no mês seguinte nunca volta naquele arquivo.
+  Valor continua o do 232; pedido ainda no 200 nunca é fechado (nota parcial não fecha).
+  Sem nota, segue em aberto ("cancelado, ou nota que o 198 ainda não trouxe").
+- ⚠️ **Vai e volta a cada rodada, de propósito**: o 232 relê o mês velho e zera a data
+  (e o status); o 200, que roda depois, devolve. Certo no fim da rodada, errado por
+  minutos no meio. Coberto por teste.
+- Índice novo em `faturamentos.pedido` para essa junção (sem ele, 34 s em produção).
+- **Pedidos Emitidos não tem mais coluna Status** (tela e Excel): a etapa do TOTVS só
+  faz sentido na lista de abertos. A ficha do cliente ainda mostra a pill.
 
 ### Resumo diário da equipe por e-mail — 2026-09-28
 

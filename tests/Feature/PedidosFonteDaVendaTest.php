@@ -208,7 +208,7 @@ class PedidosFonteDaVendaTest extends TestCase
 
     /**
      * O 232 do mês da emissão fica velho e a nota sai depois. A data vem do 198,
-     * e é a da última nota. Valor e status continuam os do 232.
+     * e é a da última nota. O valor continua o do 232; o status vira faturado.
      */
     public function test_nota_preenche_a_data_de_quem_saiu_do_200(): void
     {
@@ -225,7 +225,7 @@ class PedidosFonteDaVendaTest extends TestCase
         $pedido = Pedido::where('numero_pedido', '990011')->firstOrFail();
         $this->assertSame('2026-09-16', $pedido->data_faturamento->toDateString());
         $this->assertEqualsWithDelta(16107.0, (float) $pedido->valor_total, 0.001);
-        $this->assertSame(StatusPedidoResolver::DESCONHECIDO, $pedido->status);
+        $this->assertSame(StatusPedidoResolver::FATURADO, $pedido->status);
         $this->assertNotContains('990011', Pedido::query()->naCarteiraAberta()->pluck('numero_pedido')->all());
     }
 
@@ -266,6 +266,7 @@ class PedidosFonteDaVendaTest extends TestCase
         $deVolta = Pedido::where('numero_pedido', '990011')->firstOrFail();
         $this->assertSame('2026-09-16', $deVolta->data_faturamento->toDateString());
         $this->assertEqualsWithDelta(16107.0, (float) $deVolta->valor_total, 0.001);
+        $this->assertSame(StatusPedidoResolver::FATURADO, $deVolta->status);
     }
 
     /** Um 200 vazio ou truncado não pode esconder a carteira inteira. */

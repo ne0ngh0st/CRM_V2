@@ -18,8 +18,11 @@ use Illuminate\Support\Facades\DB;
  * ⚠️ Pedido que AINDA está no 200 não entra, mesmo com nota parcial. Faturamento
  * parcial continua em aberto, com o valor cheio — é o que o 232 soma.
  *
- * ⚠️ Não mexe em valor nem em status. Os dois continuam sendo do 232. A data é a da
- * última nota (`MAX(data_emissao)`), a mesma regra do 232 quando há mais de um item.
+ * ⚠️ Não mexe em valor, que continua sendo do 232. O status vira `faturado`, como o
+ * 232 faria se trouxesse a nota: sem isso o pedido fechado mantinha a etapa do último
+ * 200 ("Incluído na carga") e a ficha do cliente mostrava as duas coisas ao mesmo tempo.
+ * A data é a da última nota (`MAX(data_emissao)`), a mesma regra do 232 quando há mais
+ * de um item.
  *
  * O índice em `faturamentos.pedido` existe para esta junção. Sem ele, cruzar os
  * poucos mil pedidos fora do 200 com os milhões de notas varre a tabela (medido em
@@ -41,9 +44,10 @@ class DataFaturamentoPelaNota
                 GROUP BY f.pedido
             ) nota ON nota.numero = p.numero_pedido
             SET p.data_faturamento = nota.data_nota,
+                p.status = ?,
                 p.updated_at = ?
             WHERE p.data_faturamento IS NULL
               AND p.fora_do_200 = 1
-        ', [now()]);
+        ', [StatusPedidoResolver::FATURADO, now()]);
     }
 }

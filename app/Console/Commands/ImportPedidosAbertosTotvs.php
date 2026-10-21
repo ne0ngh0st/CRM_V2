@@ -26,11 +26,13 @@ use Illuminate\Support\Facades\DB;
  *
  * O contrário também é tratado (2026-09-29): pedido em aberto no CRM que SAIU do 200 é
  * marcado `fora_do_200` e some de `/pedidos-abertos`, que volta a ser espelho do 200.
- * Sem apagar nem dar baixa — a venda continua sendo do 232. Ver marcarForaDo200().
+ * Sair do 200 sozinho não apaga nem dá baixa — o 200 não distingue nota de
+ * cancelamento. Ver marcarForaDo200().
  *
- * A data de faturamento, quando o 232 do mês ficou velho, vem da nota já gravada em
- * `faturamentos` ({@see DataFaturamentoPelaNota}). O 200 sozinho não distingue nota de
- * cancelamento e não inventa essa data. Pedido que ainda está no 200 não é fechado.
+ * A baixa vem da nota (2026-10-20): pedido fora do 200 que já tem nota em
+ * `faturamentos` ganha a data dela e status `faturado` ({@see DataFaturamentoPelaNota}),
+ * porque o 232 do mês da emissão fica velho e não traz a nota que sai depois. Sem nota,
+ * continua em aberto. Pedido que ainda está no 200 nunca é fechado.
  *
  * ⚠️ O STATUS DO PEDIDO SAI DO `HISTORICO`, e este comentário já disse o contrário.
  * Ele mandava não adivinhar status a partir da frase, porque a redação poderia mudar —
