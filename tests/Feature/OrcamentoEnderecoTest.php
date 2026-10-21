@@ -359,4 +359,53 @@ class OrcamentoEnderecoTest extends TestCase
             'tipo_produto_servico' => 'produto',
         ];
     }
+
+    /*
+     * Código do cliente no TOTVS (código/loja) — 2026-10-21. Só leitura, derivado do
+     * vínculo `cliente_id`. Loja 0002 de propósito: com 0001 um formato que trocasse a
+     * loja pela da matriz passaria verde.
+     */
+
+    #[Test]
+    public function a_busca_de_cliente_devolve_o_codigo_totvs(): void
+    {
+        $this->cliente(['loja' => '0002']);
+
+        $this->actingAs($this->vendedor())
+            ->getJson(route('orcamentos.buscaClientes', ['q' => 'KNTT']))
+            ->assertJsonPath('0.codigoTotvs', '000123/0002');
+    }
+
+    #[Test]
+    public function edicao_lista_e_pdf_mostram_o_codigo_totvs_do_cliente_vinculado(): void
+    {
+        $cliente = $this->cliente(['loja' => '0002']);
+        $user = $this->vendedor();
+        $orcamento = Orcamento::create($this->dadosBase() + ['user_id' => $user->id, 'cliente_id' => $cliente->id]);
+
+        $this->actingAs($user)->get(route('orcamentos.editar', $orcamento))
+            ->assertInertia(fn ($page) => $page->where('orcamento.codigoTotvs', '000123/0002'));
+
+        $this->actingAs($user)->get(route('orcamentos.index'))
+            ->assertInertia(fn ($page) => $page->where('orcamentos.data.0.codigoTotvs', '000123/0002'));
+
+        $html = $this->renderizarFolha($orcamento->fresh());
+        $this->assertStringContainsString('Cód. cliente', $html);
+        $this->assertStringContainsString('000123/0002', $html);
+    }
+
+    #[Test]
+    public function orcamento_sem_vinculo_nao_inventa_codigo(): void
+    {
+        // Mesmo com um cliente de CNPJ igual na base: sem vínculo, não há como saber a
+        // filial, e código errado num documento é pior que código ausente.
+        $this->cliente();
+        $user = $this->vendedor();
+        $orcamento = Orcamento::create($this->dadosBase() + ['user_id' => $user->id, 'cliente_cnpj' => '16729628000162']);
+
+        $this->actingAs($user)->get(route('orcamentos.editar', $orcamento))
+            ->assertInertia(fn ($page) => $page->where('orcamento.codigoTotvs', null));
+
+        $this->assertStringNotContainsString('Cód. cliente', $this->renderizarFolha($orcamento->fresh()));
+    }
 }

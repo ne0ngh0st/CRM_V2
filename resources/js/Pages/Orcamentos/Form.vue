@@ -1,6 +1,6 @@
 <script setup>
 import { resumo as resumoOrcamento } from '@/utils/orcamento';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
@@ -104,6 +104,10 @@ const form = useForm({
         : [itemVazio()],
 });
 
+// Código do cliente no TOTVS (código/loja). Só leitura: o servidor deriva do vínculo
+// com `clientes`, então não vai no form — acompanha a escolha na busca.
+const codigoTotvs = ref(fonte?.codigoTotvs ?? props.prefillCliente?.codigoTotvs ?? null);
+
 function selecionarCliente(cliente) {
     // Os dois vínculos são mutuamente exclusivos: trocar de lead para cliente (ou o
     // contrário) tem que limpar o outro, senão o orçamento ficaria atribuído a alguém
@@ -112,6 +116,7 @@ function selecionarCliente(cliente) {
     // ⚠️ Sem este vínculo o orçamento não vira pedido no Portal: o de-para do `clientId`
     // é por cod_cliente + loja, que só existem em `clientes`.
     form.cliente_id = cliente.origem === 'cliente' ? (cliente.clienteId ?? null) : null;
+    codigoTotvs.value = cliente.origem === 'cliente' ? (cliente.codigoTotvs ?? null) : null;
     form.cliente_nome = cliente.nome ?? '';
     form.cliente_cnpj = cliente.cnpj ?? '';
     // ⚠️ Atribuir SEMPRE, inclusive vazio: trocar de cliente tem que limpar o endereço
@@ -221,6 +226,9 @@ function salvar() {
                                 <DocLinha rotulo="CNPJ">
                                     <input v-model="form.cliente_cnpj" type="text" class="doc-campo" placeholder="00.000.000/0000-00" />
                                     <InputError :message="form.errors.cliente_cnpj" />
+                                </DocLinha>
+                                <DocLinha v-if="codigoTotvs" rotulo="Cód. cliente">
+                                    <span class="doc-valor">{{ codigoTotvs }}</span>
                                 </DocLinha>
                                 <DocLinha rotulo="Endereço">
                                     <input v-model="form.cliente_endereco" type="text" class="doc-campo" placeholder="Logradouro e número" />

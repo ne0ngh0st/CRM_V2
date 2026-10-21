@@ -191,6 +191,12 @@
                     <td class="rotulo">CNPJ</td>
                     <td class="valor">{{ $orcamento->cliente_cnpj ?: '—' }}</td>
                 </tr>
+                @if ($orcamento->cliente)
+                    <tr>
+                        <td class="rotulo">Cód. cliente</td>
+                        <td class="valor">{{ $orcamento->cliente->codigoTotvs() }}</td>
+                    </tr>
+                @endif
                 {{--
                     Endereço do CNPJ orçado — sugestão do Vagner Sabelli (10/09/2026).
 

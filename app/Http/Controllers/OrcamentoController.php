@@ -100,7 +100,7 @@ class OrcamentoController extends Controller
         $kpis = $this->kpis($kpisQuery());
 
         $orcamentos = $listaQuery()
-            ->with(['user:id,name,display_name', 'aprovadoPor:id,name,display_name', 'respostaClientePor:id,name,display_name', 'itens'])
+            ->with(['user:id,name,display_name', 'aprovadoPor:id,name,display_name', 'respostaClientePor:id,name,display_name', 'cliente:id,cod_cliente,loja', 'itens'])
             ->latest()
             ->paginate(20)
             ->withQueryString();
@@ -109,6 +109,7 @@ class OrcamentoController extends Controller
             'id' => $o->id,
             'clienteNome' => $o->cliente_nome,
             'clienteCnpj' => $o->cliente_cnpj,
+            'codigoTotvs' => $o->cliente?->codigoTotvs(),
             'clienteContato' => $o->cliente_contato,
             'vendedorNome' => $o->user->display_name ?: $o->user->name,
             'formaPagamento' => $o->forma_pagamento,
@@ -370,6 +371,9 @@ class OrcamentoController extends Controller
                 // A Carteira manda o id junto; sem ele o orçamento criado a partir de um
                 // cliente da carteira nasceria sem vínculo e não viraria pedido.
                 'clienteId' => $request->integer('cliente_id') ?: null,
+                'codigoTotvs' => $request->integer('cliente_id')
+                    ? Cliente::query()->find($request->integer('cliente_id'))?->codigoTotvs()
+                    : null,
                 'nome' => (string) $request->string('cliente_nome'),
                 'cnpj' => (string) $request->string('cliente_cnpj'),
                 'contato' => (string) $request->string('cliente_contato'),
@@ -703,7 +707,7 @@ class OrcamentoController extends Controller
     {
         abort_unless($this->podeVisualizar($request->user(), $orcamento), 403);
 
-        $orcamento->load(['itens', 'user', 'aprovadoPor']);
+        $orcamento->load(['itens', 'user', 'aprovadoPor', 'cliente:id,cod_cliente,loja']);
 
         $itensCalculados = $orcamento->itens
             ->map(fn (OrcamentoItem $i) => $this->calculoService->calcularItem([
@@ -758,6 +762,7 @@ class OrcamentoController extends Controller
                  * primeiro passo de "Transformar em pedido".
                  */
                 'clienteId' => $c->id,
+                'codigoTotvs' => $c->codigoTotvs(),
                 'nome' => $c->razao_social,
                 'cnpj' => $c->cnpj,
                 'telefone' => $c->telefone,
@@ -1159,6 +1164,9 @@ class OrcamentoController extends Controller
             // Idem para o cliente — e aqui perder o vínculo custa mais: sem ele o
             // orçamento deixa de poder virar pedido no Portal.
             'clienteId' => $orcamento->cliente_id,
+            // Só leitura: deriva do vínculo, não é digitado. Orçamento sem vínculo
+            // (lead, digitado à mão, histórico do legado) fica sem código.
+            'codigoTotvs' => $orcamento->cliente?->codigoTotvs(),
             'clienteNome' => $orcamento->cliente_nome,
             'clienteCnpj' => $orcamento->cliente_cnpj,
             /*

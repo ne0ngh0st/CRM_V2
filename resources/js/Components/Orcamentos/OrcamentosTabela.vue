@@ -114,7 +114,7 @@ async function compartilharPdf(orcamento) {
                         </td>
                         <td class="tbl-td tbl-td-titulo">
                             <span class="tbl-main sm:max-w-[220px]" :title="orcamento.clienteNome">#{{ orcamento.id }} · {{ orcamento.clienteNome }}</span>
-                            <span class="tbl-sub">{{ orcamento.clienteCnpj ?? '—' }}</span>
+                            <span class="tbl-sub">{{ orcamento.clienteCnpj ?? '—' }}<template v-if="orcamento.codigoTotvs"> · {{ orcamento.codigoTotvs }}</template></span>
                         </td>
                         <td class="tbl-td" data-rotulo="Vendedor">{{ orcamento.vendedorNome }}</td>
                         <td class="tbl-td font-medium text-gray-800" data-rotulo="Valor total">{{ formatBRL(orcamento.valorTotal) }}</td>

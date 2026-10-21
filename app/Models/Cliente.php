@@ -60,6 +60,15 @@ class Cliente extends Model
         ];
     }
 
+    /**
+     * O código do cliente no TOTVS como o sistema inteiro escreve: "000123/0001".
+     * Formato num lugar só (Regra de ouro nº 8) — orçamento, tela e PDF leem daqui.
+     */
+    public function codigoTotvs(): string
+    {
+        return $this->cod_cliente.'/'.$this->loja;
+    }
+
     public function pedidos(): HasMany
     {
         return $this->hasMany(Pedido::class);
