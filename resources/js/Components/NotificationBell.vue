@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import Dropdown from '@/Components/Dropdown.vue';
-import { router, usePage } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
+import { abrirLinkDaNotificacao, formatarDataHora } from '@/utils/notificacao';
 import axios from 'axios';
 
 // Contexto de áudio em escopo de módulo (não do componente) — sobrevive a
@@ -60,24 +61,7 @@ async function abrir(notificacao) {
 
     axios.post(route('notificacoes.marcarLida', notificacao.id));
 
-    if (!notificacao.link) return;
-
-    /*
-     * ⚠️ Link de ARQUIVO não passa pelo router do Inertia.
-     *
-     * `router.visit` faz um XHR e espera uma resposta de página; recebendo um .xlsx ele
-     * descarta a resposta e o clique não faz nada — sem download e sem erro visível, que
-     * era o sintoma da planilha da Carteira. Quem sabe baixar é o navegador: como a rota
-     * responde com `Content-Disposition: attachment`, atribuir a location dispara o
-     * download sem sair da página. Quem decide o que é arquivo é o servidor
-     * (Notificacao::TIPOS_DOWNLOAD), não uma lista de tipos repetida aqui.
-     */
-    if (notificacao.download) {
-        window.location.href = notificacao.link;
-        return;
-    }
-
-    router.visit(notificacao.link);
+    abrirLinkDaNotificacao(notificacao);
 }
 
 async function marcarTodas() {
@@ -85,15 +69,6 @@ async function marcarTodas() {
     contagem.value = 0;
 
     await axios.post(route('notificacoes.marcarTodas'));
-}
-
-function formatarHora(iso) {
-    return new Date(iso).toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
 }
 
 function aoFicarVisivel() {
@@ -225,11 +200,19 @@ onUnmounted(() => {
                             >
                                 {{ n.mensagem }}
                             </p>
-                            <p class="mt-0.5 text-[0.65rem] text-gray-400">{{ formatarHora(n.criadoEm) }}</p>
+                            <p class="mt-0.5 text-[0.65rem] text-gray-400">{{ formatarDataHora(n.criadoEm) }}</p>
                         </div>
                     </div>
                 </li>
             </ul>
+
+            <!-- As lidas somem da lista acima; o histórico é o caminho de volta até elas. -->
+            <Link
+                :href="route('notificacoes.historico')"
+                class="block border-t border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-medium text-teal-700 hover:bg-gray-100 hover:text-teal-900"
+            >
+                Ver todas as notificações
+            </Link>
         </template>
     </Dropdown>
 </template>

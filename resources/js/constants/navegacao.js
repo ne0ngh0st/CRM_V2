@@ -143,6 +143,7 @@ export const NAV_PRINCIPAL = [
  */
 export const NAV_USUARIO = [
     { chave: 'perfil', rotulo: 'Perfil', icone: 'perfil', rota: 'profile.edit', ativoEm: ['profile.*'] },
+    { chave: 'notificacoes', rotulo: 'Notificações', icone: 'notificacoes', rota: 'notificacoes.historico', ativoEm: ['notificacoes.*'] },
     { chave: 'downloads', rotulo: 'Meus downloads', icone: 'downloads', rota: 'exportacoes.index', ativoEm: ['exportacoes.*'] },
     {
         // Mostra estado de infraestrutura e dispara carga pesada no banco — só admin,

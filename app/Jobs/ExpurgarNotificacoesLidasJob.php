@@ -18,7 +18,7 @@ class ExpurgarNotificacoesLidasJob implements ShouldQueue
     {
         Notificacao::query()
             ->whereNotNull('lida_em')
-            ->where('lida_em', '<', now()->subDays(30))
+            ->where('lida_em', '<', now()->subDays(Notificacao::DIAS_GUARDA_LIDAS))
             ->delete();
     }
 }

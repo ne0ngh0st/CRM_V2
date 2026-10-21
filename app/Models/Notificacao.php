@@ -35,6 +35,14 @@ class Notificacao extends Model
      */
     public const TIPOS_DESTAQUE = ['intranet_importante'];
 
+    /**
+     * Quantos dias uma notificação LIDA continua guardada antes do expurgo semanal.
+     *
+     * Lido pelo `ExpurgarNotificacoesLidasJob` e pela tela de histórico, que diz isso ao
+     * usuário — um lugar só (Regra de ouro nº 8). Não lida nunca é expurgada.
+     */
+    public const DIAS_GUARDA_LIDAS = 30;
+
     protected $fillable = [
         'user_id',
         'tipo',

@@ -40,6 +40,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile/foto', [ProfileController::class, 'destroyFoto'])->name('profile.foto.destroy');
 
     Route::get('/notificacoes', [NotificacaoController::class, 'index'])->name('notificacoes.index');
+    // Histórico: inclui as já lidas, que somem do sino. `index` acima é o JSON do sino.
+    Route::get('/notificacoes/historico', [NotificacaoController::class, 'historico'])->name('notificacoes.historico');
     Route::post('/notificacoes/marcar-todas', [NotificacaoController::class, 'marcarTodas'])->name('notificacoes.marcarTodas');
     Route::post('/notificacoes/{notificacao}/marcar-lida', [NotificacaoController::class, 'marcarLida'])->name('notificacoes.marcarLida');
 
