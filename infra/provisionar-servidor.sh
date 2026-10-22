@@ -41,7 +41,16 @@ apt-get install -y -qq \
   php8.3-mysql php8.3-redis php8.3-mbstring php8.3-xml php8.3-curl \
   php8.3-zip php8.3-gd php8.3-bcmath php8.3-intl php8.3-opcache \
   git unzip curl supervisor \
-  mysql-client redis-tools
+  mysql-client redis-tools \
+  python3 python3-venv
+
+# Motor da Cotação (motor/cotacao): venv próprio, fora do repositório, no mesmo caminho do
+# docker/dev/Dockerfile. Os pacotes (rapidfuzz, openpyxl) quem instala é o deploy.sh, a
+# partir do requirements.txt versionado — aqui só nasce o venv, com dono APP_USER.
+if [ ! -x /opt/cotacao-venv/bin/python ]; then
+  python3 -m venv /opt/cotacao-venv
+fi
+chown -R ${APP_USER}:${APP_USER} /opt/cotacao-venv
 
 echo "==> Conferindo extensões obrigatórias"
 # ⚠️ O OPcache se apresenta no `php -m` como "Zend OPcache", não como "opcache" — ele sai

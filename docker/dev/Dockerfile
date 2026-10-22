@@ -19,6 +19,14 @@ RUN apk update && apk add --no-cache \
     && docker-php-ext-enable redis \
     && apk del .build-deps
 
+# Motor da Cotação (motor/cotacao): Python + rapidfuzz/openpyxl num venv fora do
+# bind-mount, no mesmo caminho que o infra/provisionar-servidor.sh usa em produção
+# (config/cotacao.php aponta pra lá). Mudou o requirements.txt: rebuild.
+COPY motor/cotacao/requirements.txt /tmp/cotacao-requirements.txt
+RUN apk add --no-cache python3 \
+    && python3 -m venv /opt/cotacao-venv \
+    && /opt/cotacao-venv/bin/pip install --no-cache-dir -r /tmp/cotacao-requirements.txt
+
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY docker/dev/local.ini /usr/local/etc/php/conf.d/local.ini
 

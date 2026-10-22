@@ -62,6 +62,15 @@ echo "==> Dependências PHP"
 composer install --no-interaction --prefer-dist --optimize-autoloader \
   --no-dev --classmap-authoritative
 
+echo "==> Motor da Cotação (Python)"
+# venv criado pelo provisionar-servidor.sh. Rodar de novo é barato: o pip só baixa o que
+# mudou no requirements.txt (rapidfuzz tem wheel aarch64 para o m7g).
+if [ ! -x /opt/cotacao-venv/bin/pip ]; then
+  echo "ERRO: /opt/cotacao-venv não existe — rode o trecho do venv do provisionar-servidor.sh"
+  exit 1
+fi
+/opt/cotacao-venv/bin/pip install --quiet --disable-pip-version-check   -r motor/cotacao/requirements.txt
+
 echo "==> Assets"
 # npm ci (não install): instala exatamente o package-lock.json, sem resolver versões.
 # As devDependencies SÃO necessárias aqui — o Vite é uma delas.
