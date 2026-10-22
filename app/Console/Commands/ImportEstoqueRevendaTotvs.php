@@ -16,6 +16,12 @@ use RuntimeException;
  * 026 traz as filiais 01, 05 e 07 numa linha cada, e somar filiais foi o primeiro
  * palpite errado de lá — não somar.
  *
+ * ⚠️ ATÉ 22/10/2026 O 026 SÓ TINHA SIDO VISTO EM XLSX (pelo SRM). O nome das colunas
+ * vem do dicionário de lá e os números assumem o formato dos outros relatórios SQL em
+ * CSV ("1.234,56", via `Normalizador::numero`). Um "1.200" sem vírgula seria lido como
+ * 1,2. Conferir o primeiro export real com `--dry-run` e alguns valores no banco antes
+ * de confiar no estoque.
+ *
  * É retrato completo: o que sumiu do arquivo (ficou inativo, mudou de tipo) sai da
  * tabela, senão o motor continuaria sugerindo produto que não se vende mais.
  *
