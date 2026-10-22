@@ -3190,8 +3190,8 @@ cuja API de memória morava na KingHost. **Detalhe, armadilhas e migração: `do
   (Dockerfile de dev, provisionamento e deploy). ⚠️ No Alpine de dev leva ~43 s; em glibc ~7 s.
 - ⚠️ **A chave da memória é o texto normalizado DO MOTOR.** Nunca calcular em PHP. Mexeu em
   `sinonimos.json` → `cotacao:renormalizar-memoria`.
-- **Estoque = Relatório de Revenda em CSV** (`RELATORIOS TOTVS/CSV/Relatorio de Revenda -
-  SQL.csv`, já no recorte filial 05/ativos) → `estoque_revenda`, último passo dos IMPORTS do
+- **Estoque = Relatório de Revenda em CSV** (`RELATORIOS TOTVS/CSV/Relatório revenda/`,
+  já no recorte filial 05/ativos; o glob usa `Relat*rio` por causa do acento) → `estoque_revenda`, último passo dos IMPORTS do
   `totvs:atualizar`, **que nunca falha a corrente**. Preço vem como "R$ 1.234,56"
   (`ImportEstoqueRevendaTotvs::reais`, o `Normalizador::numero` daria zero).
 - Acesso e custo em `CotacaoService` (`PERFIS`, `PERFIS_CUSTO`): custo (Ult. Preco = custo de

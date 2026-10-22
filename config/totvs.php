@@ -122,7 +122,14 @@ return [
         // RV em CSV não tem linha de título; quem barra arquivo trocado é o
         // `exigirColunas` do comando.
         'estoque_revenda' => [
-            'arquivo' => ['CSV/Relatorio de Revenda*SQL.csv'],
+            'arquivo' => [
+                // Pasta própria desde 22/10/2026 ("CSV/Relatório revenda"). ⚠️ O `*` no
+                // lugar do "ó" é de propósito: o acento pode chegar ao Linux composto ou
+                // decomposto (NFC/NFD) depois de passar pelo S3, e o glob não casaria.
+                'CSV/Relat*rio revenda/*.csv',
+                // Lugar do primeiro export, mantido como fallback.
+                'CSV/Relatorio de Revenda*SQL.csv',
+            ],
             'rlt' => null,
             'periodo' => 'completo',
         ],

@@ -98,9 +98,11 @@ foreach ($sub in @('CSV', 'Pedidos emitidos', 'Leads')) {
     $pasta = Join-Path $Origem $sub
     if (-not (Test-Path $pasta)) { continue }
 
-    foreach ($f in Get-ChildItem $pasta -Filter *.csv -File -ErrorAction SilentlyContinue) {
+    # -Recurse: o Relatorio de Revenda mora numa subpasta de CSV desde 22/10/2026, e o
+    # --include "CSV/*.csv" do aws-cli ja a alcanca -- sem isto ele subiria pela metade.
+    foreach ($f in Get-ChildItem $pasta -Filter *.csv -File -Recurse -ErrorAction SilentlyContinue) {
         if ($f.LastWriteTime -gt $corte) {
-            $rel = "$sub/$($f.Name)"
+            $rel = $f.FullName.Substring($Origem.TrimEnd('\').Length + 1).Replace('\', '/')
             $aguardando += $rel
             $Filtros += @('--exclude', $rel)
             Escrever ("  aguardando assentar ({0:N0}s): {1}" -f ((Get-Date) - $f.LastWriteTime).TotalSeconds, $rel)

@@ -66,7 +66,9 @@ conferência ──▶ cotacao_decisoes (histórico) + cotacao_memoria (decisão
 
 ## Estoque (Relatório de Revenda)
 
-O Tony exporta o RV do TOTVS como `RELATORIOS TOTVS/CSV/Relatorio de Revenda - SQL.csv`
+O Tony exporta o RV do TOTVS para `RELATORIOS TOTVS/CSV/Relatório revenda/` (pasta própria
+desde 22/10; antes, `CSV/Relatorio de Revenda - SQL.csv`, que segue aceito como fallback —
+vence o arquivo mais recente)
 (primeiro export em 22/10/2026: 4.225 itens). É o mesmo relatório que o .exe lia, e já vem
 no recorte certo (filial 05, ativos — conferido pelo SRM contra o 026), então o import não
 filtra nada. Segue o fluxo dos outros relatórios: pasta → S3 → `totvs:atualizar` de hora em hora.
