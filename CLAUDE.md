@@ -3200,8 +3200,10 @@ cuja API de memória morava na KingHost. **Detalhe, armadilhas e migração: `do
   compra) só para supervisor/diretor/admin, decidido no servidor.
 
 ## Pendências
-- 🟡 **Cotação: deploy pendente** (venv Python nos dois nós, migrations, import da memória do
-  .exe) e, depois do go-live, importar as decisões locais de cada .exe. Ver `docs/cotacao.md`.
+- 🟡 **Cotação no ar desde 2026-10-22** (venv nos dois nós, RV de 22/10 carregado, 44
+  decisões do .exe importadas; motor leva ~3,8 s no app-2 para 589 itens). Falta importar
+  as decisões que cada .exe guardou localmente depois que a API da KingHost caiu
+  (`aprendizado/decisoes.csv` → `cotacao:importar-memoria`) e aposentar o .exe.
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão
   do dado (id da última rodada com sucesso) na `ChaveEscopo` + disparar o aquecimento no
