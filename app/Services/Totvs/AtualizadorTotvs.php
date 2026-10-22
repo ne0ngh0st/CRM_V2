@@ -57,6 +57,9 @@ class AtualizadorTotvs
         'totvs:import-faturamento',
         'totvs:import-pedidos-emitidos',
         'totvs:import-pedidos-abertos',
+        // Catálogo da Cotação. Independente dos outros; por último só porque é opcional
+        // (o comando nunca falha a corrente — ver o docblock dele).
+        'totvs:import-estoque-revenda',
     ];
 
     /**

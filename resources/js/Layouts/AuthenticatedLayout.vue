@@ -43,6 +43,8 @@ const perfil = computed(() => ({
     // permissão própria, sem o perfil diretor.
     isDiretor: Boolean(page.props.auth?.veVisaoDiretor),
     isAdmin: papeis.value.includes('admin'),
+    // Gate `usar-cotacao`, decidido no servidor.
+    usaCotacao: Boolean(page.props.auth?.usaCotacao),
 }));
 
 /*

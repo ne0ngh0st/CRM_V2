@@ -4,6 +4,7 @@ namespace App\Services\Exportacao;
 
 use App\Exports\CadastroExport;
 use App\Exports\CarteiraExport;
+use App\Exports\CotacaoExport;
 use App\Exports\ClientesLeadsSegmentoExport;
 use App\Exports\EquipeExport;
 use App\Exports\LeadExport;
@@ -22,7 +23,10 @@ use App\Http\Controllers\MetaController;
 use App\Http\Controllers\OrcamentoController;
 use App\Http\Controllers\PedidoController;
 use App\Http\Controllers\TabelaPrecoController;
+use App\Models\Cotacao;
+use App\Models\EstoqueRevenda;
 use App\Models\User;
+use App\Services\Cotacao\CotacaoService;
 use App\Services\Carteira\ClienteStatusResolver;
 use App\Services\Carteira\SegmentosDoVendedorResolver;
 use App\Services\Segmentos\EspecialistasDoSegmento;
@@ -81,6 +85,7 @@ class CatalogoDeExportacoes
         'maiores-por-segmento' => 'Maiores por segmento',
         'clientes-leads-segmento' => 'Clientes e leads do segmento',
         'maiores-redes' => 'Maiores redes',
+        'cotacao' => 'Cotação',
     ];
 
     public function rotulo(string $recurso): string
@@ -116,6 +121,7 @@ class CatalogoDeExportacoes
             'maiores-por-segmento' => $this->maioresPorSegmento($request, $user),
             'clientes-leads-segmento' => $this->clientesLeadsSegmento($request, $user),
             'maiores-redes' => $this->maioresRedes($request, $user),
+            'cotacao' => $this->cotacao($request, $user),
 
             /*
              * ⚠️ Estoura em vez de cair num default. O recurso vem de um registro do banco
@@ -271,6 +277,31 @@ class CatalogoDeExportacoes
             new MaioresRedesExport($filtros),
             $filtros['categoria'] === '' ? 'maiores-redes' : 'maiores-redes-'.str_replace('_', '-', $filtros['categoria']),
             app(MaioresRedesResolver::class)->consulta($filtros)->count(),
+        );
+    }
+
+    /**
+     * Uma cotação. A autorização (dono ou admin, perfil que usa a Cotação) e o custo
+     * moram no `CotacaoService` e são conferidos aqui porque o plano também é remontado
+     * dentro do job.
+     */
+    private function cotacao(Request $request, User $user): PlanoDeExportacao
+    {
+        $servico = app(CotacaoService::class);
+        $cotacao = Cotacao::findOrFail((int) $request->input('cotacao'));
+        abort_unless($servico->podeUsar($user) && $servico->podeVer($user, $cotacao), 403);
+
+        $itens = $cotacao->itens()->with('decisor:id,name,display_name')
+            ->orderByDesc('valor_periodo')->orderBy('id')->get();
+
+        $codigos = $itens->flatMap(fn ($i) => [$i->codigoFinal(), ...array_column($i->alternativas ?? [], 'codigo')])
+            ->filter()->unique()->values();
+        $estoque = EstoqueRevenda::query()->whereIn('codigo', $codigos)->get()->keyBy('codigo');
+
+        return new PlanoDeExportacao(
+            new CotacaoExport($itens, $estoque, $servico->podeVerCusto($user)),
+            'cotacao-'.$cotacao->id,
+            $itens->count(),
         );
     }
 

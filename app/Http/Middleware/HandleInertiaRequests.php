@@ -39,6 +39,8 @@ class HandleInertiaRequests extends Middleware
                 // O menu da Visão Diretor NÃO se decide pelo perfil no front: há quem entre
                 // por permissão própria (ver o gate no AppServiceProvider). O front só lê.
                 'veVisaoDiretor' => (bool) $request->user()?->can('ver-visao-diretor'),
+                // Item "Cotação" do menu: mesmo gate das rotas.
+                'usaCotacao' => (bool) $request->user()?->can('usar-cotacao'),
             ],
             // Usado por telas que precisam saber o id do registro recém-criado pra
             // continuar operando nele (ex.: anexar imagens à faca logo após cadastrar).

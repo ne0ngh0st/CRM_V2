@@ -239,6 +239,7 @@ class AtualizacaoDadosTest extends TestCase
             'totvs:import-faturamento',
             'totvs:import-pedidos-emitidos',
             'totvs:import-pedidos-abertos',
+            'totvs:import-estoque-revenda',
         ], AtualizadorTotvs::IMPORTS);
     }
 

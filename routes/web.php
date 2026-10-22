@@ -24,6 +24,7 @@ use App\Http\Controllers\TabelaPrecoController;
 use App\Http\Controllers\VisaoController;
 use App\Http\Controllers\VisaoDiretor\MaioresPorSegmentoController;
 use App\Http\Controllers\VisaoDiretor\MaioresRedesController;
+use App\Http\Controllers\CotacaoController;
 use App\Http\Controllers\VisaoGestorController;
 use Illuminate\Support\Facades\Route;
 
@@ -114,6 +115,23 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/tabela-precos', [TabelaPrecoController::class, 'index'])->name('tabela-precos.index');
     Route::post('/tabela-precos/exportar', [TabelaPrecoController::class, 'exportar'])->name('tabela-precos.exportar');
+
+    /*
+     * Cotação (lista do cliente × estoque de revenda). Gate `usar-cotacao` nas rotas; o
+     * controller confere ainda o dono de cada cotação. ⚠️ As rotas literais
+     * (`exportar`, `produtos`, `itens/...`) ficam ANTES de `/cotacoes/{cotacao}`, senão
+     * o model binding tenta achar uma cotação chamada "exportar".
+     */
+    Route::middleware('can:usar-cotacao')->group(function () {
+        Route::get('/cotacoes', [CotacaoController::class, 'index'])->name('cotacoes.index');
+        Route::post('/cotacoes', [CotacaoController::class, 'store'])->name('cotacoes.store');
+        Route::post('/cotacoes/exportar', [CotacaoController::class, 'exportar'])->name('cotacoes.exportar');
+        Route::get('/cotacoes/produtos', [CotacaoController::class, 'buscarProduto'])->name('cotacoes.produtos');
+        Route::post('/cotacoes/itens/{item}/decidir', [CotacaoController::class, 'decidir'])->name('cotacoes.itens.decidir');
+        Route::post('/cotacoes/itens/{item}/desfazer', [CotacaoController::class, 'esquecer'])->name('cotacoes.itens.desfazer');
+        Route::get('/cotacoes/{cotacao}', [CotacaoController::class, 'show'])->name('cotacoes.show');
+        Route::get('/cotacoes/{cotacao}/conferir', [CotacaoController::class, 'conferir'])->name('cotacoes.conferir');
+    });
 
     Route::get('/catalogo-facas', [CatalogoFacaController::class, 'index'])->name('catalogo-facas.index');
     // CRUD admin-only (checado no controller, como no EtiquetaMateriaPrimaController).

@@ -120,6 +120,7 @@ class ExportacaoController extends Controller
             'ordenar' => 'Ordenação',
             'visao_supervisor' => 'Supervisor',
             'visao_vendedor' => 'Vendedor',
+            'cotacao' => 'Cotação nº',
         ];
 
         /*

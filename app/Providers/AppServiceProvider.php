@@ -8,6 +8,7 @@ use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use App\Services\Cotacao\CotacaoService;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
@@ -59,6 +60,9 @@ class AppServiceProvider extends ServiceProvider
          */
         Gate::define('ver-visao-diretor', fn (User $user) => $user->hasAnyRole(['admin', 'diretor'])
             || $user->checkPermissionTo('ver-visao-diretor'));
+
+        // Cotação: quem usa mora no CotacaoService (Regra de ouro nº 8).
+        Gate::define('usar-cotacao', fn (User $user) => app(CotacaoService::class)->podeUsar($user));
 
         // Log do que sai pelo SMTP, para a tela admin /emails.
         Event::listen(MessageSent::class, [RegistroDeEmails::class, 'enviado']);

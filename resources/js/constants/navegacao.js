@@ -20,7 +20,7 @@
 
 /**
  * Visibilidade por perfil. Recebe sempre o mesmo objeto de papéis
- * (`{ isGestor, isDiretor, isAdmin }`), montado uma vez pelo layout.
+ * (`{ isGestor, isDiretor, isAdmin, usaCotacao }`), montado uma vez pelo layout.
  *
  * Item sem `visivel` aparece para todos — é o default de propósito: perfil comercial novo
  * deve nascer vendo o menu inteiro e perdendo o que não é dele, nunca o contrário.
@@ -31,6 +31,8 @@ const soAdmin = ({ isAdmin }) => isAdmin;
 // O valor vem pronto do servidor — o menu só esconde; quem proíbe é o gate
 // (docs/visao-diretor.md).
 const soDiretor = ({ isDiretor }) => isDiretor;
+// Gate `usar-cotacao`, decidido no servidor (CotacaoService::PERFIS).
+const usaCotacao = ({ usaCotacao }) => usaCotacao;
 
 /**
  * O menu principal, na ordem em que aparece.
@@ -126,10 +128,11 @@ export const NAV_PRINCIPAL = [
         rotulo: 'Catálogo',
         icone: 'catalogo',
         largura: '48',
-        ativoEm: ['tabela-precos.*', 'catalogo-facas.*'],
+        ativoEm: ['tabela-precos.*', 'catalogo-facas.*', 'cotacoes.*'],
         itens: [
             { chave: 'tabela-precos', rotulo: 'Tabela de Preços', icone: 'tabela-precos', rota: 'tabela-precos.index', ativoEm: ['tabela-precos.*'], prefetch: 'hover' },
             { chave: 'facas', rotulo: 'Catálogo de Facas', icone: 'facas', rota: 'catalogo-facas.index', ativoEm: ['catalogo-facas.*'], prefetch: 'hover' },
+            { chave: 'cotacoes', rotulo: 'Cotação', icone: 'cotacao', rota: 'cotacoes.index', ativoEm: ['cotacoes.*'], prefetch: 'click', visivel: usaCotacao },
         ],
     },
 ];
