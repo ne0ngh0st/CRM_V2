@@ -3190,15 +3190,16 @@ cuja API de memória morava na KingHost. **Detalhe, armadilhas e migração: `do
   (Dockerfile de dev, provisionamento e deploy). ⚠️ No Alpine de dev leva ~43 s; em glibc ~7 s.
 - ⚠️ **A chave da memória é o texto normalizado DO MOTOR.** Nunca calcular em PHP. Mexeu em
   `sinonimos.json` → `cotacao:renormalizar-memoria`.
-- **Estoque = relatório 026** (filial 05, ATIVO, RV/PA) → `estoque_revenda`, último passo
-  dos IMPORTS do `totvs:atualizar`, **que nunca falha a corrente**. ⚠️ O 026 em CSV ainda
-  não foi visto: conferir o primeiro export com `--dry-run`.
+- **Estoque = Relatório de Revenda em CSV** (`RELATORIOS TOTVS/CSV/Relatorio de Revenda -
+  SQL.csv`, já no recorte filial 05/ativos) → `estoque_revenda`, último passo dos IMPORTS do
+  `totvs:atualizar`, **que nunca falha a corrente**. Preço vem como "R$ 1.234,56"
+  (`ImportEstoqueRevendaTotvs::reais`, o `Normalizador::numero` daria zero).
 - Acesso e custo em `CotacaoService` (`PERFIS`, `PERFIS_CUSTO`): custo (Ult. Preco = custo de
   compra) só para supervisor/diretor/admin, decidido no servidor.
 
 ## Pendências
-- 🟡 **Cotação: falta o export do 026 em CSV** (`RELATORIOS TOTVS/CSV/Estoque necessidade -
-  SQL.csv`) e importar as decisões locais do .exe depois do go-live. Ver `docs/cotacao.md`.
+- 🟡 **Cotação: deploy pendente** (venv Python nos dois nós, migrations, import da memória do
+  .exe) e, depois do go-live, importar as decisões locais de cada .exe. Ver `docs/cotacao.md`.
 - 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
   durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão
   do dado (id da última rodada com sucesso) na `ChaveEscopo` + disparar o aquecimento no

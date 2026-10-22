@@ -7,13 +7,14 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Estoque de revenda: o catálogo contra o qual a Cotação compara a lista do cliente.
  *
- * Vem do relatório 026 do TOTVS (filial 05, ATIVO, tipo RV/PA — o mesmo recorte do
- * "Relatório de Revenda" que o Cotacao.exe lia), via `totvs:import-estoque-revenda`.
+ * Vem do Relatório de Revenda (RV) em CSV — o mesmo que o Cotacao.exe lia, já no
+ * recorte filial 05 / ativos —, via `totvs:import-estoque-revenda`. `unidade` fica nula:
+ * o RV não traz a coluna.
  *
  * Só as colunas que o motor e a tela usam. Necessidade de compra, fornecedor, consumo
  * dos meses e preço do pedido aberto são assunto do SRM, não do comercial.
  *
- * ⚠️ `ult_preco` é o ÚLTIMO PREÇO DE COMPRA (custo). Só gestor vê — quem decide é o
+ * ⚠️ `ult_preco` (Ult.Preco do RV) é o ÚLTIMO PREÇO DE COMPRA (custo). Só gestor vê — quem decide é o
  * `CotacaoService::podeVerCusto()`, e o valor sai do payload no servidor.
  */
 return new class extends Migration

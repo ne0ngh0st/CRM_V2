@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Item do estoque de revenda (relatório 026, filial 05) — o catálogo da Cotação.
+ * Item do estoque de revenda (Relatório de Revenda: filial 05, ativos) — o catálogo da Cotação.
  *
  * Só leitura: quem escreve é o `totvs:import-estoque-revenda`.
  *

@@ -3,7 +3,7 @@
  * Cotação — a pessoa envia a lista do cliente e o sistema diz, item a item, o que temos
  * no estoque de revenda. Substitui o antigo Cotacao.exe (ver docs/cotacao.md).
  *
- * O estoque NÃO é enviado aqui: vem do relatório 026 do TOTVS, de hora em hora. A tela
+ * O estoque NÃO é enviado aqui: vem do Relatório de Revenda (CSV do TOTVS), de hora em hora. A tela
  * só avisa quando o retrato está velho.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';

@@ -2,24 +2,25 @@
 
 namespace Tests\Feature;
 
+use App\Console\Commands\ImportEstoqueRevendaTotvs;
 use App\Models\EstoqueRevenda;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\UsaDiretorioDeRelatorios;
 use Tests\TestCase;
 
 /**
- * Import do relatório 026 para o estoque de revenda (catálogo da Cotação).
+ * Import do Relatório de Revenda (RV) para o estoque de revenda (catálogo da Cotação).
  *
- * O recorte é o do RV: filial 05, ATIVO, tipo RV/PA. E o comando nunca pode falhar a
- * corrente do `totvs:atualizar` — arquivo ausente ou truncado sai com sucesso e não toca
- * a tabela.
+ * O layout dos fixtures é o do primeiro export real (22/10/2026): cabeçalho com padding na
+ * 1ª linha, BOM, quantidades inteiras e preço "R$ 1.234,56" / "R$ -". E o comando nunca
+ * pode falhar a corrente do `totvs:atualizar`.
  */
 class EstoqueRevendaImportTest extends TestCase
 {
     use RefreshDatabase;
     use UsaDiretorioDeRelatorios;
 
-    private const CABECALHO = 'Filial;Usuario;Codigo;Descricao;Unidade;Tipo;Grupo;EST_FISICO;Qtd. Reserva;EST_DISP;PED_EMITID;Ult. Preco;Marca;ATIVO';
+    private const CABECALHO = "\u{FEFF}Comprador;Codigo      ;Descricao   ;Marca       ; PontoPedido;Comprar.;  Ult.Preco ; Valor Total  ; MedContr;MedVenda;  Total Media ;  Vlr Estoque ; Fisico; Reserva; Disponivel; VendProt; Ruptura; Comprado;DT_ENTREGA; Prc_Compra.;ULT_COMPRA;PEDIDO; EstDias;Grupo       ";
 
     protected function setUp(): void
     {
@@ -33,42 +34,61 @@ class EstoqueRevendaImportTest extends TestCase
         parent::tearDown();
     }
 
-    private function escrever(array $linhas): void
+    /** @param  list<array{0: string, 1: string, 2: string, 3: string, 4: string, 5: string, 6: string, 7: string}>  $itens  codigo, descricao, marca, preco, fisico, reserva, disponivel, comprado */
+    private function escrever(array $itens): void
     {
+        $linhas = array_map(
+            fn ($i) => "CRISTIANE ;{$i[0]};{$i[1]};{$i[2]};3;0;{$i[3]};R$ -;2;12;R$ -;R$ -;{$i[4]};{$i[5]};{$i[6]};0;0;{$i[7]};;0;19/11/2024;;840;0002",
+            $itens
+        );
+
         file_put_contents(
-            $this->diretorioTotvs.'/CSV/Estoque necessidade - SQL.csv',
-            "026 - ESTOQUE NECESSIDADE RV - MP;;;;;;;;;;;;;\n".self::CABECALHO."\n".implode("\n", $linhas)."\n"
+            $this->diretorioTotvs.'/CSV/Relatorio de Revenda - SQL.csv',
+            self::CABECALHO."\n".implode("\n", $linhas)."\n"
         );
     }
 
-    public function test_importa_so_filial_05_ativo_e_tipo_rv_ou_pa(): void
+    private function item(string $codigo, string $preco = ' R$ 1,00 '): array
+    {
+        return [$codigo, "ITEM {$codigo}", 'MARCA', $preco, '1', '0', '1', '0'];
+    }
+
+    public function test_importa_o_rv_com_o_preco_em_reais(): void
     {
         $this->escrever([
-            '05;JOAO;V1;ALCOOL 1LT;UN;RV;10;100;10;90;5;9,123456;TUPI;ATIVO',
-            // Mesmo formato numérico dos outros relatórios SQL do TOTVS ("1.234,56").
-            '05;JOAO;P1;BOBINA 80X40;RL;PA;20;1.200,00;0;1.200,00;0;3,5;AUTOPEL;ATIVO',
-            '01;JOAO;V1;ALCOOL 1LT;UN;RV;10;999;0;999;0;9,1;TUPI;ATIVO',
-            '05;JOAO;V2;ALCOOL 500ML;UN;RV;10;5;0;5;0;4;TUPI;INATIVO',
-            '05;JOAO;MP1;PAPEL TERMICO;KG;MP;30;50;0;50;0;7;X;ATIVO',
+            ['V1483', 'FITA ADESIVA PP. 12X30M TRANSP.', ' ADELBRAS', ' R$ 1,08 ', '58', '2', '56', '0'],
+            ['V900', 'BOBINA 80X40', 'AUTOPEL', ' R$ 1.234,56 ', '1200', '0', '1200', '300'],
+            ['V3347', 'FITA CORRETIVA', '', ' R$ - ', '0', '0', '0', '0'],
         ]);
 
         $this->artisan('totvs:import-estoque-revenda')->assertSuccessful();
 
-        $this->assertEqualsCanonicalizing(['V1', 'P1'], EstoqueRevenda::pluck('codigo')->all());
+        $fita = EstoqueRevenda::where('codigo', 'V1483')->first();
+        $this->assertSame('ADELBRAS', $fita->marca);
+        $this->assertSame([58.0, 2.0, 56.0, 1.08], [$fita->fisico, $fita->reserva, $fita->disponivel, $fita->ult_preco]);
 
-        $v1 = EstoqueRevenda::where('codigo', 'V1')->first();
-        $this->assertSame(90.0, $v1->disponivel); // filial 05, não a 01 (999) nem a soma
-        $this->assertSame(9.123456, $v1->ult_preco);
-        $this->assertSame(1200.0, EstoqueRevenda::where('codigo', 'P1')->value('fisico'));
+        $bobina = EstoqueRevenda::where('codigo', 'V900')->first();
+        $this->assertSame([1200.0, 300.0, 1234.56], [$bobina->fisico, $bobina->comprado, $bobina->ult_preco]);
+
+        $this->assertSame(0.0, EstoqueRevenda::where('codigo', 'V3347')->value('ult_preco'));
+        $this->assertNull(EstoqueRevenda::where('codigo', 'V3347')->value('marca'));
+    }
+
+    public function test_preco_do_rv_aceita_os_formatos_do_relatorio(): void
+    {
+        $this->assertSame(37.0, ImportEstoqueRevendaTotvs::reais(' R$ 37,00 '));
+        $this->assertSame(1234.56, ImportEstoqueRevendaTotvs::reais('R$ 1.234,56'));
+        $this->assertSame(-57.24, ImportEstoqueRevendaTotvs::reais('-R$ 57,24 '));
+        $this->assertSame(0.0, ImportEstoqueRevendaTotvs::reais(' R$ -   '));
     }
 
     public function test_o_que_sumiu_do_arquivo_sai_do_estoque(): void
     {
-        $this->escrever(['05;J;V1;A;UN;RV;1;1;0;1;0;1;M;ATIVO', '05;J;V2;B;UN;RV;1;1;0;1;0;1;M;ATIVO']);
+        $this->escrever([$this->item('V1'), $this->item('V2')]);
         $this->artisan('totvs:import-estoque-revenda')->assertSuccessful();
 
         $this->travel(1)->minutes();
-        $this->escrever(['05;J;V1;A;UN;RV;1;1;0;1;0;1;M;ATIVO', '05;J;V3;C;UN;RV;1;1;0;1;0;1;M;ATIVO']);
+        $this->escrever([$this->item('V1'), $this->item('V3')]);
         $this->artisan('totvs:import-estoque-revenda')->assertSuccessful();
 
         $this->assertEqualsCanonicalizing(['V1', 'V3'], EstoqueRevenda::pluck('codigo')->all());
@@ -76,11 +96,11 @@ class EstoqueRevendaImportTest extends TestCase
 
     public function test_arquivo_truncado_nao_apaga_o_estoque(): void
     {
-        $this->escrever(array_map(fn ($i) => "05;J;V{$i};ITEM {$i};UN;RV;1;1;0;1;0;1;M;ATIVO", range(1, 10)));
+        $this->escrever(array_map(fn ($i) => $this->item("V{$i}"), range(1, 10)));
         $this->artisan('totvs:import-estoque-revenda')->assertSuccessful();
 
         $this->travel(1)->minutes();
-        $this->escrever(['05;J;V1;ITEM 1;UN;RV;1;1;0;1;0;1;M;ATIVO']);
+        $this->escrever([$this->item('V1')]);
         $this->artisan('totvs:import-estoque-revenda')->assertSuccessful();
 
         $this->assertSame(10, EstoqueRevenda::count());
@@ -90,7 +110,7 @@ class EstoqueRevendaImportTest extends TestCase
     {
         $this->artisan('totvs:import-estoque-revenda')->assertSuccessful();
 
-        file_put_contents($this->diretorioTotvs.'/CSV/Estoque necessidade - SQL.csv', "Codigo;Descricao\nV1;A\n");
+        file_put_contents($this->diretorioTotvs.'/CSV/Relatorio de Revenda - SQL.csv', "Codigo;Descricao\nV1;A\n");
         $this->artisan('totvs:import-estoque-revenda')->assertSuccessful();
 
         $this->assertSame(0, EstoqueRevenda::count());

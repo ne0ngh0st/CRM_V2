@@ -14,14 +14,14 @@ conferência humana. **Cada conferência fica guardada para todo mundo**: na pr�
 de qualquer cliente e de qualquer pessoa, o mesmo texto já sai "Já validado antes".
 
 Quem usa (decisão do Tony, 22/10): vendedor, representante, supervisor, diretor, admin.
-Venda interna e assistente não. **Custo (último preço de compra do 026) só para
+Venda interna e assistente não. **Custo (último preço de compra do Relatório de Revenda) só para
 supervisor, diretor e admin**, na tela, na busca e na planilha. Tudo isso mora em
 `App\Services\Cotacao\CotacaoService` (`PERFIS`, `PERFIS_CUSTO`).
 
 ## Peças
 
 ```
-RELATORIOS TOTVS/CSV/Estoque necessidade - SQL.csv (026)
+RELATORIOS TOTVS/CSV/Relatorio de Revenda - SQL.csv (RV)
   └─ totvs:import-estoque-revenda ──▶ estoque_revenda
 upload ──▶ cotacoes (processando) ──▶ ProcessarCotacaoJob
   └─ python -I motor/cotacao/cli.py casar ──▶ cotacao_itens
@@ -64,20 +64,23 @@ conferência ──▶ cotacao_decisoes (histórico) + cotacao_memoria (decisão
 - Conflito na importação do .exe: se o CRM já tem decisão diferente para o mesmo texto,
   **fica a do CRM** (é mais nova).
 
-## Estoque (relatório 026)
+## Estoque (Relatório de Revenda)
 
-Recorte do RV: **filial 05, ATIVO, tipo RV/PA** (conferido pelo SRM, 4.170/4.170 itens).
-Só as colunas que a Cotação usa — necessidade, fornecedor e consumo são do SRM.
+O Tony exporta o RV do TOTVS como `RELATORIOS TOTVS/CSV/Relatorio de Revenda - SQL.csv`
+(primeiro export em 22/10/2026: 4.225 itens). É o mesmo relatório que o .exe lia, e já vem
+no recorte certo (filial 05, ativos — conferido pelo SRM contra o 026), então o import não
+filtra nada. Segue o fluxo dos outros relatórios: pasta → S3 → `totvs:atualizar` de hora em hora.
 
+- Formato: cabeçalho na 1ª linha (sem título), com BOM e padding; quantidades inteiras;
+  preço "R$ 1.234,56", "-R$ 57,24" ou "R$ -" (zero). ⚠️ O preço passa por
+  `ImportEstoqueRevendaTotvs::reais()`: o `Normalizador::numero` leria o "R$" e daria zero.
+- O RV não tem coluna de unidade: `estoque_revenda.unidade` fica nula.
 - ⚠️ **O import nunca falha a corrente do `totvs:atualizar`**: arquivo ausente, colunas
   erradas ou arquivo truncado (< 50% do que está gravado) saem com sucesso, com o motivo
   na saída da `/atualizacoes`, e não tocam a tabela. Quem denuncia estoque parado é a
   própria `/cotacoes` (pill "Estoque de dd/mm", âmbar depois de 2 dias úteis).
-- ⚠️ **Até 22/10 o 026 só tinha sido visto em xlsx.** Os nomes de coluna vêm do
-  dicionário do SRM e os números assumem o formato dos outros CSVs ("1.234,56"). Conferir
-  o primeiro export real com `totvs:import-estoque-revenda --dry-run`.
-- Nome do arquivo em `config/totvs.php` (`estoque_revenda`): `CSV/Estoque necessidade*SQL.csv`
-  ou `CSV/026*.csv`. O envio para o S3 já cobre `CSV/*.csv`.
+- Retrato completo: código que sumiu do RV sai do estoque. Item de cotação antiga que
+  apontava para ele aparece como "Saiu do estoque de revenda".
 
 ## Migração do .exe
 

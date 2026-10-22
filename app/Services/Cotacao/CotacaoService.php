@@ -31,7 +31,7 @@ class CotacaoService
     /** Quem usa a tela (decisão do Tony, 22/10/2026). */
     public const PERFIS = ['vendedor', 'representante', 'supervisor', 'diretor', 'admin'];
 
-    /** Quem vê o Ult. Preco do 026 — é custo de COMPRA. */
+    /** Quem vê o Ult.Preco do Relatório de Revenda — é custo de COMPRA. */
     public const PERFIS_CUSTO = ['supervisor', 'diretor', 'admin'];
 
     /**
@@ -105,7 +105,7 @@ class CotacaoService
                 ->get(['codigo', 'descricao', 'marca', 'grupo', 'fisico', 'reserva', 'disponivel', 'comprado', 'ult_preco']);
 
             if ($estoque->isEmpty()) {
-                throw new CotacaoRecusada('O estoque de revenda ainda não foi carregado (relatório 026 do TOTVS).');
+                throw new CotacaoRecusada('O estoque de revenda ainda não foi carregado (Relatório de Revenda do TOTVS).');
             }
 
             File::put($pasta.'/catalogo.json', json_encode($estoque->map(fn (EstoqueRevenda $e) => [

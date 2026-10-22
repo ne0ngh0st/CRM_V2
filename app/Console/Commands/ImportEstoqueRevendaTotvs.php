@@ -9,21 +9,20 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Estoque de revenda (catálogo da Cotação) a partir do relatório 026 do TOTVS.
+ * Estoque de revenda (catálogo da Cotação) a partir do Relatório de Revenda (RV) em CSV.
  *
- * O recorte é o do "Relatório de Revenda" que o Cotacao.exe lia (conferido pelo SRM em
- * 4.170 de 4.170 itens, 24/09/2026): **só a filial 05**, só ATIVO, só tipo RV/PA. O
- * 026 traz as filiais 01, 05 e 07 numa linha cada, e somar filiais foi o primeiro
- * palpite errado de lá — não somar.
+ * É o MESMO relatório que o Cotacao.exe lia (aba Geral do xlsx; colunas em
+ * `fontes.COLS_RV` do .exe), agora exportado pelo TOTVS como `Relatorio de Revenda -
+ * SQL.csv`. O RV já é o recorte pronto (filial 05, só ativos, tipo RV/PA — o SRM
+ * conferiu contra o 026 em 24/09), então aqui não há filtro: toda linha com código e
+ * descrição entra, inclusive os baldes OCIOSO/INATIVO do comprador, como no .exe.
  *
- * ⚠️ ATÉ 22/10/2026 O 026 SÓ TINHA SIDO VISTO EM XLSX (pelo SRM). O nome das colunas
- * vem do dicionário de lá e os números assumem o formato dos outros relatórios SQL em
- * CSV ("1.234,56", via `Normalizador::numero`). Um "1.200" sem vírgula seria lido como
- * 1,2. Conferir o primeiro export real com `--dry-run` e alguns valores no banco antes
- * de confiar no estoque.
+ * Formato visto no primeiro export (22/10/2026): cabeçalho na 1ª linha (sem título),
+ * nomes com padding, quantidades como inteiro puro ("1200") e preços como
+ * "R$ 1.234,56", "-R$ 57,24" ou "R$ -" (zero).
  *
- * É retrato completo: o que sumiu do arquivo (ficou inativo, mudou de tipo) sai da
- * tabela, senão o motor continuaria sugerindo produto que não se vende mais.
+ * É retrato completo: o que sumiu do arquivo sai da tabela, senão o motor continuaria
+ * sugerindo produto que não se vende mais.
  *
  * ⚠️ NUNCA FALHA A CORRENTE do `totvs:atualizar`: arquivo ausente, trocado ou truncado
  * devolve SUCCESS com o motivo na saída (que a /atualizacoes mostra) e não toca a
@@ -37,11 +36,7 @@ class ImportEstoqueRevendaTotvs extends Command
     protected $signature = 'totvs:import-estoque-revenda
         {--dry-run : lê e conta, sem escrever nada}';
 
-    protected $description = 'Importa o estoque de revenda (relatório 026, filial 05) para a Cotação';
-
-    public const FILIAL = 5;
-
-    public const TIPOS = ['RV', 'PA'];
+    protected $description = 'Importa o estoque de revenda (Relatório de Revenda) para a Cotação';
 
     /**
      * Abaixo desta fração do que já está gravado, o arquivo é tratado como truncado e
@@ -54,7 +49,7 @@ class ImportEstoqueRevendaTotvs extends Command
         $dryRun = (bool) $this->option('dry-run');
 
         if (Relatorios::caminho('estoque_revenda') === null) {
-            $this->warn('026 - Estoque necessidade não está na pasta: estoque de revenda não foi tocado.');
+            $this->warn('Relatório de Revenda não está na pasta: estoque de revenda não foi tocado.');
 
             return self::SUCCESS;
         }
@@ -62,33 +57,25 @@ class ImportEstoqueRevendaTotvs extends Command
         try {
             $leitor = Relatorios::abrir('estoque_revenda');
             $leitor->exigirColunas([
-                'Filial', 'Codigo', 'Descricao', 'Tipo', 'EST_FISICO', 'Qtd. Reserva',
-                'EST_DISP', 'PED_EMITID', 'Ult. Preco', 'Marca', 'ATIVO',
+                'Codigo', 'Descricao', 'Marca', 'Ult.Preco', 'Fisico', 'Reserva',
+                'Disponivel', 'Comprado', 'Grupo',
             ]);
         } catch (RuntimeException $e) {
-            $this->error('026 - Estoque necessidade NÃO importado: '.$e->getMessage());
+            $this->error('Relatório de Revenda NÃO importado: '.$e->getMessage());
 
             return self::SUCCESS;
         }
 
         $agora = now();
         $linhas = [];
-        $fora = 0;
+        $ignoradas = 0;
 
         foreach ($leitor->linhas() as $linha) {
-            if (Normalizador::filial($linha['Filial']) !== self::FILIAL
-                || mb_strtoupper(trim($linha['ATIVO'])) !== 'ATIVO'
-                || ! in_array(mb_strtoupper(trim($linha['Tipo'])), self::TIPOS, true)) {
-                $fora++;
-
-                continue;
-            }
-
             $codigo = trim($linha['Codigo']);
             $descricao = trim($linha['Descricao']);
 
             if ($codigo === '' || $descricao === '') {
-                $fora++;
+                $ignoradas++;
 
                 continue;
             }
@@ -96,14 +83,14 @@ class ImportEstoqueRevendaTotvs extends Command
             $linhas[$codigo] = [
                 'codigo' => mb_substr($codigo, 0, 40),
                 'descricao' => mb_substr($descricao, 0, 255),
-                'unidade' => Normalizador::valorOuNull(mb_substr($linha['Unidade'] ?? '', 0, 10)),
+                'unidade' => null,
                 'marca' => Normalizador::valorOuNull($linha['Marca']),
-                'grupo' => Normalizador::valorOuNull(mb_substr($linha['Grupo'] ?? '', 0, 40)),
-                'fisico' => Normalizador::numero($linha['EST_FISICO']),
-                'reserva' => Normalizador::numero($linha['Qtd. Reserva']),
-                'disponivel' => Normalizador::numero($linha['EST_DISP']),
-                'comprado' => Normalizador::numero($linha['PED_EMITID']),
-                'ult_preco' => Normalizador::numero($linha['Ult. Preco']),
+                'grupo' => Normalizador::valorOuNull(mb_substr($linha['Grupo'], 0, 40)),
+                'fisico' => Normalizador::numero($linha['Fisico']),
+                'reserva' => Normalizador::numero($linha['Reserva']),
+                'disponivel' => Normalizador::numero($linha['Disponivel']),
+                'comprado' => Normalizador::numero($linha['Comprado']),
+                'ult_preco' => self::reais($linha['Ult.Preco']),
                 'created_at' => $agora,
                 'updated_at' => $agora,
             ];
@@ -113,9 +100,9 @@ class ImportEstoqueRevendaTotvs extends Command
         $atuais = DB::table('estoque_revenda')->count();
 
         $this->line(sprintf(
-            '026 - Estoque de revenda: %s itens da filial 05 ativos (RV/PA); %s linhas fora do recorte.',
+            'Relatório de Revenda: %s itens; %s linhas sem código ou descrição.',
             number_format($novos, 0, ',', '.'),
-            number_format($fora, 0, ',', '.')
+            number_format($ignoradas, 0, ',', '.')
         ));
 
         if ($novos === 0 || ($atuais > 0 && $novos < $atuais * self::FRACAO_MINIMA)) {
@@ -137,18 +124,35 @@ class ImportEstoqueRevendaTotvs extends Command
         DB::transaction(function () use ($linhas, $agora) {
             foreach (array_chunk(array_values($linhas), 1000) as $lote) {
                 DB::table('estoque_revenda')->upsert($lote, ['codigo'], [
-                    'descricao', 'unidade', 'marca', 'grupo', 'fisico', 'reserva',
+                    'descricao', 'marca', 'grupo', 'fisico', 'reserva',
                     'disponivel', 'comprado', 'ult_preco', 'updated_at',
                 ]);
             }
 
-            // ⚠️ `whereNotIn` com a lista toda seria um IN de ~4 mil valores; mais barato
-            // é apagar o que não foi tocado nesta rodada (updated_at mais velho).
+            // Apaga o que não foi tocado nesta rodada (mais barato que um IN de 4 mil).
             DB::table('estoque_revenda')->where('updated_at', '<', $agora)->delete();
         });
 
         $this->info('Estoque de revenda gravado: '.number_format($novos, 0, ',', '.').' itens.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Preço do RV: "R$ 1.234,56", "-R$ 57,24" ou "R$ -" (zero). O `Normalizador::numero`
+     * leria o "R$" e devolveria 0 para tudo.
+     */
+    public static function reais(string $valor): float
+    {
+        $negativo = str_contains($valor, '-R$') || str_starts_with(trim($valor), '-');
+        $limpo = trim(str_replace(['R$', '-', ' ', "\u{00A0}"], '', $valor));
+
+        if ($limpo === '') {
+            return 0.0;
+        }
+
+        $numero = Normalizador::numero($limpo);
+
+        return $negativo ? -$numero : $numero;
     }
 }

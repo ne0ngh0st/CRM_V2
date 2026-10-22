@@ -16,7 +16,7 @@ use Maatwebsite\Excel\Events\AfterSheet;
  * (`planilha.py`), trocando as colunas "preencher decisão" pelo que já foi conferido
  * na tela.
  *
- * ⚠️ A coluna de custo (Ult. Preco do 026) só existe para quem pode ver custo. É
+ * ⚠️ A coluna de custo (Ult.Preco do Relatório de Revenda) só existe para quem pode ver custo. É
  * decidido por quem monta o export (`CatalogoDeExportacoes`), não aqui.
  */
 class CotacaoExport implements FromArray, WithHeadings, WithEvents

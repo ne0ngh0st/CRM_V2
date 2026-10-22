@@ -116,13 +116,13 @@ return [
             // é atribuído depois, pelo próprio CSV (ver ImportLeadsTotvs).
         ],
 
-        // Catálogo da Cotação (`estoque_revenda`). É o mesmo 026 de que sai o "Relatório
-        // de Revenda" (RV) — o import aplica o recorte do RV: filial 05, ATIVO, tipo
-        // RV/PA. ⚠️ Opcional na corrente: sem o arquivo na pasta o passo pula sem falhar.
-        // `rlt` nulo de propósito: o título exato do relatório ainda não foi visto num
-        // export real; quem barra arquivo trocado é o `exigirColunas` do comando.
+        // Catálogo da Cotação (`estoque_revenda`): o Relatório de Revenda (RV), o mesmo que
+        // o Cotacao.exe lia. Já vem no recorte certo (filial 05, ativos). ⚠️ Opcional na
+        // corrente: sem o arquivo na pasta o passo pula sem falhar. `rlt` nulo porque o
+        // RV em CSV não tem linha de título; quem barra arquivo trocado é o
+        // `exigirColunas` do comando.
         'estoque_revenda' => [
-            'arquivo' => ['CSV/Estoque necessidade*SQL.csv', 'CSV/026*.csv'],
+            'arquivo' => ['CSV/Relatorio de Revenda*SQL.csv'],
             'rlt' => null,
             'periodo' => 'completo',
         ],

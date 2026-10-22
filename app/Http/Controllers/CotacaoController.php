@@ -306,7 +306,7 @@ class CotacaoController extends Controller
         return EstoqueRevenda::query()->whereIn('codigo', collect($codigos)->unique()->values())->get()->keyBy('codigo');
     }
 
-    /** Idade do retrato do estoque: a tela avisa quando o 026 parou de chegar. */
+    /** Idade do retrato do estoque: a tela avisa quando o Relatório de Revenda parou de chegar. */
     private function resumoDoEstoque(): array
     {
         $info = EstoqueRevenda::query()->selectRaw('COUNT(*) AS n, MAX(updated_at) AS em')->first();
