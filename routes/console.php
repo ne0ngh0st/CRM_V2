@@ -185,3 +185,17 @@ Schedule::command(\App\Console\Commands\AtualizarDadosTotvs::class)
     ->onOneServer()
     ->withoutOverlapping(30)
     ->name('atualizar-dados-totvs');
+
+/*
+ * Relatório de Revenda (catálogo da Cotação). Fora da corrente acima de propósito: o RV
+ * chega como um xlsx novo por dia, e na corrente cada um faria reimportar faturamento e
+ * pedidos inteiros. Aqui uma rodada sem RV novo só lista a pasta e sai.
+ *
+ * ⚠️ No minuto 15: quem baixa o arquivo do S3 é o `totvs:atualizar` do minuto 0
+ * (`totvs:sincronizar-s3`, que roda mesmo quando não há nada para importar).
+ */
+Schedule::command('totvs:import-estoque-revenda')
+    ->hourlyAt(15)
+    ->onOneServer()
+    ->withoutOverlapping(30)
+    ->name('import-estoque-revenda');

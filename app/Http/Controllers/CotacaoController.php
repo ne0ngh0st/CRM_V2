@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ExportaPlanilha;
 use App\Models\Cotacao;
 use App\Models\CotacaoItem;
 use App\Models\EstoqueRevenda;
+use App\Models\EstoqueRevendaCarga;
 use App\Services\Cotacao\CotacaoRecusada;
 use App\Services\Cotacao\CotacaoService;
 use Illuminate\Http\JsonResponse;
@@ -285,7 +286,7 @@ class CotacaoController extends Controller
             'itens' => $cotacao->itens_total,
             'valor' => $cotacao->valor_total,
             'avisos' => $cotacao->leitura['avisos'] ?? [],
-            'estoqueEm' => $cotacao->estoque_em?->format('d/m/Y H:i'),
+            'estoqueEm' => $cotacao->estoque_em?->format('d/m/Y'),
             'criadaEm' => $cotacao->created_at?->format('d/m/Y H:i'),
         ];
     }
@@ -309,13 +310,14 @@ class CotacaoController extends Controller
     /** Idade do retrato do estoque: a tela avisa quando o Relatório de Revenda parou de chegar. */
     private function resumoDoEstoque(): array
     {
-        $info = EstoqueRevenda::query()->selectRaw('COUNT(*) AS n, MAX(updated_at) AS em')->first();
-        $em = $info?->em ? \Illuminate\Support\Carbon::parse($info->em) : null;
+        // A data é a do RV (nome do arquivo), não a da importação: é ela que diz quão
+        // velho está o estoque que a pessoa vai cotar.
+        $carga = EstoqueRevendaCarga::atual();
 
         return [
-            'itens' => (int) ($info->n ?? 0),
-            'em' => $em?->format('d/m/Y H:i'),
-            'desatualizado' => $em === null || $em->lt(now()->subWeekdays(2)),
+            'itens' => $carga?->itens ?? 0,
+            'em' => $carga?->data_rv?->format('d/m/Y'),
+            'desatualizado' => $carga === null || $carga->data_rv->lt(now()->startOfDay()->subWeekdays(2)),
         ];
     }
 }

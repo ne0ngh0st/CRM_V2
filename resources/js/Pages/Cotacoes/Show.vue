@@ -59,7 +59,7 @@ const linhas = computed(() => props.itens.data ?? []);
                 <template #subtitle>
                     <span v-if="cotacao.cliente">{{ cotacao.cliente }} · </span>
                     {{ cotacao.itens.toLocaleString('pt-BR') }} itens, {{ reais(cotacao.valor) }} no período ·
-                    enviada em {{ cotacao.criadaEm }} · estoque de {{ cotacao.estoqueEm ?? '—' }}
+                    enviada em {{ cotacao.criadaEm }} · RV de {{ cotacao.estoqueEm ?? '—' }}
                 </template>
                 <template #meta>
                     <Link :href="route('cotacoes.index')" class="text-xs font-semibold text-gray-300 hover:text-white">← Cotações</Link>

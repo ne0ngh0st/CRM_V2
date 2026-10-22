@@ -21,8 +21,8 @@ supervisor, diretor e admin**, na tela, na busca e na planilha. Tudo isso mora e
 ## Peças
 
 ```
-RELATORIOS TOTVS/CSV/Relatorio de Revenda - SQL.csv (RV)
-  └─ totvs:import-estoque-revenda ──▶ estoque_revenda
+RELATORIOS TOTVS/Relatório revenda/Relatorio de Revenda DD-MM-AAAA.xlsx (um por dia)
+  └─ totvs:import-estoque-revenda (de hora em hora, :15) ──▶ estoque_revenda + estoque_revenda_cargas
 upload ──▶ cotacoes (processando) ──▶ ProcessarCotacaoJob
   └─ python -I motor/cotacao/cli.py casar ──▶ cotacao_itens
 conferência ──▶ cotacao_decisoes (histórico) + cotacao_memoria (decisão atual)
@@ -66,23 +66,39 @@ conferência ──▶ cotacao_decisoes (histórico) + cotacao_memoria (decisão
 
 ## Estoque (Relatório de Revenda)
 
-O Tony exporta o RV do TOTVS para `RELATORIOS TOTVS/CSV/Relatório revenda/` (pasta própria
-desde 22/10; antes, `CSV/Relatorio de Revenda - SQL.csv`, que segue aceito como fallback —
-vence o arquivo mais recente)
-(primeiro export em 22/10/2026: 4.225 itens). É o mesmo relatório que o .exe lia, e já vem
-no recorte certo (filial 05, ativos — conferido pelo SRM contra o 026), então o import não
-filtra nada. Segue o fluxo dos outros relatórios: pasta → S3 → `totvs:atualizar` de hora em hora.
+**O fluxo (combinado pelo Tony em 22/10/2026):** quem monta o RV salva todo dia um xlsx
+NOVO em `RELATORIOS TOTVS/Relatório revenda/` (ex.: `Relatorio de Revenda 22-10-2026.xlsx`),
+sem sobrescrever o anterior. A pasta (e o S3) é a coleção de todas as versões; o banco
+guarda só a última foto (`estoque_revenda`) e o registro de cada carga
+(`estoque_revenda_cargas`: arquivo, data do RV, itens). É o mesmo relatório que o .exe lia,
+já no recorte filial 05 / ativos (conferido pelo SRM contra o 026), então não há filtro.
 
-- Formato: cabeçalho na 1ª linha (sem título), com BOM e padding; quantidades inteiras;
-  preço "R$ 1.234,56", "-R$ 57,24" ou "R$ -" (zero). ⚠️ O preço passa por
-  `ImportEstoqueRevendaTotvs::reais()`: o `Normalizador::numero` leria o "R$" e daria zero.
-- O RV não tem coluna de unidade: `estoque_revenda.unidade` fica nula.
-- ⚠️ **O import nunca falha a corrente do `totvs:atualizar`**: arquivo ausente, colunas
-  erradas ou arquivo truncado (< 50% do que está gravado) saem com sucesso, com o motivo
-  na saída da `/atualizacoes`, e não tocam a tabela. Quem denuncia estoque parado é a
-  própria `/cotacoes` (pill "Estoque de dd/mm", âmbar depois de 2 dias úteis).
+- ⚠️ **A versão que vale é a DATA DO NOME** (`DD-MM-AAAA`, aceita `-`, `_` ou `.`), nunca a
+  data de modificação: abrir e salvar um RV antigo o faria "voltar". O resto do nome não
+  importa (o primeiro veio como "Revanda"). Arquivo sem data é ignorado e listado na
+  saída; o `~$...xlsx` que o Excel cria com a planilha aberta também.
+- **Lê a aba `Geral` pelo nome das colunas** (`Codigo`, `Descricao`, `Marca`, `Ult.Preco`,
+  `Fisico`, `Reserva`, `Disponivel`, `Comprado`, `Grupo`). No xlsx os números já vêm
+  numéricos; texto cai no formato brasileiro, com ou sem "R$". O RV não tem unidade:
+  `estoque_revenda.unidade` fica nula.
+- ⚠️ **Fora da rodada horária do TOTVS.** A pasta está em `totvs.fora_da_impressao`: sem
+  isso, cada RV novo faria o `totvs:atualizar` achar que algo mudou e reimportar
+  faturamento, pedidos e clientes inteiros. O import do RV tem agendamento próprio
+  (`routes/console.php`, minuto 15, depois do `totvs:sincronizar-s3` do minuto 0) e só
+  trabalha quando aparece RV de data mais nova que a carregada; senão lista a pasta e sai.
+  `--forcar` recarrega. Primeiro xlsx real: 4.223 itens em ~10 s no dev.
+- ⚠️ **Nunca falha**: sem arquivo, sem a aba, colunas erradas ou truncado (< 50% do
+  gravado) saem com sucesso, com o motivo na saída, e não tocam a tabela. Quem denuncia
+  estoque parado é a `/cotacoes`: a pill "RV de dd/mm" fica âmbar com mais de 2 dias
+  úteis, e cada cotação grava de que dia era o RV que usou (`cotacoes.estoque_em`).
+- **Envio ao S3**: os dois scripts (`infra/enviar-relatorios-totvs.sh` e `.ps1`) sobem
+  `Relat*rio revenda/*.xlsx` (o `*` no lugar do "ó" porque o acento pode chegar ao Linux
+  composto ou decomposto, e o `.ps1` precisa ficar ASCII no PowerShell 5.1). O servidor
+  baixa todas as versões: ~1,5 MB por dia, ~0,5 GB por ano em disco.
 - Retrato completo: código que sumiu do RV sai do estoque. Item de cotação antiga que
   apontava para ele aparece como "Saiu do estoque de revenda".
+- Histórico do estoque dia a dia NÃO vai para tabela: é assunto do SRM. Os arquivos estão
+  todos na pasta e no S3 se um dia precisar.
 
 ## Migração do .exe
 

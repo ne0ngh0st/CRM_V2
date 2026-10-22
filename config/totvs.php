@@ -24,6 +24,14 @@ return [
     'diretorio' => env('TOTVS_RELATORIOS_DIR', '/relatorios'),
 
     /*
+    | Pastas que NÃO entram na impressão digital do `totvs:atualizar` (padrões de glob,
+    | relativos ao `diretorio`). ⚠️ O RV chega todo dia como arquivo novo e tem import
+    | próprio, agendado à parte: na impressão, cada RV faria a rodada horária achar que
+    | "algo mudou" e reimportar faturamento, pedidos e clientes inteiros sem motivo.
+    */
+    'fora_da_impressao' => ['Relat*rio revenda'],
+
+    /*
     |---------------------------------------------------------------------------
     | Arquivos por domínio
     |---------------------------------------------------------------------------
@@ -116,20 +124,13 @@ return [
             // é atribuído depois, pelo próprio CSV (ver ImportLeadsTotvs).
         ],
 
-        // Catálogo da Cotação (`estoque_revenda`): o Relatório de Revenda (RV), o mesmo que
-        // o Cotacao.exe lia. Já vem no recorte certo (filial 05, ativos). ⚠️ Opcional na
-        // corrente: sem o arquivo na pasta o passo pula sem falhar. `rlt` nulo porque o
-        // RV em CSV não tem linha de título; quem barra arquivo trocado é o
-        // `exigirColunas` do comando.
+        // Catálogo da Cotação (`estoque_revenda`): o Relatório de Revenda (RV), um xlsx NOVO
+        // por dia, sem sobrescrever (a pasta é a coleção de versões). Quem escolhe a versão
+        // é a DATA DO NOME, não este glob — ver `ImportEstoqueRevendaTotvs`. ⚠️ O `*` no
+        // lugar do "ó" é de propósito: o acento pode chegar ao Linux composto ou decomposto
+        // (NFC/NFD) depois de passar pelo S3, e o glob não casaria.
         'estoque_revenda' => [
-            'arquivo' => [
-                // Pasta própria desde 22/10/2026 ("CSV/Relatório revenda"). ⚠️ O `*` no
-                // lugar do "ó" é de propósito: o acento pode chegar ao Linux composto ou
-                // decomposto (NFC/NFD) depois de passar pelo S3, e o glob não casaria.
-                'CSV/Relat*rio revenda/*.csv',
-                // Lugar do primeiro export, mantido como fallback.
-                'CSV/Relatorio de Revenda*SQL.csv',
-            ],
+            'arquivo' => ['Relat*rio revenda/*.xlsx'],
             'rlt' => null,
             'periodo' => 'completo',
         ],

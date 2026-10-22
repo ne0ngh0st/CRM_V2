@@ -85,8 +85,14 @@ $Filtros = @(
     '--include', 'CSV/*.csv',
     '--include', 'Pedidos emitidos/*.csv',
     '--include', 'Leads/*.csv',
+    # Relatorio de Revenda (Cotacao): um xlsx novo por dia. O * no lugar do "o"
+    # acentuado mantem este arquivo ASCII: o PowerShell 5.1 le .ps1 sem BOM como ANSI
+    # e estragaria o acento.
+    '--include', 'Relat*rio revenda/*.xlsx',
     '--exclude', 'CSV/etc/*',
-    '--exclude', 'CSV/META VENDA*'
+    '--exclude', 'CSV/META VENDA*',
+    # Trava que o Excel cria ("~$Relatorio...xlsx") enquanto a planilha esta aberta.
+    '--exclude', '*~$*'
 )
 
 # Arquivos ainda sendo escritos entram como --exclude, para o sync deste ciclo
@@ -94,13 +100,14 @@ $Filtros = @(
 $corte = (Get-Date).AddMinutes(-$MinutosParaAssentar)
 $aguardando = @()
 
-foreach ($sub in @('CSV', 'Pedidos emitidos', 'Leads')) {
+$pastasRv = @(Get-ChildItem $Origem -Directory -Filter 'Relat*rio revenda' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+foreach ($sub in @('CSV', 'Pedidos emitidos', 'Leads') + $pastasRv) {
     $pasta = Join-Path $Origem $sub
     if (-not (Test-Path $pasta)) { continue }
 
     # -Recurse: o Relatorio de Revenda mora numa subpasta de CSV desde 22/10/2026, e o
     # --include "CSV/*.csv" do aws-cli ja a alcanca -- sem isto ele subiria pela metade.
-    foreach ($f in Get-ChildItem $pasta -Filter *.csv -File -Recurse -ErrorAction SilentlyContinue) {
+    foreach ($f in Get-ChildItem $pasta -File -Recurse -Include *.csv, *.xlsx -ErrorAction SilentlyContinue) {
         if ($f.LastWriteTime -gt $corte) {
             $rel = $f.FullName.Substring($Origem.TrimEnd('\').Length + 1).Replace('\', '/')
             $aguardando += $rel

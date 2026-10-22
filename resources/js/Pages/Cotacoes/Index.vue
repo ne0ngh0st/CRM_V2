@@ -114,7 +114,7 @@ const reais = (v) => Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency',
                 <template #meta>
                     <StatusPill v-if="estoque.itens === 0" tone="danger" surface="dark">Estoque não carregado</StatusPill>
                     <StatusPill v-else :tone="estoque.desatualizado ? 'warn' : 'ok'" surface="dark">
-                        Estoque de {{ estoque.em }}
+                        RV de {{ estoque.em }}
                     </StatusPill>
                 </template>
             </PageHero>

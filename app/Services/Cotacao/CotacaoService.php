@@ -8,6 +8,7 @@ use App\Models\CotacaoDecisao;
 use App\Models\CotacaoItem;
 use App\Models\CotacaoMemoria;
 use App\Models\EstoqueRevenda;
+use App\Models\EstoqueRevendaCarga;
 use App\Models\User;
 use App\Support\Uploads\Disco;
 use Illuminate\Http\UploadedFile;
@@ -129,7 +130,8 @@ class CotacaoService
                 '--saida', $pasta.'/resultado.json',
             ], $pasta.'/resultado.json');
 
-            $this->gravarResultado($cotacao, $saida, EstoqueRevenda::max('updated_at'));
+            // A data do RV em uso (do nome do arquivo), não a hora em que foi importado.
+            $this->gravarResultado($cotacao, $saida, EstoqueRevendaCarga::atual()?->data_rv?->toDateString());
         } finally {
             File::deleteDirectory($pasta);
         }

@@ -57,9 +57,8 @@ class AtualizadorTotvs
         'totvs:import-faturamento',
         'totvs:import-pedidos-emitidos',
         'totvs:import-pedidos-abertos',
-        // Catálogo da Cotação. Independente dos outros; por último só porque é opcional
-        // (o comando nunca falha a corrente — ver o docblock dele).
-        'totvs:import-estoque-revenda',
+        // ⚠️ O Relatório de Revenda (Cotação) NÃO entra aqui: tem agendamento próprio e
+        // fica fora da impressão digital (`totvs.fora_da_impressao`).
     ];
 
     /**
@@ -371,6 +370,20 @@ class AtualizadorTotvs
      * ⚠️ Tamanho sozinho não bastaria: um relatório regerado com o mesmo recorte pode ter
      * exatamente o mesmo tamanho e conteúdo diferente.
      */
+    /** Arquivo de pasta com import próprio (ver `totvs.fora_da_impressao`). */
+    private function foraDaImpressao(string $relativo): bool
+    {
+        $pasta = explode('/', str_replace('\\', '/', $relativo))[0];
+
+        foreach ((array) config('totvs.fora_da_impressao', []) as $padrao) {
+            if (fnmatch($padrao, $pasta)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function impressaoDigital(): string
     {
         $diretorio = $this->diretorio();
@@ -388,6 +401,10 @@ class AtualizadorTotvs
         foreach ($it as $arquivo) {
             /** @var SplFileInfo $arquivo */
             if (! $arquivo->isFile() || str_starts_with($arquivo->getFilename(), '.')) {
+                continue;
+            }
+
+            if ($this->foraDaImpressao(substr($arquivo->getPathname(), strlen($diretorio) + 1))) {
                 continue;
             }
 
