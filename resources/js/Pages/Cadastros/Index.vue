@@ -45,6 +45,7 @@ watch(() => props.flashEnvio, (v) => { envioLocal.value = v; });
 
 const prefillBobina = ref(null);
 const prefillEtiqueta = ref(null);
+const prefillCliente = ref(null);
 const detalhes = reactive({ show: false, titulo: '', campos: [] });
 
 const abas = [
@@ -243,7 +244,7 @@ const tabBtn = (ativo) =>
                     </div>
 
                     <template v-if="subAbaClientes === 'cliente'">
-                        <CadastroClienteForm :opcoes="opcoes" />
+                        <CadastroClienteForm :opcoes="opcoes" :prefill="prefillCliente" />
                         <DarkCard title="Solicitações de cliente" :subtitle="`${clientesFila.total} registro${clientesFila.total !== 1 ? 's' : ''}`">
                             <template #icon>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full"><line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round"/></svg>
@@ -259,6 +260,7 @@ const tabBtn = (ativo) =>
                                 v-if="clientesFila.data.length"
                                 :clientes="clientesFila.data"
                                 @detalhes="(i) => abrirDetalhes('Cliente #' + i.id, i, [['CNPJ','cnpjFaturamento'],['Razão','razaoSocial'],['Fantasia','nomeFantasia'],['Segmento','segmentoAtuacao'],['UF','estado'],['Telefone','telefone'],['E-mail','email'],['Status','status'],['Solicitante','nomeSolicitante'],['Obs.','observacoes']])"
+                                @copiar="(i) => { prefillCliente = { ...i.copia }; window.scrollTo({ top: 0, behavior: 'smooth' }); }"
                                 @excluir="(i) => excluir('cadastros.clientes.destroy', i.id, 'solicitação de cliente')"
                             />
                             <p v-else class="text-sm text-gray-400">Nenhuma solicitação de cliente.</p>

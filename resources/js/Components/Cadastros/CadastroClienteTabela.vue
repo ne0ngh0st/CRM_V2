@@ -5,7 +5,7 @@ defineProps({
     clientes: { type: Array, required: true },
 });
 
-const emit = defineEmits(['excluir', 'detalhes']);
+const emit = defineEmits(['copiar', 'excluir', 'detalhes']);
 
 function tone(status) {
     return ({ pendente: 'warn', em_analise: 'neutral', processado: 'ok', rejeitado: 'danger' })[status] || 'neutral';
@@ -42,6 +42,9 @@ function tone(status) {
                         <div class="tbl-acoes">
                             <button type="button" title="Detalhes" class="tbl-acao tbl-acao-neutro" @click="emit('detalhes', item)">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8h.01" stroke-linecap="round"/></svg>
+                            </button>
+                            <button type="button" title="Copiar para formulário" class="tbl-acao tbl-acao-teal" @click="emit('copiar', item)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="8" width="12" height="12" rx="1"/><path d="M4 16V4h12" stroke-linecap="round"/></svg>
                             </button>
                             <button type="button" title="Excluir" class="tbl-acao tbl-acao-danger" @click="emit('excluir', item)">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7h14M9 7V5h6v2M10 11v6M14 11v6M7 7l1 12h8l1-12" stroke-linecap="round" stroke-linejoin="round"/></svg>

@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import DarkCard from '@/Components/DarkCard.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -9,6 +9,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 
 const props = defineProps({
     opcoes: { type: Object, required: true },
+    prefill: { type: Object, default: null },
 });
 
 const form = useForm({
@@ -40,6 +41,17 @@ const form = useForm({
     email: '',
     observacoes: '',
 });
+
+// "Copiar para formulário": o servidor manda `copia` já com as chaves do form,
+// sem o CNPJ (a cópia é para outra filial/cliente).
+watch(
+    () => props.prefill,
+    (p) => {
+        if (!p) return;
+        Object.assign(form, p, { cnpj_faturamento: '' });
+        form.clearErrors();
+    },
+);
 
 const soEntrega = computed(() => form.cadastro_raiz_opcao === 'nova_entrega');
 const mostrarEntrega = computed(() => form.entrega_diferente || soEntrega.value);

@@ -694,6 +694,37 @@ class CadastroController extends Controller
             'nomeSolicitante' => $c->nome_solicitante,
             'observacoes' => $c->observacoes,
             'cadastroRaizOpcao' => $c->cadastro_raiz_opcao,
+            // "Copiar para formulário": as chaves são as do form, para a tela só
+            // espalhar o objeto. O CNPJ fica de fora — a cópia serve para outra
+            // filial/cliente, e repetir o CNPJ geraria a solicitação duplicada.
+            'copia' => [
+                'cadastro_raiz_opcao' => $c->cadastro_raiz_opcao ?? '',
+                'inscricao_estadual' => $c->inscricao_estadual ?? '',
+                'razao_social' => $c->razao_social ?? '',
+                'nome_fantasia' => $c->nome_fantasia ?? '',
+                'condicao_pagamento' => $c->condicao_pagamento ?? '',
+                'grupo_vendas' => $c->grupo_vendas ?: 'nao',
+                'grupo_vendas_codigo' => $c->grupo_vendas_codigo ?? '',
+                'tabela_preco' => $c->tabela_preco ?: 'nao',
+                'tabela_preco_codigo' => $c->tabela_preco_codigo ?? '',
+                'segmento_atuacao' => $c->segmento_atuacao ?? '',
+                'endereco' => $c->endereco ?? '',
+                'complemento' => $c->complemento ?? '',
+                'cep' => $c->cep ?? '',
+                'bairro' => $c->bairro ?? '',
+                'municipio' => $c->municipio ?? '',
+                'estado' => $c->estado ?? '',
+                'entrega_diferente' => filled($c->entrega_endereco) && $c->cadastro_raiz_opcao !== 'nova_entrega',
+                'entrega_endereco' => $c->entrega_endereco ?? '',
+                'entrega_complemento' => $c->entrega_complemento ?? '',
+                'entrega_cep' => $c->entrega_cep ?? '',
+                'entrega_bairro' => $c->entrega_bairro ?? '',
+                'entrega_municipio' => $c->entrega_municipio ?? '',
+                'entrega_estado' => $c->entrega_estado ?? '',
+                'telefone' => $c->telefone ?? '',
+                'email' => $c->email ?? '',
+                'observacoes' => $c->observacoes ?? '',
+            ],
         ];
     }
 
