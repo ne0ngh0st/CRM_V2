@@ -108,10 +108,12 @@ function submit() {
                     <div>
                         <InputLabel value="Razão social" class="!text-xs" />
                         <TextInput v-model="form.razao_social" class="mt-1 block w-full text-xs" />
+                        <InputError :message="form.errors.razao_social" />
                     </div>
                     <div>
                         <InputLabel value="Nome fantasia" class="!text-xs" />
                         <TextInput v-model="form.nome_fantasia" class="mt-1 block w-full text-xs" />
+                        <InputError :message="form.errors.nome_fantasia" />
                     </div>
                     <div v-if="!soEntrega">
                         <InputLabel value="Condição de pagamento *" class="!text-xs" />
@@ -126,6 +128,7 @@ function submit() {
                                 <label class="inline-flex items-center gap-1.5"><input v-model="form.grupo_vendas" type="radio" value="sim" class="border-gray-300 text-cyan focus:ring-cyan" /> Sim</label>
                             </div>
                             <TextInput v-if="form.grupo_vendas === 'sim'" v-model="form.grupo_vendas_codigo" class="mt-2 block w-full text-xs" placeholder="Código do grupo" />
+                            <InputError v-if="form.grupo_vendas === 'sim'" :message="form.errors.grupo_vendas_codigo" />
                         </div>
                         <div>
                             <InputLabel value="Tabela de preço" class="!text-xs" />
@@ -134,6 +137,7 @@ function submit() {
                                 <label class="inline-flex items-center gap-1.5"><input v-model="form.tabela_preco" type="radio" value="sim" class="border-gray-300 text-cyan focus:ring-cyan" /> Sim</label>
                             </div>
                             <TextInput v-if="form.tabela_preco === 'sim'" v-model="form.tabela_preco_codigo" class="mt-2 block w-full text-xs" placeholder="Identificação da tabela" />
+                            <InputError v-if="form.tabela_preco === 'sim'" :message="form.errors.tabela_preco_codigo" />
                         </div>
                     </div>
                     <div v-if="!soEntrega" class="sm:col-span-2">
@@ -153,22 +157,27 @@ function submit() {
                     <div class="sm:col-span-2">
                         <InputLabel value="Endereço *" class="!text-xs" />
                         <TextInput v-model="form.endereco" class="mt-1 block w-full text-xs" required />
+                        <InputError :message="form.errors.endereco" />
                     </div>
                     <div>
                         <InputLabel value="Complemento" class="!text-xs" />
                         <TextInput v-model="form.complemento" class="mt-1 block w-full text-xs" />
+                        <InputError :message="form.errors.complemento" />
                     </div>
                     <div>
                         <InputLabel value="CEP *" class="!text-xs" />
                         <TextInput v-model="form.cep" class="mt-1 block w-full text-xs" placeholder="00000-000" required />
+                        <InputError :message="form.errors.cep" />
                     </div>
                     <div>
                         <InputLabel value="Bairro *" class="!text-xs" />
                         <TextInput v-model="form.bairro" class="mt-1 block w-full text-xs" required />
+                        <InputError :message="form.errors.bairro" />
                     </div>
                     <div>
                         <InputLabel value="Município *" class="!text-xs" />
                         <TextInput v-model="form.municipio" class="mt-1 block w-full text-xs" required />
+                        <InputError :message="form.errors.municipio" />
                     </div>
                     <div>
                         <InputLabel value="Estado *" class="!text-xs" />
@@ -176,6 +185,7 @@ function submit() {
                             <option value="">UF</option>
                             <option v-for="uf in opcoes.estados" :key="uf" :value="uf">{{ uf }}</option>
                         </select>
+                        <InputError :message="form.errors.estado" />
                     </div>
                 </div>
             </section>
@@ -191,22 +201,27 @@ function submit() {
                     <div class="sm:col-span-2">
                         <InputLabel value="Endereço de entrega *" class="!text-xs" />
                         <TextInput v-model="form.entrega_endereco" class="mt-1 block w-full text-xs" required />
+                        <InputError :message="form.errors.entrega_endereco" />
                     </div>
                     <div>
                         <InputLabel value="Complemento" class="!text-xs" />
                         <TextInput v-model="form.entrega_complemento" class="mt-1 block w-full text-xs" />
+                        <InputError :message="form.errors.entrega_complemento" />
                     </div>
                     <div>
                         <InputLabel value="CEP *" class="!text-xs" />
                         <TextInput v-model="form.entrega_cep" class="mt-1 block w-full text-xs" required />
+                        <InputError :message="form.errors.entrega_cep" />
                     </div>
                     <div>
                         <InputLabel value="Bairro *" class="!text-xs" />
                         <TextInput v-model="form.entrega_bairro" class="mt-1 block w-full text-xs" required />
+                        <InputError :message="form.errors.entrega_bairro" />
                     </div>
                     <div>
                         <InputLabel value="Município *" class="!text-xs" />
                         <TextInput v-model="form.entrega_municipio" class="mt-1 block w-full text-xs" required />
+                        <InputError :message="form.errors.entrega_municipio" />
                     </div>
                     <div>
                         <InputLabel value="Estado *" class="!text-xs" />
@@ -214,6 +229,7 @@ function submit() {
                             <option value="">UF</option>
                             <option v-for="uf in opcoes.estados" :key="uf" :value="uf">{{ uf }}</option>
                         </select>
+                        <InputError :message="form.errors.entrega_estado" />
                     </div>
                 </div>
             </section>
@@ -224,10 +240,12 @@ function submit() {
                     <div>
                         <InputLabel value="Telefone *" class="!text-xs" />
                         <TextInput v-model="form.telefone" class="mt-1 block w-full text-xs" placeholder="(00) 00000-0000" required />
+                        <InputError :message="form.errors.telefone" />
                     </div>
                     <div>
                         <InputLabel value="E-mail *" class="!text-xs" />
                         <TextInput v-model="form.email" type="email" class="mt-1 block w-full text-xs" required />
+                        <InputError :message="form.errors.email" />
                     </div>
                 </div>
             </section>
@@ -236,6 +254,15 @@ function submit() {
                 <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Observações</p>
                 <textarea v-model="form.observacoes" rows="3" class="mt-2 block w-full rounded border-gray-300 text-xs focus:border-cyan focus:ring-cyan" placeholder="Opcional" />
             </section>
+
+            <!-- O servidor recusa e a página não rola: sem este resumo, a recusa de um
+                 campo lá em cima parecia "o botão não faz nada" (2026-10-26). -->
+            <div v-if="Object.keys(form.errors).length" class="rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+                <p class="font-semibold">A solicitação não foi enviada. Corrija:</p>
+                <ul class="mt-1 list-disc pl-4">
+                    <li v-for="(msg, campo) in form.errors" :key="campo">{{ msg }}</li>
+                </ul>
+            </div>
 
             <div class="flex justify-end">
                 <PrimaryButton :disabled="form.processing">Gerar solicitação</PrimaryButton>
