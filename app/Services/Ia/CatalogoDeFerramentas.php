@@ -4,7 +4,13 @@ namespace App\Services\Ia;
 
 use App\Services\Ia\Ferramentas\AbrirChamado;
 use App\Services\Ia\Ferramentas\BuscarCliente;
+use App\Services\Ia\Ferramentas\BuscarVendedor;
+use App\Services\Ia\Ferramentas\ConsultarLeads;
+use App\Services\Ia\Ferramentas\ConsultarOrcamento;
 use App\Services\Ia\Ferramentas\ConsultarPedido;
+use App\Services\Ia\Ferramentas\DesempenhoComercial;
+use App\Services\Ia\Ferramentas\NumerosDoCliente;
+use App\Services\Ia\Ferramentas\PedidosEmAtencao;
 use App\Services\Ia\Ferramentas\FrescorDosDados;
 use App\Services\Ia\Ferramentas\MinhaMeta;
 use App\Services\Ia\Ferramentas\QuemCuidaDoCliente;
@@ -29,6 +35,12 @@ final class CatalogoDeFerramentas
         BuscarCliente::class,
         ResumoCliente::class,
         QuemCuidaDoCliente::class,
+        BuscarVendedor::class,
+        NumerosDoCliente::class,
+        ConsultarOrcamento::class,
+        DesempenhoComercial::class,
+        PedidosEmAtencao::class,
+        ConsultarLeads::class,
         MinhaMeta::class,
         FrescorDosDados::class,
         AbrirChamado::class,

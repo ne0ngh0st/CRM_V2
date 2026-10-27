@@ -9,6 +9,7 @@ use App\Services\Ia\ContextoIa;
 use App\Services\Ia\Ferramenta;
 use App\Services\Ia\Formato;
 use App\Services\Pedidos\StatusPedidoResolver;
+use App\Services\Vendedores\NomeVendedorResolver;
 
 /**
  * Status de um pedido pelo número.
@@ -23,6 +24,7 @@ final class ConsultarPedido implements Ferramenta
     public function __construct(
         private readonly DashboardScopeResolver $escopo,
         private readonly StatusPedidoResolver $status,
+        private readonly NomeVendedorResolver $nomes,
     ) {}
 
     public function nome(): string
@@ -39,8 +41,10 @@ final class ConsultarPedido implements Ferramenta
     {
         return 'Consulta um pedido pelo número do TOTVS (ex.: 992086 ou A00063): situação '
             .'(em aberto ou faturado), etapa no TOTVS, último movimento, previsão de '
-            .'faturamento, se está atrasado, cliente e itens. Só encontra pedidos da carteira '
-            .'do usuário. Use sempre que o usuário citar um número de pedido.';
+            .'faturamento, se está atrasado, cliente, vendedor responsável (nome e código) e '
+            .'itens. "Quem cuida deste pedido" é o campo vendedor — não busque o cliente de '
+            .'novo. Só encontra pedidos da carteira do usuário. Use sempre que o usuário '
+            .'citar um número de pedido.';
     }
 
     public function esquema(): array
@@ -81,14 +85,19 @@ final class ConsultarPedido implements Ferramenta
             ];
         }
 
+        $nomes = $this->nomes->porCodigo($pedidos->pluck('cod_vendedor'));
+
         return [
             'encontrado' => true,
-            'pedidos' => $pedidos->map(fn (Pedido $p) => $this->descrever($p))->all(),
+            'pedidos' => $pedidos->map(fn (Pedido $p) => $this->descrever($p, $nomes))->all(),
         ];
     }
 
-    /** @return array<string, mixed> */
-    private function descrever(Pedido $p): array
+    /**
+     * @param  array<string, string>  $nomes
+     * @return array<string, mixed>
+     */
+    private function descrever(Pedido $p, array $nomes): array
     {
         $emAberto = $p->data_faturamento === null;
         $status = $this->status->paraTela($p);
@@ -101,6 +110,10 @@ final class ConsultarPedido implements Ferramenta
                 'razao_social' => $p->cliente->razao_social,
                 'codigo_totvs' => $p->cliente->codigoTotvs(),
             ] : null,
+            'vendedor' => [
+                'codigo' => $p->cod_vendedor,
+                'nome' => $nomes[$p->cod_vendedor] ?? $p->cod_vendedor,
+            ],
             'data_pedido' => Formato::data($p->data_pedido),
             'valor_total' => Formato::reais($p->valor_total),
             'situacao' => match (true) {

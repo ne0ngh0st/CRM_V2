@@ -16,14 +16,21 @@ reaproveitando os resolvers que as telas já usam:
 | `buscar_cliente` | `BuscaTitularidade::clientesQueCasam` (com escopo) | carteira do usuário |
 | `resumo_cliente` | `ClienteStatusResolver::statusPara`, compra mais recente entre filiais | carteira do usuário |
 | `quem_cuida_do_cliente` | `BuscaTitularidade::buscar` | empresa inteira, **saída estreita** |
+| `buscar_vendedor` | `EquipeScopeResolver::codigosEquipe` | a mesma da tela Equipe |
+| `numeros_do_cliente` | `faturamento_cliente_mensal` (Visão Diretor) | o código inteiro, só se o usuário vê todas as filiais |
+| `consultar_orcamento` | o corte de `OrcamentoController::baseQuery` | os orçamentos do escopo |
+| `desempenho_comercial` | `MetaRankingResolver::ranking` | a mesma de /metas |
+| `pedidos_em_atencao` | `DashboardBlocos::pedidosAtencao` | a mesma do card do Painel |
+| `consultar_leads` | `Lead::visivel` + escopo do Painel | a carteira de leads |
 | `minha_meta` | `MetaRankingResolver::metaVsRealizado` | escopo do Painel |
 | `frescor_dos_dados` | `FrescorDoDado::porDominio` | — |
 | `abrir_chamado` | `NotificacaoService` | grava em `ia_chamados`, avisa o suporte |
 
 - Vazamento entre carteiras fica impossível por construção, e o número dito no chat sai do
   mesmo lugar que o número da tela (Regra de ouro nº 8).
-- ⚠️ **"Não encontrado" é a mesma frase** para pedido inexistente e pedido de outra
-  carteira. Dizer "existe, mas não é seu" já vaza que o colega vendeu.
+- ⚠️ **O faturamento do cliente é o código inteiro** (`faturamento_cliente_mensal`, sem
+  vendedor). Quem não alcança todas as filiais recebe `faturamento: null` — o total
+  incluiria a nota do colega. Os pedidos em aberto continuam só das filiais visíveis.
 - ⚠️ **Nenhuma ferramenta devolve texto livre de terceiros** (observação de lead, mensagem
   do formulário do site). É por aí que chegaria uma injeção de prompt. Ferramenta nova que
   precise disso exige cuidado próprio.

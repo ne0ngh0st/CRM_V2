@@ -42,7 +42,8 @@ final class ResumoCliente implements Ferramenta
         return 'Ficha resumida de um cliente da carteira, pelo id (vem de buscar_cliente): '
             .'status na carteira (ativo/inativando/inativo) com o motivo, última compra, '
             .'último contato registrado, segmento e pedidos em aberto. Use para "por que o '
-            .'cliente está inativo", "quando comprou pela última vez", "tem pedido aberto".';
+            .'cliente está inativo" e "quando comprou pela última vez". Para valor faturado, '
+            .'use numeros_do_cliente.';
     }
 
     public function esquema(): array

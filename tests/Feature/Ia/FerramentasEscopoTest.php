@@ -40,7 +40,61 @@ class FerramentasEscopoTest extends IaTestCase
         $this->assertSame('em aberto', $pedido['situacao']);
         $this->assertTrue($pedido['atrasado']);
         $this->assertSame('MERCADO BOM PRECO LTDA', $pedido['cliente']['razao_social']);
+        $this->assertSame('000010', $pedido['vendedor']['codigo']);
         $this->assertSame('R$ 1.500,50', $pedido['valor_total']);
+    }
+
+    public function test_pedido_diz_o_nome_de_quem_vendeu(): void
+    {
+        $vendedora = $this->usuario('vendedor', '000010');
+        $vendedora->forceFill(['display_name' => 'ADRIANA AGUERA'])->save();
+        $this->pedido();
+
+        $pedido = $this->consultarPedidoComo($vendedora)['pedidos'][0];
+
+        $this->assertSame('000010', $pedido['vendedor']['codigo']);
+        $this->assertSame('ADRIANA AGUERA', $pedido['vendedor']['nome']);
+    }
+
+    public function test_admin_acha_vendedor_pelo_nome_e_devolve_o_codigo(): void
+    {
+        $vendedora = $this->usuario('vendedor', '010244');
+        $vendedora->forceFill(['display_name' => 'ADRIANA AGUERA'])->save();
+
+        $this->roteiro([R::ferramenta('buscar_vendedor', ['nome' => 'adriana aguera']), R::texto('ok')]);
+        $this->perguntar($this->usuario('admin'), 'qual código a Adriana tem')->assertOk();
+
+        $pessoa = $this->resultadoDaFerramenta()['pessoas'][0];
+        $this->assertSame('ADRIANA AGUERA', $pessoa['nome']);
+        $this->assertSame('010244', $pessoa['codigo']);
+        $this->assertSame('vendedor', $pessoa['perfil']);
+    }
+
+    public function test_vendedor_nao_descobre_o_codigo_de_colega(): void
+    {
+        $colega = $this->usuario('vendedor', '010244');
+        $colega->forceFill(['display_name' => 'ADRIANA AGUERA'])->save();
+
+        $this->roteiro([R::ferramenta('buscar_vendedor', ['nome' => 'Adriana']), R::texto('ok')]);
+        $this->perguntar($this->usuario('vendedor', '000010'), 'qual o código da Adriana')->assertOk();
+
+        $r = $this->resultadoDaFerramenta();
+        $this->assertSame([], $r['pessoas']);
+        $this->assertStringNotContainsString('010244', json_encode($r));
+    }
+
+    public function test_supervisor_ve_a_equipe_e_nao_quem_esta_fora(): void
+    {
+        $daEquipe = $this->usuario('vendedor', '010244', '000100');
+        $daEquipe->forceFill(['display_name' => 'ADRIANA AGUERA'])->save();
+        $deFora = $this->usuario('vendedor', '010999', '000200');
+        $deFora->forceFill(['display_name' => 'ADRIANA FORA'])->save();
+
+        $this->roteiro([R::ferramenta('buscar_vendedor', ['nome' => 'Adriana']), R::texto('ok')]);
+        $this->perguntar($this->usuario('supervisor', '000100'), 'quem é a Adriana')->assertOk();
+
+        $codigos = array_column($this->resultadoDaFerramenta()['pessoas'], 'codigo');
+        $this->assertSame(['010244'], $codigos);
     }
 
     public function test_pedido_de_outra_carteira_responde_igual_a_inexistente(): void

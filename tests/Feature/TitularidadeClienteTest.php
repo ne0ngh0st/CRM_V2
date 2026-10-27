@@ -98,6 +98,37 @@ class TitularidadeClienteTest extends TestCase
     }
 
     /**
+     * O código que o CRM mostra é "015076/0001" (código + loja). Sem este corte a busca
+     * colava os dígitos e procurava um CNPJ, e a filial certa sumia.
+     */
+    #[Test]
+    public function test_encontra_filial_pelo_codigo_com_loja(): void
+    {
+        $this->vendedor('010244', 'ADRIANA AGUERA');
+        $this->cliente([
+            'cod_cliente' => '015076',
+            'loja' => '0001',
+            'cnpj' => '33.000.167/0001-01',
+            'razao_social' => 'CONCESSIONARIA DO AEROPORTO',
+            'cod_vendedor' => '010244',
+        ]);
+        $this->cliente([
+            'cod_cliente' => '999888',
+            'loja' => '01',
+            'cnpj' => '01.507.600/0191-00',
+            'razao_social' => 'OUTRA EMPRESA',
+            'cod_vendedor' => '010244',
+        ]);
+
+        $this->actingAs($this->vendedor('999999'))
+            ->getJson(route('cadastros.titularidade', ['termo' => '015076/0001']))
+            ->assertOk()
+            ->assertJsonCount(1, 'resultados')
+            ->assertJsonPath('resultados.0.razaoSocial', 'CONCESSIONARIA DO AEROPORTO')
+            ->assertJsonPath('resultados.0.responsaveis.0', 'ADRIANA AGUERA');
+    }
+
+    /**
      * A busca por documento tem que achar com e sem máscara, e com pedaço.
      * ⚠️ Conferido no banco: 91.451 clientes têm CNPJ mascarado, 746 têm CPF mascarado e
      * ZERO estão gravados só com dígitos — por isso a remontagem da máscara em vez de um

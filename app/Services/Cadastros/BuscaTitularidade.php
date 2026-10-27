@@ -92,6 +92,12 @@ class BuscaTitularidade
             return collect();
         }
 
+        // "015076/0001" é código + loja (o formato de Cliente::codigoTotvs), não um CNPJ.
+        // Sem este corte, os dígitos colados viram prefixo de CNPJ e a filial certa some.
+        if (preg_match('/^(\d{1,6})\s*\/\s*(\d{1,4})$/', $termo, $partes)) {
+            return $this->porCodigoELoja($partes[1], $partes[2], $codVendedores, $limite);
+        }
+
         $query = Cliente::query()
             ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor'])
             ->when($codVendedores !== null, fn ($q) => $q->whereIn('cod_vendedor', $codVendedores));
@@ -128,6 +134,27 @@ class BuscaTitularidade
         }
 
         return $clientes;
+    }
+
+    /**
+     * Filial pelo par código/loja. Se a loja não bater (padding diferente), devolve as
+     * filiais daquele código: melhor a lista certa do que "não existe".
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return Collection<int, Cliente>
+     */
+    private function porCodigoELoja(string $codigo, string $loja, ?array $codVendedores, int $limite): Collection
+    {
+        $base = fn () => Cliente::query()
+            ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor'])
+            ->when($codVendedores !== null, fn ($q) => $q->whereIn('cod_vendedor', $codVendedores))
+            ->where('cod_cliente', $codigo)
+            ->orderBy('razao_social')
+            ->limit($limite);
+
+        $daLoja = $base()->where('loja', $loja)->get();
+
+        return $daLoja->isNotEmpty() ? $daLoja : $base()->get();
     }
 
     /**

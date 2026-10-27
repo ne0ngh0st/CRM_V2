@@ -38,8 +38,8 @@ final class BuscarCliente implements Ferramenta
     {
         return 'Procura clientes da carteira do usuário pelo começo do nome (razão social ou '
             .'fantasia), CNPJ/CPF ou código do TOTVS. Devolve até 10, com o id para usar em '
-            .'resumo_cliente. Se não achar, o cliente pode ser de outra carteira: aí use '
-            .'quem_cuida_do_cliente.';
+            .'resumo_cliente, numeros_do_cliente e consultar_orcamento. Se não achar, o cliente '
+            .'pode ser de outra carteira: aí use quem_cuida_do_cliente.';
     }
 
     public function esquema(): array

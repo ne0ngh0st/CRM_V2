@@ -59,8 +59,9 @@ return [
     // Acima disto no mês o assistente para para todos e diz por quê.
     'teto_mensal_usd' => (float) env('IA_TETO_MENSAL_USD', 300),
 
-    // Voltas de ferramenta por pergunta. Pergunta normal usa 1 a 3.
-    'max_voltas' => 6,
+    // Voltas de ferramenta por pergunta. Uma pergunta do diretor (achar a pessoa,
+    // achar o cliente, somar, abrir o orçamento) usa até 5. O teto fica um pouco acima.
+    'max_voltas' => 8,
 
     // Teto do job. O worker da fila `ia` roda com --timeout=180 (infra/configurar-daemons.sh).
     'timeout_job' => (int) env('IA_TIMEOUT_JOB', 150),

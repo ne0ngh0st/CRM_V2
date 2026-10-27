@@ -32,10 +32,12 @@ final class QuemCuidaDoCliente implements Ferramenta
 
     public function descricao(): string
     {
-        return 'Diz de qual vendedor (e supervisor) é um cliente, em toda a empresa, por nome, '
-            .'CNPJ/CPF ou código. Também mostra solicitações de cadastro ainda pendentes. Use '
-            .'para "esse CNPJ é de alguém?", "posso prospectar?" ou quando buscar_cliente não '
-            .'achar o cliente na carteira. Não traz status, compras nem contatos.';
+        return 'Diz de qual vendedor (e supervisor) é uma EMPRESA, em toda a empresa, por nome, '
+            .'CNPJ/CPF ou código (com ou sem a loja: 015076 ou 015076/0001). Também mostra '
+            .'solicitações de cadastro ainda pendentes. Use para "esse CNPJ é de alguém?" ou '
+            .'quando buscar_cliente não achar o cliente na carteira. Não serve para achar o '
+            .'código de uma pessoa da Autopel — isso é buscar_vendedor. Não traz status, '
+            .'compras nem contatos.';
     }
 
     public function esquema(): array
