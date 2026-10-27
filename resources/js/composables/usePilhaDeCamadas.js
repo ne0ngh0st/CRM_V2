@@ -26,6 +26,14 @@ import { onUnmounted } from 'vue';
 
 const pilha = [];
 
+/**
+ * Há modal ou gaveta aberta? Para quem fica FORA da pilha — o painel do assistente no
+ * desktop não trava o scroll da página — e precisa saber se o ESC é dele ou do modal.
+ */
+export function haCamadasAbertas() {
+    return pilha.length > 0;
+}
+
 export function usePilhaDeCamadas() {
     /* Identidade desta instância. Objeto vazio serve: só a igualdade por referência importa. */
     const token = {};

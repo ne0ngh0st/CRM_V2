@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use App\Support\Markdown;
 use Illuminate\Support\Str;
 
 /**
@@ -137,20 +138,12 @@ class IntranetPublicacao extends Model
     }
 
     /**
-     * O corpo em HTML, pronto para `v-html`.
-     *
-     * ⚠️ `html_input => strip` e `allow_unsafe_links => false` SÃO a segurança desta
-     * feature: é o que torna seguro o front injetar o HTML. Quem publica é gestor, mas o
-     * texto é lido pelos ~200 usuários — um `<script>` colado de algum lugar rodaria na
-     * sessão de todos. Renderizar no servidor mantém a regra num lugar só e dispensa
-     * biblioteca de markdown no bundle.
+     * O corpo em HTML, pronto para `v-html`. A segurança (sem HTML cru, sem link
+     * inseguro) mora em {@see Markdown::seguro()}, compartilhada com o assistente de IA.
      */
     public static function renderizar(string $markdown): string
     {
-        return Str::markdown($markdown, [
-            'html_input' => 'strip',
-            'allow_unsafe_links' => false,
-        ]);
+        return Markdown::seguro($markdown);
     }
 
     /** Resumo em texto puro para o cartão da lista (sem markdown cru aparecendo). */

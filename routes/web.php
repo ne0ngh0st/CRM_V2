@@ -9,6 +9,8 @@ use App\Http\Controllers\EmailEnviadoController;
 use App\Http\Controllers\EquipeController;
 use App\Http\Controllers\EtiquetaMateriaPrimaController;
 use App\Http\Controllers\ExportacaoController;
+use App\Http\Controllers\IaAdminController;
+use App\Http\Controllers\IaController;
 use App\Http\Controllers\InicioController;
 use App\Http\Controllers\IntranetController;
 use App\Http\Controllers\LeadController;
@@ -132,6 +134,24 @@ Route::middleware('auth')->group(function () {
         Route::get('/cotacoes/{cotacao}', [CotacaoController::class, 'show'])->name('cotacoes.show');
         Route::get('/cotacoes/{cotacao}/conferir', [CotacaoController::class, 'conferir'])->name('cotacoes.conferir');
     });
+
+    /*
+     * Assistente de IA (docs/ia-assistente.md). Gate `usar-ia`: admin sempre; os demais
+     * só com IA_HABILITADO e o e-mail na lista de beta testers. A pergunta só grava e
+     * enfileira — a resposta chega pelo canal do Reverb (ou pelo polling de `mensagem`).
+     * A tela admin (chamados e uso) confere o perfil no controller.
+     */
+    Route::middleware('can:usar-ia')->prefix('ia')->name('ia.')->group(function () {
+        Route::post('/mensagens', [IaController::class, 'enviar'])->middleware('throttle:10,1')->name('enviar');
+        Route::get('/mensagens/{mensagem}', [IaController::class, 'mensagem'])->name('mensagem');
+        Route::patch('/mensagens/{mensagem}/avaliacao', [IaController::class, 'avaliar'])->name('avaliar');
+        Route::post('/mensagens/{mensagem}/parar', [IaController::class, 'parar'])->name('parar');
+        Route::get('/conversas', [IaController::class, 'conversas'])->name('conversas');
+        Route::get('/conversas/{conversa}', [IaController::class, 'conversa'])->name('conversa');
+    });
+    Route::get('/ia/admin', [IaAdminController::class, 'index'])->name('ia.admin');
+    Route::get('/ia/admin/conversas/{conversa}', [IaAdminController::class, 'conversa'])->name('ia.admin.conversa');
+    Route::post('/ia/admin/chamados/{chamado}/responder', [IaAdminController::class, 'responder'])->name('ia.admin.responder');
 
     Route::get('/catalogo-facas', [CatalogoFacaController::class, 'index'])->name('catalogo-facas.index');
     // CRUD admin-only (checado no controller, como no EtiquetaMateriaPrimaController).

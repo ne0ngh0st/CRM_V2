@@ -160,6 +160,8 @@ export const NAV_USUARIO = [
     },
     // Log do SMTP — mostra destinatários de todo e-mail do sistema, então só admin.
     { chave: 'emails', rotulo: 'E-mails enviados', icone: 'emails', rota: 'emails.index', ativoEm: ['emails.*'], visivel: soAdmin },
+    // Chamados que o assistente de IA abriu, custo e respostas marcadas como ruins.
+    { chave: 'ia-admin', rotulo: 'Assistente: chamados e uso', icone: 'assistente', rota: 'ia.admin', ativoEm: ['ia.admin'], visivel: soAdmin },
 ];
 
 /**

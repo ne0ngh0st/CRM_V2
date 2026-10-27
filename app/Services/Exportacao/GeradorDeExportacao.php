@@ -9,8 +9,6 @@ use App\Services\Escopo\ModoVisao;
 use App\Services\Notificacao\NotificacaoService;
 use App\Support\Uploads\Disco;
 use Illuminate\Http\Request;
-use Illuminate\Session\ArraySessionHandler;
-use Illuminate\Session\Store;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Throwable;
@@ -192,25 +190,10 @@ class GeradorDeExportacao
         $request = Request::create('/exportacao', 'GET', $exportacao->filtros ?? []);
         $request->setUserResolver(fn () => $user);
 
-        $this->restaurarModoVisao($exportacao);
+        // Antes de o catálogo resolver os controllers: o modo "Minha carteira" de quem
+        // pediu tem que valer aqui também (ver ModoVisao::restaurarSemSessao).
+        ModoVisao::restaurarSemSessao($exportacao->modo_visao);
 
         return $this->catalogo->plano($exportacao->recurso, $request, $user);
-    }
-
-    /**
-     * Devolve ao container o modo Equipe/Minha carteira que valia no momento do pedido.
-     *
-     * ⚠️ A sessão é sintética de propósito. `ModoVisao` lê de `Session`, e no worker não
-     * existe sessão nenhuma — o valor cairia no default EQUIPE, que está certo para o
-     * aquecimento de cache e errado para uma exportação pedida em "Minha carteira".
-     * Instanciar aqui, antes de o catálogo resolver os controllers, faz todos os
-     * resolvers de escopo enxergarem o modo correto sem que nenhum deles saiba disso.
-     */
-    private function restaurarModoVisao(Exportacao $exportacao): void
-    {
-        $sessao = new Store('exportacao', new ArraySessionHandler(60));
-        $sessao->put(ModoVisao::CHAVE_SESSAO, $exportacao->modo_visao ?: ModoVisao::EQUIPE);
-
-        app()->instance(ModoVisao::class, new ModoVisao($sessao));
     }
 }

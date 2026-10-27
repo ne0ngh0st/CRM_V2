@@ -78,6 +78,27 @@ stdout_logfile=/var/log/crm-worker.log
 stopwaitsecs=720
 CONF
 
+  echo "==> Worker do assistente de IA (fila ia)"
+  # ⚠️ Fila PRÓPRIA. O worker acima processa exportação de 95 s e import do TOTVS; atrás
+  # dele, o chat esperaria minutos para começar a responder. Três processos = três
+  # respostas ao mesmo tempo; a quarta pergunta espera alguns segundos na fila.
+  #
+  # ⚠️ --timeout=180 > 150 do ResponderMensagemIaJob (config ia.timeout_job), e
+  # stopwaitsecs=190 > 180: no deploy, a resposta em andamento termina antes do restart.
+  cat > /etc/supervisor/conf.d/crm-worker-ia.conf <<CONF
+[program:crm-worker-ia]
+process_name=%(program_name)s_%(process_num)02d
+command=php ${APP_DIR}/artisan queue:work redis --queue=ia --tries=1 --timeout=180 --sleep=1 --max-time=3600
+directory=${APP_DIR}
+autostart=true
+autorestart=true
+user=${APP_USER}
+numprocs=3
+redirect_stderr=true
+stdout_logfile=/var/log/crm-worker-ia.log
+stopwaitsecs=190
+CONF
+
   echo "==> Scheduler (cron)"
   # ⚠️ Sem isto o cache warming não roda e as páginas voltam a esfriar — em silêncio,
   # sem erro nenhum. É o erro mais provável de passar despercebido no primeiro deploy.
@@ -93,7 +114,7 @@ CONF
 fi
 
 echo "==> Logs"
-for f in /var/log/crm-reverb.log /var/log/crm-worker.log /var/log/crm-scheduler.log; do
+for f in /var/log/crm-reverb.log /var/log/crm-worker.log /var/log/crm-worker-ia.log /var/log/crm-scheduler.log; do
   touch "$f"; chown ${APP_USER}:${APP_USER} "$f"
 done
 

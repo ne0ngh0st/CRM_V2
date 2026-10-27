@@ -41,6 +41,9 @@ class HandleInertiaRequests extends Middleware
                 'veVisaoDiretor' => (bool) $request->user()?->can('ver-visao-diretor'),
                 // Item "Cotação" do menu: mesmo gate das rotas.
                 'usaCotacao' => (bool) $request->user()?->can('usar-cotacao'),
+                // Botão do assistente de IA: mesmo gate das rotas. Sem query: os papéis
+                // já vieram para `roles` acima.
+                'usaIa' => (bool) $request->user()?->can('usar-ia'),
             ],
             // Usado por telas que precisam saber o id do registro recém-criado pra
             // continuar operando nele (ex.: anexar imagens à faca logo após cadastrar).

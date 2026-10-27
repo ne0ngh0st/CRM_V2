@@ -3199,7 +3199,40 @@ cuja API de memória morava na KingHost. **Detalhe, armadilhas e migração: `do
 - Acesso e custo em `CotacaoService` (`PERFIS`, `PERFIS_CUSTO`): custo (Ult. Preco = custo de
   compra) só para supervisor/diretor/admin, decidido no servidor.
 
+### Assistente de IA (chat) — Fase 1, 2026-10-26
+
+Botão flutuante em toda página autenticada. Responde sobre pedidos, clientes da carteira,
+metas e o uso do CRM, e abre chamado para o Tony quando não resolve. **Desenho, armadilhas e
+números: `docs/ia-assistente.md`.** Aqui fica o que muda decisão:
+
+- **O modelo não lê o banco: chama ferramentas** (`app/Services/Ia/Ferramentas/`) que rodam
+  como o usuário e reaproveitam os resolvers das telas. Só leitura, mais o chamado. Ferramenta
+  nova entra em `CatalogoDeFerramentas::FERRAMENTAS`.
+- **Fila própria `ia` + Reverb**, não SSE (5-20 s por resposta contra 12 workers FPM). Worker
+  `crm-worker-ia` (3 processos) em `infra/configurar-daemons.sh`; ⚠️ **precisa rodar o script
+  de daemons no app-2** antes de ligar. Polling de reserva quando o canal fica mudo.
+- ⚠️ **`ia_mensagens.conteudo_api` é histórico só por anexação** e é `longText`, não `json`:
+  o Opus 5.5 recusa histórico editado, e a coluna JSON reordena chaves.
+- ⚠️ **`resources/ia/manual.md` é a fonte das respostas de "como faço X"**: mudou tela, mude
+  o manual. Está como RASCUNHO.
+- Interruptores em `config/ia.php`: `IA_HABILITADO` (desligado, só admin), lista de beta
+  testers, limite diário, teto mensal em US$. Sem chave em `local`, um roteiro de
+  demonstração responde (`ClienteClaudeDemonstracao`).
+- **Modelo se decide com `php artisan ia:avaliar --modelo=...`** (`resources/ia/avaliacao.json`;
+  gasta dinheiro de verdade).
+- Extrações feitas junto (Regra de ouro nº 8): `DashboardScopeResolver::alcanca()` (a
+  Carteira usa), `ModoVisao::restaurarSemSessao()` (a exportação usa),
+  `BuscaTitularidade::clientesQueCasam()` com escopo opcional e `App\Support\Markdown::seguro()`
+  (a intranet usa).
+
 ## Pendências
+- 🟡 **Assistente de IA pronto e desligado.** Para o beta, nesta ordem:
+  1. `ANTHROPIC_API_KEY` (conta da empresa);
+  2. rodar `ia:avaliar` nos dois modelos e escolher `IA_MODELO`;
+  3. Tony revisar `resources/ia/manual.md`;
+  4. `infra/configurar-daemons.sh` no app-2 (worker da fila `ia`);
+  5. `.env` dos dois nós (`IA_*`), `config:cache`, reload do FPM, `queue:restart`;
+  6. liberar só o e-mail do Tony, testar, depois os beta testers.
 - 🟡 **Cotação no ar desde 2026-10-22** (venv nos dois nós, RV de 22/10 carregado, 44
   decisões do .exe importadas; motor leva ~3,8 s no app-2 para 589 itens). Falta importar
   as decisões que cada .exe guardou localmente depois que a API da KingHost caiu

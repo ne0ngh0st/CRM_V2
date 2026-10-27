@@ -21,6 +21,7 @@ import VisaoSupervisorToggle from '@/Components/VisaoSupervisorToggle.vue';
 import SimulacaoBanner from '@/Components/SimulacaoBanner.vue';
 import BarraInferior from '@/Components/Navegacao/BarraInferior.vue';
 import GavetaMobile from '@/Components/Navegacao/GavetaMobile.vue';
+import IaBotao from '@/Components/Ia/IaBotao.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { estaAtivo, menuPrincipal, menuUsuario } from '@/constants/navegacao';
 
@@ -261,5 +262,8 @@ const itensDoUsuario = computed(() => menuUsuario(perfil.value));
             @abrir-mais="gavetaAberta = !gavetaAberta"
         />
         <GavetaMobile :show="gavetaAberta" :perfil="perfil" @close="gavetaAberta = false" />
+
+        <!-- Assistente de IA: gate `usar-ia` decidido no servidor. -->
+        <IaBotao v-if="page.props.auth?.usaIa" />
     </div>
 </template>

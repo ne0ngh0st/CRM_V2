@@ -56,10 +56,45 @@ class BuscaTitularidade
      */
     private function clientes(string $termo): Collection
     {
+        $clientes = $this->clientesQueCasam($termo);
+
+        $responsaveis = $this->responsaveisPorCodigo($clientes->pluck('cod_vendedor')->filter()->unique()->all());
+
+        return $clientes->map(fn (Cliente $c) => [
+            'tipo' => 'cliente',
+            'razaoSocial' => $c->razao_social,
+            'nomeFantasia' => $c->nome_fantasia,
+            'cnpj' => $c->cnpj,
+            'codCliente' => $c->cod_cliente,
+            'loja' => $c->loja,
+            'codVendedor' => $c->cod_vendedor,
+            ...($responsaveis[$c->cod_vendedor] ?? ['responsaveis' => [], 'supervisor' => null]),
+        ]);
+    }
+
+    /**
+     * Os clientes que casam com o termo — documento, código do TOTVS ou nome.
+     *
+     * Sem `$codVendedores`, ignora o escopo (é a feature desta classe, ver o docblock).
+     * Com ele, devolve só a carteira: é a busca do assistente de IA, que reaproveita a
+     * mesma lógica de casamento — e os mesmos números medidos abaixo — em vez de ter uma
+     * segunda (Regra de ouro nº 8).
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return Collection<int, Cliente>
+     */
+    public function clientesQueCasam(string $termo, ?array $codVendedores = null, int $limite = self::LIMITE): Collection
+    {
+        $termo = trim($termo);
         $digitos = preg_replace('/\D/', '', $termo) ?? '';
 
+        if ($codVendedores === []) {
+            return collect();
+        }
+
         $query = Cliente::query()
-            ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor']);
+            ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor'])
+            ->when($codVendedores !== null, fn ($q) => $q->whereIn('cod_vendedor', $codVendedores));
 
         /*
          * ⚠️ Caminho rápido por PREFIXO MASCARADO, não por REPLACE().
@@ -81,29 +116,18 @@ class BuscaTitularidade
                     ->orWhere('cnpj', 'like', $this->prefixoCpf($digitos).'%')
                     ->orWhere('cod_cliente', $termo);
             });
-            $clientes = $query->orderBy('razao_social')->limit(self::LIMITE)->get();
+            $clientes = $query->orderBy('razao_social')->limit($limite)->get();
 
             // Dígitos que não acharam documento caem para o nome: um número no meio da
             // razão social ("Casa 24 Horas") não pode sumir da resposta.
             if ($clientes->isEmpty()) {
-                $clientes = $this->porNome($termo);
+                $clientes = $this->porNome($termo, $codVendedores, $limite);
             }
         } else {
-            $clientes = $this->porNome($termo);
+            $clientes = $this->porNome($termo, $codVendedores, $limite);
         }
 
-        $responsaveis = $this->responsaveisPorCodigo($clientes->pluck('cod_vendedor')->filter()->unique()->all());
-
-        return $clientes->map(fn (Cliente $c) => [
-            'tipo' => 'cliente',
-            'razaoSocial' => $c->razao_social,
-            'nomeFantasia' => $c->nome_fantasia,
-            'cnpj' => $c->cnpj,
-            'codCliente' => $c->cod_cliente,
-            'loja' => $c->loja,
-            'codVendedor' => $c->cod_vendedor,
-            ...($responsaveis[$c->cod_vendedor] ?? ['responsaveis' => [], 'supervisor' => null]),
-        ]);
+        return $clientes;
     }
 
     /**
@@ -139,14 +163,16 @@ class BuscaTitularidade
      *   nome comum   ("MERCADO")        : 41 ms
      *   termo sem match por prefixo     : 290 ms   ← único caso caro, e é o mais raro
      *
+     * @param  array<string>|null  $codVendedores
      * @return Collection<int, Cliente>
      */
-    private function porNome(string $termo): Collection
+    private function porNome(string $termo, ?array $codVendedores, int $limite): Collection
     {
         $base = fn () => Cliente::query()
             ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor'])
+            ->when($codVendedores !== null, fn ($q) => $q->whereIn('cod_vendedor', $codVendedores))
             ->orderBy('razao_social')
-            ->limit(self::LIMITE);
+            ->limit($limite);
 
         $porPrefixo = $base()
             ->where(fn ($q) => $q->where('razao_social', 'like', "{$termo}%")

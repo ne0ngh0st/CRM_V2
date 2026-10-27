@@ -3,6 +3,8 @@
 namespace App\Services\Escopo;
 
 use Illuminate\Contracts\Session\Session;
+use Illuminate\Session\ArraySessionHandler;
+use Illuminate\Session\Store;
 
 /**
  * Em que modo o supervisor está olhando o sistema: EQUIPE ou MINHA CARTEIRA.
@@ -52,6 +54,24 @@ class ModoVisao
     public function pessoal(): bool
     {
         return $this->atual() === self::PESSOAL;
+    }
+
+    /**
+     * Devolve ao container o modo que valia na requisição que ORIGINOU um trabalho de
+     * fila (exportação, resposta do assistente de IA).
+     *
+     * ⚠️ A sessão é sintética de propósito. No worker não existe sessão nenhuma e o modo
+     * cairia no default EQUIPE — certo para o aquecimento de cache, errado para quem pediu
+     * algo em "Minha carteira": receberia a equipe inteira. Chamar ANTES de resolver do
+     * container qualquer coisa que dependa do escopo, para todos os resolvers enxergarem
+     * o modo certo sem saber que estão num job.
+     */
+    public static function restaurarSemSessao(?string $modo): void
+    {
+        $sessao = new Store('modo-visao', new ArraySessionHandler(60));
+        $sessao->put(self::CHAVE_SESSAO, in_array($modo, self::MODOS, true) ? $modo : self::EQUIPE);
+
+        app()->instance(self::class, new self($sessao));
     }
 
     public function definir(string $modo): void

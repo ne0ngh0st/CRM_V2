@@ -2049,11 +2049,7 @@ class CarteiraController extends Controller
 
     private function autorizarCliente(Request $request, Cliente $cliente): void
     {
-        $scope = $this->scopeResolver->resolve($request->user(), null, null);
-
-        if ($scope['codVendedores'] !== null && ! in_array($cliente->cod_vendedor, $scope['codVendedores'], true)) {
-            abort(403);
-        }
+        abort_unless($this->scopeResolver->alcanca($request->user(), $cliente->cod_vendedor), 403);
     }
 
     /**

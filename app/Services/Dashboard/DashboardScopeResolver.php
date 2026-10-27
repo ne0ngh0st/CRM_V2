@@ -44,6 +44,21 @@ class DashboardScopeResolver
     }
 
     /**
+     * O registro deste vendedor está ao alcance do usuário? A pergunta de "posso abrir
+     * este cliente/pedido?" — feita pela Carteira e pelas ferramentas do assistente de
+     * IA com a mesma regra (Regra de ouro nº 8).
+     *
+     * Escopo `null` é a empresa inteira (alcança tudo, inclusive registro sem vendedor);
+     * qualquer outro escopo exige o código na lista.
+     */
+    public function alcanca(User $user, ?string $codVendedor): bool
+    {
+        $codigos = $this->resolve($user, null, null)['codVendedores'];
+
+        return $codigos === null || ($codVendedor !== null && in_array($codVendedor, $codigos, true));
+    }
+
+    /**
      * @return array{codVendedores: array<string>|null, visaoSupervisor: ?string, visaoVendedor: ?string}
      */
     private function resolverEscopo(User $user, ?string $visaoSupervisor, ?string $visaoVendedor): array

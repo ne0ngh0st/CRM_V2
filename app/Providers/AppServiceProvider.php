@@ -2,7 +2,14 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\SimulacaoController;
 use App\Models\User;
+use App\Services\Ia\AcessoIa;
+use App\Services\Ia\ClienteClaude;
+use App\Services\Ia\ClienteClaudeAnthropic;
+use App\Services\Ia\ClienteClaudeBedrock;
+use App\Services\Ia\ClienteClaudeDemonstracao;
+use App\Services\Ia\ClienteOpenAiCompativel;
 use App\Services\Email\RegistroDeEmails;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Queue\Events\JobFailed;
@@ -20,7 +27,24 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // A única porta para o modelo de IA; os testes trocam por um roteiro.
+        // - `IA_PROVEDOR=bedrock` (o padrão): Claude no Bedrock, modelo em `IA_MODELO`.
+        // - `IA_PROVEDOR=local`: Ollama, só fora de produção.
+        // - `anthropic` sem chave em dev: roteiro de demonstração (em produção sem chave
+        //   o assistente tem que falhar, não fingir).
+        $this->app->bind(ClienteClaude::class, function ($app) {
+            if (config('ia.provedor') === 'bedrock') {
+                return new ClienteClaudeBedrock;
+            }
+
+            if (config('ia.provedor') === 'local' && ! $app->isProduction()) {
+                return new ClienteOpenAiCompativel;
+            }
+
+            return $app->environment('local') && config('ia.api_key') === ''
+                ? new ClienteClaudeDemonstracao
+                : new ClienteClaudeAnthropic;
+        });
     }
 
     /**
@@ -63,6 +87,13 @@ class AppServiceProvider extends ServiceProvider
 
         // Cotação: quem usa mora no CotacaoService (Regra de ouro nº 8).
         Gate::define('usar-cotacao', fn (User $user) => app(CotacaoService::class)->podeUsar($user));
+
+        // Assistente de IA: quem usa mora no AcessoIa. Admin simulando um vendedor
+        // continua podendo testar como ele (a sessão diz que há um admin do outro lado).
+        Gate::define('usar-ia', fn (User $user) => app(AcessoIa::class)->podeUsar(
+            $user,
+            request()->hasSession() && request()->session()->has(SimulacaoController::SESSAO_ADMIN_ID),
+        ));
 
         // Log do que sai pelo SMTP, para a tela admin /emails.
         Event::listen(MessageSent::class, [RegistroDeEmails::class, 'enviado']);

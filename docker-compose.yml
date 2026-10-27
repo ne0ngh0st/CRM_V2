@@ -101,7 +101,8 @@ services:
     #
     # Depois de mexer no Dockerfile: `docker compose build` (sem argumento) ou nomeie os
     # três serviços. Nunca só `app`.
-    command: php artisan queue:listen --tries=1 --timeout=700
+    # `ia` primeiro: a resposta do assistente não pode esperar atrás de uma exportação.
+    command: php artisan queue:listen --queue=ia,default --tries=1 --timeout=700
     environment:
       DB_HOST: mysql
       REDIS_HOST: redis
