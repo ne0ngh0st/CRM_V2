@@ -54,7 +54,7 @@ def _catalogo(itens):
 
 def cmd_casar(args):
     try:
-        leitura = detector.ler_pedido(args.pedido)
+        leitura = detector.ler_pedido(args.pedido, aba=args.aba or None)
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 2
@@ -114,6 +114,7 @@ def main(argv=None):
     c.add_argument("--catalogo", required=True)
     c.add_argument("--memoria", required=True)
     c.add_argument("--saida", required=True)
+    c.add_argument("--aba", default="")
     c.set_defaults(func=cmd_casar)
 
     n = sub.add_parser("normalizar")

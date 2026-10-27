@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -63,33 +64,80 @@ class CotacaoController extends Controller
             'criadaEm' => $c->created_at?->format('d/m/Y H:i'),
         ]);
 
+        $escolherId = $request->integer('escolher');
+        $escolher = Cotacao::query()
+            ->where('status', Cotacao::STATUS_AGUARDANDO_ABA)
+            ->when($escolherId > 0, fn ($q) => $q->whereKey($escolherId))
+            ->when(! $user->hasRole('admin') || $escolherId === 0, fn ($q) => $q->where('user_id', $user->id))
+            ->latest('id')
+            ->first();
+
+        if ($escolher && ! $this->servico->podeVer($user, $escolher)) {
+            $escolher = null;
+        }
+
         return Inertia::render('Cotacoes/Index', [
             'cotacoes' => $cotacoes,
             'emAndamento' => $cotacoes->getCollection()->contains(fn ($c) => $c['status'] === Cotacao::STATUS_PROCESSANDO && ! $c['travou']),
             'estoque' => $this->resumoDoEstoque(),
             'mostraAutor' => $user->hasRole('admin'),
             'maxUploadMb' => (int) round(config('cotacao.max_upload_kb') / 1024),
+            'escolher' => $escolher ? [
+                'id' => $escolher->id,
+                'arquivo' => $escolher->nome_arquivo,
+                'abas' => $escolher->leitura['abas'] ?? [],
+            ] : null,
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $dados = $request->validate([
-            'arquivo' => ['required', 'file', 'mimes:xlsx,csv,txt', 'max:'.config('cotacao.max_upload_kb')],
+            'arquivo' => ['required', 'file', 'mimes:xlsx,xlsm,csv,txt', 'max:'.config('cotacao.max_upload_kb')],
             'cliente_id' => ['nullable', 'integer', 'exists:clientes,id'],
         ], [
-            'arquivo.mimes' => 'Envie a lista em Excel (.xlsx) ou CSV.',
+            'arquivo.mimes' => 'Envie a lista em Excel (.xlsx, .xlsm) ou CSV.',
         ]);
 
         $cotacao = $this->servico->iniciar($request->user(), $request->file('arquivo'), $dados['cliente_id'] ?? null);
+
+        if ($cotacao->status === Cotacao::STATUS_AGUARDANDO_ABA) {
+            return redirect()->route('cotacoes.index', ['escolher' => $cotacao->id]);
+        }
+
+        return redirect()->route('cotacoes.show', $cotacao);
+    }
+
+    /** A pessoa marcou qual aba do Excel é a lista de itens. */
+    public function escolherAba(Request $request, Cotacao $cotacao): RedirectResponse
+    {
+        $this->autorizar($request, $cotacao);
+
+        $nomes = array_column($cotacao->leitura['abas'] ?? [], 'nome');
+        $dados = $request->validate([
+            'aba' => ['required', 'string', Rule::in($nomes)],
+        ], [
+            'aba.required' => 'Escolha a aba que tem a lista de itens.',
+            'aba.in' => 'Escolha uma das abas do arquivo.',
+        ]);
+
+        try {
+            $this->servico->confirmarAba($cotacao, $dados['aba']);
+        } catch (CotacaoRecusada $e) {
+            return back()->withErrors(['aba' => $e->getMessage()]);
+        }
 
         return redirect()->route('cotacoes.show', $cotacao);
     }
 
     /** Resumo: quanto foi achado, quanto falta conferir, e a lista completa. */
-    public function show(Request $request, Cotacao $cotacao): Response
+    public function show(Request $request, Cotacao $cotacao): Response|RedirectResponse
     {
         $this->autorizar($request, $cotacao);
+
+        if ($cotacao->status === Cotacao::STATUS_AGUARDANDO_ABA) {
+            return redirect()->route('cotacoes.index', ['escolher' => $cotacao->id]);
+        }
         $comCusto = $this->servico->podeVerCusto($request->user());
 
         $porStatus = $cotacao->itens()
@@ -153,9 +201,14 @@ class CotacaoController extends Controller
     }
 
     /** Um item por vez, o de maior valor primeiro. */
-    public function conferir(Request $request, Cotacao $cotacao): Response
+    public function conferir(Request $request, Cotacao $cotacao): Response|RedirectResponse
     {
         $this->autorizar($request, $cotacao);
+
+        if ($cotacao->status === Cotacao::STATUS_AGUARDANDO_ABA) {
+            return redirect()->route('cotacoes.index', ['escolher' => $cotacao->id]);
+        }
+
         $comCusto = $this->servico->podeVerCusto($request->user());
 
         $fila = $this->servico->pendentes($cotacao);

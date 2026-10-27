@@ -125,6 +125,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:usar-cotacao')->group(function () {
         Route::get('/cotacoes', [CotacaoController::class, 'index'])->name('cotacoes.index');
         Route::post('/cotacoes', [CotacaoController::class, 'store'])->name('cotacoes.store');
+        Route::post('/cotacoes/{cotacao}/aba', [CotacaoController::class, 'escolherAba'])->name('cotacoes.aba');
         Route::post('/cotacoes/exportar', [CotacaoController::class, 'exportar'])->name('cotacoes.exportar');
         Route::get('/cotacoes/produtos', [CotacaoController::class, 'buscarProduto'])->name('cotacoes.produtos');
         Route::post('/cotacoes/itens/{item}/decidir', [CotacaoController::class, 'decidir'])->name('cotacoes.itens.decidir');

@@ -10,6 +10,8 @@ Tony (Antonio Barbosa), desenvolvedor solo na Autopel Soluções (suprimentos co
 Refatoração completa do **PALMA** (CRM legado em PHP procedural, MySQL, ~200 usuários/dia, 78-92 páginas, 11 perfis) para stack moderna: **Laravel 11 + Inertia.js + Vue 3**. Motivação central: o PHP legado tem problemas sérios de performance; o objetivo do Laravel + AWS é deixar tudo bem mais rápido/"snappy".
 
 - **Legado de referência:** `C:\Users\antonio.barbosa\OneDrive - autopel.com\Documentos\Sistemas\CRM-AUTOPEL-COMERCIAL` (é o PALMA atual em produção — código-fonte de `https://gestao-comercial.autopel.com`, deploy em `dist\deploy-kinghost`). ⚠️ **Mudou de lugar em 2026-08-10**: era `C:\xampp\htdocs\PLANO-DE-ESCAPE`, mas `C:\xampp` não existe mais nesta máquina (reinstalação) — o repositório é o mesmo (README ainda se chama "PLANO-DE-ESCAPE"), só o caminho mudou. Sessões antigas descreviam essa pasta como "projeto Docker não relacionado ao CRM-V2": **é o legado, sim.** Continua valendo que NÃO é `Site` (snapshot velho do mesmo sistema) nem `PALMA` (landing estática).
+- 🪦 **`gestao-comercial.autopel.com` foi DESATIVADO em 2026-10-22.** Os arquivos do app saíram da KingHost e o domínio redireciona (302) tudo para `https://crm.autopel.online/` (pacote e roteiro em `CRM-AUTOPEL-COMERCIAL\tools\desativacao-kinghost\`). **O servidor e o banco `autopel01` da KingHost continuam no ar**: o AUTOPRINT (BI da Lele, ingestão Bling/Mercado Livre) grava e lê lá. O código do legado segue no repositório como referência.
+  - ⚠️ A `/cotacao-api/` (memória de cotação do programa do COMPRAS) morava nesse domínio e saiu junto: hoje ela também cai no redirecionamento, e o programa guarda as decisões só no CSV local. Ela vai ser portada para o CRM-V2; no dia, trocar o `api_url` no `config.json` do programa.
 - **Escopo reduzido:** de ~78-92 páginas pra **~16 páginas core**, focado só em vendedores internos + representantes.
 - **Hospedagem: AWS, no ar desde 2026-08-28 em `https://crm.autopel.online`** (sa-east-1: ALB + 2× EC2 `m7g.large` + RDS MySQL 8 Multi-AZ + ElastiCache Redis + S3). Provisionada **por SSH**, com os scripts versionados em `infra/` — o Laravel Forge não foi descartado, só depende de cartão corporativo que ainda não saiu. Estado, endereços e armadilhas em `docs/deploy-aws.md`. Azure AD fora de escopo (só um hook `azure_id` nullable).
 
@@ -3197,7 +3199,8 @@ cuja API de memória morava na KingHost. **Detalhe, armadilhas e migração: `do
   parte (minuto 15), só quando há RV mais novo; **nunca falha**. Cada carga em
   `estoque_revenda_cargas`; a `/cotacoes` mostra "RV de dd/mm".
 - Acesso e custo em `CotacaoService` (`PERFIS`, `PERFIS_CUSTO`): custo (Ult. Preco = custo de
-  compra) só para supervisor/diretor/admin, decidido no servidor.
+  compra) para vendedor/supervisor/diretor/admin (vendedor desde 27/10; representante
+  não), decidido no servidor.
 
 ## Pendências
 - 🟡 **Cotação no ar desde 2026-10-22** (venv nos dois nós, RV de 22/10 carregado, 44
