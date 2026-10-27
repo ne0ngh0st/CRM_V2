@@ -23,6 +23,19 @@ final class Formato
         return $valor === null ? null : 'R$ '.number_format((float) $valor, 2, ',', '.');
     }
 
+    /** Caixa faturada. Inteiro sem casa; fração com duas. */
+    public static function caixas(float|string|null $valor): ?string
+    {
+        if ($valor === null) {
+            return null;
+        }
+
+        $n = (float) $valor;
+        $casas = abs($n - round($n)) < 0.001 ? 0 : 2;
+
+        return number_format($n, $casas, ',', '.');
+    }
+
     /** Descreve o escopo resolvido em palavras, para o modelo dizer de quem é o número. */
     public static function escopo(?array $codVendedores, ?string $perfil): string
     {

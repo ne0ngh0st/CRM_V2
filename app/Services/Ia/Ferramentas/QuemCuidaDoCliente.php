@@ -2,9 +2,12 @@
 
 namespace App\Services\Ia\Ferramentas;
 
+use App\Models\Cliente;
 use App\Services\Cadastros\BuscaTitularidade;
+use App\Services\Ia\AvisoCodigoGrupo;
 use App\Services\Ia\ContextoIa;
 use App\Services\Ia\Ferramenta;
+use App\Services\Ia\GrupoNaResposta;
 
 /**
  * "De quem é este cliente?" — a mesma busca de /cadastros, que IGNORA o escopo de
@@ -33,10 +36,11 @@ final class QuemCuidaDoCliente implements Ferramenta
     public function descricao(): string
     {
         return 'Diz de qual vendedor (e supervisor) é uma EMPRESA, em toda a empresa, por nome, '
-            .'CNPJ/CPF ou código (com ou sem a loja: 015076 ou 015076/0001). Também mostra '
-            .'solicitações de cadastro ainda pendentes. Use para "esse CNPJ é de alguém?" ou '
-            .'quando buscar_cliente não achar o cliente na carteira. Não serve para achar o '
-            .'código de uma pessoa da Autopel — isso é buscar_vendedor. Não traz status, '
+            .'CNPJ/CPF ou código de cliente (com ou sem a loja: 015076 ou 015076/0001). Também '
+            .'devolve o grupo de vendas dessa empresa e mostra solicitações de cadastro ainda '
+            .'pendentes. Use para "esse CNPJ é de alguém?". "Este grupo" depois disso é o campo '
+            .'grupo — as caixas do grupo são consultar_grupo, nunca este código como cliente. '
+            .'Não serve para achar uma pessoa da Autopel (buscar_vendedor). Não traz status, '
             .'compras nem contatos.';
     }
 
@@ -54,13 +58,46 @@ final class QuemCuidaDoCliente implements Ferramenta
 
     public function executar(ContextoIa $contexto, array $entrada): array
     {
-        $resultados = array_slice($this->busca->buscar((string) ($entrada['termo'] ?? '')), 0, self::LIMITE);
-
-        return [
-            'resultados' => $resultados,
+        $termo = (string) ($entrada['termo'] ?? '');
+        $resultados = array_slice($this->busca->buscar($termo), 0, self::LIMITE);
+        $saida = [
+            'resultados' => $this->comGrupo($resultados),
             'mensagem' => $resultados === []
                 ? 'Ninguém encontrado: o cliente não está cadastrado no TOTVS nem há solicitação pendente.'
                 : null,
         ];
+        $aviso = AvisoCodigoGrupo::paraTermo($termo);
+
+        if ($aviso !== null) {
+            $saida['grupo_com_este_numero'] = $aviso;
+        }
+
+        return $saida;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $resultados
+     * @return list<array<string, mixed>>
+     */
+    private function comGrupo(array $resultados): array
+    {
+        $codigos = collect($resultados)->pluck('codCliente')->filter()->unique()->values();
+
+        if ($codigos->isEmpty()) {
+            return $resultados;
+        }
+
+        $porFilial = Cliente::query()
+            ->whereIn('cod_cliente', $codigos)
+            ->get(['cod_cliente', 'loja', 'cod_grupo'])
+            ->keyBy(fn (Cliente $c) => $c->cod_cliente.'|'.$c->loja);
+        $nomes = GrupoNaResposta::nomes($porFilial->pluck('cod_grupo'));
+
+        return array_map(function (array $linha) use ($porFilial, $nomes) {
+            $filial = $porFilial[($linha['codCliente'] ?? '').'|'.($linha['loja'] ?? '')] ?? null;
+            $linha['grupo'] = $filial ? GrupoNaResposta::de($filial->cod_grupo, $nomes) : null;
+
+            return $linha;
+        }, $resultados);
     }
 }

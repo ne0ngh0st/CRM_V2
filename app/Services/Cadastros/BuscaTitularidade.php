@@ -99,7 +99,7 @@ class BuscaTitularidade
         }
 
         $query = Cliente::query()
-            ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor'])
+            ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor', 'cod_grupo'])
             ->when($codVendedores !== null, fn ($q) => $q->whereIn('cod_vendedor', $codVendedores));
 
         /*
@@ -146,7 +146,7 @@ class BuscaTitularidade
     private function porCodigoELoja(string $codigo, string $loja, ?array $codVendedores, int $limite): Collection
     {
         $base = fn () => Cliente::query()
-            ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor'])
+            ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor', 'cod_grupo'])
             ->when($codVendedores !== null, fn ($q) => $q->whereIn('cod_vendedor', $codVendedores))
             ->where('cod_cliente', $codigo)
             ->orderBy('razao_social')
@@ -196,7 +196,7 @@ class BuscaTitularidade
     private function porNome(string $termo, ?array $codVendedores, int $limite): Collection
     {
         $base = fn () => Cliente::query()
-            ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor'])
+            ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor', 'cod_grupo'])
             ->when($codVendedores !== null, fn ($q) => $q->whereIn('cod_vendedor', $codVendedores))
             ->orderBy('razao_social')
             ->limit($limite);

@@ -2,11 +2,13 @@
 
 namespace App\Services\VisaoDiretor;
 
+use App\Services\Faturamento\VolumePorFamilia;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Dono ÚNICO da escrita em `faturamento_cliente_mensal` e `faturamento_cliente_produto`
+ * Dono ÚNICO da escrita em `faturamento_cliente_mensal`, `faturamento_cliente_familia_mensal`
+ * (caixas por família, para o assistente) e `faturamento_cliente_produto`
  * (quem já comprou qual produto, para o `VinculoPorProduto`).
  *
  * `faturamento_cliente_mensal` é o faturamento por cliente e mês
@@ -67,6 +69,7 @@ class FaturamentoMensalRollup
 
         DB::transaction(function () use ($inicio, $fim) {
             DB::table('faturamento_cliente_mensal')->where('mes', $inicio->toDateString())->delete();
+            DB::table('faturamento_cliente_familia_mensal')->where('mes', $inicio->toDateString())->delete();
 
             DB::statement(
                 'INSERT INTO faturamento_cliente_mensal (cod_cliente, mes, valor_total, notas, calculado_em)
@@ -75,6 +78,26 @@ class FaturamentoMensalRollup
                   WHERE data_emissao BETWEEN ? AND ?
                     AND cod_cliente IS NOT NULL
                   GROUP BY cod_cliente',
+                [$inicio->toDateString(), now(), $inicio->toDateString(), $fim->toDateString()],
+            );
+
+            $familia = VolumePorFamilia::familiaSql('p');
+            $caixas = VolumePorFamilia::caixasSql('p', 'f');
+            $semCaixa = VolumePorFamilia::semCaixaSql('p', 'f');
+            DB::statement(
+                "INSERT INTO faturamento_cliente_familia_mensal (cod_cliente, mes, familia, quantidade, unidades_sem_caixa, calculado_em)
+                 SELECT t.cod_cliente, ?, t.familia, COALESCE(SUM(t.caixas), 0), COALESCE(SUM(t.sem_caixa), 0), ?
+                   FROM (
+                        SELECT f.cod_cliente, {$familia} AS familia, {$caixas} AS caixas, {$semCaixa} AS sem_caixa
+                          FROM faturamentos f
+                          INNER JOIN produtos p ON p.cod_produto = f.cod_produto
+                         WHERE f.data_emissao BETWEEN ? AND ?
+                           AND f.cod_cliente IS NOT NULL
+                           AND f.quantidade IS NOT NULL
+                   ) AS t
+                  WHERE t.familia IS NOT NULL
+                    AND (t.caixas IS NOT NULL OR t.sem_caixa IS NOT NULL)
+                  GROUP BY t.cod_cliente, t.familia",
                 [$inicio->toDateString(), now(), $inicio->toDateString(), $fim->toDateString()],
             );
 

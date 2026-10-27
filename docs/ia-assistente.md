@@ -16,8 +16,10 @@ reaproveitando os resolvers que as telas já usam:
 | `buscar_cliente` | `BuscaTitularidade::clientesQueCasam` (com escopo) | carteira do usuário |
 | `resumo_cliente` | `ClienteStatusResolver::statusPara`, compra mais recente entre filiais | carteira do usuário |
 | `quem_cuida_do_cliente` | `BuscaTitularidade::buscar` | empresa inteira, **saída estreita** |
+| `consultar_grupo` | `grupos_cliente` + `faturamento_cliente_familia_mensal` | empresas do grupo que estão na carteira; volume só do código inteiro |
 | `buscar_vendedor` | `EquipeScopeResolver::codigosEquipe` | a mesma da tela Equipe |
 | `numeros_do_cliente` | `faturamento_cliente_mensal` (Visão Diretor) | o código inteiro, só se o usuário vê todas as filiais |
+| `quem_comprou` | `faturamento_cliente_produto` (rollup) | empresas da carteira; não diz quem comprou fora dela |
 | `consultar_orcamento` | o corte de `OrcamentoController::baseQuery` | os orçamentos do escopo |
 | `desempenho_comercial` | `MetaRankingResolver::ranking` | a mesma de /metas |
 | `pedidos_em_atencao` | `DashboardBlocos::pedidosAtencao` | a mesma do card do Painel |
@@ -28,6 +30,7 @@ reaproveitando os resolvers que as telas já usam:
 
 - Vazamento entre carteiras fica impossível por construção, e o número dito no chat sai do
   mesmo lugar que o número da tela (Regra de ouro nº 8).
+- ⚠️ **Grupo não é cliente.** `000258` no TOTVS é o grupo de vendas `258` (`GrpVendas`). O cliente `000258` é outra empresa. `consultar_grupo` normaliza o zero à esquerda. Caixa de bobina sai do código vendido em `produtos`: unidade CX já é a caixa (o "C/30" do nome é o conteúdo, não se divide); outra unidade com "C/30", "CX/16" ou "CX6" no nome divide a quantidade da nota por esse número. Código sem tamanho no nome não vira caixa — fica em `unidades_sem_caixa`, e o assistente não pode dividir esse resto por 30. Etiqueta e tag seguem na unidade da nota (CX ou RL). O volume mora em `faturamento_cliente_familia_mensal`, escrito pelo rollup. A tabela nasce vazia: o histórico só aparece depois de `faturamento:rollup-mensal --desde=2018-01`. Sem isso o assistente diz que ainda não foi calculado, e não que o grupo compra zero.
 - ⚠️ **O faturamento do cliente é o código inteiro** (`faturamento_cliente_mensal`, sem
   vendedor). Quem não alcança todas as filiais recebe `faturamento: null` — o total
   incluiria a nota do colega. Os pedidos em aberto continuam só das filiais visíveis.
