@@ -39,7 +39,9 @@ PADROES = {
     "descricao": {
         "nome": (r"\b(DESCRICAO|DS MATERIAL|DESCR|ESPECIFICACAO|DISCRIMINACAO|"
                  r"PRODUTO|MATERIAL|ITEM|OBJETO|MERCADORIA|DENOMINACAO)\b", 10),
-        "evitar": r"^(CD|COD|CODIGO|NR|N|QT|VL|DT)\b|\b(GRUPO|LOCAL|TIPO|CLASSE)\b",
+        # CATEGORIA: "Categoria Descricao" convive com "Descricao" num RFP.
+        # As duas casam com DESCRICAO; a primeira nao e o produto.
+        "evitar": r"^(CD|COD|CODIGO|NR|N|QT|VL|DT)\b|\b(GRUPO|LOCAL|TIPO|CLASSE|CATEGORIA)\b",
         "forma": lambda pf: pf["txt"] > 0.5 and pf["tam"] >= 8,
     },
     "cod_cliente": {
@@ -84,8 +86,14 @@ PADROES = {
     },
 }
 
-# palavras que denunciam uma aba de tabela dinamica / resumo, nao de dados
-ABAS_RUINS = re.compile(r"\b(DINAMICA|RESUMO|GRAFICO|CAPA|INSTRUCOES|TOTAIS?)\b")
+# palavras que denunciam uma aba de tabela dinamica / resumo, nao de dados.
+# VOLUMETRIA: no RFP de material de escritorio a aba com esse nome e o
+# historico de compras (apoio). A lista a cotar e outra aba, menor em
+# celulas preenchidas -- sem este desconto a volumetria ganha e a cotacao
+# sai com as categorias em vez dos itens.
+ABAS_RUINS = re.compile(
+    r"\b(DINAMICA|RESUMO|GRAFICO|CAPA|INSTRUCOES|TOTAIS?|VOLUMETRIA)\b"
+)
 
 
 # --------------------------------------------------------------- leitura crua

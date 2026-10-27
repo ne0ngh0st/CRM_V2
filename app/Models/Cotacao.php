@@ -15,7 +15,7 @@ class Cotacao extends Model
     protected $table = 'cotacoes';
 
     protected $fillable = [
-        'user_id', 'cliente_id', 'nome_arquivo', 'caminho_arquivo', 'status', 'erro',
+        'user_id', 'cliente_id', 'nome_arquivo', 'caminho_arquivo', 'aba', 'status', 'erro',
         'leitura', 'itens_total', 'valor_total', 'estoque_em', 'processada_em',
     ];
 
@@ -24,6 +24,9 @@ class Cotacao extends Model
     public const STATUS_PRONTA = 'pronta';
 
     public const STATUS_FALHA = 'falha';
+
+    /** Excel com várias abas: a comparação só começa depois que a pessoa escolhe qual é a lista. */
+    public const STATUS_AGUARDANDO_ABA = 'aguardando_aba';
 
     protected function casts(): array
     {

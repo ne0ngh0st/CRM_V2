@@ -21,9 +21,11 @@ const props = defineProps({
     estoque: { type: Object, required: true },
     mostraAutor: { type: Boolean, default: false },
     maxUploadMb: { type: Number, default: 10 },
+    escolher: { type: Object, default: null },
 });
 
 const form = useForm({ arquivo: null, cliente_id: null });
+const escolha = useForm({ aba: '' });
 const inputArquivo = ref(null);
 const cliente = ref(null);
 const busca = ref('');
@@ -74,6 +76,11 @@ function enviar() {
     });
 }
 
+function confirmarAba() {
+    if (!props.escolher) return;
+    escolha.post(route('cotacoes.aba', props.escolher.id));
+}
+
 /* Recarrega sozinha enquanto há cotação em preparo — mesmo desenho de Meus downloads. */
 let timer = null;
 function ajustarPoll(ativo) {
@@ -87,6 +94,7 @@ const linhas = computed(() => props.cotacoes.data ?? []);
 
 function estado(c) {
     if (c.travou) return { tone: 'danger', texto: 'Interrompida' };
+    if (c.status === 'aguardando_aba') return { tone: 'warn', texto: 'Escolher aba' };
     if (c.status === 'processando') return { tone: 'warn', texto: 'Comparando' };
     if (c.status === 'falha') return { tone: 'danger', texto: 'Falhou' };
     if (c.pendentes > 0) return { tone: 'warn', texto: `${c.pendentes} a conferir` };
@@ -119,12 +127,39 @@ const reais = (v) => Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency',
                 </template>
             </PageHero>
 
-            <DarkCard title="Nova cotação" subtitle="Excel (.xlsx) ou CSV, do jeito que o cliente mandou">
+            <DarkCard title="Nova cotação" subtitle="Excel (.xlsx, .xlsm) ou CSV, do jeito que o cliente mandou">
                 <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5">
                         <path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
                 </template>
+
+                <form v-if="escolher" class="space-y-3 border-b border-gray-200 p-4" @submit.prevent="confirmarAba">
+                    <p class="text-sm font-medium text-gray-800">
+                        Qual aba é a lista de itens?
+                        <span class="font-normal text-gray-500">{{ escolher.arquivo }}</span>
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <label
+                            v-for="aba in escolher.abas"
+                            :key="aba.nome"
+                            class="flex cursor-pointer items-center gap-2 rounded border px-3 py-2 text-sm"
+                            :class="escolha.aba === aba.nome ? 'border-navy bg-navy/5 text-navy' : 'border-gray-300 text-gray-700'"
+                        >
+                            <input v-model="escolha.aba" type="radio" name="aba" class="text-navy" :value="aba.nome">
+                            <span>{{ aba.nome }}</span>
+                            <span class="text-xs text-gray-400">{{ aba.linhas }} linhas</span>
+                        </label>
+                    </div>
+                    <InputError :message="escolha.errors.aba" />
+                    <button
+                        type="submit"
+                        :disabled="escolha.processing || !escolha.aba"
+                        class="rounded bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {{ escolha.processing ? 'Enviando…' : 'Comparar esta aba' }}
+                    </button>
+                </form>
 
                 <form class="grid gap-4 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end" @submit.prevent="enviar">
                     <div>
@@ -132,11 +167,11 @@ const reais = (v) => Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency',
                         <input
                             ref="inputArquivo"
                             type="file"
-                            accept=".xlsx,.csv"
+                            accept=".xlsx,.xlsm,.csv"
                             class="mt-1 block w-full text-sm text-gray-600 file:mr-3 file:rounded file:border-0 file:bg-navy file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
                             @change="aoEscolherArquivo"
                         />
-                        <p class="mt-1 text-xs text-gray-400">Até {{ maxUploadMb }} MB. Não precisa ajustar colunas: o sistema acha a descrição sozinho.</p>
+                        <p class="mt-1 text-xs text-gray-400">Até {{ maxUploadMb }} MB. Se o Excel tiver mais de uma aba, você escolhe qual é a lista.</p>
                         <InputError :message="form.errors.arquivo" class="mt-1" />
                     </div>
 
@@ -215,6 +250,14 @@ const reais = (v) => Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency',
                                     </td>
                                     <td class="tbl-td">
                                         <div class="tbl-acoes">
+                                            <Link
+                                                v-if="c.status === 'aguardando_aba'"
+                                                :href="route('cotacoes.index', { escolher: c.id })"
+                                                class="tbl-acao tbl-acao-amber"
+                                                title="Escolher a aba"
+                                            >
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10" stroke-linecap="round" /></svg>
+                                            </Link>
                                             <Link
                                                 v-if="c.status === 'pronta' && c.pendentes > 0"
                                                 :href="route('cotacoes.conferir', c.id)"

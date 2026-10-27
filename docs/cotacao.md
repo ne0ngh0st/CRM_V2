@@ -14,8 +14,8 @@ conferência humana. **Cada conferência fica guardada para todo mundo**: na pr�
 de qualquer cliente e de qualquer pessoa, o mesmo texto já sai "Já validado antes".
 
 Quem usa (decisão do Tony, 22/10): vendedor, representante, supervisor, diretor, admin.
-Venda interna e assistente não. **Custo (último preço de compra do Relatório de Revenda) só para
-supervisor, diretor e admin**, na tela, na busca e na planilha. Tudo isso mora em
+Venda interna e assistente não. **Custo (último preço de compra do Relatório de Revenda) para
+vendedor, supervisor, diretor e admin** (vendedor desde 27/10; representante não, por ser externo), na tela, na busca e na planilha. Tudo isso mora em
 `App\Services\Cotacao\CotacaoService` (`PERFIS`, `PERFIS_CUSTO`).
 
 ## Peças
@@ -44,6 +44,15 @@ conferência ──▶ cotacao_decisoes (histórico) + cotacao_memoria (decisão
   calcular em PHP. Mudou `dicionarios/sinonimos.json` ou `normalizar.py` →
   `php artisan cotacao:renormalizar-memoria`, senão as decisões antigas param de casar sem
   erro nenhum e os itens voltam para a fila.
+- ⚠️ **Aba e coluna (RFP da Sthefany, 22/10).** O arquivo traz capa, a lista a cotar
+  (aba RFP, 324 itens) e o histórico "Volumetria". A escolha por célula preenchida
+  pegou a Volumetria, e "Categoria Descrição" ganhou de "Descrição" (mesmo peso, a
+  primeira vence): 497 linhas viraram 2 categorias que a memória já tinha como "não
+  trabalhamos", e a tela disse Conferida, R$ 0. Com mais de uma aba, quem envia
+  escolhe qual é a lista — o motor lê só essa. CSV e arquivo de uma aba seguem
+  direto. O desconto de VOLUMETRIA/CAPA/RESUMO só vale quando nenhuma aba foi
+  marcada. Nome com CATEGORIA não é coluna de descrição. O preço desse RFP
+  continua R$ 0 de propósito: a coluna "VALOR C/ IMPOSTOS" está vazia.
 - **Paridade com o .exe**: conferida em 22/10 na lista do Almox (589 itens × 4.111 SKUs):
   589 de 589 idênticos em status, score, código, alternativas e motivos, no Windows, no
   Alpine de dev e num Python glibc.

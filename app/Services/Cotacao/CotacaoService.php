@@ -18,7 +18,9 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Reader\Xlsx;
 use RuntimeException;
+use Throwable;
 
 /**
  * Tudo que a Cotação decide mora aqui (Regra de ouro nº 8): quem usa, quem vê custo,
@@ -32,8 +34,11 @@ class CotacaoService
     /** Quem usa a tela (decisão do Tony, 22/10/2026). */
     public const PERFIS = ['vendedor', 'representante', 'supervisor', 'diretor', 'admin'];
 
-    /** Quem vê o Ult.Preco do Relatório de Revenda — é custo de COMPRA. */
-    public const PERFIS_CUSTO = ['supervisor', 'diretor', 'admin'];
+    /**
+     * Quem vê o Ult.Preco do Relatório de Revenda — é custo de COMPRA. Vendedor entrou em
+     * 27/10/2026 (pedido do Tony); representante fica de fora por ser externo.
+     */
+    public const PERFIS_CUSTO = ['vendedor', 'supervisor', 'diretor', 'admin'];
 
     /**
      * Rótulo e tom (`StatusPill`) de cada status do motor. O front não tem cópia: recebe
@@ -72,6 +77,9 @@ class CotacaoService
     /**
      * Guarda a lista e enfileira a comparação. Sempre assíncrono: o cruzamento leva de
      * 5 a 40 s (Regra de ouro nº 9 — acima de 2 s não pode ser síncrono).
+     *
+     * Excel com mais de uma aba NÃO escolhe sozinho qual é a lista: devolve a cotação
+     * em `aguardando_aba` e a tela pergunta. CSV e arquivo de uma aba seguem direto.
      */
     public function iniciar(User $user, UploadedFile $arquivo, ?int $clienteId): Cotacao
     {
@@ -79,17 +87,65 @@ class CotacaoService
         $caminho = 'cotacoes/'.Str::uuid().'.'.$extensao;
         Disco::exports()->put($caminho, $arquivo->get());
 
+        $abas = $extensao === 'xlsx' ? $this->listarAbas($arquivo->getRealPath()) : [];
+        $esperaEscolha = count($abas) > 1;
+
         $cotacao = Cotacao::create([
             'user_id' => $user->id,
             'cliente_id' => $clienteId,
             'nome_arquivo' => mb_substr($arquivo->getClientOriginalName(), 0, 255),
             'caminho_arquivo' => $caminho,
+            'status' => $esperaEscolha ? Cotacao::STATUS_AGUARDANDO_ABA : Cotacao::STATUS_PROCESSANDO,
+            'leitura' => $esperaEscolha ? ['abas' => $abas] : null,
+        ]);
+
+        if (! $esperaEscolha) {
+            ProcessarCotacaoJob::dispatch($cotacao->id);
+        }
+
+        return $cotacao;
+    }
+
+    /**
+     * A pessoa marcou qual aba é a lista. Só então a comparação entra na fila.
+     */
+    public function confirmarAba(Cotacao $cotacao, string $aba): void
+    {
+        $nomes = array_column($cotacao->leitura['abas'] ?? [], 'nome');
+
+        if ($cotacao->status !== Cotacao::STATUS_AGUARDANDO_ABA || ! in_array($aba, $nomes, true)) {
+            throw new CotacaoRecusada('Escolha uma das abas do arquivo.');
+        }
+
+        $cotacao->update([
+            'aba' => $aba,
             'status' => Cotacao::STATUS_PROCESSANDO,
         ]);
 
         ProcessarCotacaoJob::dispatch($cotacao->id);
+    }
 
-        return $cotacao;
+    /**
+     * Nome e quantidade de linhas de cada aba, sem carregar as células. Falhou a
+     * leitura: devolve vazio e o motor segue no caminho de uma aba só (a mensagem
+     * de erro dele chega na tela).
+     *
+     * @return list<array{nome: string, linhas: int}>
+     */
+    public function listarAbas(string $caminho): array
+    {
+        try {
+            $info = (new Xlsx())->listWorksheetInfo($caminho);
+        } catch (Throwable $e) {
+            Log::warning('Não li as abas da cotação', ['erro' => $e->getMessage()]);
+
+            return [];
+        }
+
+        return array_map(fn (array $aba) => [
+            'nome' => (string) $aba['worksheetName'],
+            'linhas' => (int) $aba['totalRows'],
+        ], $info);
     }
 
     public function processar(Cotacao $cotacao): void
@@ -122,13 +178,20 @@ class CotacaoService
             ])->all(), JSON_UNESCAPED_UNICODE));
             File::put($pasta.'/memoria.json', json_encode($this->memoriaParaMotor(), JSON_UNESCAPED_UNICODE | JSON_FORCE_OBJECT));
 
-            $saida = $this->rodarMotor([
+            $argumentos = [
                 'casar',
                 '--pedido', $pedido,
                 '--catalogo', $pasta.'/catalogo.json',
                 '--memoria', $pasta.'/memoria.json',
                 '--saida', $pasta.'/resultado.json',
-            ], $pasta.'/resultado.json');
+            ];
+
+            if ($cotacao->aba) {
+                $argumentos[] = '--aba';
+                $argumentos[] = $cotacao->aba;
+            }
+
+            $saida = $this->rodarMotor($argumentos, $pasta.'/resultado.json');
 
             // A data do RV em uso (do nome do arquivo), não a hora em que foi importado.
             $this->gravarResultado($cotacao, $saida, EstoqueRevendaCarga::atual()?->data_rv?->toDateString());

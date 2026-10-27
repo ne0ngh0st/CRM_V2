@@ -15,6 +15,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 /**
@@ -126,36 +128,51 @@ class CotacaoTest extends TestCase
 
     // ---------------------------------------------------------------- custo
 
-    public function test_custo_so_aparece_para_gestor(): void
+    public function test_custo_nao_aparece_para_representante(): void
     {
-        $vendedor = $this->usuario('vendedor');
-        $cotacao = $this->cotacaoDe($vendedor);
+        $representante = $this->usuario('representante');
+        $cotacao = $this->cotacaoDe($representante);
 
-        $conferir = $this->actingAs($vendedor)->get(route('cotacoes.conferir', $cotacao))->assertOk();
+        $conferir = $this->actingAs($representante)->get(route('cotacoes.conferir', $cotacao))->assertOk();
         $candidatos = $conferir->viewData('page')['props']['item']['candidatos'];
         $this->assertNotEmpty($candidatos);
         foreach ($candidatos as $c) {
             $this->assertArrayNotHasKey('custo', $c);
         }
 
-        $busca = $this->actingAs($vendedor)->getJson(route('cotacoes.produtos', ['q' => 'alcool']))->json();
+        $busca = $this->actingAs($representante)->getJson(route('cotacoes.produtos', ['q' => 'alcool']))->json();
         $this->assertNotEmpty($busca);
         $this->assertArrayNotHasKey('custo', $busca[0]);
-
-        $admin = $this->usuario('admin');
-        $candidatosAdmin = $this->actingAs($admin)->get(route('cotacoes.conferir', $cotacao))
-            ->viewData('page')['props']['item']['candidatos'];
-        $this->assertArrayHasKey('custo', $candidatosAdmin[0]);
     }
 
-    public function test_planilha_do_vendedor_nao_tem_coluna_de_custo(): void
+    public function test_vendedor_e_gestor_veem_custo(): void
     {
         $vendedor = $this->usuario('vendedor');
         $cotacao = $this->cotacaoDe($vendedor);
+
+        foreach (['vendedor' => $vendedor, 'admin' => $this->usuario('admin')] as $perfil => $user) {
+            $candidatos = $this->actingAs($user)->get(route('cotacoes.conferir', $cotacao))
+                ->viewData('page')['props']['item']['candidatos'];
+            $this->assertArrayHasKey('custo', $candidatos[0], $perfil);
+        }
+
+        $busca = $this->actingAs($vendedor)->getJson(route('cotacoes.produtos', ['q' => 'alcool']))->json();
+        $this->assertArrayHasKey('custo', $busca[0]);
+    }
+
+    public function test_planilha_do_representante_nao_tem_coluna_de_custo(): void
+    {
+        $representante = $this->usuario('representante');
+        $cotacao = $this->cotacaoDe($representante);
         $request = Request::create('/', 'GET', ['cotacao' => $cotacao->id]);
 
-        $plano = app(CatalogoDeExportacoes::class)->plano('cotacao', $request, $vendedor);
+        $plano = app(CatalogoDeExportacoes::class)->plano('cotacao', $request, $representante);
         $this->assertNotContains('Custo (últ. compra)', $plano->planilha->headings());
+
+        $vendedor = $this->usuario('vendedor');
+        $request = Request::create('/', 'GET', ['cotacao' => $this->cotacaoDe($vendedor)->id]);
+        $plano = app(CatalogoDeExportacoes::class)->plano('cotacao', $request, $vendedor);
+        $this->assertContains('Custo (últ. compra)', $plano->planilha->headings());
 
         $plano = app(CatalogoDeExportacoes::class)->plano('cotacao', $request, $this->usuario('admin'));
         $this->assertContains('Custo (últ. compra)', $plano->planilha->headings());
@@ -268,5 +285,150 @@ class CotacaoTest extends TestCase
         $item = $this->cotacaoDe($this->usuario('vendedor'))->itens()
             ->where('descricao_cliente', 'CANETA ESFEROGRAFICA AZUL')->first();
         $this->assertSame('SEM_MATCH_CONFIRMADO', $item->status_motor);
+    }
+
+    /**
+     * O RFP de material de escritório (22/10) tem a lista a cotar numa aba e o
+     * histórico numa aba "Volumetria" mais cheia. Quem envia escolhe a aba; o
+     * motor lê só essa. Sem a escolha, a cotação não compara nada.
+     */
+    public function test_excel_com_varias_abas_espera_a_pessoa_escolher(): void
+    {
+        $user = $this->usuario('vendedor');
+        $cotacao = $this->cotacaoDe($user, $this->xlsx($this->rfpComVolumetria(), 'rfp-escritorio.xlsx'));
+
+        $this->assertSame(Cotacao::STATUS_AGUARDANDO_ABA, $cotacao->status);
+        $this->assertSame(0, $cotacao->itens_total);
+        $this->assertSame(
+            ['Volumetria 30set22-30set23', 'RFP'],
+            array_column($cotacao->leitura['abas'], 'nome'),
+        );
+
+        $this->actingAs($user)
+            ->get(route('cotacoes.index', ['escolher' => $cotacao->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('escolher.id', $cotacao->id)
+                ->where('escolher.arquivo', 'rfp-escritorio.xlsx')
+                ->has('escolher.abas', 2));
+
+        $this->actingAs($user)
+            ->get(route('cotacoes.show', $cotacao))
+            ->assertRedirect(route('cotacoes.index', ['escolher' => $cotacao->id]));
+
+        $this->actingAs($user)
+            ->post(route('cotacoes.aba', $cotacao), ['aba' => 'RFP'])
+            ->assertRedirect(route('cotacoes.show', $cotacao));
+
+        $cotacao->refresh();
+        $this->assertSame('RFP', $cotacao->aba);
+        $this->assertSame(Cotacao::STATUS_PRONTA, $cotacao->status, (string) $cotacao->erro);
+        $this->assertSame(23, $cotacao->itens_total);
+        $this->assertNotNull($cotacao->itens()->where('descricao_cliente', 'ALCOOL 70 1000 ML')->first());
+        $this->assertNull($cotacao->itens()->where('descricao_cliente', 'like', 'PRODUTO HISTORICO%')->first());
+    }
+
+    public function test_a_aba_escolhida_e_a_unica_que_o_motor_le(): void
+    {
+        $user = $this->usuario('vendedor');
+        $cotacao = $this->cotacaoDe($user, $this->xlsx($this->rfpComVolumetria(), 'rfp-escritorio.xlsx'));
+
+        $this->actingAs($user)
+            ->post(route('cotacoes.aba', $cotacao), ['aba' => 'Volumetria 30set22-30set23'])
+            ->assertRedirect(route('cotacoes.show', $cotacao));
+
+        $cotacao->refresh();
+        $this->assertSame(Cotacao::STATUS_PRONTA, $cotacao->status, (string) $cotacao->erro);
+        $this->assertSame(40, $cotacao->itens_total);
+        $this->assertNotNull($cotacao->itens()->where('descricao_cliente', 'PRODUTO HISTORICO 1')->first());
+        $this->assertNull($cotacao->itens()->where('descricao_cliente', 'ALCOOL 70 1000 ML')->first());
+    }
+
+    public function test_aba_fora_do_arquivo_nao_dispara_a_comparacao(): void
+    {
+        $user = $this->usuario('vendedor');
+        $cotacao = $this->cotacaoDe($user, $this->xlsx($this->rfpComVolumetria(), 'rfp-escritorio.xlsx'));
+
+        $this->actingAs($user)
+            ->post(route('cotacoes.aba', $cotacao), ['aba' => 'Capa'])
+            ->assertSessionHasErrors('aba');
+
+        $this->assertSame(Cotacao::STATUS_AGUARDANDO_ABA, $cotacao->refresh()->status);
+        $this->assertSame(0, $cotacao->itens()->count());
+    }
+
+    public function test_outro_vendedor_nao_escolhe_a_aba(): void
+    {
+        $cotacao = $this->cotacaoDe($this->usuario('vendedor'), $this->xlsx($this->rfpComVolumetria(), 'rfp-escritorio.xlsx'));
+
+        $this->actingAs($this->usuario('vendedor'))
+            ->post(route('cotacoes.aba', $cotacao), ['aba' => 'RFP'])
+            ->assertNotFound();
+
+        $this->assertSame(Cotacao::STATUS_AGUARDANDO_ABA, $cotacao->refresh()->status);
+    }
+
+    /**
+     * Na mesma aba, "Categoria Descrição" e "Descrição" casam com o mesmo nome.
+     * A categoria vem primeiro; sem o corte, as linhas colapsam nas 2 categorias.
+     */
+    public function test_coluna_categoria_descricao_nao_engole_o_produto(): void
+    {
+        $wb = new Spreadsheet();
+        $wb->getActiveSheet()->fromArray([
+            ['Categoria Descrição', 'Descrição', 'Quant.'],
+            ['Escritório e Papelaria', 'COLA BASTAO 10G', 4],
+            ['Escritório e Papelaria', 'ALCOOL 70 1000 ML', 2],
+            ['Copa e alimento', 'CAFE PO VACUO 500G', 6],
+            ['Copa e alimento', 'AÇUCAR REFINADO 1KG', 3],
+        ]);
+
+        $cotacao = $this->cotacaoDe($this->usuario('vendedor'), $this->xlsx($wb, 'lista.xlsx'));
+
+        $this->assertSame(Cotacao::STATUS_PRONTA, $cotacao->status, (string) $cotacao->erro);
+        $this->assertSame(4, $cotacao->itens_total);
+        $nomes = $cotacao->itens()->pluck('descricao_cliente')->all();
+        $this->assertContains('COLA BASTAO 10G', $nomes);
+        $this->assertContains('ALCOOL 70 1000 ML', $nomes);
+        $this->assertNotContains('Escritório e Papelaria', $nomes);
+        $this->assertNotContains('Copa e alimento', $nomes);
+    }
+
+    private function rfpComVolumetria(): Spreadsheet
+    {
+        $wb = new Spreadsheet();
+        $vol = $wb->getActiveSheet();
+        $vol->setTitle('Volumetria 30set22-30set23');
+        $linhas = [['Data Pedido', 'Categoria Descrição', 'Descrição', 'Quant.', 'Cidade']];
+        for ($i = 1; $i <= 40; $i++) {
+            $linhas[] = ['2024-03-08', 'Escritório e Papelaria', 'PRODUTO HISTORICO '.$i, 3, 'SAO PAULO'];
+        }
+        $vol->fromArray($linhas);
+
+        $rfp = $wb->createSheet();
+        $rfp->setTitle('RFP');
+        $rfp->setCellValue('A1', 'Escopo');
+        $rfp->setCellValue('A4', 'Descritivo do Escopo:');
+        $rfp->setCellValue('B4', 'Materiais de escritório');
+        $itens = [['Codigo do Fornecedor', 'DESCRIÇÃO DO ITEM', 'UNIDADE', 'QTDE', 'MARCA', 'VALOR C/ IMPOSTOS']];
+        $itens[] = [null, 'ALCOOL 70 1000 ML', 'UN', 1, 'TUPI', null];
+        $itens[] = [null, 'PAPEL SULFITE A4 75G', 'CX', 1, 'CHAMEX', null];
+        $itens[] = [null, 'CANETA ESFEROGRAFICA AZUL', 'UN', 1, 'BIC', null];
+        for ($i = 1; $i <= 20; $i++) {
+            $itens[] = [null, 'ITEM RFP '.$i, 'UN', 1, 'MARCA', null];
+        }
+        $rfp->fromArray($itens, null, 'A8');
+
+        return $wb;
+    }
+
+    private function xlsx(Spreadsheet $wb, string $nome): UploadedFile
+    {
+        $path = tempnam(sys_get_temp_dir(), 'cotacao');
+        (new Xlsx($wb))->save($path);
+        $conteudo = file_get_contents($path);
+        @unlink($path);
+
+        return UploadedFile::fake()->createWithContent($nome, $conteudo);
     }
 }
