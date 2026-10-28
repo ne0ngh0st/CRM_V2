@@ -360,4 +360,30 @@ class SegmentosInativosTest extends TestCase
 
         $this->assertSame(1, $comEquipe['segmentosInativos']['total'], 'só o segmento da equipe');
     }
+
+    /**
+     * Representante atende só SUPERMERCADISTA: o ranking por segmento não lhe diz nada
+     * (Tony, 2026-10-28). O vendedor com a mesma carteira continua recebendo o bloco.
+     */
+    #[Test]
+    public function test_representante_nao_recebe_o_ranking_por_segmento(): void
+    {
+        $this->cliente('A1', '101', $this->inativo(), '000006');
+
+        $representante = User::factory()->create();
+        $representante->assignRole('representante');
+        VendedorPerfil::create(['user_id' => $representante->id, 'cod_vendedor' => '000006']);
+
+        $props = $this->actingAs($representante)->get(route('dashboard'))->assertOk()->viewData('page')['props'];
+        $this->assertNull($props['segmentosInativos']);
+        $this->assertSame([], $props['especialistasSegmento']);
+        $this->assertNotNull($props['carteiraSegmento'], 'só o ranking sai, a carteira fica');
+
+        $vendedor = User::factory()->create();
+        $vendedor->assignRole('vendedor');
+        VendedorPerfil::create(['user_id' => $vendedor->id, 'cod_vendedor' => '000006']);
+
+        $props = $this->actingAs($vendedor)->get(route('dashboard'))->assertOk()->viewData('page')['props'];
+        $this->assertNotNull($props['segmentosInativos']);
+    }
 }

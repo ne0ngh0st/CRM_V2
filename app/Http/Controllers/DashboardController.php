@@ -124,8 +124,11 @@ class DashboardController extends Controller
              * custava 41,5 s no escopo empresa; esta sai de `clientes` e custa 261 ms
              * (39 ms por vendedor). Se a família voltar ao quadro, esta condição volta a
              * precisar de `&& ! $eGestor` — ou de uma tabela de apoio.
+             *
+             * ⚠️ Representante NÃO vê (Tony, 2026-10-28): todo representante atende só
+             * SUPERMERCADISTA, então um ranking de segmentos não lhe diz nada.
              */
-            'segmentosInativos' => $temEscopo
+            'segmentosInativos' => $temEscopo && $role !== 'representante'
                 ? $this->blocos->segmentosInativos($porVendedor, $codVendedores)
                 : null,
             /*
@@ -134,7 +137,7 @@ class DashboardController extends Controller
              * tem que aparecer no F5 seguinte, e o bloco vive 30 min. Uma consulta sobre
              * ~25 segmentos — e não exige bump de ChaveEscopo::VERSAO.
              */
-            'especialistasSegmento' => $temEscopo
+            'especialistasSegmento' => $temEscopo && $role !== 'representante'
                 ? $this->especialistas->porCodigo()
                 : [],
             /*
