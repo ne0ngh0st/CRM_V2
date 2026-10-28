@@ -10,6 +10,7 @@ use App\Services\Ia\Ferramentas\ConsultarLeads;
 use App\Services\Ia\Ferramentas\ConsultarOrcamento;
 use App\Services\Ia\Ferramentas\ConsultarPedido;
 use App\Services\Ia\Ferramentas\DesempenhoComercial;
+use App\Services\Ia\Ferramentas\ListarPedidos;
 use App\Services\Ia\Ferramentas\NumerosDoCliente;
 use App\Services\Ia\Ferramentas\PedidosEmAtencao;
 use App\Services\Ia\Ferramentas\QuemComprou;
@@ -44,6 +45,7 @@ final class CatalogoDeFerramentas
         ConsultarOrcamento::class,
         DesempenhoComercial::class,
         PedidosEmAtencao::class,
+        ListarPedidos::class,
         ConsultarLeads::class,
         MinhaMeta::class,
         FrescorDosDados::class,

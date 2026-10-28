@@ -11,9 +11,11 @@ use App\Services\Ia\PromptDoSistema;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Inertia\Inertia;
+use Inertia\Response;
 
 /**
- * O chat do assistente de IA (painel lateral do layout).
+ * O chat do assistente de IA (painel lateral do layout e a tela cheia em /ia).
  *
  * ⚠️ `enviar` NÃO responde a pergunta: grava, enfileira e devolve em milissegundos. A
  * resposta leva de 5 a 20 s e vem pelo Reverb (`IaEvento`) — com `mensagem` como rede de
@@ -29,6 +31,18 @@ class IaController extends Controller
         private readonly PromptDoSistema $prompt,
         private readonly ModoVisao $modo,
     ) {}
+
+    /**
+     * A tela cheia: conversas na lateral, a conversa no centro. A página não traz dado
+     * nenhum — conversa e histórico vêm pelos mesmos endpoints JSON do painel, e o estado
+     * é o mesmo (`useAssistenteIa`): abrir a tela cheia continua a conversa do painel.
+     */
+    public function tela(Request $request): Response
+    {
+        return Inertia::render('Assistente/Index', [
+            'conversaInicial' => $request->integer('conversa') ?: null,
+        ]);
+    }
 
     public function enviar(Request $request): JsonResponse
     {
@@ -147,17 +161,21 @@ class IaController extends Controller
         return response()->json($mensagem->paraTela());
     }
 
+    /** As conversas da pessoa. O painel pede as 20 últimas; a tela cheia, até 200. */
     public function conversas(Request $request): JsonResponse
     {
+        $limite = min(200, max(1, $request->integer('limite', 20)));
+
         return response()->json(IaConversa::query()
             ->where('user_id', $request->user()->id)
             ->orderByDesc('updated_at')
-            ->limit(20)
+            ->limit($limite)
             ->get(['id', 'titulo', 'updated_at'])
             ->map(fn (IaConversa $c) => [
                 'id' => $c->id,
                 'titulo' => $c->titulo,
-                'quando' => $c->updated_at?->format('d/m H:i'),
+                'quando' => $c->updated_at?->isToday() ? $c->updated_at->format('H:i') : $c->updated_at?->format('d/m'),
+                'atualizadaEm' => $c->updated_at?->toIso8601String(),
             ]));
     }
 

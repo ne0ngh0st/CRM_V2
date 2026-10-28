@@ -190,8 +190,8 @@ export function novaConversa() {
     aviso.value = null;
 }
 
-export async function carregarConversas() {
-    const res = await fetch(route('ia.conversas'), { headers: { Accept: 'application/json' } });
+export async function carregarConversas(limite = 20) {
+    const res = await fetch(route('ia.conversas', { limite }), { headers: { Accept: 'application/json' } });
     conversas.value = res.ok ? await res.json() : [];
 }
 

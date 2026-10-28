@@ -41,7 +41,10 @@ final class NumerosDoCliente implements Ferramenta
     {
         return 'Faturamento (nota fiscal, a mesma base da Visão Diretor) de um cliente, '
             .'pelo id de buscar_cliente: total desde 2018, ano corrente, mês corrente e ano '
-            .'anterior, mais os pedidos em aberto das filiais que o usuário vê. Use para '
+            .'anterior, os últimos 13 meses mês a mês (valor e número de notas) e os pedidos em '
+            .'aberto das filiais que o usuário vê. O faturamento é do CÓDIGO inteiro, todas as '
+            .'filiais. Use para "quanto esse cliente faturou", "compra todo mês?", '
+            .'"frequência", '
             .'"quanto esse cliente faturou", "faturamento total", "quanto está em aberto '
             .'nele". Não serve para meta da equipe (desempenho_comercial) nem para um pedido '
             .'específico (consultar_pedido).';
@@ -73,6 +76,8 @@ final class NumerosDoCliente implements Ferramenta
             fn ($dono) => $dono !== null && in_array($dono, $codigos, true),
         );
 
+        $filiais = Cliente::query()->where('cod_cliente', $cliente->cod_cliente)->count();
+
         $filiaisVisiveis = Cliente::query()
             ->where('cod_cliente', $cliente->cod_cliente)
             ->when($codigos !== null, fn ($q) => $q->whereIn('cod_vendedor', $codigos))
@@ -88,7 +93,9 @@ final class NumerosDoCliente implements Ferramenta
             'encontrado' => true,
             'razao_social' => $cliente->razao_social,
             'codigo_totvs' => $cliente->codigoTotvs(),
-            'definicao' => 'Faturamento é nota fiscal, somada pelo código do cliente (todas as filiais), da base da Visão Diretor. Não é soma de pedido.',
+            'filial_consultada' => $cliente->codigoTotvs(),
+            'filiais_do_codigo' => $filiais,
+            'definicao' => "Faturamento é nota fiscal somada pelo CÓDIGO {$cliente->cod_cliente} inteiro ({$filiais} filiais), não só pela filial consultada. Diga isso ao apresentar. Não é soma de pedido.",
             'pedidos_em_aberto' => [
                 'quantidade' => (int) ($abertos->qtd ?? 0),
                 'valor' => Formato::reais((float) ($abertos->valor ?? 0)),
@@ -121,10 +128,36 @@ final class NumerosDoCliente implements Ferramenta
                 'ano' => $this->soma($meses->where('mes', '>=', $inicioAno)->where('mes', '<=', $mesAtual)),
                 'mes' => $this->soma($meses->where('mes', $mesAtual)),
                 'ano_anterior' => $this->soma($meses->where('mes', '>=', $inicioAnoAnterior)->where('mes', '<=', $fimAnoAnterior)),
+                'ultimos_13_meses' => $this->porMes($meses),
                 'atualizado_em' => Formato::data($meses->max('calculado_em') ? \Illuminate\Support\Carbon::parse($meses->max('calculado_em')) : null),
             ],
             'mensagem' => null,
         ];
+    }
+
+    /**
+     * Mês a mês, com zero explícito no mês sem nota — é o que responde "compra todo mês?".
+     * O mês corrente sai marcado como parcial.
+     *
+     * @param  Collection<int, object>  $meses
+     * @return list<array<string, mixed>>
+     */
+    private function porMes(Collection $meses): array
+    {
+        $porChave = $meses->keyBy('mes');
+        $saida = [];
+
+        for ($i = 12; $i >= 0; $i--) {
+            $mes = now()->startOfMonth()->subMonths($i);
+            $linha = $porChave[$mes->toDateString()] ?? null;
+            $saida[] = [
+                'mes' => $mes->format('m/Y'),
+                'faturamento' => Formato::reais(round((float) ($linha->valor_total ?? 0), 2)),
+                'notas' => (int) ($linha->notas ?? 0),
+            ] + ($i === 0 ? ['parcial' => true] : []);
+        }
+
+        return $saida;
     }
 
     /** @param  Collection<int, object>  $meses */

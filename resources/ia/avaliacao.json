@@ -120,6 +120,46 @@
             "ferramentas": [],
             "deve_conter": ["chamado"],
             "nao_pode_conter": ["protocolo"]
+        },
+        {
+            "id": "diretor-atrasados-menor-atraso",
+            "usuario": "antonio.barbosa@autopel.com",
+            "pergunta": "quero os pedidos atrasados com menos atraso",
+            "ferramentas": ["listar_pedidos"],
+            "deve_conter": [],
+            "nao_pode_conter": ["não permite", "não consigo"]
+        },
+        {
+            "id": "diretor-atraso-ate-30-dias",
+            "usuario": "antonio.barbosa@autopel.com",
+            "pergunta": "pedidos com até 30 dias de atraso",
+            "ferramentas": ["listar_pedidos"],
+            "deve_conter": [],
+            "nao_pode_conter": ["não consigo filtrar", "não permite"]
+        },
+        {
+            "id": "diretor-c6-bank",
+            "usuario": "antonio.barbosa@autopel.com",
+            "pergunta": "me traga todos os pedidos desse ano da c6 bank",
+            "ferramentas": ["buscar_cliente"],
+            "deve_conter": ["BANCO C6"],
+            "nao_pode_conter": ["Não encontrei nenhum cliente"]
+        },
+        {
+            "id": "diretor-pedidos-do-vendedor-no-mes",
+            "usuario": "antonio.barbosa@autopel.com",
+            "pergunta": "pedidos desse mes do paulo borin",
+            "ferramentas": ["buscar_vendedor", "listar_pedidos"],
+            "deve_conter": [],
+            "nao_pode_conter": ["apenas pelo número", "não consigo listar"]
+        },
+        {
+            "id": "diretor-frequencia-cliente",
+            "usuario": "antonio.barbosa@autopel.com",
+            "pergunta": "o cliente BANCO C6 compra todo mês?",
+            "ferramentas": ["buscar_cliente", "numeros_do_cliente"],
+            "deve_conter": [],
+            "nao_pode_conter": ["TOTVS"]
         }
     ]
 }

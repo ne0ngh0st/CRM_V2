@@ -56,8 +56,27 @@ class BuscaTitularidade
      */
     private function clientes(string $termo): Collection
     {
-        $clientes = $this->clientesQueCasam($termo);
+        return $this->comResponsaveis($this->clientesQueCasam($termo));
+    }
 
+    /**
+     * Mesma resposta de `buscar()`, mas pelas PALAVRAS do termo (ver
+     * `clientesPorPalavras`). Só o assistente de IA chama, e só depois de `buscar()`
+     * não achar nada: a tela continua exata.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function buscarPorPalavras(string $termo): array
+    {
+        return $this->comResponsaveis($this->clientesPorPalavras($termo))->values()->all();
+    }
+
+    /**
+     * @param  Collection<int, Cliente>  $clientes
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function comResponsaveis(Collection $clientes): Collection
+    {
         $responsaveis = $this->responsaveisPorCodigo($clientes->pluck('cod_vendedor')->filter()->unique()->all());
 
         return $clientes->map(fn (Cliente $c) => [
@@ -214,6 +233,84 @@ class BuscaTitularidade
             ->where(fn ($q) => $q->where('razao_social', 'like', "%{$termo}%")
                 ->orWhere('nome_fantasia', 'like', "%{$termo}%"))
             ->get();
+    }
+
+    /** Teto de linhas lidas pela busca aproximada antes de pontuar. */
+    private const CANDIDATOS_POR_PALAVRAS = 500;
+
+    /** Palavras que não identificam empresa nenhuma: casar por elas traria meia base. */
+    private const PALAVRAS_GENERICAS = [
+        'LTDA', 'SA', 'ME', 'EPP', 'EIRELI', 'CIA', 'DE', 'DA', 'DO', 'DAS', 'DOS', 'E', 'EM',
+    ];
+
+    /**
+     * Busca aproximada: as palavras do termo em qualquer ordem, palavra inteira.
+     *
+     * "C6 Bank" não acha "BANCO C6 S.A" por prefixo nem por "contém": a ordem e a grafia
+     * mudam. Aqui cada palavra é procurada inteira (`C6`, para "C6" não casar com
+     * "REC61"), e quem casa mais palavras vem primeiro — "C6" sozinho já traz o banco.
+     *
+     * ⚠️ Varre a tabela (`LIKE '%x%'` não usa índice): medido com os 92 mil clientes,
+     * 1,1 s ("C6 Bank") a 3 s (três palavras comuns). Por isso NÃO entra em
+     * `clientesQueCasam()` nem na tela "Quem cuida do cliente?": é o último recurso do
+     * assistente de IA, que já roda no worker da fila `ia` (Regra nº 9), chamado só
+     * quando a busca exata não achou. O resultado sai marcado como aproximado para o
+     * modelo confirmar com o usuário.
+     *
+     * @param  array<string>|null  $codVendedores
+     * @return Collection<int, Cliente>
+     */
+    public function clientesPorPalavras(string $termo, ?array $codVendedores = null, int $limite = 10): Collection
+    {
+        $palavras = collect(preg_split('/[^\p{L}\p{N}]+/u', mb_strtoupper($termo)) ?: [])
+            ->filter(fn (string $p) => mb_strlen($p) >= 2 && ! in_array($p, self::PALAVRAS_GENERICAS, true))
+            ->unique()
+            ->take(5)
+            ->values();
+
+        if ($palavras->isEmpty() || $codVendedores === []) {
+            return collect();
+        }
+
+        // Filtro barato primeiro (LIKE varre, mas é bem mais leve que REGEXP), já
+        // ordenado por quantas palavras casam; palavra inteira e raridade são conferidas
+        // em PHP, só nos candidatos.
+        // ⚠️ COALESCE: sem ele, cliente sem nome fantasia dá NULL LIKE → NULL, a soma
+        // inteira vira NULL e ele some da busca mesmo casando pela razão social.
+        $pontos = implode(' + ', array_fill(0, $palavras->count(), "(COALESCE(razao_social, '') LIKE ? OR COALESCE(nome_fantasia, '') LIKE ?)"));
+        $ligacoes = $palavras->flatMap(fn (string $p) => ["%{$p}%", "%{$p}%"])->all();
+
+        $candidatos = Cliente::query()
+            ->select(['id', 'cod_cliente', 'loja', 'cnpj', 'razao_social', 'nome_fantasia', 'cod_vendedor', 'cod_grupo'])
+            ->when($codVendedores !== null, fn ($q) => $q->whereIn('cod_vendedor', $codVendedores))
+            ->whereRaw("({$pontos}) > 0", $ligacoes)
+            ->orderByRaw("({$pontos}) DESC", $ligacoes)
+            ->limit(self::CANDIDATOS_POR_PALAVRAS)
+            ->get();
+
+        $casadas = $candidatos->mapWithKeys(fn (Cliente $c) => [$c->id => $palavras->filter(
+            fn (string $p) => preg_match('/\b'.preg_quote($p, '/').'\b/u', mb_strtoupper($c->razao_social.' '.$c->nome_fantasia)) === 1,
+        )->all()]);
+
+        // A palavra rara pesa mais: em "C6 Bank", "C6" (o banco) vale mais que "BANK",
+        // que aparece em meia dúzia de fintechs. Peso = 1 / quantos candidatos a têm.
+        // ⚠️ Os candidatos vêm truncados em 500 (os que mais casam primeiro), então o
+        // peso de uma palavra comum é aproximado — basta para desempatar.
+        $peso = $palavras->mapWithKeys(fn (string $p) => [
+            $p => 1 / max(1, $casadas->filter(fn (array $ps) => in_array($p, $ps, true))->count()),
+        ]);
+
+        // Primeiro quem casa MAIS palavras; no empate, a palavra rara pesa mais.
+        return $candidatos
+            ->filter(fn (Cliente $c) => $casadas[$c->id] !== [])
+            ->sortBy([
+                fn (Cliente $a, Cliente $b) => count($casadas[$b->id]) <=> count($casadas[$a->id]),
+                fn (Cliente $a, Cliente $b) => array_sum(array_map(fn ($p) => $peso[$p], $casadas[$b->id]))
+                    <=> array_sum(array_map(fn ($p) => $peso[$p], $casadas[$a->id])),
+                fn (Cliente $a, Cliente $b) => strcmp($a->razao_social, $b->razao_social),
+            ])
+            ->take($limite)
+            ->values();
     }
 
     /**

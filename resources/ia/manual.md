@@ -45,6 +45,7 @@
 - Os relatórios do TOTVS são carregados ao longo do dia útil. Pedido ou nota de hoje pode ainda não estar no CRM.
 
 ### Pedidos
+- **Previsão de faturamento** é quando o TOTVS espera emitir a nota; pedido **atrasado** é o que está em aberto com essa previsão vencida, e os dias de atraso contam a partir dela. **Entrega prevista** é outra data: a de chegada ao cliente.
 - **Pedidos em aberto** espelham o relatório de pedidos em aberto do TOTVS. A coluna Status é a etapa no TOTVS, lida do último movimento: incluído na carga, separação, bloqueio (estoque, crédito, arte), liberado, WMS etc. Quando o CRM não reconhece o movimento, a etapa fica em branco e o texto original aparece ao abrir a linha.
 - **Pedido novo** só aparece no CRM depois que o relatório de pedidos emitidos do TOTVS é carregado de novo.
 - **Atrasado**: pedido em aberto com previsão de faturamento já vencida.

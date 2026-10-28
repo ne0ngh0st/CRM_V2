@@ -13,7 +13,7 @@ reaproveitando os resolvers que as telas já usam:
 | Ferramenta | Reaproveita | Escopo |
 |---|---|---|
 | `consultar_pedido` | `DashboardScopeResolver::alcanca`, `StatusPedidoResolver::paraTela` | carteira do usuário |
-| `buscar_cliente` | `BuscaTitularidade::clientesQueCasam` (com escopo) | carteira do usuário |
+| `buscar_cliente` | `BuscaTitularidade::clientesQueCasam` (com escopo); sem achado, `clientesPorPalavras` | carteira do usuário |
 | `resumo_cliente` | `ClienteStatusResolver::statusPara`, compra mais recente entre filiais | carteira do usuário |
 | `quem_cuida_do_cliente` | `BuscaTitularidade::buscar` | empresa inteira, **saída estreita** |
 | `consultar_grupo` | `grupos_cliente` + `faturamento_cliente_familia_mensal` | empresas do grupo que estão na carteira; volume só do código inteiro |
@@ -23,6 +23,7 @@ reaproveitando os resolvers que as telas já usam:
 | `consultar_orcamento` | o corte de `OrcamentoController::baseQuery` | os orçamentos do escopo |
 | `desempenho_comercial` | `MetaRankingResolver::ranking` | a mesma de /metas |
 | `pedidos_em_atencao` | `DashboardBlocos::pedidosAtencao` | a mesma do card do Painel |
+| `listar_pedidos` | `Pedido::naCarteiraAberta` (aberto) / tabela inteira (todos) | escopo do Painel; vendedor fora dele é recusado |
 | `consultar_leads` | `Lead::visivel` + escopo do Painel | a carteira de leads |
 | `minha_meta` | `MetaRankingResolver::metaVsRealizado` | escopo do Painel |
 | `frescor_dos_dados` | `FrescorDoDado::porDominio` | — |
@@ -37,6 +38,18 @@ reaproveitando os resolvers que as telas já usam:
 - ⚠️ **Nenhuma ferramenta devolve texto livre de terceiros** (observação de lead, mensagem
   do formulário do site). É por aí que chegaria uma injeção de prompt. Ferramenta nova que
   precise disso exige cuidado próprio.
+- ⚠️ **Lista de pedido é `listar_pedidos`** (2026-10-28, das perguntas do diretor que não
+  funcionaram): por vendedor, por cliente (o código inteiro, todas as filiais), período,
+  faixa de atraso e ordem, com o total do filtro e até 25 linhas; `por_mes` dá a
+  frequência. `pedidos_em_atencao` ficou só com os totais e os 8 mais antigos do card.
+- ⚠️ **Busca aproximada de cliente** (`BuscaTitularidade::clientesPorPalavras`): "C6 Bank"
+  não casa com "BANCO C6" nem por começo nem por "contém". Só roda quando a busca exata
+  não acha nada, e só no assistente (a tela continua exata): varre a tabela, 1-3 s com os
+  92 mil clientes, aceitável porque roda no worker. Palavra inteira (C6 não casa REC61),
+  quem casa mais palavras primeiro, e no empate a palavra mais rara pesa mais. Sai
+  marcada "Resultado aproximado" para o modelo confirmar com o usuário.
+- `numeros_do_cliente` traz `ultimos_13_meses` (valor e nº de notas, zero explícito) e diz
+  na `definicao` que o número é do código inteiro — o modelo rotulava como da filial.
 - Ferramenta nova entra em `CatalogoDeFerramentas::FERRAMENTAS` (é a whitelist).
 
 ## Arquitetura: fila + Reverb, não SSE
@@ -183,6 +196,17 @@ php artisan ia:avaliar --modelo=claude-haiku-5-5
 
 - **Botão flutuante** (canto inferior direito; no celular, acima da barra) e **painel**:
   gaveta de 420 px no desktop (não trava o scroll da página), tela cheia no celular.
+- **Tela cheia `/ia`** (menu do usuário → "Assistente", ou o botão ⤢ do painel): conversas
+  na lateral, agrupadas por data e com busca (até 200), a conversa no centro. É a MESMA
+  conversa do painel — o estado mora em `useAssistenteIa`. Lá o botão flutuante some, mas
+  o `IaBotao` continua montado, porque é ele que escuta o canal da resposta. Mensagens e
+  caixa são componentes únicos (`IaMensagens`, `IaEntrada`, `IaListaConversas`) usados
+  pelas duas telas.
+- **Microfone** (`useDitado`): reconhecimento de fala do próprio navegador (Web Speech
+  API), sem custo. Chrome e Edge têm; no Firefox o botão não aparece. ⚠️ No Chrome o
+  áudio é transcrito pelo Google (no Edge, pela Microsoft): é o navegador que manda, não o
+  CRM. O ditado só escreve na caixa, nunca envia sozinho — a pessoa confere antes (número
+  de pedido ditado erra).
 - **`/ia/admin`** (menu do usuário → "Assistente: chamados e uso", só admin): chamados com
   resposta (notifica quem abriu), custo do mês e respostas marcadas com 👎, com a conversa
   inteira.

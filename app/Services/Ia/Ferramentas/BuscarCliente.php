@@ -41,7 +41,8 @@ final class BuscarCliente implements Ferramenta
     {
         return 'Procura clientes da carteira do usuário pelo começo do nome (razão social ou '
             .'fantasia), CNPJ/CPF ou código de CLIENTE do TOTVS (cod_cliente, ex.: 215371). '
-            .'Devolve até 10, com o id para usar em resumo_cliente, numeros_do_cliente e '
+            .'Se o nome exato não existir, procura pelas palavras em qualquer ordem ("C6 Bank" '
+            .'acha "BANCO C6") e avisa que é aproximado. Devolve até 10, com o id para usar em resumo_cliente, numeros_do_cliente e '
             .'consultar_orcamento, e o grupo de vendas de cada um. Código de GRUPO (000258, '
             .'"grupo nr") NÃO entra aqui — isso é consultar_grupo. Se não achar, o cliente '
             .'pode ser de outra carteira: aí use quem_cuida_do_cliente.';
@@ -69,6 +70,13 @@ final class BuscarCliente implements Ferramenta
 
         $codigos = $this->escopo->resolve($contexto->user, null, null)['codVendedores'];
         $clientes = $this->busca->clientesQueCasam($termo, $codigos, self::LIMITE);
+        $aproximado = false;
+
+        // "C6 Bank" não casa com "BANCO C6" por começo de nome: tenta pelas palavras.
+        if ($clientes->isEmpty()) {
+            $clientes = $this->busca->clientesPorPalavras($termo, $codigos, self::LIMITE);
+            $aproximado = $clientes->isNotEmpty();
+        }
         $nomesDeGrupo = GrupoNaResposta::nomes($clientes->pluck('cod_grupo'));
         $saida = [
             'clientes' => $clientes->map(fn (Cliente $c) => [
@@ -79,7 +87,11 @@ final class BuscarCliente implements Ferramenta
                 'codigo_totvs' => $c->codigoTotvs(),
                 'grupo' => GrupoNaResposta::de($c->cod_grupo, $nomesDeGrupo),
             ])->values()->all(),
-            'mensagem' => $clientes->isEmpty() ? 'Nenhum cliente com esse termo na carteira do usuário.' : null,
+            'mensagem' => match (true) {
+                $clientes->isEmpty() => 'Nenhum cliente com esse termo na carteira do usuário.',
+                $aproximado => 'Resultado aproximado: nenhum nome começa ou contém exatamente esse termo. Estes casam com PALAVRAS dele, em outra ordem: confirme com o usuário se é um deles antes de seguir.',
+                default => null,
+            },
         ];
         $aviso = $this->avisoDeGrupo($termo, $clientes);
 

@@ -46,6 +46,8 @@ const perfil = computed(() => ({
     isAdmin: papeis.value.includes('admin'),
     // Gate `usar-cotacao`, decidido no servidor.
     usaCotacao: Boolean(page.props.auth?.usaCotacao),
+    // Gate `usar-ia`, decidido no servidor.
+    usaIa: Boolean(page.props.auth?.usaIa),
 }));
 
 /*

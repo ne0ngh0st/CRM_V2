@@ -33,8 +33,10 @@ final class PedidosEmAtencao implements Ferramenta
     {
         return 'Carteira de pedidos em aberto do escopo: quantidade, valor em aberto, quantos '
             .'estão atrasados (previsão de faturamento vencida), quantos vencem em 7 dias e o '
-            .'valor em risco (atrasados + vencendo). Com incluir_lista true, traz os atrasados. '
-            .'Use para "quanto está em aberto", "o que está atrasado", "valor em risco".';
+            .'valor em risco (atrasados + vencendo). Com incluir_lista true, traz os 8 atrasados '
+            .'MAIS ANTIGOS (a lista do card do Painel). Use para os totais: "quanto está em '
+            .'aberto", "valor em risco". Para escolher ordem, faixa de atraso, vendedor ou '
+            .'cliente, use listar_pedidos.';
     }
 
     public function esquema(): array

@@ -20,7 +20,7 @@
 
 /**
  * Visibilidade por perfil. Recebe sempre o mesmo objeto de papéis
- * (`{ isGestor, isDiretor, isAdmin, usaCotacao }`), montado uma vez pelo layout.
+ * (`{ isGestor, isDiretor, isAdmin, usaCotacao, usaIa }`), montado uma vez pelo layout.
  *
  * Item sem `visivel` aparece para todos — é o default de propósito: perfil comercial novo
  * deve nascer vendo o menu inteiro e perdendo o que não é dele, nunca o contrário.
@@ -33,6 +33,8 @@ const soAdmin = ({ isAdmin }) => isAdmin;
 const soDiretor = ({ isDiretor }) => isDiretor;
 // Gate `usar-cotacao`, decidido no servidor (CotacaoService::PERFIS).
 const usaCotacao = ({ usaCotacao }) => usaCotacao;
+// Gate `usar-ia` (admin sempre; os demais na lista de beta testers).
+const usaIa = ({ usaIa }) => usaIa;
 
 /**
  * O menu principal, na ordem em que aparece.
@@ -148,6 +150,8 @@ export const NAV_USUARIO = [
     { chave: 'perfil', rotulo: 'Perfil', icone: 'perfil', rota: 'profile.edit', ativoEm: ['profile.*'] },
     { chave: 'notificacoes', rotulo: 'Notificações', icone: 'notificacoes', rota: 'notificacoes.historico', ativoEm: ['notificacoes.*'] },
     { chave: 'downloads', rotulo: 'Meus downloads', icone: 'downloads', rota: 'exportacoes.index', ativoEm: ['exportacoes.*'] },
+    // O assistente em tela cheia; o botão flutuante continua sendo a entrada rápida.
+    { chave: 'assistente', rotulo: 'Assistente', icone: 'assistente', rota: 'ia.tela', ativoEm: ['ia.tela'], visivel: usaIa },
     {
         // Mostra estado de infraestrutura e dispara carga pesada no banco — só admin,
         // igual à matéria-prima de etiqueta e ao CRUD do Catálogo de Facas.

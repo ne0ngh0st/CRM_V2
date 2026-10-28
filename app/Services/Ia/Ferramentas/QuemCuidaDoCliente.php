@@ -60,11 +60,20 @@ final class QuemCuidaDoCliente implements Ferramenta
     {
         $termo = (string) ($entrada['termo'] ?? '');
         $resultados = array_slice($this->busca->buscar($termo), 0, self::LIMITE);
+        $aproximado = false;
+
+        if ($resultados === []) {
+            $resultados = array_slice($this->busca->buscarPorPalavras($termo), 0, self::LIMITE);
+            $aproximado = $resultados !== [];
+        }
+
         $saida = [
             'resultados' => $this->comGrupo($resultados),
-            'mensagem' => $resultados === []
-                ? 'Ninguém encontrado: o cliente não está cadastrado no TOTVS nem há solicitação pendente.'
-                : null,
+            'mensagem' => match (true) {
+                $resultados === [] => 'Ninguém encontrado: o cliente não está cadastrado no TOTVS nem há solicitação pendente.',
+                $aproximado => 'Resultado aproximado: nenhum nome começa ou contém exatamente esse termo. Estes casam com PALAVRAS dele, em outra ordem: confirme com o usuário se é um deles.',
+                default => null,
+            },
         ];
         $aviso = AvisoCodigoGrupo::paraTermo($termo);
 

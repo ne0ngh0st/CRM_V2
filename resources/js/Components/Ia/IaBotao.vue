@@ -8,6 +8,9 @@
  * os ouvintes daquele canal, inclusive este. Por isso este componente se inscreve de novo
  * ao montar e, ao desmontar, tira só o PRÓPRIO ouvinte (`stopListening`), sem sair do canal
  * que o sino ainda usa.
+ *
+ * Na tela cheia (/ia) o botão e o painel somem — a conversa já está na página —, mas o
+ * componente continua montado: é ele que escuta o canal por onde a resposta chega.
  */
 import { computed, onMounted, onUnmounted } from 'vue';
 import { usePage } from '@inertiajs/vue3';
@@ -16,6 +19,7 @@ import { aberto, aplicarEvento } from '@/composables/useAssistenteIa';
 
 const pagina = usePage();
 const userId = computed(() => pagina.props.auth?.user?.id);
+const naTelaCheia = computed(() => route().current('ia.tela'));
 
 let canal = null;
 
@@ -33,7 +37,7 @@ onUnmounted(() => {
 
 <template>
     <button
-        v-show="!aberto"
+        v-show="!aberto && !naTelaCheia"
         type="button"
         class="fixed bottom-20 right-4 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full bg-corp-black text-white shadow-lg ring-2 ring-cyan/60 transition hover:scale-105 hover:ring-cyan sm:bottom-6 sm:right-6"
         title="Assistente PALMA — tire dúvidas sobre pedidos, clientes e o sistema"
@@ -46,5 +50,5 @@ onUnmounted(() => {
         </svg>
     </button>
 
-    <IaPainel />
+    <IaPainel v-if="!naTelaCheia" />
 </template>

@@ -143,6 +143,7 @@ Route::middleware('auth')->group(function () {
      * A tela admin (chamados e uso) confere o perfil no controller.
      */
     Route::middleware('can:usar-ia')->prefix('ia')->name('ia.')->group(function () {
+        Route::get('/', [IaController::class, 'tela'])->name('tela');
         Route::post('/mensagens', [IaController::class, 'enviar'])->middleware('throttle:10,1')->name('enviar');
         Route::get('/mensagens/{mensagem}', [IaController::class, 'mensagem'])->name('mensagem');
         Route::patch('/mensagens/{mensagem}/avaliacao', [IaController::class, 'avaliar'])->name('avaliar');
