@@ -1,6 +1,6 @@
 <script setup>
 /*
- * Os três botões de canal da coluna "Ações": ligar, WhatsApp e e-mail.
+ * Os botões de canal da coluna "Ações": ligar, WhatsApp, e-mail e presencial.
  *
  * Existe como componente porque o que se repete aqui é MARCAÇÃO (três botões, três
  * ícones, três regras de habilitação), não um punhado de utilities — é o critério da
@@ -10,8 +10,15 @@
  * ⚠️ O componente NÃO registra o contato: ele emite `contato` com o canal e quem
  * chama decide a rota (`carteira.ligacao` ou `leads.ligacao`). Foi o jeito de manter
  * a marcação num lugar só sem que o componente precisasse conhecer as rotas.
+ *
+ * ⚠️ O presencial é o único canal que não abre nada fora do CRM: o clique É o registro.
+ * Por isso ele pede confirmação — nos outros, quem clica sem querer vê o discador abrir
+ * e percebe; aqui um clique perdido viraria uma visita que nunca aconteceu, contada na
+ * métrica e no "Último contato" do cliente.
  */
 import { computed } from 'vue';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao.js';
 import { linkEmail, linkTelefone, linkWhatsapp, temWhatsapp } from '@/utils/contato.js';
 
 const props = defineProps({
@@ -20,6 +27,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['contato']);
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
 
 const podeWhatsapp = computed(() => !!props.telefone && temWhatsapp(props.telefone));
 const podeEmail = computed(() => !!props.email && props.email.includes('@'));
@@ -42,6 +50,17 @@ function enviarEmail() {
     if (!podeEmail.value) return;
     emit('contato', 'email');
     window.location.href = linkEmail(props.email);
+}
+
+async function presencial() {
+    const ok = await confirmar({
+        titulo: 'Registrar contato presencial',
+        mensagem: 'Confirma que você esteve pessoalmente com este cliente agora?',
+        detalhe: 'O contato entra nas suas métricas e passa a ser o "Último contato" do cliente.',
+        rotuloConfirmar: 'Registrar visita',
+        tom: 'neutro',
+    });
+    if (ok) emit('contato', 'presencial');
 }
 </script>
 
@@ -85,4 +104,19 @@ function enviarEmail() {
             <path d="m3.5 6.5 8.5 6 8.5-6" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
     </button>
+
+    <!-- Sempre habilitado: visita não depende de telefone nem e-mail cadastrados. -->
+    <button
+        type="button"
+        title="Registrar contato presencial (visita)"
+        class="tbl-acao tbl-acao-navy"
+        @click="presencial"
+    >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21Z" stroke-linejoin="round" />
+            <circle cx="12" cy="10" r="2.25" />
+        </svg>
+    </button>
+
+    <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
 </template>

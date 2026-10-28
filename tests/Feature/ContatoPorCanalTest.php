@@ -75,6 +75,17 @@ class ContatoPorCanalTest extends TestCase
         $this->assertDatabaseHas('ligacoes', ['cliente_id' => $this->cliente->id, 'tipo_contato' => 'email']);
     }
 
+    /** Visita: o botão não depende de telefone nem e-mail, e o canal tem que chegar como presencial. */
+    public function test_registra_contato_presencial_com_o_canal_certo(): void
+    {
+        $this->actingAs($this->vendedor)
+            ->post(route('carteira.ligacao', $this->cliente), ['tipo' => 'presencial'])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('ligacoes', ['cliente_id' => $this->cliente->id, 'tipo_contato' => 'presencial']);
+        $this->assertSame('presencial', $this->cliente->fresh()->canal_ultimo_contato);
+    }
+
     /** Sem `tipo` continua sendo ligação — é o contrato que a rota tinha antes. */
     public function test_sem_tipo_o_contato_e_telefonico(): void
     {
