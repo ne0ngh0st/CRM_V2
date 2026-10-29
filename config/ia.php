@@ -57,7 +57,7 @@ return [
     'limite_diario_por_usuario' => (int) env('IA_LIMITE_DIARIO', 40),
 
     // Acima disto no mês o assistente para para todos e diz por quê.
-    'teto_mensal_usd' => (float) env('IA_TETO_MENSAL_USD', 300),
+    'teto_mensal_usd' => (float) env('IA_TETO_MENSAL_USD', 20),
 
     // R$ por US$, só para a tela de uso mostrar o custo em reais. Valor fixo de
     // propósito (sem API de câmbio): é estimativa, e a fatura da AWS vem em dólar.

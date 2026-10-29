@@ -140,7 +140,7 @@ histórico.
 | `IA_USUARIOS_LIBERADOS` | — | beta testers (e-mails, vírgula) |
 | `IA_CHAMADOS_PARA` | e-mail do Tony | quem recebe chamado |
 | `IA_LIMITE_DIARIO` | 40 | perguntas por usuário por dia (admin não tem limite) |
-| `IA_TETO_MENSAL_USD` | 300 | acima disso para para todos; somado com cache de 5 min |
+| `IA_TETO_MENSAL_USD` | 20 | acima disso para para todos; somado com cache de 5 min |
 
 - No Opus 5.5 vai `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`): a recusa
   dos classificadores de segurança é refeita em outro modelo, em vez de virar resposta vazia.
