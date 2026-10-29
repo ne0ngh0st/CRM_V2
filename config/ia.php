@@ -59,6 +59,10 @@ return [
     // Acima disto no mês o assistente para para todos e diz por quê.
     'teto_mensal_usd' => (float) env('IA_TETO_MENSAL_USD', 300),
 
+    // R$ por US$, só para a tela de uso mostrar o custo em reais. Valor fixo de
+    // propósito (sem API de câmbio): é estimativa, e a fatura da AWS vem em dólar.
+    'cotacao_dolar' => (float) env('IA_COTACAO_DOLAR', 5.40),
+
     // Voltas de ferramenta por pergunta. Uma pergunta do diretor (achar a pessoa,
     // achar o cliente, somar, abrir o orçamento) usa até 5. O teto fica um pouco acima.
     'max_voltas' => 8,

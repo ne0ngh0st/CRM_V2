@@ -24,6 +24,10 @@ const status = ref(props.status);
 watch(status, () => router.get(route('ia.admin'), { status: status.value }, { preserveScroll: true, replace: true }));
 
 const usd = (n) => `US$ ${Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const brl = (n) => Number(n * props.uso.cotacaoDolar).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const tokens = (n) => (n >= 1_000_000 ? `${(n / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi` : n >= 1000 ? `${Math.round(n / 1000).toLocaleString('pt-BR')} mil` : String(n));
+const tokensTotal = computed(() => Object.values(props.uso.tokensMes).reduce((a, b) => a + b, 0));
+const projecaoEstoura = computed(() => props.uso.tetoMes > 0 && props.uso.projecaoMes >= props.uso.tetoMes);
 const pctTeto = computed(() => (props.uso.tetoMes > 0 ? Math.round((props.uso.custoMes / props.uso.tetoMes) * 100) : 0));
 
 // ---- responder chamado
@@ -119,23 +123,52 @@ onMounted(() => {
                     </ul>
                 </DarkCard>
 
-                <DarkCard title="Uso do mês" :subtitle="`Teto de ${usd(uso.tetoMes)}`">
+                <DarkCard title="Consumo e saldo" :subtitle="`Teto de ${usd(uso.tetoMes)} (${brl(uso.tetoMes)}) por mês`">
                     <template #icon>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-5 w-5"><path d="M4 18a8 8 0 1 1 16 0" stroke-linecap="round" /><path d="m12 18 4-5" stroke-linecap="round" /></svg>
                     </template>
 
-                    <div class="flex flex-wrap gap-2">
-                        <KpiTile :value="uso.perguntasMes.toLocaleString('pt-BR')" label="Perguntas" />
-                        <KpiTile :value="usd(uso.custoMes)" label="Custo estimado" compact :tone="pctTeto >= 80 ? 'warn' : 'default'" />
-                        <KpiTile :value="`${pctTeto}%`" label="Do teto" :tone="pctTeto >= 80 ? 'warn' : 'default'" />
+                    <!-- Barra do teto: quanto do mês já foi. -->
+                    <div class="mb-1 flex items-baseline justify-between text-xs text-gray-500">
+                        <span>Gasto <strong class="text-gray-700">{{ usd(uso.custoMes) }}</strong> · {{ brl(uso.custoMes) }}</span>
+                        <span>{{ pctTeto }}% do teto</span>
                     </div>
+                    <div class="h-2 overflow-hidden rounded bg-gray-100">
+                        <div class="h-full rounded" :class="pctTeto >= 80 ? 'bg-amber' : 'bg-teal'" :style="{ width: `${Math.min(100, pctTeto)}%` }" />
+                    </div>
+
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <KpiTile :value="usd(uso.disponivelMes)" label="Disponível" compact :tone="pctTeto >= 80 ? 'warn' : 'ok'" />
+                        <KpiTile :value="brl(uso.disponivelMes)" label="Disponível (R$)" compact :tone="pctTeto >= 80 ? 'warn' : 'ok'" />
+                        <KpiTile :value="usd(uso.projecaoMes)" label="Projeção do mês" compact :tone="projecaoEstoura ? 'warn' : 'default'" />
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <KpiTile :value="uso.perguntasMes.toLocaleString('pt-BR')" label="Perguntas" />
+                        <KpiTile :value="usd(uso.custoPorPergunta)" label="Por pergunta" compact />
+                        <KpiTile :value="tokens(tokensTotal)" label="Tokens" />
+                    </div>
+                    <p v-if="projecaoEstoura" class="mt-2 text-xs text-amber-dark">
+                        No ritmo atual o teto acaba antes do fim do mês — aí o assistente para para todos.
+                    </p>
+
+                    <p class="mb-1 mt-4 text-xs font-semibold uppercase text-gray-400">Tokens do mês</p>
+                    <ul class="text-sm">
+                        <li class="flex justify-between border-b border-gray-100 py-1 text-gray-600"><span>Entrada</span><span class="text-xs">{{ uso.tokensMes.entrada.toLocaleString('pt-BR') }}</span></li>
+                        <li class="flex justify-between border-b border-gray-100 py-1 text-gray-600"><span>Saída (resposta)</span><span class="text-xs">{{ uso.tokensMes.saida.toLocaleString('pt-BR') }}</span></li>
+                        <li class="flex justify-between border-b border-gray-100 py-1 text-gray-600"><span>Cache lido</span><span class="text-xs">{{ uso.tokensMes.cacheLeitura.toLocaleString('pt-BR') }}</span></li>
+                        <li class="flex justify-between border-b border-gray-100 py-1 text-gray-600"><span>Cache gravado</span><span class="text-xs">{{ uso.tokensMes.cacheEscrita.toLocaleString('pt-BR') }}</span></li>
+                    </ul>
+                    <p class="mt-2 text-[0.7rem] leading-4 text-gray-400">
+                        Estimativa pela tabela de preços do modelo, com dólar a R$ {{ uso.cotacaoDolar.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) }}.
+                        "Disponível" é o que sobra do teto do CRM; a AWS cobra depois, na fatura do mês.
+                    </p>
 
                     <p class="mb-1 mt-4 text-xs font-semibold uppercase text-gray-400">Por usuário</p>
                     <ul class="max-h-48 overflow-y-auto text-sm">
                         <li v-for="u in uso.porUsuario" :key="u.nome" class="flex items-baseline justify-between gap-2 border-b border-gray-100 py-1">
                             <span class="truncate text-gray-700">{{ u.nome }}</span>
                             <span class="shrink-0 text-xs text-gray-500">
-                                {{ u.perguntas }} perg. · {{ usd(u.custo) }}<span v-if="u.negativas" class="text-red-700"> · {{ u.negativas }} 👎</span>
+                                {{ u.perguntas }} perg. · {{ tokens(u.tokens) }} tok · {{ usd(u.custo) }}<span v-if="u.negativas" class="text-red-700"> · {{ u.negativas }} 👎</span>
                             </span>
                         </li>
                         <li v-if="!uso.porUsuario.length" class="text-gray-500">Ninguém usou ainda este mês.</li>
@@ -145,7 +178,7 @@ onMounted(() => {
                     <ul class="max-h-48 overflow-y-auto text-sm">
                         <li v-for="d in uso.porDia" :key="d.dia" class="flex justify-between border-b border-gray-100 py-1 text-gray-600">
                             <span>{{ d.dia }}</span>
-                            <span class="text-xs">{{ d.perguntas }} perg. · {{ usd(d.custo) }}</span>
+                            <span class="text-xs">{{ d.perguntas }} perg. · {{ tokens(d.tokens) }} tok · {{ usd(d.custo) }}</span>
                         </li>
                     </ul>
 

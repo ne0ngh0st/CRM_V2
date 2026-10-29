@@ -209,7 +209,10 @@ php artisan ia:avaliar --modelo=claude-haiku-5-5
   de pedido ditado erra).
 - **`/ia/admin`** (menu do usuário → "Assistente: chamados e uso", só admin): chamados com
   resposta (notifica quem abriu), custo do mês e respostas marcadas com 👎, com a conversa
-  inteira.
+  inteira. O card "Consumo e saldo" mostra tokens (entrada/saída/cache), gasto, quanto
+  sobra do teto e a projeção do mês, em US$ e em R$ (`IA_COTACAO_DOLAR`, fixo, padrão
+  5,40). ⚠️ "Disponível" é o que sobra de `IA_TETO_MENSAL_USD`, não saldo na AWS: o
+  Bedrock é pós-pago, e a fatura real fica no Cost Explorer.
 
 ## Medido (2026-10-26, dev, `artisan serve`)
 
