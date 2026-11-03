@@ -709,9 +709,8 @@ por arquivo, e a exportação rodou da máquina do Tony.
 
 ### 10.5 O que continua fora do fluxo automático
 
-- **`produtos`** — o `PRODUTOS - SQL.xlsx` está vazio e o Tony mescla dois CSVs à mão;
-  enquanto a query de origem não virar uma só, continua vindo do `legado:import-produtos`
-  (espelho do v1). Ver seção 4.4.
+- ~~**`produtos`**~~ — entrou em 2026-10-29: `totvs:import-produtos` lê a tabela de preço
+  (234) e o cadastro (005) em xlsx, na pasta `produtos/`. Ver o docblock do comando.
 - **`leads`** (`base_marco - SQL.csv`) — o arquivo é sincronizado do S3 mas o import não
   entrou na corrente do `totvs:atualizar`: o `legado:import-leads` apaga e reinsere as
   linhas `origem='sistema'`, então os ids mudam a cada rodada e observação/agendamento

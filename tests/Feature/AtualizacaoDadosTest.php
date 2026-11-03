@@ -237,6 +237,7 @@ class AtualizacaoDadosTest extends TestCase
         $this->assertSame([
             'totvs:import-clientes',
             'totvs:import-faturamento',
+            'totvs:import-produtos',
             'totvs:import-pedidos-emitidos',
             'totvs:import-pedidos-abertos',
         ], AtualizadorTotvs::IMPORTS);

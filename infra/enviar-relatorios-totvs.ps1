@@ -89,6 +89,8 @@ $Filtros = @(
     # acentuado mantem este arquivo ASCII: o PowerShell 5.1 le .ps1 sem BOM como ANSI
     # e estragaria o acento.
     '--include', 'Relat*rio revenda/*.xlsx',
+    # Produtos: tabela de preco (234) e cadastro (005), em xlsx.
+    '--include', 'produtos/*.xlsx',
     '--exclude', 'CSV/etc/*',
     '--exclude', 'CSV/META VENDA*',
     # Trava que o Excel cria ("~$Relatorio...xlsx") enquanto a planilha esta aberta.
@@ -101,7 +103,7 @@ $corte = (Get-Date).AddMinutes(-$MinutosParaAssentar)
 $aguardando = @()
 
 $pastasRv = @(Get-ChildItem $Origem -Directory -Filter 'Relat*rio revenda' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
-foreach ($sub in @('CSV', 'Pedidos emitidos', 'Leads') + $pastasRv) {
+foreach ($sub in @('CSV', 'Pedidos emitidos', 'Leads', 'produtos') + $pastasRv) {
     $pasta = Join-Path $Origem $sub
     if (-not (Test-Path $pasta)) { continue }
 

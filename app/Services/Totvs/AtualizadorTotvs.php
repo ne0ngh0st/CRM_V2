@@ -55,6 +55,8 @@ class AtualizadorTotvs
     public const IMPORTS = [
         'totvs:import-clientes',
         'totvs:import-faturamento',
+        // Independente dos outros. Arquivo faltando ou truncado não derruba a corrente.
+        'totvs:import-produtos',
         'totvs:import-pedidos-emitidos',
         'totvs:import-pedidos-abertos',
         // ⚠️ O Relatório de Revenda (Cotação) NÃO entra aqui: tem agendamento próprio e

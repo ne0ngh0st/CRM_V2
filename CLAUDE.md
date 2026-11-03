@@ -3202,6 +3202,25 @@ cuja API de memória morava na KingHost. **Detalhe, armadilhas e migração: `do
   compra) para vendedor/supervisor/diretor/admin (vendedor desde 27/10; representante
   não), decidido no servidor.
 
+### Produtos vêm do TOTVS (234 + 005), não mais do legado — 2026-10-29
+
+O V40826 não aparecia na busca do orçamento: `produtos` só era alimentado pelo
+`legado:import-produtos`, que parou com o legado. Agora `totvs:import-produtos` (na
+corrente do `totvs:atualizar`) lê dois xlsx da pasta `RELATORIOS TOTVS/produtos/`: a
+tabela de preço **234** (código, descrição, unidade, preço — só bobina e etiqueta) e o
+cadastro **005** (grupo e ATIVO).
+- Entra: toda a 234 + do 005 os produtos de venda (código `V`) ativos sem preço. P/S/M
+  (intermediário, serviço, matéria-prima) ficam de fora. **Nunca apaga.**
+- ⚠️ **Categoria só é preenchida quando vazia** (`COALESCE`): TAG é grupo ETIQUETAS no
+  TOTVS e sumiria. Produto novo ganha pelo grupo (`categoriaDoGrupo()`).
+- ⚠️ Lido por `App\Services\Totvs\LeitorXlsx` (streaming): o PhpSpreadsheet levava 105 s e
+  786 MB no 005; o leitor, 14 s e 32 MB. Rodada inteira ~20 s.
+- Arquivo faltando ou 234 truncada (< 50% dos preços gravados): não grava e não derruba a
+  corrente.
+- Os scripts de envio sobem `produtos/*.xlsx`. ⚠️ A 234 traz também produto `ATIVO = NAO`
+  (5,5 mil), como a base do legado trazia.
+- Testes: `ProdutosImportTotvsTest` (8), 2 mutações mordidas.
+
 ### Assistente de IA (chat) — Fase 1, 2026-10-26
 
 Botão flutuante em toda página autenticada. Responde sobre pedidos, clientes da carteira,
@@ -3228,25 +3247,6 @@ números: `docs/ia-assistente.md`.** Aqui fica o que muda decisão:
   `BuscaTitularidade::clientesQueCasam()` com escopo opcional e `App\Support\Markdown::seguro()`
   (a intranet usa).
 
-## Pendências
-- 🟡 **Assistente de IA pronto e desligado.** Para o beta, nesta ordem:
-  1. `ANTHROPIC_API_KEY` (conta da empresa);
-  2. rodar `ia:avaliar` nos dois modelos e escolher `IA_MODELO`;
-  3. Tony revisar `resources/ia/manual.md`;
-  4. `infra/configurar-daemons.sh` no app-2 (worker da fila `ia`);
-  5. `.env` dos dois nós (`IA_*`), `config:cache`, reload do FPM, `queue:restart`;
-  6. liberar só o e-mail do Tony, testar, depois os beta testers.
-- 🟡 **Cotação no ar desde 2026-10-22** (venv nos dois nós, RV de 22/10 carregado, 44
-  decisões do .exe importadas; motor leva ~3,8 s no app-2 para 589 itens). Falta importar
-  as decisões que cada .exe guardou localmente depois que a API da KingHost caiu
-  (`aprendizado/decisoes.csv` → `cotacao:importar-memoria`) e aposentar o .exe.
-- 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
-  durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão
-  do dado (id da última rodada com sucesso) na `ChaveEscopo` + disparar o aquecimento no
-  fim da rodada.
-- 🟡 **Tainara (`vendedor_perfis.cod_vendedor = '00006'`, 5 dígitos)** não casa com os
-  pedidos dela, que o TOTVS emite como `000006`. Corrigir o perfil para `000006` (a meta
-  dela também está em `00006`, zerada).
 ### Tela de Segmentos e Visão Diretor suprimida — 2026-10-30
 
 **Visão Gestor → Segmentos** (`/equipe/segmentos`) virou item próprio do menu, e saiu das
@@ -3267,6 +3267,25 @@ as rotas responderem 404. Para voltar: `true` no `.env`, `config:cache`, reload 
   especialista. Dados e agendamentos da seção continuam rodando.
 - O `phpunit.xml` liga o interruptor, para a suíte continuar cobrindo a seção.
 
+## Pendências
+- 🟡 **Assistente de IA pronto e desligado.** Para o beta, nesta ordem:
+  1. `ANTHROPIC_API_KEY` (conta da empresa);
+  2. rodar `ia:avaliar` nos dois modelos e escolher `IA_MODELO`;
+  3. Tony revisar `resources/ia/manual.md`;
+  4. `infra/configurar-daemons.sh` no app-2 (worker da fila `ia`);
+  5. `.env` dos dois nós (`IA_*`), `config:cache`, reload do FPM, `queue:restart`;
+  6. liberar só o e-mail do Tony, testar, depois os beta testers.
+- 🟡 **Cotação no ar desde 2026-10-22** (venv nos dois nós, RV de 22/10 carregado, 44
+  decisões do .exe importadas; motor leva ~3,8 s no app-2 para 589 itens). Falta importar
+  as decisões que cada .exe guardou localmente depois que a API da KingHost caiu
+  (`aprendizado/decisoes.csv` → `cotacao:importar-memoria`) e aposentar o .exe.
+- 🟡 **Cache do Painel não é invalidado quando o import termina.** Um valor calculado
+  durante a importação fica até 30 min (caso da Inaya, 17/09). Caminho sugerido: versão
+  do dado (id da última rodada com sucesso) na `ChaveEscopo` + disparar o aquecimento no
+  fim da rodada.
+- 🟡 **Tainara (`vendedor_perfis.cod_vendedor = '00006'`, 5 dígitos)** não casa com os
+  pedidos dela, que o TOTVS emite como `000006`. Corrigir o perfil para `000006` (a meta
+  dela também está em `00006`, zerada).
 - 🟢 **Power BI no RDS — migração CONCLUÍDA em 2026-09-17.** O relatório em uso é o
   **`BI_RADES RDS`** (`reportId=0d7a10a1-…`, fonte em `POWER BI\BI_RADES RDS.pbip`); o
   `BI_RADES CORRETO` (ODBC da KingHost) foi apagado do Serviço. As 12 tabelas leem
@@ -3281,8 +3300,7 @@ as rotas responderem 404. Para voltar: `true` no `.env`, `config:cache`, reload 
     `AutopelTema2026.json`, `FitToWidth`, abas renomeadas). Formatação fixada no visual vence
     o tema, e o Desktop tem que estar fechado para editar — §9.7.
   - ⚠️ `bi_leitura` precisa de **20 conexões** (o refresh abre uma por tabela; com 5 falhou).
-  - Em aberto: relatórios 198 de jan–ago/2026 (município/família); `produtos` sem fonte
-    TOTVS depois de 31/10.
+  - Em aberto: relatórios 198 de jan–ago/2026 (município/família).
 - 🟡 **"Falta vender" do TOTAL/SUBTOTAL é líquida — confirmar com o diretor.** Hoje o
   vendedor "coberto" compensa a falta do colega na mesma equipe (e a empresa inteira aparece
   "Coberto", porque o faturado já passou da meta). A alternativa é somar só as faltas

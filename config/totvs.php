@@ -135,12 +135,21 @@ return [
             'periodo' => 'completo',
         ],
 
-        /*
-         * `produtos` ainda não entra: hoje o Tony mescla DOIS CSVs fora do sistema para
-         * montar essa base, e o `PRODUTOS - SQL.xlsx` da pasta está vazio. Antes de
-         * automatizar, a query de origem precisa virar uma só. Até lá, produto continua
-         * vindo pelo `legado:import-produtos` (espelho do v1).
-         */
+        // `produtos` sai de DOIS relatórios, juntados pelo `totvs:import-produtos`: a tabela
+        // de preço (234, bobina e etiqueta com preço) e o cadastro (005, grupo e se está
+        // ativo). Em xlsx, lidos em streaming (`LeitorXlsx`). O `*` no lugar do "Ç" é pelo
+        // mesmo motivo do "ó" do RV; "PROTUDOS" é o nome que o arquivo tem hoje.
+        'produtos_precos' => [
+            'arquivo' => ['produtos/TABELA DE PRE*OS PRODUTOS*.xlsx'],
+            'rlt' => '234 - TABELA DE PRECO PADRAO',
+            'periodo' => 'completo',
+        ],
+
+        'produtos_cadastro' => [
+            'arquivo' => ['produtos/PROTUDOS TOTVS*.xlsx', 'produtos/PRODUTOS TOTVS*.xlsx'],
+            'rlt' => '005 - CADASTRO DE PRODUTO COM NCM',
+            'periodo' => 'completo',
+        ],
 
     ],
 

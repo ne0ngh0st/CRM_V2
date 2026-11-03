@@ -214,9 +214,9 @@ class ViewsBi
     /**
      * Cadastro de produtos + os códigos que aparecem em venda e não estão no cadastro.
      *
-     * ⚠️ `produtos` hoje só é alimentado pelo `legado:import-produtos`, que depende do
-     * legado. Sem os órfãos, um produto novo vendido depois do desligamento sumiria da
-     * dimensão e as linhas de faturamento dele ficariam sem descrição no BI. (O legado
+     * ⚠️ `produtos` vem do `totvs:import-produtos` (tabela de preço 234 + produtos de venda
+     * do cadastro 005), que não cobre todo código vendido. Sem os órfãos, um produto fora
+     * desse recorte sumiria da dimensão e as linhas de faturamento dele ficariam sem descrição no BI. (O legado
      * não tinha órfãos nenhum: esta parte é nova.)
      *
      * ⚠️ É a view mais cara depois da de faturamento, e a forma importa — medido no dev,
