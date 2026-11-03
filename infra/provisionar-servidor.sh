@@ -199,6 +199,12 @@ server {
 
         # Precisa acomodar os exports síncronos, que podem passar de 60s.
         fastcgi_read_timeout 300;
+
+        # O padrão (4 KB) não comporta o header Link de preload do Vite + os
+        # Set-Cookie: a Carteira passou disso em 2026-10-28 e dava 502 ("upstream
+        # sent too big header") em todo carregamento completo da página.
+        fastcgi_buffer_size 32k;
+        fastcgi_buffers 16 16k;
     }
 
     location ~ /\.(?!well-known).* {
