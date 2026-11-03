@@ -1,5 +1,8 @@
 # Visão Diretor
 
+> ⚠️ **Suprimida desde 2026-10-30** (`VISAO_DIRETOR_HABILITADA=false`): sem menu, rotas em
+> 404. Dados e agendamentos seguem rodando; a volta é só o `.env`.
+
 Seção do menu com análises estratégicas para o dono da empresa. Nasceu em 2026-09-18 com a
 página **Maiores por Segmento**, e fixa o padrão das que vierem depois.
 

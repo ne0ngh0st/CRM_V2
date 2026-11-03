@@ -1,28 +1,17 @@
 <script setup>
 /**
- * Mapa visual de cobertura: quem atende cada segmento.
+ * Quem atende cada segmento: uma linha por segmento, com os nomes das equipes internas.
+ * Quem está na tela e quem entra na conta vem do servidor (`QuadroSegmentosResolver`).
  *
- * Três camadas, nenhuma delas é análise — só "quem é de onde":
- *   1. faixa mosaico (tamanho = quantidade de pessoas)
- *   2. faixa âmbar de quem ainda não tem segmento
- *   3. ilhas coloridas, uma por segmento com gente; vazios viram alvos de soltar
+ * Tirar é o × no nome; acrescentar é o seletor da coluna Ações. As duas gravam na hora.
  *
- * Arrastar adiciona o segmento (a pessoa pode ter 1-2). Tirar é o X no canto
- * do retrato, ou o modal. Representante não arrasta nem some do SUPERMERCADISTA.
- *
- * ⭐ A ESTRELA marca o especialista do segmento (admin + diretor). É o único lugar do
- * sistema onde ele é definido; o Resumo da Visão Diretor e o card "Segmentos Atendidos"
- * do Painel só mostram. Um por segmento: marcar outra pessoa tira a anterior, e clicar
- * na estrela acesa desmarca. Fica no canto oposto ao X de propósito — são ações de
- * pesos muito diferentes e não podem ser confundidas num clique rápido.
+ * ⭐ A ESTRELA no nome marca o especialista do segmento (admin + diretor). É o único lugar
+ * do sistema onde ele é definido. Um por segmento: marcar outra pessoa tira a anterior, e
+ * clicar na estrela acesa desmarca.
  */
 import { computed, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import KpiTile from '@/Components/KpiTile.vue';
-import PessoaSegmentoChip from '@/Components/Equipe/PessoaSegmentoChip.vue';
-import EditarSegmentosModal from '@/Components/Equipe/EditarSegmentosModal.vue';
-import EspecialistaSelo from '@/Components/Segmentos/EspecialistaSelo.vue';
-import { corDoSegmento, CODIGO_SUPERMERCADISTA } from '@/constants/segmentos.js';
 
 const props = defineProps({
     quadro: { type: Object, required: true },
@@ -31,77 +20,26 @@ const props = defineProps({
 });
 
 const busca = ref('');
-const arrastado = ref(null);
-const alvo = ref(null);
-const pessoaAtivaId = ref(null);
 const salvando = ref(false);
 
-const termo = computed(() => busca.value.trim().toLowerCase());
+const linhas = computed(() => {
+    const termo = busca.value.trim().toLowerCase();
 
-function casa(pessoa) {
-    if (!termo.value) {
-        return true;
-    }
-
-    return pessoa.nome.toLowerCase().includes(termo.value)
-        || String(pessoa.codVendedor).toLowerCase().includes(termo.value);
-}
-
-function ehRepresentante(pessoa) {
-    return pessoa.perfil === 'representante';
-}
-
-function pessoasDo(segmentoId) {
-    return props.quadro.pessoas.filter(
-        (p) => p.segmentosIds.includes(segmentoId) && casa(p),
-    );
-}
-
-const semSegmento = computed(() =>
-    props.quadro.pessoas.filter((p) => p.segmentosIds.length === 0 && casa(p)),
-);
-
-const preenchidos = computed(() => props.quadro.segmentos
-    .map((s) => ({ ...s, pessoas: pessoasDo(s.id) }))
-    .filter((s) => s.pessoas.length > 0)
-    .sort((a, b) => b.pessoas.length - a.pessoas.length || a.nome.localeCompare(b.nome)));
-
-const vazios = computed(() => {
-    const ocupados = new Set(
-        props.quadro.pessoas.flatMap((p) => p.segmentosIds),
-    );
-
-    return props.quadro.segmentos.filter((s) => !ocupados.has(s.id));
-});
-
-const mosaico = computed(() => {
-    const faixas = props.quadro.segmentos
-        .map((s) => ({
-            ...s,
-            quantidade: props.quadro.pessoas.filter((p) => p.segmentosIds.includes(s.id)).length,
+    return props.quadro.segmentos
+        .map((segmento) => ({
+            ...segmento,
+            pessoas: props.quadro.pessoas.filter((p) => p.segmentosIds.includes(segmento.id)),
         }))
-        .filter((s) => s.quantidade > 0)
-        .sort((a, b) => b.quantidade - a.quantidade);
-
-    const total = faixas.reduce((soma, s) => soma + s.quantidade, 0);
-
-    return { faixas, total };
+        .filter((s) => !termo
+            || s.nome.toLowerCase().includes(termo)
+            || s.pessoas.some((p) => p.nome.toLowerCase().includes(termo)))
+        .sort((a, b) => b.pessoas.length - a.pessoas.length || a.nome.localeCompare(b.nome));
 });
 
-const maiorIlha = computed(() =>
-    Math.max(1, ...preenchidos.value.map((s) => s.pessoas.length)),
-);
+const semSegmento = computed(() => props.quadro.pessoas.filter((p) => p.segmentosIds.length === 0));
 
-const pessoaAtiva = computed(() =>
-    props.quadro.pessoas.find((p) => p.id === pessoaAtivaId.value) ?? null,
-);
-
-function cor(codigo) {
-    return corDoSegmento(codigo);
-}
-
-function larguraBarra(quantidade) {
-    return `${Math.max(8, (quantidade / maiorIlha.value) * 100)}%`;
+function candidatos(segmento) {
+    return props.quadro.pessoas.filter((p) => !p.segmentosIds.includes(segmento.id));
 }
 
 function salvar(pessoa, ids) {
@@ -116,37 +54,30 @@ function salvar(pessoa, ids) {
     });
 }
 
-function soltarEm(segmentoId) {
-    const pessoa = arrastado.value;
-    arrastado.value = null;
-    alvo.value = null;
-    if (!pessoa || !props.podeEditar || ehRepresentante(pessoa)) {
-        return;
+function adicionar(segmento, evento) {
+    const pessoa = props.quadro.pessoas.find((p) => p.id === Number(evento.target.value));
+    evento.target.value = '';
+
+    if (pessoa) {
+        salvar(pessoa, [...pessoa.segmentosIds, segmento.id]);
     }
-    if (pessoa.segmentosIds.includes(segmentoId)) {
-        return;
-    }
-    salvar(pessoa, [...pessoa.segmentosIds, segmentoId]);
 }
 
-function tirar(pessoa, segmentoId) {
-    if (!props.podeEditar || ehRepresentante(pessoa)) {
-        return;
-    }
-    salvar(pessoa, pessoa.segmentosIds.filter((id) => id !== segmentoId));
+function tirar(pessoa, segmento) {
+    salvar(pessoa, pessoa.segmentosIds.filter((id) => id !== segmento.id));
 }
 
-function ehEspecialista(pessoa, ilha) {
-    return ilha.especialista?.id === pessoa.id;
+function ehEspecialista(pessoa, segmento) {
+    return segmento.especialista?.id === pessoa.id;
 }
 
-function alternarEspecialista(pessoa, ilha) {
+function alternarEspecialista(pessoa, segmento) {
     if (!props.podeDefinirEspecialista) {
         return;
     }
     salvando.value = true;
-    router.patch(route('equipe.segmentos.especialista', ilha.id), {
-        especialista_user_id: ehEspecialista(pessoa, ilha) ? null : pessoa.id,
+    router.patch(route('equipe.segmentos.especialista', segmento.id), {
+        especialista_user_id: ehEspecialista(pessoa, segmento) ? null : pessoa.id,
     }, {
         preserveScroll: true,
         preserveState: true,
@@ -157,13 +88,15 @@ function alternarEspecialista(pessoa, ilha) {
     });
 }
 
-function abrir(pessoa) {
-    pessoaAtivaId.value = pessoa.id;
-}
+function tituloEstrela(pessoa, segmento) {
+    if (!ehEspecialista(pessoa, segmento)) {
+        return `Marcar ${pessoa.nome} como especialista de ${segmento.nome}`;
+    }
 
-const codigoSuper = computed(
-    () => props.quadro.codigoSupermercadista || CODIGO_SUPERMERCADISTA,
-);
+    return props.podeDefinirEspecialista
+        ? `Especialista de ${segmento.nome} — clique para desmarcar`
+        : `Especialista de ${segmento.nome}`;
+}
 </script>
 
 <template>
@@ -179,190 +112,103 @@ const codigoSuper = computed(
             <KpiTile :value="quadro.totais.segmentosComGente" label="Segmentos cobertos" tone="info" />
         </div>
 
-        <div v-if="mosaico.total" class="overflow-hidden rounded border border-gray-300 bg-white">
-            <div class="flex h-14 w-full sm:h-16">
-                <div
-                    v-for="faixa in mosaico.faixas"
-                    :key="faixa.id"
-                    class="relative min-w-[4px] overflow-hidden transition hover:brightness-95"
-                    :style="{ flexGrow: faixa.quantidade, backgroundColor: cor(faixa.codigo).barra }"
-                    :title="`${faixa.nome} · ${faixa.quantidade}`"
-                >
-                    <span
-                        v-if="faixa.quantidade / mosaico.total >= 0.08"
-                        class="absolute inset-0 flex items-center justify-center px-1 text-center text-[0.62rem] font-semibold uppercase leading-3 tracking-wide text-white"
-                    >
-                        {{ faixa.nome }}
-                        <span class="ml-1 tabular-nums opacity-80">{{ faixa.quantidade }}</span>
-                    </span>
-                </div>
-            </div>
-        </div>
-
         <div class="flex flex-col gap-1 sm:max-w-xs">
             <label class="text-[0.68rem] font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
             <input
                 v-model="busca"
                 type="text"
-                placeholder="Nome ou código..."
+                placeholder="Segmento ou nome..."
                 class="min-h-11 w-full rounded border-gray-300 py-1.5 text-xs text-gray-700 focus:border-cyan focus:ring-cyan sm:min-h-0"
             />
         </div>
 
-        <p v-if="podeEditar" class="text-xs text-gray-500">
-            Arraste uma pessoa para o segmento — ou toque nela para escolher. No celular, só o toque.
+        <p v-if="semSegmento.length" class="text-xs text-gray-600">
+            <span class="font-semibold text-amber-dark">Sem segmento:</span>
+            {{ semSegmento.map((p) => p.nome).join(' · ') }}
         </p>
-        <p v-else class="text-xs text-gray-500">Toque na pessoa para ver os segmentos dela.</p>
 
-        <section
-            v-if="semSegmento.length"
-            class="rounded border-2 border-amber bg-amber/10 p-3 sm:p-4"
-            :class="alvo === 'sem' ? 'ring-2 ring-amber' : ''"
-        >
-            <div class="mb-3 flex items-end justify-between gap-2">
-                <div>
-                    <h2 class="text-sm font-semibold uppercase tracking-wide text-amber-dark">Sem segmento</h2>
-                    <p class="text-xs text-gray-600">Ainda não atendem nenhum. Arraste para uma ilha abaixo.</p>
-                </div>
-                <span class="text-2xl font-bold tabular-nums text-amber-dark">{{ semSegmento.length }}</span>
+        <div class="overflow-hidden rounded border border-gray-300 bg-white">
+            <div class="tbl-wrap">
+                <table class="tbl tbl-cartoes sm:min-w-[860px]">
+                    <thead>
+                        <tr class="tbl-head-row">
+                            <th class="tbl-th">Segmento</th>
+                            <th class="tbl-th">Nome</th>
+                            <th class="tbl-th">Pessoas</th>
+                            <th v-if="podeEditar" class="tbl-th">Adicionar</th>
+                        </tr>
+                    </thead>
+                    <tbody class="tbl-body">
+                        <tr v-for="segmento in linhas" :key="segmento.id" class="tbl-row">
+                            <td class="tbl-td tbl-td-titulo"><span class="tbl-main">{{ segmento.nome }}</span></td>
+                            <td class="tbl-td" data-rotulo="Nome">
+                                <div v-if="segmento.pessoas.length" class="flex flex-wrap items-center justify-center gap-1">
+                                    <span
+                                        v-for="pessoa in segmento.pessoas"
+                                        :key="pessoa.id"
+                                        class="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-gray-50 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-gray-700"
+                                    >
+                                        <button
+                                            v-if="ehEspecialista(pessoa, segmento) || podeDefinirEspecialista"
+                                            type="button"
+                                            class="leading-none"
+                                            :class="[
+                                                ehEspecialista(pessoa, segmento) ? 'text-amber-dark' : 'text-gray-400 hover:text-amber-dark',
+                                                podeDefinirEspecialista ? 'cursor-pointer' : 'cursor-default',
+                                            ]"
+                                            :title="tituloEstrela(pessoa, segmento)"
+                                            :aria-pressed="ehEspecialista(pessoa, segmento)"
+                                            :disabled="salvando"
+                                            @click="alternarEspecialista(pessoa, segmento)"
+                                        >
+                                            <svg
+                                                viewBox="0 0 24 24"
+                                                class="h-3 w-3"
+                                                aria-hidden="true"
+                                                :fill="ehEspecialista(pessoa, segmento) ? 'currentColor' : 'none'"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linejoin="round"
+                                            >
+                                                <path d="M12 3.2l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.3 2.8 1-6-4.4-4.2 6-.9Z" />
+                                            </svg>
+                                        </button>
+                                        {{ pessoa.nome }}
+                                        <button
+                                            v-if="podeEditar"
+                                            type="button"
+                                            class="leading-none text-gray-400 hover:text-red-600"
+                                            :title="`Tirar ${pessoa.nome} de ${segmento.nome}`"
+                                            :disabled="salvando"
+                                            @click="tirar(pessoa, segmento)"
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                </div>
+                                <span v-else class="text-xs text-gray-400">—</span>
+                            </td>
+                            <td class="tbl-td tabular-nums" data-rotulo="Pessoas">{{ segmento.pessoas.length }}</td>
+                            <td v-if="podeEditar" class="tbl-td" data-rotulo="Adicionar">
+                                <select
+                                    class="w-full rounded border-gray-300 py-1 text-xs text-gray-600 focus:border-cyan focus:ring-cyan"
+                                    :disabled="salvando || !candidatos(segmento).length"
+                                    :aria-label="`Adicionar pessoa em ${segmento.nome}`"
+                                    @change="adicionar(segmento, $event)"
+                                >
+                                    <option value="">Adicionar...</option>
+                                    <option v-for="pessoa in candidatos(segmento)" :key="pessoa.id" :value="pessoa.id">
+                                        {{ pessoa.nome }}
+                                    </option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr v-if="!linhas.length">
+                            <td :colspan="podeEditar ? 4 : 3" class="tbl-td text-gray-400">Nada encontrado.</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
-            <div class="flex flex-wrap gap-2">
-                <PessoaSegmentoChip
-                    v-for="pessoa in semSegmento"
-                    :key="pessoa.id"
-                    :pessoa="pessoa"
-                    :pode-editar="podeEditar"
-                    :arrastando="arrastado?.id === pessoa.id"
-                    @clicar="abrir"
-                    @arrastar-inicio="arrastado = $event"
-                    @arrastar-fim="arrastado = null"
-                />
-            </div>
-        </section>
-
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <section
-                v-for="ilha in preenchidos"
-                :key="ilha.id"
-                class="flex flex-col overflow-hidden rounded border bg-white shadow-sm transition"
-                :class="[
-                    alvo === ilha.id ? 'ring-2 ring-cyan' : '',
-                    ilha.pessoas.length >= 8 ? 'sm:col-span-2' : '',
-                ]"
-                :style="{ borderColor: cor(ilha.codigo).barra }"
-                @dragover.prevent="alvo = ilha.id"
-                @dragleave="alvo === ilha.id && (alvo = null)"
-                @drop.prevent="soltarEm(ilha.id)"
-            >
-                <header
-                    class="flex items-start justify-between gap-2 px-3 py-2.5"
-                    :style="{ backgroundColor: cor(ilha.codigo).fundo, color: cor(ilha.codigo).texto }"
-                >
-                    <div class="min-w-0 flex-1">
-                        <h2 class="truncate text-sm font-semibold uppercase tracking-wide">{{ ilha.nome }}</h2>
-                        <div class="mt-1">
-                            <EspecialistaSelo :especialista="ilha.especialista" compacto />
-                        </div>
-                        <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/60">
-                            <div
-                                class="h-full rounded-full"
-                                :style="{ width: larguraBarra(ilha.pessoas.length), backgroundColor: cor(ilha.codigo).barra }"
-                            />
-                        </div>
-                    </div>
-                    <span class="text-2xl font-bold tabular-nums leading-none">{{ ilha.pessoas.length }}</span>
-                </header>
-                <div class="flex flex-wrap content-start gap-2 p-3">
-                    <div
-                        v-for="pessoa in ilha.pessoas"
-                        :key="pessoa.id"
-                        class="group relative"
-                    >
-                        <PessoaSegmentoChip
-                            :pessoa="pessoa"
-                            :pode-editar="podeEditar"
-                            :arrastando="arrastado?.id === pessoa.id"
-                            :travada="ehRepresentante(pessoa) && ilha.codigo === codigoSuper"
-                            @clicar="abrir"
-                            @arrastar-inicio="arrastado = $event"
-                            @arrastar-fim="arrastado = null"
-                        />
-                        <!--
-                            Estrela: acesa = especialista deste segmento (visível para
-                            todos); apagada só aparece no hover, e só para quem pode marcar.
-                        -->
-                        <button
-                            v-if="ehEspecialista(pessoa, ilha) || podeDefinirEspecialista"
-                            type="button"
-                            class="absolute -left-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border bg-white transition"
-                            :class="[
-                                ehEspecialista(pessoa, ilha)
-                                    ? 'border-amber text-amber'
-                                    : 'border-gray-300 text-gray-300 opacity-0 hover:border-amber hover:text-amber group-hover:opacity-100 focus:opacity-100',
-                                podeDefinirEspecialista ? 'cursor-pointer' : 'cursor-default',
-                            ]"
-                            :title="ehEspecialista(pessoa, ilha)
-                                ? (podeDefinirEspecialista ? `Especialista de ${ilha.nome} — clique para desmarcar` : `Especialista de ${ilha.nome}`)
-                                : `Marcar ${pessoa.nome} como especialista de ${ilha.nome}`"
-                            :aria-pressed="ehEspecialista(pessoa, ilha)"
-                            :disabled="salvando"
-                            @click.stop="alternarEspecialista(pessoa, ilha)"
-                        >
-                            <svg viewBox="0 0 24 24" class="h-3 w-3" aria-hidden="true"
-                                :fill="ehEspecialista(pessoa, ilha) ? 'currentColor' : 'none'"
-                                stroke="currentColor" stroke-width="2" stroke-linejoin="round"
-                            >
-                                <path d="M12 3.2l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.3 2.8 1-6-4.4-4.2 6-.9Z" />
-                            </svg>
-                        </button>
-                        <button
-                            v-if="podeEditar && !ehRepresentante(pessoa)"
-                            type="button"
-                            class="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 bg-white text-[0.65rem] leading-none text-gray-500 opacity-0 transition hover:border-red-400 hover:text-red-600 group-hover:opacity-100"
-                            title="Tirar deste segmento"
-                            @click.stop="tirar(pessoa, ilha.id)"
-                        >
-                            ×
-                        </button>
-                    </div>
-                </div>
-            </section>
         </div>
-
-        <section v-if="vazios.length" class="rounded border border-dashed border-gray-300 bg-white p-3">
-            <h2 class="mb-2 text-[0.7rem] font-semibold uppercase tracking-wide text-gray-500">
-                Ainda sem ninguém
-            </h2>
-            <div class="flex flex-wrap gap-2">
-                <button
-                    v-for="segmento in vazios"
-                    :key="segmento.id"
-                    type="button"
-                    class="rounded border px-2.5 py-1.5 text-left text-[0.65rem] font-semibold uppercase tracking-wide transition"
-                    :class="alvo === segmento.id ? 'ring-2 ring-cyan' : ''"
-                    :style="{
-                        backgroundColor: cor(segmento.codigo).fundo,
-                        borderColor: cor(segmento.codigo).barra,
-                        color: cor(segmento.codigo).texto,
-                    }"
-                    :title="podeEditar ? 'Solte uma pessoa aqui para atribuir' : segmento.nome"
-                    @dragover.prevent="alvo = segmento.id"
-                    @dragleave="alvo === segmento.id && (alvo = null)"
-                    @drop.prevent="soltarEm(segmento.id)"
-                >
-                    {{ segmento.nome }}
-                </button>
-            </div>
-        </section>
-
-        <EditarSegmentosModal
-            :show="Boolean(pessoaAtiva)"
-            :pessoa="pessoaAtiva"
-            :segmentos="quadro.segmentos"
-            :codigo-supermercadista="codigoSuper"
-            :salvando="salvando"
-            @close="pessoaAtivaId = null"
-            @salvar="pessoaAtiva && salvar(pessoaAtiva, $event)"
-        />
     </div>
 </template>

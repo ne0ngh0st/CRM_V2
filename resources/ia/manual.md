@@ -16,7 +16,7 @@
 
 - **Início** (Painel): metas do mês, Evolução Comercial (venda e faturamento mês a mês), carteira por segmento, segmentos atendidos com potencial, pedidos que pedem atenção, orçamentos, contatos.
 - **Visão Gestor** (supervisor, diretor, admin): Equipe, Observações e ligações, Metas.
-- **Visão Diretor** (diretor, admin): Maiores por segmento, Maiores redes.
+- **Visão Gestor → Segmentos** (gestores): quem atende cada segmento nas equipes internas; admin e diretor também criam, renomeiam, ajustam o peso e excluem segmentos na aba Cadastro.
 - **Carteira**: Clientes e Leads.
 - **Pedidos**: Pedidos em aberto e Pedidos emitidos.
 - **Orçamentos**.

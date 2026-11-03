@@ -21,8 +21,8 @@ use Illuminate\Database\Seeder;
  * coluna Potencial do card "Segmentos Atendidos". Os mesmos valores estão na migration
  * `add_peso_potencial_to_segmentos_table`, que é quem alcança dev e produção (bancos já
  * semeados); aqui eles existem para banco novo e para a suíte nascerem com o dado real.
- * Se a diretoria mandar pesos novos, os dois lugares mudam juntos — é o preço de ainda não
- * haver tela de edição.
+ * ⚠️ Desde a tela Visão Gestor → Segmentos o seeder só CRIA o que falta: `db:seed` não pode
+ * desfazer o nome e o peso editados por lá.
  */
 class SegmentoSeeder extends Seeder
 {
@@ -55,7 +55,7 @@ class SegmentoSeeder extends Seeder
     public function run(): void
     {
         foreach (self::SEGMENTOS as $segmento) {
-            Segmento::updateOrCreate(['codigo' => $segmento['codigo']], $segmento);
+            Segmento::firstOrCreate(['codigo' => $segmento['codigo']], $segmento);
         }
     }
 }

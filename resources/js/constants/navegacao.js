@@ -64,11 +64,8 @@ export const NAV_PRINCIPAL = [
         largura: '64',
         ativoEm: ['equipe.*', 'visao-gestor.*', 'metas.*'],
         itens: [
-            /*
-             * "Segmentos" NÃO tem item próprio (decisão do Tony, 2026-09-22): é uma aba
-             * dentro da Equipe (`EquipeAbas`), e por isso o item Equipe acende nas duas.
-             */
-            { chave: 'equipe', rotulo: 'Equipe', icone: 'equipe', rota: 'equipe.index', ativoEm: ['equipe.index', 'equipe.segmentos'], prefetch: 'hover' },
+            { chave: 'equipe', rotulo: 'Equipe', icone: 'equipe', rota: 'equipe.index', ativoEm: ['equipe.index'], prefetch: 'hover' },
+            { chave: 'segmentos', rotulo: 'Segmentos', icone: 'segmentos', rota: 'equipe.segmentos', ativoEm: ['equipe.segmentos'], prefetch: 'hover' },
             { chave: 'visao-gestor-index', rotulo: 'Observações e ligações', icone: 'observacoes', rota: 'visao-gestor.index', ativoEm: ['visao-gestor.*'], prefetch: 'hover' },
             { chave: 'metas', rotulo: 'Metas', icone: 'metas', rota: 'metas.index', ativoEm: ['metas.*'], prefetch: 'hover' },
         ],

@@ -12,6 +12,7 @@ use App\Services\Equipe\EquipeScopeResolver;
 use App\Services\Equipe\OrganogramaBuilder;
 use App\Services\Equipe\QuadroSegmentosResolver;
 use App\Services\Equipe\SegmentoVendedorSync;
+use App\Services\Segmentos\CadastroDeSegmentos;
 use App\Services\Segmentos\EspecialistasDoSegmento;
 use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
@@ -35,6 +36,7 @@ class EquipeController extends Controller
         private readonly QuadroSegmentosResolver $quadroSegmentos,
         private readonly SegmentoVendedorSync $segmentoVendedorSync,
         private readonly EspecialistasDoSegmento $especialistas,
+        private readonly CadastroDeSegmentos $cadastroSegmentos,
     ) {
     }
 
@@ -183,6 +185,7 @@ class EquipeController extends Controller
              */
             'podeDefinirEspecialista' => Gate::forUser($user)->allows('ver-visao-diretor'),
             'quadro' => $this->quadroSegmentos->montar($user),
+            'cadastro' => $this->scope->podeGerenciar($user) ? $this->cadastroSegmentos->listar() : [],
         ]);
     }
 

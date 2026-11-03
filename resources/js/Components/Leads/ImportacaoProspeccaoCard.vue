@@ -215,7 +215,7 @@ function rodar(simulacao) {
                         :value="formatInteiro(dados.sugestoesPendentes)"
                         label="Redes para confirmar"
                         :tone="dados.sugestoesPendentes ? 'warn' : 'default'"
-                        :href="dados.sugestoesPendentes ? route('visao-diretor.maiores.index') : null"
+                        :href="dados.sugestoesPendentes && $page.props.auth.veVisaoDiretor ? route('visao-diretor.maiores.index') : null"
                         compact
                     />
                 </div>

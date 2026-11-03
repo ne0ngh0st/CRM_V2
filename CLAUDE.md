@@ -3247,6 +3247,26 @@ números: `docs/ia-assistente.md`.** Aqui fica o que muda decisão:
 - 🟡 **Tainara (`vendedor_perfis.cod_vendedor = '00006'`, 5 dígitos)** não casa com os
   pedidos dela, que o TOTVS emite como `000006`. Corrigir o perfil para `000006` (a meta
   dela também está em `00006`, zerada).
+### Tela de Segmentos e Visão Diretor suprimida — 2026-10-30
+
+**Visão Gestor → Segmentos** (`/equipe/segmentos`) virou item próprio do menu, e saiu das
+abas da Equipe. Duas abas: **Quem atende** (tabela SEGMENTO → NOME, só com as equipes
+internas do Américo e da Sandra, `QuadroSegmentosResolver::EQUIPES_INTERNAS`; representante
+não entra; o quadro de arrastar saiu) e **Cadastro** (só
+admin/diretor): criar, renomear, peso (0-20) e excluir. Regras em
+`App\Services\Segmentos\CadastroDeSegmentos`.
+- ⚠️ **O código não se edita**: é a chave de `clientes.cod_segmento`.
+- ⚠️ **Renomear atualiza `leads.segmento`**, que guarda o nome, não o código.
+- Excluir só sem cliente, lead, pessoa ou conta; o 101 nunca sai.
+- ⚠️ O `SegmentoSeeder` só cria o que falta, para `db:seed` não desfazer a edição da tela.
+- O Painel leva até 30 min para refletir nome e peso (bloco cacheado).
+
+**Visão Diretor suprimida**: `VISAO_DIRETOR_HABILITADA` (default `false`) tira o menu e faz
+as rotas responderem 404. Para voltar: `true` no `.env`, `config:cache`, reload do FPM.
+- ⚠️ **O gate `ver-visao-diretor` NÃO mudou**: ele ainda decide quem marca a estrela de
+  especialista. Dados e agendamentos da seção continuam rodando.
+- O `phpunit.xml` liga o interruptor, para a suíte continuar cobrindo a seção.
+
 - 🟢 **Power BI no RDS — migração CONCLUÍDA em 2026-09-17.** O relatório em uso é o
   **`BI_RADES RDS`** (`reportId=0d7a10a1-…`, fonte em `POWER BI\BI_RADES RDS.pbip`); o
   `BI_RADES CORRETO` (ODBC da KingHost) foi apagado do Serviço. As 12 tabelas leem
@@ -3460,10 +3480,6 @@ números: `docs/ia-assistente.md`.** Aqui fica o que muda decisão:
   escopo empresa e é o que inviabilizou a primeira versão — precisa de tabela de apoio ou
   recorte de escopo. ⚠️ Enquanto isso, o filtro `?sem_familia=` da Carteira está
   **inalcançável pela interface** (nenhum link aponta para ele).
-- **Não há tela para editar `segmentos.peso_potencial`.** Os pesos da diretoria (08/09/2026)
-  vivem na migration `2026_09_08_100000` e no `SegmentoSeeder`, então peso novo hoje é
-  deploy. Se a diretoria passar a revisar isso com frequência, vale uma tela admin nos
-  moldes de `/orcamentos/materia-prima`.
 - **Preencher `orcamentos.lead_id` retroativamente**, se fizer falta. A coluna existe desde
   2026-09-03 mas só é preenchida em orçamento novo; os históricos não têm vínculo com lead.
 - **O funil não tem relatório de conversão.** `etapa_alterada_em` responde "parado há X

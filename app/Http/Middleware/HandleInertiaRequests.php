@@ -38,7 +38,7 @@ class HandleInertiaRequests extends Middleware
                 'roles' => $request->user()?->getRoleNames() ?? [],
                 // O menu da Visão Diretor NÃO se decide pelo perfil no front: há quem entre
                 // por permissão própria (ver o gate no AppServiceProvider). O front só lê.
-                'veVisaoDiretor' => (bool) $request->user()?->can('ver-visao-diretor'),
+                'veVisaoDiretor' => config('visao_diretor.habilitada') && (bool) $request->user()?->can('ver-visao-diretor'),
                 // Item "Cotação" do menu: mesmo gate das rotas.
                 'usaCotacao' => (bool) $request->user()?->can('usar-cotacao'),
                 // Botão do assistente de IA: mesmo gate das rotas. Sem query: os papéis

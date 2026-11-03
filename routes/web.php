@@ -20,6 +20,7 @@ use App\Http\Controllers\ObservacaoController;
 use App\Http\Controllers\OrcamentoController;
 use App\Http\Controllers\PedidoController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SegmentoController;
 use App\Http\Controllers\SimulacaoController;
 use App\Http\Controllers\SugestaoController;
 use App\Http\Controllers\TabelaPrecoController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\VisaoDiretor\MaioresPorSegmentoController;
 use App\Http\Controllers\VisaoDiretor\MaioresRedesController;
 use App\Http\Controllers\CotacaoController;
 use App\Http\Controllers\VisaoGestorController;
+use App\Http\Middleware\VisaoDiretorHabilitada;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', InicioController::class)->name('inicio');
@@ -244,6 +246,10 @@ Route::middleware('auth')->group(function () {
     // A estrela do quadro de Segmentos. Admin + diretor (gate da Visão Diretor), checado
     // no controller: a rota vive na Equipe porque é lá que a pessoa é marcada.
     Route::patch('/equipe/segmentos/{segmento}/especialista', [EquipeController::class, 'definirEspecialista'])->name('equipe.segmentos.especialista');
+    // Cadastro de segmentos. Admin + diretor, checado no controller.
+    Route::post('/equipe/segmentos', [SegmentoController::class, 'store'])->name('equipe.segmentos.store');
+    Route::put('/equipe/segmentos/{segmento}', [SegmentoController::class, 'update'])->name('equipe.segmentos.update');
+    Route::delete('/equipe/segmentos/{segmento}', [SegmentoController::class, 'destroy'])->name('equipe.segmentos.destroy');
     Route::patch('/equipe/{usuario}', [EquipeController::class, 'update'])->name('equipe.update');
     Route::patch('/equipe/{usuario}/senha', [EquipeController::class, 'atualizarSenha'])->name('equipe.senha');
     Route::patch('/equipe/{usuario}/status', [EquipeController::class, 'toggleStatus'])->name('equipe.status');
@@ -279,7 +285,7 @@ Route::middleware('auth')->group(function () {
      * aqui e já nasce protegida, sem depender de checagem no controller. Padrão da seção
      * em docs/visao-diretor.md.
      */
-    Route::middleware('can:ver-visao-diretor')->prefix('visao-diretor')->name('visao-diretor.')->group(function () {
+    Route::middleware([VisaoDiretorHabilitada::class, 'can:ver-visao-diretor'])->prefix('visao-diretor')->name('visao-diretor.')->group(function () {
         Route::get('/maiores-por-segmento', [MaioresPorSegmentoController::class, 'index'])->name('maiores.index');
         Route::get('/maiores-por-segmento/busca-vinculo', [MaioresPorSegmentoController::class, 'buscarVinculo'])->name('maiores.busca-vinculo');
         Route::post('/maiores-por-segmento/exportar', [MaioresPorSegmentoController::class, 'exportar'])->name('maiores.exportar');

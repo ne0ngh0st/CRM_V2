@@ -48,5 +48,7 @@
         <!-- Webhook WP: vazio no teste pra o 503 (desligado) ser o default.
              Testes que gravam setam config() na hora. force pra .env local não vazar. -->
         <env name="WP_LEADS_WEBHOOK_SECRET" value="" force="true"/>
+        <!-- A suíte segue cobrindo a Visão Diretor enquanto ela está suprimida. -->
+        <env name="VISAO_DIRETOR_HABILITADA" value="true" force="true"/>
     </php>
 </phpunit>

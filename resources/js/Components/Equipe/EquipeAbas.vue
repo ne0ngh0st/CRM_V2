@@ -1,13 +1,7 @@
 <script setup>
 /**
- * As três visões da Equipe. Mora aqui e não nas duas páginas porque Lista /
- * Organograma / Segmentos precisam acender a mesma aba nos dois lados —
- * copiar os botões é o que fez o link admin "Atualização de dados" existir
- * só no desktop (Regra de ouro nº 8).
- *
- * Organograma continua só para quem gerencia usuários (admin/diretor).
- * Segmentos é cobertura comercial: supervisor também entra, porque é ele
- * quem atribui quem atende o quê.
+ * As visões da Equipe. Organograma continua só para quem gerencia usuários
+ * (admin/diretor). Segmentos saiu daqui em 2026-10-30: é item próprio da Visão Gestor.
  */
 import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
@@ -49,9 +43,6 @@ function classe(destaque) {
             :class="classe(ativa === 'organograma')"
         >
             Organograma
-        </Link>
-        <Link :href="route('equipe.segmentos')" :class="classe(ativa === 'segmentos')">
-            Segmentos
         </Link>
     </div>
 </template>

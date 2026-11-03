@@ -6,24 +6,27 @@ use App\Models\Segmento;
 use App\Models\SegmentoVendedor;
 use App\Models\User;
 use App\Models\VendedorPerfil;
+use App\Services\Equipe\QuadroSegmentosResolver;
 use App\Support\Perf\ContadorDeQueries;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Quadro visual de cobertura por segmento (`/equipe/segmentos`).
+ * Tabela de cobertura por segmento (`/equipe/segmentos`).
  *
  * O que estes testes protegem:
  *  1. a pergunta é "quem é de cada segmento na EQUIPE", não a lista filtrada;
  *  2. supervisor vê só a própria equipe e consegue atribuir nela;
- *  3. representante não sai de SUPERMERCADISTA, nem pelo quadro nem pelo modal
- *     antigo da lista — a regra mora na escrita, não no Vue;
+ *  3. representante não sai de SUPERMERCADISTA, nem pela tela nem pelo modal
+ *     da lista — a regra mora na escrita, não no Vue;
  *  4. o custo não cresce com o número de vendedores (N+1 no map).
  */
 class EquipeQuadroSegmentosTest extends TestCase
 {
     use RefreshDatabase;
+
+    private const EQUIPE = QuadroSegmentosResolver::EQUIPES_INTERNAS[0];
 
     protected function setUp(): void
     {
@@ -84,8 +87,8 @@ class EquipeQuadroSegmentosTest extends TestCase
         $super = $this->segmento('101', 'SUPERMERCADISTA');
         $drogaria = $this->segmento('109', 'DROGARIAS');
 
-        $this->usuario('vendedor', '000111', display: 'Ana');
-        $this->usuario('vendedor', '000222');
+        $this->usuario('vendedor', '000111', self::EQUIPE, display: 'Ana');
+        $this->usuario('vendedor', '000222', self::EQUIPE);
         $this->atribuir('000111', $super, $drogaria);
         $this->atribuir('000222', $super);
 
@@ -101,8 +104,8 @@ class EquipeQuadroSegmentosTest extends TestCase
     public function test_sem_segmento_entra_no_total_e_inativo_fica_de_fora(): void
     {
         $this->segmento('101', 'SUPERMERCADISTA');
-        $this->usuario('vendedor', '000111');
-        $this->usuario('vendedor', '000222', attrs: ['is_active' => false]);
+        $this->usuario('vendedor', '000111', self::EQUIPE);
+        $this->usuario('vendedor', '000222', self::EQUIPE, attrs: ['is_active' => false]);
         $this->usuario('vendedor', null);
 
         $quadro = $this->quadroDe($this->admin());
@@ -143,6 +146,21 @@ class EquipeQuadroSegmentosTest extends TestCase
                 'segmentos' => [$drogaria->id],
             ])
             ->assertForbidden();
+    }
+
+    public function test_so_entram_as_equipes_internas_e_nunca_representante(): void
+    {
+        [$americo, $sandra] = QuadroSegmentosResolver::EQUIPES_INTERNAS;
+        $this->usuario('supervisor', $americo);
+        $this->usuario('supervisor', $sandra);
+        $this->usuario('vendedor', '000111', $americo);
+        $this->usuario('vendedor', '000222', $sandra);
+        $this->usuario('representante', '000333', $americo);
+        $this->usuario('vendedor', '000444', '000006');
+
+        $codigos = collect($this->quadroDe($this->admin())['pessoas'])->pluck('codVendedor')->all();
+
+        $this->assertEqualsCanonicalizing([$americo, $sandra, '000111', '000222'], $codigos);
     }
 
     public function test_vendedor_nao_acessa_o_quadro(): void
@@ -204,8 +222,8 @@ class EquipeQuadroSegmentosTest extends TestCase
     public function test_codigo_compartilhado_muda_os_dois(): void
     {
         $drogaria = $this->segmento('109', 'DROGARIAS');
-        $a = $this->usuario('vendedor', '000111');
-        $this->usuario('vendedor', '000111');
+        $a = $this->usuario('vendedor', '000111', self::EQUIPE);
+        $this->usuario('vendedor', '000111', self::EQUIPE);
 
         $this->actingAs($this->admin())
             ->patch(route('equipe.atualizarSegmentos', $a), [
