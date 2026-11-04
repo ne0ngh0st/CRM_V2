@@ -56,6 +56,7 @@ const idSupermercadista = computed(
 );
 
 const ehRepresentante = computed(() => form.perfil === 'representante');
+const ehAssistente = computed(() => form.perfil === 'assistente');
 
 watch(
     () => form.perfil,
@@ -143,7 +144,15 @@ function salvar() {
                 </div>
             </div>
 
-            <div v-if="form.cod_vendedor" class="mt-4">
+            <!--
+                Assistente usa o código do gestor que apoia, e o segmento é do código: o
+                servidor não grava segmento por ele (User::PERFIS_ESPELHO).
+            -->
+            <p v-if="form.cod_vendedor && ehAssistente" class="mt-4 text-xs text-gray-500">
+                Assistente usa o código do gestor que apoia e vê o mesmo que ele. Os segmentos
+                são os do gestor e se editam na conta dele.
+            </p>
+            <div v-else-if="form.cod_vendedor" class="mt-4">
                 <InputLabel value="Segmentos" />
                 <p v-if="ehRepresentante" class="mt-1 text-xs text-gray-500">
                     Representante atende só SUPERMERCADISTA — sem exceção.

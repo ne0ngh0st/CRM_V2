@@ -14,6 +14,7 @@ use App\Services\Equipe\QuadroSegmentosResolver;
 use App\Services\Equipe\SegmentoVendedorSync;
 use App\Services\Segmentos\CadastroDeSegmentos;
 use App\Services\Segmentos\EspecialistasDoSegmento;
+use App\Services\Totvs\Normalizador;
 use App\Services\Vendedores\NomeVendedorResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -340,6 +341,7 @@ class EquipeController extends Controller
             'estado' => ['nullable', 'string', 'max:2'],
             'tipo_usuario' => ['nullable', Rule::in(['INTERNO', 'EXTERNO'])],
         ]);
+        $data = $this->normalizarCodigos($data);
 
         $usuario = User::create([
             'name' => $data['name'],
@@ -381,6 +383,7 @@ class EquipeController extends Controller
             'segmentos.*' => ['integer', Rule::exists('segmentos', 'id')],
             'resumo_diario' => ['nullable', Rule::in(['nenhum', 'equipe', 'consolidado'])],
         ]);
+        $data = $this->normalizarCodigos($data);
 
         $usuario->update([
             'name' => $data['name'],
@@ -399,9 +402,13 @@ class EquipeController extends Controller
             $usuario->forceFill(['resumo_diario' => $data['resumo_diario']])->save();
         }
 
+        $perfilAnteriorEspelho = $usuario->hasAnyRole(User::PERFIS_ESPELHO);
         $usuario->syncRoles([$data['perfil']]);
 
         $codVendedorAnterior = $usuario->vendedorPerfil?->cod_vendedor;
+        // Perfil novo OU anterior: quem deixa de ser assistente agora também não apaga o
+        // segmento do código do gestor que usava antes.
+        $espelho = in_array($data['perfil'], User::PERFIS_ESPELHO, true) || $perfilAnteriorEspelho;
 
         if (! empty($data['cod_vendedor'])) {
             VendedorPerfil::updateOrCreate(
@@ -409,18 +416,27 @@ class EquipeController extends Controller
                 ['cod_vendedor' => $data['cod_vendedor'], 'cod_super' => ($data['cod_super'] ?? null) ?: null],
             );
 
-            if ($codVendedorAnterior && $codVendedorAnterior !== $data['cod_vendedor']) {
-                SegmentoVendedor::where('cod_vendedor', $codVendedorAnterior)->delete();
-            }
+            /*
+             * ⚠️ O segmento é do CÓDIGO, e o assistente usa o código do gestor que apoia
+             * (User::PERFIS_ESPELHO). Gravar aqui ao editar a Ana Clara reescreveria os
+             * segmentos da Sandra com o que estivesse marcado no modal da Ana. Pelo mesmo
+             * motivo, trocar ou tirar o código de um assistente não apaga os segmentos do
+             * código antigo.
+             */
+            if (! $espelho) {
+                if ($codVendedorAnterior && $codVendedorAnterior !== $data['cod_vendedor']) {
+                    SegmentoVendedor::where('cod_vendedor', $codVendedorAnterior)->delete();
+                }
 
-            $this->segmentoVendedorSync->substituir(
-                $data['cod_vendedor'],
-                $data['segmentos'] ?? [],
-                $data['perfil'],
-            );
+                $this->segmentoVendedorSync->substituir(
+                    $data['cod_vendedor'],
+                    $data['segmentos'] ?? [],
+                    $data['perfil'],
+                );
+            }
         } else {
             $usuario->vendedorPerfil?->delete();
-            if ($codVendedorAnterior) {
+            if ($codVendedorAnterior && ! $espelho) {
                 SegmentoVendedor::where('cod_vendedor', $codVendedorAnterior)->delete();
             }
         }
@@ -497,6 +513,25 @@ class EquipeController extends Controller
 
         $codAlvo = $alvo->vendedorPerfil?->cod_vendedor;
         abort_unless($codAlvo && in_array($codAlvo, $codigos, true), 403);
+    }
+
+    /**
+     * O código digitado na tela passa pelo mesmo `Normalizador::codigoVendedor()` dos
+     * imports: o TOTVS emite `000006`, e um `00006` digitado à mão (Tainara e Melissa, até
+     * 2026-11-04) não casava com pedido nem cliente nenhum, e a tela da pessoa ficava vazia.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizarCodigos(array $data): array
+    {
+        foreach (['cod_vendedor', 'cod_super'] as $campo) {
+            if (array_key_exists($campo, $data)) {
+                $data[$campo] = Normalizador::codigoVendedor($data[$campo]);
+            }
+        }
+
+        return $data;
     }
 
     private function usernameUnico(string $email): string

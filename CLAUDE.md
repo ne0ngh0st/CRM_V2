@@ -2566,6 +2566,37 @@ próprio código: **Carteira, Leads, Pedidos (abertos e emitidos)**, com as aç�
   Existia para o Murilo quando era assistente; ele virou `venda_interna` em 24/09.
 - Testes: `AcessoAssistenteTest` (10), verificado por mutação.
 
+### O assistente nunca é dono do código; perfil "Cadastro" — 2026-11-04
+
+**Assistente = espelho do gestor** (Tony): Ana Clara usa o código da Sandra (000115),
+Natany o do Roberto Jude, Murilo o do Paulo Borin, Melissa e Tainara o do Cleber. O
+`NomeVendedorResolver` deixava vencer a ÚLTIMA conta criada com o código, então a equipe
+da Sandra aparecia como "Ana Clara" na Equipe — e o vendedor da carteira dela também (o
+grupo do 010395 caía no Murilo). Natany só "funcionava" porque o Roberto não tem login.
+
+- **`User::PERFIS_ESPELHO`** (`assistente`) + **`VendedorPerfil::scopeTitulares()`**: toda
+  pergunta "de quem é este código?" filtra por ali — `NomeVendedorResolver`,
+  `BuscaTitularidade::responsaveisPorCodigo()`, `OrganogramaBuilder` (nó-pai) e o nome da
+  linha no `ResumoEquipeBuilder`. Consulta nova de dono de código usa o scope.
+- ⚠️ **A Equipe não grava segmento de assistente**: o segmento é do código, e editar a Ana
+  reescrevia os da Sandra com o que estivesse marcado no modal dela. Trocar ou tirar o
+  código de um assistente também não apaga o segmento do código antigo.
+- **Código digitado na Equipe passa por `Normalizador::codigoVendedor()`** (`00006` →
+  `000006`), o mesmo dos imports.
+
+**Perfil `cadastro`** (`User::PERFIL_CADASTRO`): quem só pede cadastro de bobina, etiqueta
+e cliente — o Vini, da licitação, para quem o CRM é a via oficial. Não é o sistema de
+Licitação entrando no CRM (Regra nº 2): ele usa a tela comercial de Cadastros.
+- **Quem proíbe é `RestringirPerfilCadastro`** (grupo `web`): LISTA DO QUE PODE
+  (`cadastros.*`, perfil, notificações, downloads, intranet, logout). GET fora dela volta
+  para /cadastros; escrita é 403. Rota nova nasce fechada para o perfil; rota SEM nome
+  passa.
+- Menu: item com `doCadastro: true` em `navegacao.js` é o único que o perfil vê (o
+  contrário do default). A barra do celular estreita para 2 colunas nesse caso.
+- Como não é gestor, vê só as próprias solicitações. A sub-aba de lead manual continua
+  lá; lead criado por ele nasce sem `cod_vendedor` (só admin/diretor veem).
+- Testes: `AssistenteEspelhoTest` (6), `PerfilCadastroTest` (4); 3 mutações mordidas.
+
 ### O de-para do Portal morreu: a API aceita chave de negócio — 2026-09-25
 
 Fecha o arco da integração "orçamento vira pedido". Levei ao Marcelo a única pergunta que

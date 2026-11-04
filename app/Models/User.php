@@ -57,7 +57,29 @@ class User extends Authenticatable
      * O `legado:import-usuarios` não sobrescreve quem está num deles — senão a próxima
      * importação devolveria a venda interna para `assistente`.
      */
-    public const PERFIS_SO_DO_CRM = ['venda_interna'];
+    public const PERFIS_SO_DO_CRM = ['venda_interna', 'cadastro'];
+
+    /**
+     * Perfis que usam o código de OUTRA pessoa e por isso nunca são donos dele.
+     *
+     * O assistente é um espelho do gestor que apoia: Ana Clara tem o código da Sandra
+     * (000115), Murilo o do Paulo Borin, Melissa e Tainara o do Cleber. Até 2026-11-04 o
+     * "código → nome" deixava vencer a última conta criada com o código, então a equipe da
+     * Sandra aparecia como "Ana Clara" na Equipe, e o vendedor da carteira dela também.
+     *
+     * Quem pergunta "de quem é este código?" filtra por aqui
+     * (`VendedorPerfil::scopeTitulares()`); a tela Equipe também não grava segmento por
+     * eles, porque o segmento é do código, ou seja, do gestor.
+     */
+    public const PERFIS_ESPELHO = ['assistente'];
+
+    /**
+     * Perfil que só faz solicitação de cadastro (bobina, etiqueta, cliente): gente de fora
+     * do comercial, como a licitação, para quem o CRM é a via oficial de pedir cadastro.
+     * Vê só /cadastros, o perfil, as notificações e os downloads. Quem restringe é o
+     * middleware `RestringirPerfilCadastro`; o menu só esconde.
+     */
+    public const PERFIL_CADASTRO = 'cadastro';
 
     /**
      * Usuários com algum dos perfis — pelo NOME, dentro do próprio `whereHas`.

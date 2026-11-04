@@ -20,7 +20,7 @@
 
 /**
  * Visibilidade por perfil. Recebe sempre o mesmo objeto de papéis
- * (`{ isGestor, isDiretor, isAdmin, usaCotacao, usaIa }`), montado uma vez pelo layout.
+ * (`{ isGestor, isDiretor, isAdmin, usaCotacao, usaIa, soCadastro }`), montado uma vez pelo layout.
  *
  * Item sem `visivel` aparece para todos — é o default de propósito: perfil comercial novo
  * deve nascer vendo o menu inteiro e perdendo o que não é dele, nunca o contrário.
@@ -35,6 +35,8 @@ const soDiretor = ({ isDiretor }) => isDiretor;
 const usaCotacao = ({ usaCotacao }) => usaCotacao;
 // Gate `usar-ia` (admin sempre; os demais na lista de beta testers).
 const usaIa = ({ usaIa }) => usaIa;
+// Perfil Cadastro (só /cadastros). Ver `visiveis()`.
+const soCadastro = ({ soCadastro }) => soCadastro;
 
 /**
  * O menu principal, na ordem em que aparece.
@@ -121,6 +123,7 @@ export const NAV_PRINCIPAL = [
         rota: 'cadastros.index',
         ativoEm: ['cadastros.*'],
         prefetch: 'click',
+        doCadastro: true,
     },
     {
         chave: 'catalogo',
@@ -144,9 +147,9 @@ export const NAV_PRINCIPAL = [
  * se perder na extração.
  */
 export const NAV_USUARIO = [
-    { chave: 'perfil', rotulo: 'Perfil', icone: 'perfil', rota: 'profile.edit', ativoEm: ['profile.*'] },
-    { chave: 'notificacoes', rotulo: 'Notificações', icone: 'notificacoes', rota: 'notificacoes.historico', ativoEm: ['notificacoes.*'] },
-    { chave: 'downloads', rotulo: 'Meus downloads', icone: 'downloads', rota: 'exportacoes.index', ativoEm: ['exportacoes.*'] },
+    { chave: 'perfil', rotulo: 'Perfil', icone: 'perfil', rota: 'profile.edit', ativoEm: ['profile.*'], doCadastro: true },
+    { chave: 'notificacoes', rotulo: 'Notificações', icone: 'notificacoes', rota: 'notificacoes.historico', ativoEm: ['notificacoes.*'], doCadastro: true },
+    { chave: 'downloads', rotulo: 'Meus downloads', icone: 'downloads', rota: 'exportacoes.index', ativoEm: ['exportacoes.*'], doCadastro: true },
     // O assistente em tela cheia; o botão flutuante continua sendo a entrada rápida.
     { chave: 'assistente', rotulo: 'Assistente', icone: 'assistente', rota: 'ia.tela', ativoEm: ['ia.tela'], visivel: usaIa },
     {
@@ -177,19 +180,28 @@ export const NAV_USUARIO = [
  * 2026-09-15). Gestor recebe os mesmos quatro; Equipe, Metas e Visão Gestor ficam na
  * gaveta, porque tela de gestão se usa sentado. Mudar isso é mexer só nesta lista.
  *
- * ⚠️ A lista TEM que resolver em exatamente 4 para qualquer perfil — a barra é um grid de
- * 5 colunas e um destino a menos deixa um buraco. Ver `barraInferior()`.
+ * ⚠️ A lista resolve em exatamente 4 para todo perfil comercial — a barra é um grid de 5
+ * colunas. A exceção é o perfil Cadastro, que tem um destino só; a barra estreita o grid
+ * para esse caso. Ver `barraInferior()`.
  */
 const DESTINOS_MOBILE = [
     { chave: 'inicio', rotulo: 'Início', icone: 'inicio', rota: 'dashboard', ativoEm: ['dashboard'] },
     { chave: 'carteira', rotulo: 'Carteira', icone: 'carteira', rota: 'carteira.index', ativoEm: ['carteira.*'] },
     { chave: 'leads', rotulo: 'Leads', icone: 'leads', rota: 'leads.index', ativoEm: ['leads.*'] },
     { chave: 'pedidos', rotulo: 'Pedidos', icone: 'pedidos', rota: 'pedidos.index', ativoEm: ['pedidos.*'] },
+    // Só o perfil Cadastro, que não tem nenhum dos quatro de cima (a barra encolhe).
+    { chave: 'cadastros', rotulo: 'Cadastros', icone: 'cadastros', rota: 'cadastros.index', ativoEm: ['cadastros.*'], doCadastro: true, visivel: soCadastro },
 ];
 
-/** Aplica a visibilidade por perfil a uma lista, preservando a ordem declarada. */
+/**
+ * Aplica a visibilidade por perfil a uma lista, preservando a ordem declarada.
+ *
+ * ⚠️ O perfil Cadastro é o contrário do default: vê SÓ o que tem `doCadastro: true`.
+ * Item novo do menu nasce escondido para ele, igual à lista de rotas do middleware
+ * `RestringirPerfilCadastro`, que é quem proíbe de verdade.
+ */
 function visiveis(lista, perfil) {
-    return lista.filter((item) => !item.visivel || item.visivel(perfil));
+    return lista.filter((item) => (!perfil.soCadastro || item.doCadastro) && (!item.visivel || item.visivel(perfil)));
 }
 
 export function menuPrincipal(perfil) {

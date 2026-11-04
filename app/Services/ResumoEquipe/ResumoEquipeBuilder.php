@@ -206,9 +206,12 @@ class ResumoEquipeBuilder
         $nomesTotvs = DB::table('vendedores_totvs')->whereIn('codigo', $codigos)->pluck('nome', 'codigo');
 
         $linhas = collect($codigos)->map(function (string $cod) use ($perfis, $nomesTotvs, $venda, $faturamento, $pedidos, $contatosDe) {
-            // Código compartilhado: o nome é o do usuário ativo; os contatos, de todos.
-            $donos = $perfis->where('cod_vendedor', $cod)->sortByDesc(fn ($p) => (int) $p->user->is_active)->values();
-            $dono = $donos->first()?->user;
+            // Código compartilhado: o nome é o do titular ativo (o assistente usa o código do
+            // gestor e nunca dá nome à linha); os contatos são de todos.
+            $donos = $perfis->where('cod_vendedor', $cod)->values();
+            $dono = $donos
+                ->sortByDesc(fn ($p) => ((int) $p->user->is_active) * 2 + (int) ! $p->user->hasAnyRole(User::PERFIS_ESPELHO))
+                ->first()?->user;
 
             return [
                 'nome' => $dono ? ($dono->display_name ?: $dono->name) : ($nomesTotvs[$cod] ?? $cod),

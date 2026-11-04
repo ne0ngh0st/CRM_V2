@@ -2,6 +2,7 @@
 
 namespace App\Services\Equipe;
 
+use App\Models\User;
 use Illuminate\Support\Collection;
 
 /**
@@ -24,7 +25,12 @@ class OrganogramaBuilder
     public function construir(Collection $nos): array
     {
         $porId = $nos->keyBy('id');
-        $idPorCodigo = $nos->groupBy('codVendedor')->map(fn ($grupo) => $grupo->first()['id']);
+        // O assistente usa o código do gestor e nunca vira nó-pai de ninguém
+        // (User::PERFIS_ESPELHO).
+        $idPorCodigo = $nos
+            ->reject(fn (array $no) => in_array($no['perfil'], User::PERFIS_ESPELHO, true))
+            ->groupBy('codVendedor')
+            ->map(fn ($grupo) => $grupo->first()['id']);
 
         $filhosPorPai = [];
         foreach ($nos as $no) {

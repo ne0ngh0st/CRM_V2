@@ -365,12 +365,13 @@ class BuscaTitularidade
         }
 
         $usuarios = User::query()
-            ->whereHas('vendedorPerfil', fn ($q) => $q->whereIn('cod_vendedor', $codigos))
+            // O assistente usa o código do gestor e não "cuida" de cliente nenhum.
+            ->whereHas('vendedorPerfil', fn ($q) => $q->titulares()->whereIn('cod_vendedor', $codigos))
             ->with('vendedorPerfil:id,user_id,cod_vendedor,cod_super')
             ->get(['id', 'name', 'display_name']);
 
         $supervisores = User::query()
-            ->whereHas('vendedorPerfil', fn ($q) => $q->whereIn('cod_vendedor', $usuarios->pluck('vendedorPerfil.cod_super')->filter()->unique()->all()))
+            ->whereHas('vendedorPerfil', fn ($q) => $q->titulares()->whereIn('cod_vendedor', $usuarios->pluck('vendedorPerfil.cod_super')->filter()->unique()->all()))
             ->with('vendedorPerfil:id,user_id,cod_vendedor')
             ->get(['id', 'name', 'display_name'])
             ->keyBy(fn (User $u) => $u->vendedorPerfil->cod_vendedor);

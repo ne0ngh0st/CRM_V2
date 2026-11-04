@@ -22,6 +22,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [
+            // Perfil "Cadastro" só alcança /cadastros. Antes do Inertia, para o redirect
+            // não pagar as props compartilhadas.
+            \App\Http\Middleware\RestringirPerfilCadastro::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
             // Presença ("N online agora" da Equipe). Só age em terminate(), depois de a

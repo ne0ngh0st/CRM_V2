@@ -58,7 +58,7 @@ const ativos = computed(() => {
             (o rótulo mais longo) empurra os vizinhos e os alvos deixam de ter a mesma
             largura — a pessoa aprende a posição do dedo, não o rótulo.
         -->
-        <div class="grid grid-cols-5">
+        <div class="grid" :class="destinos.length === 4 ? 'grid-cols-5' : 'grid-cols-2'">
             <!--
                 ⚠️ `min-h-[3.25rem]` (52px) fica acima do mínimo de 44px de alvo de toque, e
                 a altura vem do CONTAINER, não do padding: rótulo que quebre em duas linhas

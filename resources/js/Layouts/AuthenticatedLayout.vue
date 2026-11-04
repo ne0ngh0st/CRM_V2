@@ -48,6 +48,8 @@ const perfil = computed(() => ({
     usaCotacao: Boolean(page.props.auth?.usaCotacao),
     // Gate `usar-ia`, decidido no servidor.
     usaIa: Boolean(page.props.auth?.usaIa),
+    // Perfil que só faz solicitação de cadastro: o menu mostra só /cadastros.
+    soCadastro: papeis.value.includes('cadastro'),
 }));
 
 /*

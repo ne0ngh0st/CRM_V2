@@ -7,6 +7,7 @@ export const ROTULOS_PERFIL = {
     representante: 'Representante',
     venda_interna: 'Venda interna',
     assistente: 'Assistente',
+    cadastro: 'Cadastro',
 };
 
 /**

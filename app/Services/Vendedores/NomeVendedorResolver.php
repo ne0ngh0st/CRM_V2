@@ -29,8 +29,12 @@ use Illuminate\Support\Collection;
  * ⚠️ O degrau 3 não é decoração: apagá-lo faria a coluna aparecer VAZIA, que é pior que
  * o código — o código pelo menos é procurável no TOTVS.
  *
+ * ⚠️ O assistente NUNCA dá nome a um código (`VendedorPerfil::titulares()`): ele usa o
+ * código do gestor que apoia. Antes disso a equipe da Sandra saía como "Ana Clara",
+ * porque a assistente foi criada depois (2026-11-04).
+ *
  * ⚠️ `cod_vendedor` NÃO é único em `vendedor_perfis` (há contas compartilhando código).
- * Quando duas contas dividem o mesmo código, vence a última — comportamento herdado das
+ * Quando duas contas TITULARES dividem o mesmo código, vence a última — comportamento herdado das
  * nove cópias e mantido de propósito: aqui a pergunta é "que nome escrevo nesta célula?",
  * e quem precisa da lista inteira é a busca de titularidade, que resolve isso por conta
  * própria em `BuscaTitularidade::responsaveisPorCodigo()`.
@@ -54,6 +58,7 @@ class NomeVendedorResolver
         }
 
         $nomes = VendedorPerfil::query()
+            ->titulares()
             ->whereIn('cod_vendedor', $codigos)
             ->with('user:id,name,display_name')
             ->get()
@@ -131,6 +136,7 @@ class NomeVendedorResolver
         $doTotvs = VendedorTotvs::query()->pluck('nome', 'codigo');
 
         $doCrm = VendedorPerfil::query()
+            ->titulares()
             ->with('user:id,name,display_name')
             ->get()
             ->mapWithKeys(fn (VendedorPerfil $vp) => [$vp->cod_vendedor => $vp->user?->display_name ?: $vp->user?->name])
