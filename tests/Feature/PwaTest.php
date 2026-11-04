@@ -42,8 +42,10 @@ class PwaTest extends TestCase
         $this->assertSame('/dashboard', $manifesto['start_url']);
         $this->assertNotEmpty($manifesto['icons']);
 
+        // O `src` leva cache-buster (`?v=autopel`, desde a volta ao logo Autopel): o arquivo
+        // é o caminho sem a query string.
         foreach ($manifesto['icons'] as $icone) {
-            $this->assertFileExists(public_path(ltrim($icone['src'], '/')));
+            $this->assertFileExists(public_path(ltrim((string) parse_url($icone['src'], PHP_URL_PATH), '/')));
         }
     }
 

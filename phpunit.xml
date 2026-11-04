@@ -12,6 +12,13 @@
             <directory>tests/Feature</directory>
         </testsuite>
     </testsuites>
+    <!-- NÃO remover: aborta a rodada completa se o PHPUnit não carregou todos os
+         arquivos de teste do disco (o bind-mount do Docker Desktop esconde parte deles
+         da varredura e a suíte rodava 444 de 1.389 testes sem avisar). Ver
+         tests/Support/GuardaDescobertaDeTestes.php. Suíte inteira: composer test. -->
+    <extensions>
+        <bootstrap class="Tests\Support\GuardaDescobertaDeTestes"/>
+    </extensions>
     <source>
         <include>
             <directory>app</directory>

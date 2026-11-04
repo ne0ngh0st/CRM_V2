@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\ContaEstrategica;
 use App\Models\Segmento;
 use App\Models\SegmentoVendedor;
 use App\Models\User;
@@ -156,12 +155,11 @@ class EspecialistaSegmentoTest extends TestCase
     {
         $admin = $this->usuario('admin');
         $inaya = $this->usuario('vendedor', '001', ['display_name' => 'INAYA']);
-        ContaEstrategica::create(['segmento_id' => $this->drogarias->id, 'nome' => 'RAIA']);
-
         $this->marcar($admin, $inaya);
 
+        // Desde 2026-10-14 (página sem redes) o resumo é a prop `resumo`, uma linha por segmento.
         $resumo = collect($this->actingAs($admin)->get(route('visao-diretor.maiores.index'))
-            ->assertOk()->viewData('page')['props']['dados']['resumoPorSegmento'])->firstWhere('codigo', '109');
+            ->assertOk()->viewData('page')['props']['resumo'])->firstWhere('codigo', '109');
 
         $this->assertSame($inaya->id, $resumo['especialista']['id']);
     }
