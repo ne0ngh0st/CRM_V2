@@ -111,7 +111,8 @@ docker compose run --rm --no-deps -e DB_HOST=<host> app composer test
 1. **Snapshot manual** do `crm-v2-prod` (`pre-upgrade-84-AAAAMMDD`). É o ponto de volta
    absoluto, independente do Blue/Green.
 2. **Grupo de parâmetros `crm-v2-mysql84`** (família `mysql8.4`) com os 4 parâmetros
-   customizados do §2.
+   customizados do §2, **mais `innodb_buffer_pool_size` e `innodb_adaptive_hash_index`**
+   (ver o resultado abaixo).
 3. **Criar o Blue/Green Deployment** com `--target-engine-version 8.4.11`,
    `--target-db-parameter-group-name crm-v2-mysql84` e o option group
    `default:mysql-8-4`. O RDS roda o pre-check de upgrade sozinho; se recusar, o motivo
@@ -131,6 +132,57 @@ docker compose run --rm --no-deps -e DB_HOST=<host> app composer test
    - Algum plano piorou (sumiu o `Using index`, apareceu `type: ALL` onde não tinha)?
      **Parar.** Ajustar índice ou consulta antes de virar.
 
+**✅ Feita em 2026-11-04: aprovada, com um ajuste de parâmetro OBRIGATÓRIO.**
+
+| Peça | Nome |
+|---|---|
+| Snapshot manual | `pre-upgrade-84-20261104` |
+| Grupo de parâmetros | `crm-v2-mysql84` |
+| Blue/Green | `crm-v2-upgrade-84` (`bgd-8hjvbelzlx0msmhi`) |
+| Verde | `crm-v2-prod-green-gnaxsa` (8.4.11, Multi-AZ, primário em `sa-east-1a`) |
+
+- Logins `palma` e `bi_leitura` mantêm `mysql_native_password` (plugin ACTIVE);
+  `sql_mode` e os 4 parâmetros iguais; réplica em dia.
+- As 13 views do BI respondem. `vw_bi_dim_produto`, a mais pesada, ficou **mais rápida**
+  no 8.4: 34 s contra 49-51 s, aquecido e intercalado. A primeira leitura no verde frio
+  levou 279 s, só cache.
+- Páginas comparadas pelo kernel HTTP (`infra/comparar-banco-84.php`), admin, cache
+  desligado, mínimo de 3-4 rodadas intercaladas: **nenhum erro**.
+
+🚨 **O 8.4 nasce com o buffer pool 25% MENOR, e isso precisa ficar no grupo
+`crm-v2-mysql84`.** O grupo padrão do 8.0 dimensiona o `innodb_buffer_pool_size` por
+`{DBInstanceClassMemory*3/4}` (2 GB na `db.t4g.medium`). O do 8.4 deixa em branco, e o
+MySQL escolhe 1,5 GB. Com o banco em 3,2 GB e a RAM já escassa, a Carteira ficou 13-18%
+mais lenta e o Painel 7%, uniformemente, sem nenhum plano diferente. Também mudou
+`innodb_adaptive_hash_index` (ON → OFF). Os dois foram fixados no `crm-v2-mysql84`:
+
+| Parâmetro | Valor |
+|---|---|
+| `innodb_buffer_pool_size` | `{DBInstanceClassMemory*3/4}` |
+| `innodb_adaptive_hash_index` | `1` |
+
+Depois do ajuste (medido da app-1):
+
+| Página | 8.0 | 8.4 |
+|---|---:|---:|
+| Carteira (todos os filtros) | 1.017-1.412 ms | 1,00-1,01x |
+| Painel (sem cache) | 3.746 ms | 1,05x |
+| Metas, Visão Gestor, Leads, Pedidos, Equipe | | 0,42-0,65x (rede, ver abaixo) |
+
+O que sobra no Painel é a soma de faturamento do ano (+9%, mesmo plano, `Using index`),
+e o Painel é servido do cache aquecido pelo `AquecerCacheDashboardJob`.
+
+⚠️ **Zona de disponibilidade muda na virada.** O primário de hoje está em `sa-east-1c`
+(junto da app-2); o do verde, em `sa-east-1a` (junto da app-1). Cada consulta que cruza
+de zona paga ~0,7 ms a mais (0,37 contra 1,11 ms por `SELECT 1`). Depois da virada a
+app-2, que roda worker, scheduler e o `totvs:atualizar`, passa a ficar longe do banco e a
+app-1 perto. Página leve com 40 consultas: +30 ms. Não bloqueia o upgrade; se incomodar,
+um *failover* do RDS troca o primário para `sa-east-1c` (o secundário já está lá).
+
+Outros defaults que mudaram e ficaram como o 8.4 decide: `innodb_buffer_pool_instances`
+8 → 1, `innodb_change_buffering` all → none, `innodb_io_capacity` 200 → 10000,
+`innodb_log_buffer_size` 8 → 64 MB.
+
 ### Fase 2: switchover (sábado, xx:20, ~15 min com a conferência)
 
 1. `aws rds switchover-blue-green-deployment --switchover-timeout 300`. O RDS bloqueia
@@ -145,6 +197,40 @@ docker compose run --rm --no-deps -e DB_HOST=<host> app composer test
    - a rodada seguinte do `totvs:atualizar` terminando em **sucesso** na `/atualizacoes`;
    - fila andando (`queue` sem acúmulo nas métricas do CloudWatch);
    - na segunda seguinte, o refresh das 10:30 do Power BI concluindo.
+
+**✅ Feita em 2026-11-04, 16:37:59 → 16:38:37 (38 s), no meio da tarde, a pedido do
+Tony.** Sem import rodando e com lag 0. Depois do `reload` do FPM e do
+`supervisorctl restart all` nos dois nós, foi conferido:
+- endpoint de produção em 8.4.11, gravável, buffer pool 2 GB, adaptive hash index ON;
+- POST de login com senha errada pelo ALB → **422**;
+- 13 páginas pelo kernel → 200;
+- nenhum `ERROR` no log, scheduler rodando, `failed_jobs` = 0, usuários gravando
+  presença.
+
+Ainda a conferir: a rodada das 17:00 do `totvs:atualizar` e o refresh das 10:30 do Power
+BI no dia seguinte.
+
+O banco antigo virou `crm-v2-prod-old1` (8.0.46, `sa-east-1c`, deletion protection
+ligada).
+
+**Conferência antes de apagar o azul (mesmo dia, ~17:05):**
+- as 80 tabelas de `palma_v2` + `bi` têm a mesma contagem nos dois (9.239.450 linhas) e
+  o mesmo `CHECKSUM TABLE`, exceto `users`. Ali a única diferença é a presença
+  (`last_activity_at`/`last_login_at` de 7 usuários que usaram o sistema depois da
+  virada); todas as outras colunas batem nos 140 usuários;
+- 13 views e as permissões do `bi_leitura` (20 conexões) intactas;
+- ALB: 0 erros 5xx da aplicação em 196 requisições desde a virada (1 do próprio ALB,
+  durante os 38 s); nenhum alarme; zero `ERROR` no log dos dois nós;
+- a rodada das 17:00 do `totvs:atualizar` saiu `sem_mudanca` (não havia relatório
+  novo). Uma rodada `--forcar` foi barrada pelo modo automático e não foi feita; o import
+  já tinha passado nos testes contra o 8.4 na Fase 0.
+
+**Feita em 2026-11-04, ~17:10:** apagados `crm-v2-prod-old1` (com
+`--delete-automated-backups`, sem snapshot final), o Blue/Green (sem `--delete-target`,
+que depois da virada é a produção) e o grupo `crm-v2-mysql80`. Ficou o snapshot
+`pre-upgrade-84-20261104` (8.0.46), a única volta para o 8.0. Em 2026-11-05 foi apagado
+o snapshot manual `crm-v2-prod-antes-historico-20260831-0916` (de antes da carga do
+histórico de faturamento, sem uso).
 
 ### Fase 3: limpeza (até 24 h depois)
 

@@ -21,7 +21,7 @@
 |---|---|
 | 1-3 Arquitetura, inventário, custos | ✅ decidido |
 | 4.1 Rede (VPC, subnets, SGs) | ✅ `vpc-0c3d9a668fc84f036` |
-| 4.2 RDS | ✅ `crm-v2-prod`, MySQL 8.0.46, Multi-AZ, senha no Secrets Manager |
+| 4.2 RDS | ✅ `crm-v2-prod`, **MySQL 8.4.11** (desde 2026-11-04, ver `docs/upgrade-mysql-84.md`), grupo `crm-v2-mysql84`, Multi-AZ, primário em `sa-east-1a` |
 | 4.3 ElastiCache | ✅ `crm-v2-redis`, 7.1.0, `volatile-lru` confirmado |
 | 4.4 S3 | ✅ bucket `crm-v2-arquivos-890615325644`, acesso por IAM role — ver 5.4.1 |
 | 4.5 ACM + Route 53 | ✅ certificado ISSUED, `crm.autopel.online` → ALB |
