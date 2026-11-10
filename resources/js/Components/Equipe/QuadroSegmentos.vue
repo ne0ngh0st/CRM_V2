@@ -51,6 +51,36 @@ const equipes = computed(() => {
         .filter((equipe) => equipe.pessoas.length);
 });
 
+/**
+ * Segmentos sem ninguém entre as pessoas DESTA tela (equipes internas; representante não
+ * conta). Sai da mesma lista de pessoas da tabela de cima, então os dois blocos nunca se
+ * contradizem: alocar alguém aqui tira o segmento desta lista no mesmo recarregamento.
+ */
+const semNinguem = computed(() => {
+    const termo = busca.value.trim().toLowerCase();
+    const cobertos = new Set(props.quadro.pessoas.flatMap((p) => p.segmentosIds));
+
+    return props.quadro.segmentos
+        .filter((s) => !cobertos.has(s.id))
+        .filter((s) => !termo || s.nome.toLowerCase().includes(termo));
+});
+
+const pessoasPorEquipe = computed(() => props.quadro.equipes
+    .map((equipe) => ({
+        ...equipe,
+        pessoas: props.quadro.pessoas.filter((p) => p.equipe === equipe.codigo),
+    }))
+    .filter((equipe) => equipe.pessoas.length));
+
+function alocar(segmento, evento) {
+    const pessoa = props.quadro.pessoas.find((p) => p.id === Number(evento.target.value));
+    evento.target.value = '';
+
+    if (pessoa) {
+        salvar(pessoa, [...pessoa.segmentosIds, segmento.id]);
+    }
+}
+
 function candidatos(pessoa) {
     return props.quadro.segmentos.filter((s) => !pessoa.segmentosIds.includes(s.id));
 }
@@ -234,6 +264,45 @@ function tituloEstrela(pessoa, segmento) {
                         </template>
                         <tr v-if="!equipes.length">
                             <td :colspan="podeEditar ? 4 : 3" class="tbl-td text-gray-400">Nada encontrado.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div v-if="semNinguem.length" class="overflow-hidden rounded border border-gray-300 bg-white">
+            <div class="bg-corp-black px-4 py-2 text-center text-sm font-semibold uppercase tracking-wide text-white">
+                Segmentos sem ninguém alocado
+                <span class="ml-1 font-normal text-gray-300">({{ semNinguem.length }})</span>
+            </div>
+            <div class="tbl-wrap">
+                <table class="tbl tbl-cartoes sm:min-w-[480px]">
+                    <thead>
+                        <tr class="tbl-head-row">
+                            <th class="tbl-th">Segmento</th>
+                            <th v-if="podeEditar" class="tbl-th sm:w-[40%]">Alocar</th>
+                        </tr>
+                    </thead>
+                    <tbody class="tbl-body">
+                        <tr v-for="segmento in semNinguem" :key="segmento.id" class="tbl-row">
+                            <td class="tbl-td tbl-td-titulo">
+                                <span class="text-xs font-medium uppercase tracking-wide text-gray-700">{{ segmento.nome }}</span>
+                            </td>
+                            <td v-if="podeEditar" class="tbl-td" data-rotulo="Alocar">
+                                <select
+                                    class="w-full rounded border-gray-300 py-1 text-xs text-gray-600 focus:border-cyan focus:ring-cyan"
+                                    :disabled="salvando"
+                                    :aria-label="`Alocar alguém em ${segmento.nome}`"
+                                    @change="alocar(segmento, $event)"
+                                >
+                                    <option value="">Alocar vendedor...</option>
+                                    <optgroup v-for="equipe in pessoasPorEquipe" :key="equipe.codigo" :label="equipe.nome">
+                                        <option v-for="pessoa in equipe.pessoas" :key="pessoa.id" :value="pessoa.id">
+                                            {{ pessoa.nome }}
+                                        </option>
+                                    </optgroup>
+                                </select>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
