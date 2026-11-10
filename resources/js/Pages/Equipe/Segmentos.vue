@@ -42,7 +42,7 @@ function classeAba(destaque) {
                         </svg>
                     </template>
                     <template #subtitle>
-                        Quem atende cada segmento nas equipes internas.
+                        Divisão dos segmentos de mercado por supervisor e vendedor, nas equipes internas.
                         <template v-if="podeDefinirEspecialista">A estrela marca o especialista do segmento.</template>
                     </template>
                 </PageHero>

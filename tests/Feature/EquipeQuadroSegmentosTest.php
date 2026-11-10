@@ -125,8 +125,10 @@ class EquipeQuadroSegmentosTest extends TestCase
 
         $quadro = $this->quadroDe($supervisor);
         $codigos = collect($quadro['pessoas'])->pluck('codVendedor')->all();
-        $this->assertEqualsCanonicalizing(['000100', '000111'], $codigos);
-        $this->assertNotContains('000999', $codigos);
+        // O supervisor é o cabeçalho do grupo, não uma linha (ele não tem segmento gravado).
+        $this->assertSame(['000111'], $codigos);
+        $this->assertSame(['000100'], array_column($quadro['equipes'], 'codigo'));
+        $this->assertSame('000100', $quadro['pessoas'][0]['equipe']);
 
         $this->actingAs($supervisor)
             ->patch(route('equipe.atualizarSegmentos', $daEquipe), [
@@ -160,7 +162,49 @@ class EquipeQuadroSegmentosTest extends TestCase
 
         $codigos = collect($this->quadroDe($this->admin())['pessoas'])->pluck('codVendedor')->all();
 
-        $this->assertEqualsCanonicalizing([$americo, $sandra, '000111', '000222'], $codigos);
+        $this->assertEqualsCanonicalizing(['000111', '000222'], $codigos);
+    }
+
+    /**
+     * O layout é SUPERVISOR → VENDEDOR → SEGMENTOS: cada pessoa cai na equipe do gestor
+     * dela, e as equipes saem com nome, na ordem de EQUIPES_INTERNAS.
+     */
+    public function test_cada_vendedor_cai_na_equipe_do_seu_supervisor(): void
+    {
+        [$americo, $sandra] = QuadroSegmentosResolver::EQUIPES_INTERNAS;
+        $this->usuario('supervisor', $americo, display: 'Americo');
+        $this->usuario('supervisor', $sandra, display: 'Sandra');
+        $this->usuario('vendedor', '000111', $americo);
+        $this->usuario('vendedor', '000222', $sandra);
+
+        $quadro = $this->quadroDe($this->admin());
+
+        $this->assertSame(
+            [['codigo' => $americo, 'nome' => 'Americo'], ['codigo' => $sandra, 'nome' => 'Sandra']],
+            $quadro['equipes'],
+        );
+        $porCodigo = collect($quadro['pessoas'])->pluck('equipe', 'codVendedor')->all();
+        $this->assertSame(['000111' => $americo, '000222' => $sandra], $porCodigo);
+    }
+
+    /**
+     * O gestor só é cabeçalho. Mas se o CÓDIGO dele tem segmento gravado, ele vira linha da
+     * própria equipe — senão o segmento existiria sem aparecer em lugar nenhum da tela.
+     * O assistente usa o mesmo código e segue a mesma regra.
+     */
+    public function test_gestor_so_vira_linha_quando_o_codigo_tem_segmento(): void
+    {
+        [$americo, $sandra] = QuadroSegmentosResolver::EQUIPES_INTERNAS;
+        $drogaria = $this->segmento('109', 'DROGARIAS');
+        $this->usuario('supervisor', $americo);
+        $this->usuario('supervisor', $sandra);
+        $this->usuario('assistente', $sandra, $sandra);
+        $this->atribuir($americo, $drogaria);
+
+        $pessoas = collect($this->quadroDe($this->admin())['pessoas']);
+
+        $this->assertSame([$americo], $pessoas->pluck('codVendedor')->all());
+        $this->assertSame($americo, $pessoas[0]['equipe']);
     }
 
     public function test_vendedor_nao_acessa_o_quadro(): void
