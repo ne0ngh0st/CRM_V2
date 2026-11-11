@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Cadastros\BuscaTitularidade;
 use App\Services\Cadastros\EnvioParaCadastro;
 use App\Services\Cadastros\SolicitacaoTituloResolver;
+use App\Services\Cadastros\SolicitanteDaEquipe;
 use App\Services\Receita\CartaoCnpjService;
 use App\Services\Solicitacoes\BobinaPdfPresenter;
 use App\Services\Solicitacoes\EtiquetaPdfPresenter;
@@ -84,6 +85,7 @@ class CadastroController extends Controller
 
     public function __construct(
         private readonly SolicitacaoTituloResolver $tituloResolver,
+        private readonly SolicitanteDaEquipe $solicitante,
     ) {}
 
     public function index(Request $request): Response
@@ -122,7 +124,11 @@ class CadastroController extends Controller
                 'estados' => self::ESTADOS,
                 'segmentos' => self::SEGMENTOS,
             ],
+            // Supervisor e assistente pedem cadastro em nome de alguém da equipe
+            // (SolicitanteDaEquipe). Vazio para os demais: a tela não mostra o seletor.
+            'solicitantes' => $this->solicitante->paraTela($user),
             'meta' => [
+                'userId' => $user->id,
                 'solicitanteNome' => $solicitanteNome,
                 'codVendedor' => $codVendedor,
                 'emails' => self::EMAILS,
@@ -141,7 +147,7 @@ class CadastroController extends Controller
         $isGestor = in_array($user->getRoleNames()->first(), ['admin', 'diretor', 'supervisor'], true);
 
         // Mesmo escopo da listagem: quem não é gestor só vê a própria solicitação.
-        abort_unless($isGestor || $bobina->user_id === $user->id, 403);
+        abort_unless($isGestor || in_array($bobina->user_id, $this->solicitante->idsDaEquipe($user), true), 403);
 
         $bobina->load('enviadoPor');
 
@@ -159,7 +165,7 @@ class CadastroController extends Controller
         $user = $request->user();
         $isGestor = in_array($user->getRoleNames()->first(), ['admin', 'diretor', 'supervisor'], true);
 
-        abort_unless($isGestor || $etiqueta->user_id === $user->id, 403);
+        abort_unless($isGestor || in_array($etiqueta->user_id, $this->solicitante->idsDaEquipe($user), true), 403);
 
         $etiqueta->load('enviadoPor');
 
@@ -213,7 +219,8 @@ class CadastroController extends Controller
     {
         $query = SolicitacaoBobina::query()->latest();
         if (! $isGestor) {
-            $query->where('user_id', $user->id);
+            // A própria pessoa; a assistente também vê as da equipe que ela atende.
+            $query->whereIn('user_id', $this->solicitante->idsDaEquipe($user));
         }
 
         $busca = trim((string) $request->string('busca'));
@@ -239,7 +246,8 @@ class CadastroController extends Controller
     {
         $query = SolicitacaoEtiqueta::query()->latest();
         if (! $isGestor) {
-            $query->where('user_id', $user->id);
+            // A própria pessoa; a assistente também vê as da equipe que ela atende.
+            $query->whereIn('user_id', $this->solicitante->idsDaEquipe($user));
         }
 
         $busca = trim((string) $request->string('busca'));
@@ -266,7 +274,8 @@ class CadastroController extends Controller
     {
         $query = ClienteParaCadastro::query()->latest();
         if (! $isGestor) {
-            $query->where('user_id', $user->id);
+            // A própria pessoa; a assistente também vê as da equipe que ela atende.
+            $query->whereIn('user_id', $this->solicitante->idsDaEquipe($user));
         }
 
         $busca = trim((string) $request->string('busca'));
@@ -291,7 +300,8 @@ class CadastroController extends Controller
     {
         $query = Lead::query()->where('origem', 'manual')->visivel()->latest();
         if (! $isGestor) {
-            $query->where('user_id', $user->id);
+            // A própria pessoa; a assistente também vê as da equipe que ela atende.
+            $query->whereIn('user_id', $this->solicitante->idsDaEquipe($user));
         }
 
         $busca = trim((string) $request->string('busca'));
@@ -313,7 +323,9 @@ class CadastroController extends Controller
 
     public function storeBobina(Request $request): RedirectResponse
     {
-        $user = $request->user();
+        // Quem consta como solicitante: a própria pessoa ou, para supervisor/assistente,
+        // o vendedor da equipe escolhido na tela.
+        $user = $this->solicitante->resolver($request->user(), $request->input('em_nome_de'));
 
         $data = $request->validate([
             'nomenclatura' => ['required', 'string', 'max:255'],
@@ -384,7 +396,9 @@ class CadastroController extends Controller
 
     public function storeEtiqueta(Request $request): RedirectResponse
     {
-        $user = $request->user();
+        // Quem consta como solicitante: a própria pessoa ou, para supervisor/assistente,
+        // o vendedor da equipe escolhido na tela.
+        $user = $this->solicitante->resolver($request->user(), $request->input('em_nome_de'));
 
         $data = $request->validate([
             'nomenclatura' => ['required', 'string', 'max:255'],
@@ -451,7 +465,9 @@ class CadastroController extends Controller
 
     public function storeCliente(Request $request): RedirectResponse
     {
-        $user = $request->user();
+        // Quem consta como solicitante: a própria pessoa ou, para supervisor/assistente,
+        // o vendedor da equipe escolhido na tela.
+        $user = $this->solicitante->resolver($request->user(), $request->input('em_nome_de'));
         $modoEntrega = $request->string('cadastro_raiz_opcao')->value() === 'nova_entrega';
 
         $data = $request->validate([
@@ -552,7 +568,9 @@ class CadastroController extends Controller
 
     public function storeLead(Request $request): RedirectResponse
     {
-        $user = $request->user();
+        // Quem consta como solicitante: a própria pessoa ou, para supervisor/assistente,
+        // o vendedor da equipe escolhido na tela.
+        $user = $this->solicitante->resolver($request->user(), $request->input('em_nome_de'));
 
         $data = $request->validate([
             'razao_social' => ['required', 'string', 'max:255'],
@@ -594,7 +612,7 @@ class CadastroController extends Controller
         $role = $user->getRoleNames()->first();
         $isGestor = in_array($role, ['admin', 'diretor', 'supervisor'], true);
 
-        if ($user->id === $ownerId) {
+        if ($user->id === $ownerId || in_array($ownerId, $this->solicitante->idsDaEquipe($user), true)) {
             return;
         }
 

@@ -66,13 +66,13 @@ class DashboardScopeResolver
         $role = $this->roleDe($user);
         $proprio = $user->vendedorPerfil?->cod_vendedor;
 
-        // Inclui o assistente: ele tem o código do supervisor que apoia (ver
-        // User::PERFIS_ESCOPO_PROPRIO) e vê a carteira pessoal dele, nunca a equipe.
-        if (in_array($role, User::PERFIS_ESCOPO_PROPRIO, true)) {
+        if (in_array($role, User::PERFIS_CARTEIRA, true)) {
             return ['codVendedores' => $proprio ? [$proprio] : [], 'visaoSupervisor' => null, 'visaoVendedor' => null];
         }
 
-        if ($role === 'supervisor') {
+        // O assistente usa o código do supervisor que apoia e vê o mesmo que ele, com o
+        // mesmo alternador (User::PERFIS_COM_EQUIPE, desde 2026-11-04).
+        if (in_array($role, User::PERFIS_COM_EQUIPE, true)) {
             /*
              * Modo "Minha carteira": o supervisor opera como vendedor.
              *
@@ -167,7 +167,7 @@ class DashboardScopeResolver
         $role = $this->roleDe($user);
 
         $codSuper = match (true) {
-            $role === 'supervisor' => $user->vendedorPerfil?->cod_vendedor,
+            in_array($role, User::PERFIS_COM_EQUIPE, true) => $user->vendedorPerfil?->cod_vendedor,
             in_array($role, ['admin', 'diretor'], true) && $visaoSupervisor => $visaoSupervisor,
             default => null,
         };
@@ -207,11 +207,10 @@ class DashboardScopeResolver
      */
     private function calcularUsuarioIds(User $user, array $scope): array
     {
-        // Vendedor/representante/assistente agrega só o próprio histórico, mesmo que o
-        // código de vendedor seja compartilhado com outra conta — é exatamente o caso do
-        // assistente, que tem o código do supervisor: as ligações e os orçamentos dele
-        // são dele, não do supervisor.
-        if (in_array($this->roleDe($user), User::PERFIS_ESCOPO_PROPRIO, true)) {
+        // Vendedor/representante agrega só o próprio histórico, mesmo que o código seja
+        // compartilhado com outra conta. O assistente, desde 2026-11-04, agrega como o
+        // supervisor que espelha: todos os usuários do escopo.
+        if (in_array($this->roleDe($user), User::PERFIS_CARTEIRA, true)) {
             return [$user->id];
         }
 
@@ -256,7 +255,12 @@ class DashboardScopeResolver
             return collect();
         }
 
+        // ⚠️ `titulares()`: a assistente do supervisor tem o código DELE e às vezes o
+        // `cod_super` também (Ana Clara: 000115 / 000115). Sem o filtro, a carteira pessoal
+        // do supervisor entraria na "equipe pura". Mesma consulta em
+        // `EscoposAquecidos::listar()` — se divergir, o aquecimento erra a chave.
         return $this->memo["equipe:{$codSupervisor}"] ??= VendedorPerfil::query()
+            ->titulares()
             ->where('cod_super', $codSupervisor)
             ->pluck('cod_vendedor');
     }

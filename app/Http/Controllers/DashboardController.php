@@ -68,9 +68,9 @@ class DashboardController extends Controller
             // pill mentiria pelos 30 min de TTL, o mesmo defeito da badge "0 online".
             'totalOnline' => User::query()->onlineAgora()->count(),
             'visao' => [
-                'mostrarSeletor' => $eGestor,
+                'mostrarSeletor' => User::temSeletorDeVendedor($role),
                 'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => $eGestor
+                'vendedores' => User::temSeletorDeVendedor($role)
                     ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
                     : [],
                 'visaoSupervisor' => $scope['visaoSupervisor'],

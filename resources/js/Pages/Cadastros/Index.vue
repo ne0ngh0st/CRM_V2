@@ -32,12 +32,21 @@ const props = defineProps({
     filtros: Object,
     opcoes: Object,
     meta: Object,
+    // Supervisor e assistente: em nome de quem pedir (SolicitanteDaEquipe). Vazio para os demais.
+    solicitantes: { type: Array, default: () => [] },
     flashEnvio: { type: Object, default: null },
 });
 
 const filtros = reactive({
     busca: props.filtros.busca || '',
     status: props.filtros.status || '',
+});
+
+// Em nome de quem as solicitações desta tela saem. Começa em quem está logado.
+const emNomeDe = ref(props.meta?.userId ?? null);
+const nomeDoSolicitante = computed(() => {
+    const escolhido = props.solicitantes.find((s) => s.id === emNomeDe.value);
+    return escolhido ? escolhido.nome : null;
 });
 
 const envioLocal = ref(props.flashEnvio);
@@ -209,6 +218,18 @@ const tabBtn = (ativo) =>
                 -->
                 <QuemCuidaBusca />
 
+                <!--
+                    Supervisor e assistente pedem cadastro pelos vendedores da equipe. A
+                    solicitação nasce no nome do vendedor escolhido (é ele quem recebe a
+                    cópia do e-mail); vale para as quatro fichas abaixo.
+                -->
+                <div v-if="solicitantes.length > 1" class="flex flex-wrap items-center gap-2 rounded border border-gray-300 bg-white px-3 py-2">
+                    <label for="em-nome-de" class="text-[0.65rem] font-semibold uppercase tracking-wide text-gray-500">Solicitar em nome de</label>
+                    <select id="em-nome-de" v-model="emNomeDe" class="rounded border-gray-300 py-1.5 text-xs focus:border-cyan focus:ring-cyan">
+                        <option v-for="s in solicitantes" :key="s.id" :value="s.id">{{ s.nome }}{{ s.eu ? ' (eu)' : '' }}</option>
+                    </select>
+                </div>
+
                 <div class="flex flex-wrap gap-1 border-b border-gray-300">
                     <button
                         v-for="tab in abas"
@@ -244,7 +265,7 @@ const tabBtn = (ativo) =>
                     </div>
 
                     <template v-if="subAbaClientes === 'cliente'">
-                        <CadastroClienteForm :opcoes="opcoes" :prefill="prefillCliente" />
+                        <CadastroClienteForm :opcoes="opcoes" :prefill="prefillCliente" :em-nome-de="emNomeDe" />
                         <DarkCard title="Solicitações de cliente" :subtitle="`${clientesFila.total} registro${clientesFila.total !== 1 ? 's' : ''}`">
                             <template #icon>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full"><line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round"/></svg>
@@ -269,7 +290,7 @@ const tabBtn = (ativo) =>
                     </template>
 
                     <template v-else>
-                        <CadastroLeadForm />
+                        <CadastroLeadForm :em-nome-de="emNomeDe" />
                         <DarkCard title="Leads manuais" :subtitle="`${leads.total} lead${leads.total !== 1 ? 's' : ''}`">
                             <template #icon>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full"><line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round"/></svg>
@@ -294,7 +315,7 @@ const tabBtn = (ativo) =>
 
                 <!-- BOBINAS -->
                 <template v-else-if="aba === 'bobinas'">
-                    <CadastroBobinaForm :prefill="prefillBobina" :meta="meta" />
+                    <CadastroBobinaForm :prefill="prefillBobina" :meta="meta" :em-nome-de="emNomeDe" :solicitante-nome="nomeDoSolicitante" />
                     <DarkCard title="Solicitações de bobinas" :subtitle="`${bobinas.total} registro${bobinas.total !== 1 ? 's' : ''}`">
                         <template #icon>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full"><line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round"/></svg>
@@ -321,7 +342,7 @@ const tabBtn = (ativo) =>
 
                 <!-- ETIQUETAS -->
                 <template v-else>
-                    <CadastroEtiquetaForm :prefill="prefillEtiqueta" :meta="meta" :opcoes="opcoes.etiquetas" />
+                    <CadastroEtiquetaForm :prefill="prefillEtiqueta" :meta="meta" :opcoes="opcoes.etiquetas" :em-nome-de="emNomeDe" :solicitante-nome="nomeDoSolicitante" />
                     <DarkCard title="Solicitações de etiquetas" :subtitle="`${etiquetas.total} registro${etiquetas.total !== 1 ? 's' : ''}`">
                         <template #icon>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-full w-full"><line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round"/><line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round"/><line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round"/></svg>

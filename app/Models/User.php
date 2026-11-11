@@ -53,6 +53,21 @@ class User extends Authenticatable
     public const PERFIS_ESCOPO_PROPRIO = [...self::PERFIS_CARTEIRA, 'assistente'];
 
     /**
+     * Perfis que olham a EQUIPE do próprio código e alternam entre Equipe e Minha
+     * carteira (`ModoVisao`), com o seletor de vendedor da equipe.
+     *
+     * O assistente entrou em 2026-11-04 (pedido do Tony): é espelho do gestor, então vê
+     * o que o supervisor vê. Antes ficava só na carteira pessoal do código.
+     */
+    public const PERFIS_COM_EQUIPE = ['supervisor', 'assistente'];
+
+    /** Quem recebe o seletor de vendedor nas telas (Painel, Carteira, Leads, Pedidos, Orçamentos). */
+    public static function temSeletorDeVendedor(?string $perfil): bool
+    {
+        return in_array($perfil, [...self::PERFIS_COM_EQUIPE, 'admin', 'diretor'], true);
+    }
+
+    /**
      * Perfis que só existem no CRM-V2, sem equivalente no `USUARIOS.PERFIL` do legado.
      * O `legado:import-usuarios` não sobrescreve quem está num deles — senão a próxima
      * importação devolveria a venda interna para `assistente`.

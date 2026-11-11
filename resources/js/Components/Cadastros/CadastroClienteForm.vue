@@ -10,6 +10,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 const props = defineProps({
     opcoes: { type: Object, required: true },
     prefill: { type: Object, default: null },
+    emNomeDe: { type: Number, default: null },
 });
 
 const form = useForm({
@@ -61,6 +62,7 @@ function submit() {
     form.transform((data) => ({
         ...data,
         entrega_diferente: !!data.entrega_diferente,
+        em_nome_de: props.emNomeDe,
     })).post(route('cadastros.clientes.store'), {
         preserveScroll: true,
         onSuccess: () => {

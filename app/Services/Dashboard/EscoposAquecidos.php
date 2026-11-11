@@ -34,7 +34,9 @@ class EscoposAquecidos
 
         if (config('perf.escopos_aquecidos.supervisores', true)) {
             foreach ($this->codigosDeSupervisores() as $codSuper) {
+                // Mesma consulta de `DashboardScopeResolver::equipeDoSupervisor()`.
                 $equipe = VendedorPerfil::query()
+                    ->titulares()
                     ->where('cod_super', $codSuper)
                     ->pluck('cod_vendedor')
                     ->all();

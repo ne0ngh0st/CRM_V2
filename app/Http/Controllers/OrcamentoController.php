@@ -205,9 +205,9 @@ class OrcamentoController extends Controller
                 'ver' => (string) $request->string('ver'),
             ],
             'visao' => [
-                'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
+                'mostrarSeletor' => User::temSeletorDeVendedor($role),
                 'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => in_array($role, ['supervisor', 'admin', 'diretor'], true)
+                'vendedores' => User::temSeletorDeVendedor($role)
                     ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
                     : [],
                 'visaoSupervisor' => $scope['visaoSupervisor'],

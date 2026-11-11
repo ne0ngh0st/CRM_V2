@@ -10,6 +10,8 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 const props = defineProps({
     prefill: { type: Object, default: null },
     meta: { type: Object, default: () => ({}) },
+    emNomeDe: { type: Number, default: null },
+    solicitanteNome: { type: String, default: null },
 });
 
 const form = useForm({
@@ -67,7 +69,7 @@ function limparDiametroTubete() {
 }
 
 function submit() {
-    form.post(route('cadastros.bobinas.store'), {
+    form.transform((d) => ({ ...d, em_nome_de: props.emNomeDe })).post(route('cadastros.bobinas.store'), {
         preserveScroll: true,
         onSuccess: () => form.reset(),
     });
@@ -88,7 +90,7 @@ const fieldClass = 'mt-1 block w-full rounded border-gray-300 text-xs focus:bord
         <div class="mb-4 grid gap-2 sm:grid-cols-3">
             <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
                 <p class="text-[0.65rem] font-semibold uppercase text-gray-400">Solicitante</p>
-                <p class="text-sm text-gray-800">{{ meta.solicitanteNome }}</p>
+                <p class="text-sm text-gray-800">{{ solicitanteNome || meta.solicitanteNome }}</p>
             </div>
             <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
                 <p class="text-[0.65rem] font-semibold uppercase text-gray-400">Data</p>

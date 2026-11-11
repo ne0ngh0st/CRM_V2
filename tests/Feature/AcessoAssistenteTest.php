@@ -9,6 +9,7 @@ use App\Models\Pedido;
 use App\Models\User;
 use App\Models\VendedorPerfil;
 use App\Services\Dashboard\DashboardScopeResolver;
+use App\Services\Escopo\ModoVisao;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -32,6 +33,11 @@ class AcessoAssistenteTest extends TestCase
     {
         parent::setUp();
         $this->seed(RoleSeeder::class);
+
+        // Desde 2026-11-04 o assistente tem o alternador do supervisor e ENTRA em "Minha
+        // carteira" (o login grava isso na sessão). Os testes deste arquivo cobrem esse
+        // modo; o de Equipe está em AssistenteEquipeTest.
+        $this->withSession([ModoVisao::CHAVE_SESSAO => ModoVisao::PESSOAL]);
     }
 
     private function usuario(string $perfil, string $codigo, ?string $codSuper = null): User
@@ -71,9 +77,9 @@ class AcessoAssistenteTest extends TestCase
         $this->assertSame(['DO SUPERVISOR'], $razoes);
     }
 
-    public function test_assistente_nao_ve_a_equipe_do_supervisor(): void
+    public function test_em_minha_carteira_o_assistente_nao_ve_a_equipe(): void
     {
-        // Vendedor abaixo do supervisor: o supervisor em modo Equipe o veria; o assistente não.
+        // Vendedor abaixo do supervisor: só aparece no modo Equipe.
         $this->usuario('vendedor', '010500', self::CODIGO_SUPERVISOR);
 
         $escopo = app(DashboardScopeResolver::class)->resolve($this->assistente(), null, null);
@@ -138,7 +144,8 @@ class AcessoAssistenteTest extends TestCase
         $this->assertNull($props['vendaComparacao']);
         $this->assertNull($props['faturamentoComparacao']);
         $this->assertNull($props['biEmbedUrl']);
-        $this->assertFalse($props['visao']['mostrarSeletor']);
+        // Seletor de vendedor da equipe, igual ao supervisor (2026-11-04).
+        $this->assertTrue($props['visao']['mostrarSeletor']);
     }
 
     public function test_assistente_nao_entra_no_dropdown_de_vendedores(): void
@@ -174,7 +181,8 @@ class AcessoAssistenteTest extends TestCase
         $this->actingAs($assistente)->get(route('orcamentos.novo'))->assertOk();
     }
 
-    public function test_assistente_so_ve_os_proprios_orcamentos(): void
+    /** Espelho do supervisor (2026-11-04): os orçamentos do código são dos dois. */
+    public function test_assistente_ve_os_orcamentos_do_codigo_dele_e_do_supervisor(): void
     {
         $assistente = $this->assistente();
         $supervisor = $this->usuario('supervisor', self::CODIGO_SUPERVISOR);
@@ -186,8 +194,7 @@ class AcessoAssistenteTest extends TestCase
             ->get(route('orcamentos.index'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('kpis.total', 1)
-                ->where('orcamentos.data.0.clienteNome', 'Cliente da assistente')
+                ->where('kpis.total', 2)
             );
     }
 }

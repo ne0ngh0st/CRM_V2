@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ExportaPlanilha;
+use App\Models\User;
 use App\Models\AgendamentoLigacao;
 use App\Models\CarteiraMotivoInatividade;
 use App\Models\Cliente;
@@ -395,9 +396,9 @@ class CarteiraController extends Controller
             ],
             'opcoes' => $this->opcoesDeFiltro($request, $codVendedores),
             'visao' => [
-                'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
+                'mostrarSeletor' => User::temSeletorDeVendedor($role),
                 'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => in_array($role, ['supervisor', 'admin', 'diretor'], true)
+                'vendedores' => User::temSeletorDeVendedor($role)
                     ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
                     : [],
                 'visaoSupervisor' => $scope['visaoSupervisor'],

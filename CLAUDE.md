@@ -2598,6 +2598,28 @@ Licitação entrando no CRM (Regra nº 2): ele usa a tela comercial de Cadastros
   lá; lead criado por ele nasce sem `cod_vendedor` (só admin/diretor veem).
 - Testes: `AssistenteEspelhoTest` (6), `PerfilCadastroTest` (4); 3 mutações mordidas.
 
+**Mesmo dia, segunda leva: o assistente tem o alternador e cadastra pela equipe.**
+- **`User::PERFIS_COM_EQUIPE`** (`supervisor`, `assistente`): o resolver trata o
+  assistente igual ao supervisor — Equipe (pura) ou Minha carteira, e o seletor de
+  vendedor da equipe (`User::temSeletorDeVendedor()`, nas 6 telas). Contatos e
+  orçamentos agregam todos os usuários do escopo, como o supervisor. ⚠️ Isso tirou o
+  assistente do caminho de `PERFIS_ESCOPO_PROPRIO` no SERVIDOR; no front a constante
+  continua dando os botões de ligar/agendar/orçar.
+- ⚠️ **O assistente ENTRA em "Minha carteira"**: o login grava `visao_modo = pessoal`
+  na sessão (`AuthenticatedSessionController`). Na sessão, e não como default do
+  `ModoVisao`, para tela, export e IA lerem o mesmo valor. A equipe do Roberto é vazia:
+  com o default Equipe a Natany entraria numa tela em branco.
+- ⚠️ **`equipeDoSupervisor()` usa `titulares()`**: a Ana tem `cod_super` = 000115 (o
+  código da própria Sandra), e sem o filtro a carteira pessoal da Sandra entrava na
+  "equipe pura". `EscoposAquecidos` repete a mesma consulta — mudar as duas juntas.
+- **Cadastro em nome da equipe** (`App\Services\Cadastros\SolicitanteDaEquipe`):
+  supervisor e assistente escolhem "Solicitar em nome de" na tela de Cadastros (o
+  titular do código + os vendedores com `cod_super` nele). A solicitação nasce como se o
+  vendedor a tivesse feito (`user_id`, nome, código, cópia do e-mail); id fora da equipe
+  é erro de validação, nunca cai em silêncio para quem está logado. A assistente vê e
+  reenvia as solicitações da equipe (lista, PDF). Não há registro de quem digitou.
+- Testes: `AssistenteEquipeTest` (9); 3 mutações mordidas.
+
 ### O de-para do Portal morreu: a API aceita chave de negócio — 2026-09-25
 
 Fecha o arco da integração "orçamento vira pedido". Levei ao Marcelo a única pergunta que

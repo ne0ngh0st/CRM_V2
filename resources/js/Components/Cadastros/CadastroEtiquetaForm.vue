@@ -11,6 +11,8 @@ const props = defineProps({
     prefill: { type: Object, default: null },
     meta: { type: Object, default: () => ({}) },
     opcoes: { type: Object, required: true },
+    emNomeDe: { type: Number, default: null },
+    solicitanteNome: { type: String, default: null },
 });
 
 const diametroSelect = ref('');
@@ -89,7 +91,7 @@ function submit() {
     form.diametro_tubete = diametroSelect.value === '__custom__' ? diametroCustom.value : diametroSelect.value;
     form.tipo_adesivo = adesivoSelect.value === '__custom__' ? adesivoCustom.value : adesivoSelect.value;
 
-    form.post(route('cadastros.etiquetas.store'), {
+    form.transform((d) => ({ ...d, em_nome_de: props.emNomeDe })).post(route('cadastros.etiquetas.store'), {
         preserveScroll: true,
         onSuccess: () => {
             form.reset();
@@ -115,7 +117,7 @@ function submit() {
         <div class="mb-4 grid gap-2 sm:grid-cols-3">
             <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
                 <p class="text-[0.65rem] font-semibold uppercase text-gray-400">Solicitante</p>
-                <p class="text-sm text-gray-800">{{ meta.solicitanteNome }}</p>
+                <p class="text-sm text-gray-800">{{ solicitanteNome || meta.solicitanteNome }}</p>
             </div>
             <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
                 <p class="text-[0.65rem] font-semibold uppercase text-gray-400">Data</p>

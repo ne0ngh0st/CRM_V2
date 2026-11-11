@@ -6,6 +6,10 @@ import TextInput from '@/Components/TextInput.vue';
 import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 
+const props = defineProps({
+    emNomeDe: { type: Number, default: null },
+});
+
 const form = useForm({
     razao_social: '',
     nome_fantasia: '',
@@ -16,7 +20,7 @@ const form = useForm({
 });
 
 function submit() {
-    form.post(route('cadastros.leads.store'), {
+    form.transform((d) => ({ ...d, em_nome_de: props.emNomeDe })).post(route('cadastros.leads.store'), {
         preserveScroll: true,
         onSuccess: () => form.reset(),
     });

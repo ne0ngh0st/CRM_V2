@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ExportaPlanilha;
+use App\Models\User;
 use App\Models\Pedido;
 use App\Services\Dashboard\DashboardScopeResolver;
 use App\Services\Metas\MetaRankingResolver;
@@ -119,9 +120,9 @@ class PedidoController extends Controller
                 ),
             ],
             'visao' => [
-                'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
+                'mostrarSeletor' => User::temSeletorDeVendedor($role),
                 'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => in_array($role, ['supervisor', 'admin', 'diretor'], true)
+                'vendedores' => User::temSeletorDeVendedor($role)
                     ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
                     : [],
                 'visaoSupervisor' => $scope['visaoSupervisor'],
@@ -371,9 +372,9 @@ class PedidoController extends Controller
                 'anos' => range((int) now()->year, (int) now()->year - 2),
             ],
             'visao' => [
-                'mostrarSeletor' => in_array($role, ['supervisor', 'admin', 'diretor'], true),
+                'mostrarSeletor' => User::temSeletorDeVendedor($role),
                 'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => in_array($role, ['supervisor', 'admin', 'diretor'], true)
+                'vendedores' => User::temSeletorDeVendedor($role)
                     ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
                     : [],
                 'visaoSupervisor' => $scope['visaoSupervisor'],
