@@ -209,6 +209,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/orcamentos', [OrcamentoController::class, 'index'])->name('orcamentos.index');
     Route::post('/orcamentos/exportar', [OrcamentoController::class, 'exportar'])->name('orcamentos.exportar');
+    Route::post('/orcamentos/aprovar-fila', [OrcamentoController::class, 'aprovarFila'])->name('orcamentos.aprovarFila');
     Route::get('/orcamentos/novo', [OrcamentoController::class, 'novo'])->name('orcamentos.novo');
     Route::get('/orcamentos/busca-clientes', [OrcamentoController::class, 'buscarClientes'])->name('orcamentos.buscaClientes');
     Route::get('/orcamentos/busca-produtos', [OrcamentoController::class, 'buscarProdutos'])->name('orcamentos.buscaProdutos');

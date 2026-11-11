@@ -193,6 +193,8 @@ class OrcamentoController extends Controller
             'orcamentos' => $orcamentos,
             'kpis' => $kpis,
             'filaAprovacao' => self::FILA_POR_PERFIL[$role] ?? null,
+            // Instante desta leitura: o "Aprovar todos" só alcança o que já existia aqui.
+            'filaLidaEm' => now()->toIso8601String(),
             'filtros' => [
                 'busca' => $busca,
                 'status' => $status,
@@ -298,7 +300,7 @@ class OrcamentoController extends Controller
      * ⚠️ Recebe a query SEM as facetas que o funil desenha (etapa, margem, nível): um
      * filtro não se aplica à faceta que ele controla — mesma regra do card da Carteira.
      *
-     * @return array{total: int, valorTotal: float, aguardandoSupervisor: int, aguardandoDiretor: int, etapas: list<array{chave: string, rotulo: string, qtd: int, valor: float}>}
+     * @return array{total: int, valorTotal: float, aguardandoSupervisor: int, aguardandoDiretor: int, valorAguardandoSupervisor: float, valorAguardandoDiretor: float, etapas: list<array{chave: string, rotulo: string, qtd: int, valor: float}>}
      */
     private function kpis(Builder $query): array
     {
@@ -307,7 +309,9 @@ class OrcamentoController extends Controller
                 COUNT(*) AS qtd,
                 COALESCE(SUM(valor_total), 0) AS valor,
                 COALESCE(SUM(status_gestor = 'pendente' AND nivel_aprovacao = 'supervisor'), 0) AS aguardando_supervisor,
-                COALESCE(SUM(status_gestor = 'pendente' AND nivel_aprovacao = 'diretor'), 0) AS aguardando_diretor")
+                COALESCE(SUM(status_gestor = 'pendente' AND nivel_aprovacao = 'diretor'), 0) AS aguardando_diretor,
+                COALESCE(SUM(IF(status_gestor = 'pendente' AND nivel_aprovacao = 'supervisor', valor_total, 0)), 0) AS valor_aguardando_supervisor,
+                COALESCE(SUM(IF(status_gestor = 'pendente' AND nivel_aprovacao = 'diretor', valor_total, 0)), 0) AS valor_aguardando_diretor")
             // Pela expressão, não pelo alias: o only_full_group_by daqui já recusou alias.
             ->groupByRaw(Orcamento::sqlEtapa())
             ->get()
@@ -328,6 +332,8 @@ class OrcamentoController extends Controller
             'valorTotal' => (float) $linhas->sum('valor'),
             'aguardandoSupervisor' => (int) $linhas->sum('aguardando_supervisor'),
             'aguardandoDiretor' => (int) $linhas->sum('aguardando_diretor'),
+            'valorAguardandoSupervisor' => (float) $linhas->sum('valor_aguardando_supervisor'),
+            'valorAguardandoDiretor' => (float) $linhas->sum('valor_aguardando_diretor'),
             'etapas' => $etapas,
         ];
     }
@@ -558,25 +564,112 @@ class OrcamentoController extends Controller
     {
         $user = $request->user();
         abort_unless($this->podeDecidir($user, $orcamento->nivel_aprovacao), 403);
-        abort_unless($orcamento->status_gestor === 'pendente', 409);
 
+        if ($aviso = $this->avisoDeJaDecidido($orcamento, 'aprovado')) {
+            return $aviso;
+        }
+
+        $this->registrarAprovacao($orcamento, $user);
+
+        return back();
+    }
+
+    /**
+     * Aprovar ou rejeitar o que já foi decidido não é erro de servidor: é clique duplo,
+     * ou uma linha que outra pessoa resolveu enquanto a lista estava na tela. Até
+     * 2026-11-11 isso era `abort(409)` e o supervisor via a tela "409 Conflict" do
+     * Inertia no meio da fila.
+     *
+     * Já está no estado pedido → volta em silêncio (a lista recarrega certa). Está no
+     * estado contrário → volta com o aviso de quem decidiu. Nunca decide de novo.
+     */
+    private function avisoDeJaDecidido(Orcamento $orcamento, string $pedido): ?RedirectResponse
+    {
+        if ($orcamento->status_gestor === 'pendente') {
+            return null;
+        }
+
+        if ($orcamento->status_gestor === $pedido) {
+            return back();
+        }
+
+        $quem = $orcamento->aprovadoPor?->display_name ?: $orcamento->aprovadoPor?->name;
+
+        return back()->with('orcamentoAviso', [
+            'tipo' => 'erro',
+            'mensagem' => "O orçamento #{$orcamento->id} já tinha sido {$orcamento->status_gestor}"
+                .($quem ? " por {$quem}" : '').'. Nada foi alterado.',
+        ]);
+    }
+
+    /**
+     * "Aprovar todos": aprova de uma vez a FILA de quem está logado — os pendentes do
+     * nível dele (`FILA_POR_PERFIL`), dentro do escopo e dos filtros da tela (busca,
+     * datas, vendedor). É o mesmo recorte do "N aguardando a sua aprovação", então o
+     * número do botão é o número aprovado.
+     *
+     * ⚠️ Só a própria fila, nunca "tudo que eu poderia decidir": o diretor também pode
+     * aprovar margem de nível supervisor, mas um clique em lote não deve passar por cima
+     * da fila de outra pessoa.
+     *
+     * ⚠️ `ate` é o instante em que a tela foi montada. Orçamento criado ou editado depois
+     * disso NÃO entra: quem confirma "aprovar 7" não pode aprovar um oitavo, nem um
+     * desconto que mudou depois que ele olhou. O que ficar de fora continua na fila.
+     */
+    public function aprovarFila(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $fila = self::FILA_POR_PERFIL[$user->getRoleNames()->first()] ?? null;
+        abort_if($fila === null, 403);
+
+        $dados = $request->validate(['ate' => ['required', 'date']]);
+
+        $pendentes = $this->baseQuery($request, comFacetas: false)
+            ->where('status_gestor', $fila['status'])
+            ->where('nivel_aprovacao', $fila['nivel'])
+            ->where('updated_at', '<=', Carbon::parse($dados['ate'])->setTimezone(config('app.timezone')))
+            ->with('user')
+            ->get();
+
+        DB::transaction(function () use ($pendentes, $user) {
+            foreach ($pendentes as $orcamento) {
+                $this->registrarAprovacao($orcamento, $user);
+            }
+        });
+
+        $qtd = $pendentes->count();
+
+        return back()->with('orcamentoAviso', [
+            'tipo' => 'ok',
+            'mensagem' => match ($qtd) {
+                0 => 'Nenhum orçamento foi aprovado: a fila mudou desde que a tela foi aberta. Confira a lista.',
+                1 => '1 orçamento aprovado.',
+                default => "{$qtd} orçamentos aprovados.",
+            },
+        ]);
+    }
+
+    /** A aprovação de margem em si — única definição, usada pela linha e pelo lote. */
+    private function registrarAprovacao(Orcamento $orcamento, User $aprovador): void
+    {
         $orcamento->update([
             'status_gestor' => 'aprovado',
-            'aprovado_por_id' => $user->id,
+            'aprovado_por_id' => $aprovador->id,
             'aprovado_em' => now(),
             'motivo_rejeicao' => null,
         ]);
 
         $this->notificarDecisao($orcamento, aprovado: true);
-
-        return back();
     }
 
     public function rejeitar(Request $request, Orcamento $orcamento): RedirectResponse
     {
         $user = $request->user();
         abort_unless($this->podeDecidir($user, $orcamento->nivel_aprovacao), 403);
-        abort_unless($orcamento->status_gestor === 'pendente', 409);
+
+        if ($aviso = $this->avisoDeJaDecidido($orcamento, 'rejeitado')) {
+            return $aviso;
+        }
 
         $data = $request->validate([
             'motivo_rejeicao' => ['required', 'string', 'max:1000'],

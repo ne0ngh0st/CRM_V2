@@ -58,6 +58,8 @@ class HandleInertiaRequests extends Middleware
                  * e o desfecho DELA sim vem pelo sino.
                  */
                 'portalAviso' => fn () => $request->session()->get('portalAviso'),
+                // Desfecho de uma ação em lote na tela de Orçamentos ("7 orçamentos aprovados").
+                'orcamentoAviso' => fn () => $request->session()->get('orcamentoAviso'),
                 /*
                  * Desfecho de um pedido de exportação: `{estado, url, rotulo, linhas}`.
                  *

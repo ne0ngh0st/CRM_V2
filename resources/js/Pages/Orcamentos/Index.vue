@@ -18,6 +18,8 @@ import {
     ROTULOS_NIVEL_APROVACAO,
 } from '@/constants/orcamentos.js';
 import { contarFiltrosAtivos } from '@/utils/filtros';
+import ConfirmacaoModal from '@/Components/ConfirmacaoModal.vue';
+import { useConfirmacao } from '@/composables/useConfirmacao';
 
 const props = defineProps({
     role: String,
@@ -29,6 +31,7 @@ const props = defineProps({
     orcamentos: Object,
     kpis: Object,
     filaAprovacao: { type: Object, default: null },
+    filaLidaEm: { type: String, default: '' },
     filtros: Object,
     visao: Object,
 });
@@ -49,7 +52,8 @@ function aplicarFiltros() {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['orcamentos', 'kpis', 'filtros', 'visao'],
+        // `filaLidaEm` vai junto: é o corte do "Aprovar todos" e tem que ser o desta lista.
+        only: ['orcamentos', 'kpis', 'filtros', 'visao', 'filaLidaEm'],
     });
 }
 
@@ -164,6 +168,7 @@ const comVoce = computed(() => {
 
     return {
         qtd: fila.nivel === 'diretor' ? props.kpis.aguardandoDiretor : props.kpis.aguardandoSupervisor,
+        valor: fila.nivel === 'diretor' ? props.kpis.valorAguardandoDiretor : props.kpis.valorAguardandoSupervisor,
         href: hrefFaceta(fila),
         ativo: facetaAtiva(fila),
     };
@@ -194,14 +199,63 @@ function abrirRespostaCliente(orcamento) {
     modalResposta.value = true;
 }
 
+/*
+ * Uma aprovação por vez. Uma segunda visita do Inertia CANCELA a primeira no navegador
+ * (o servidor aprova, mas a lista não recarrega) — e o clique seguinte caía numa linha
+ * que já não estava pendente. Enquanto uma corre, os outros cliques são ignorados.
+ */
+let aprovando = false;
+
 function aprovar(orcamento) {
-    router.patch(route('orcamentos.aprovar', orcamento.id), {}, { preserveScroll: true, preserveState: true });
+    if (aprovando) return;
+    aprovando = true;
+
+    router.patch(route('orcamentos.aprovar', orcamento.id), {}, {
+        preserveScroll: true,
+        preserveState: true,
+        onFinish: () => { aprovando = false; },
+    });
 }
 
 // Aviso do envio ao Portal. Vem do flash porque a validação do de-para acontece
 // DENTRO da requisição: "falta o representante" ou "o CNPJ não bate" precisa aparecer
 // na hora, e não pelo sino minutos depois.
-const portalAviso = computed(() => usePage().props.flash?.portalAviso ?? null);
+const portalAviso = computed(() => usePage().props.flash?.portalAviso ?? usePage().props.flash?.orcamentoAviso ?? null);
+
+/*
+ * "Aprovar todos": a fila inteira de quem está logado, num clique. Só existe com a tela
+ * NA fila — aí a lista é exatamente o que vai ser aprovado, em todas as páginas.
+ * O servidor refaz o recorte (escopo + filtros + nível) e ignora o que chegou ou mudou
+ * depois de `filaLidaEm`.
+ */
+const { confirmacao, confirmar, aoConfirmar, aoCancelar } = useConfirmacao();
+
+const podeAprovarTodos = computed(() => recorteDaFila.value && (comVoce.value?.qtd ?? 0) > 1);
+
+async function aprovarTodos() {
+    const { qtd, valor } = comVoce.value;
+
+    const confirmado = await confirmar({
+        titulo: 'Aprovar todos',
+        subtitulo: `${qtd} orçamentos · ${formatBRL(valor)}`,
+        mensagem: `Aprovar a margem dos ${qtd} orçamentos que aguardam a sua aprovação?`,
+        detalhe: props.orcamentos.last_page > 1
+            ? 'Inclui os das outras páginas, não só os que estão na tela. Cada vendedor é avisado pelo sino.'
+            : 'Cada vendedor é avisado pelo sino.',
+        rotuloConfirmar: `Aprovar ${qtd}`,
+        tom: 'atencao',
+    });
+    if (!confirmado) return;
+
+    router.post(route('orcamentos.aprovarFila'), {
+        busca: filtros.busca,
+        data_inicio: filtros.data_inicio,
+        data_fim: filtros.data_fim,
+        visao_supervisor: filtros.visao_supervisor,
+        visao_vendedor: filtros.visao_vendedor,
+        ate: props.filaLidaEm,
+    }, { preserveScroll: true });
+}
 
 const modalPortal = ref(false);
 
@@ -308,6 +362,14 @@ function enviarAoPortal(orcamento) {
                         </svg>
                     </template>
                     <template #actions>
+                        <button
+                            v-if="podeAprovarTodos"
+                            type="button"
+                            class="rounded bg-green-700 px-3 py-1 text-xs font-medium text-white transition hover:bg-green-800"
+                            @click="aprovarTodos"
+                        >
+                            Aprovar todos ({{ comVoce.qtd }})
+                        </button>
                         <ExportarExcelButton
                             rota="orcamentos.exportar"
                             :filtros="filtros"
@@ -365,6 +427,7 @@ function enviarAoPortal(orcamento) {
             </div>
         </div>
 
+        <ConfirmacaoModal v-bind="confirmacao" @confirmar="aoConfirmar" @close="aoCancelar" />
         <RejeitarOrcamentoModal :show="modalRejeitar" :orcamento="orcamentoAtivo" @close="modalRejeitar = false" />
         <ExcluirOrcamentoModal :show="modalExcluir" :orcamento="orcamentoAtivo" @close="modalExcluir = false" />
         <RespostaClienteModal :show="modalResposta" :orcamento="orcamentoAtivo" :motivos="motivosRecusaCliente" @close="modalResposta = false" />
