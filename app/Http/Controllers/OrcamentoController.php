@@ -80,11 +80,7 @@ class OrcamentoController extends Controller
             return $destino;
         }
 
-        $scope = $this->scopeResolver->resolve(
-            $user,
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($user, $request);
 
         $busca = trim((string) $request->string('busca'));
         $status = (string) $request->string('status');
@@ -204,15 +200,7 @@ class OrcamentoController extends Controller
                 'data_fim' => $dataFim,
                 'ver' => (string) $request->string('ver'),
             ],
-            'visao' => [
-                'mostrarSeletor' => User::temSeletorDeVendedor($role),
-                'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => User::temSeletorDeVendedor($role)
-                    ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
-                    : [],
-                'visaoSupervisor' => $scope['visaoSupervisor'],
-                'visaoVendedor' => $scope['visaoVendedor'],
-            ],
+            'visao' => $this->scopeResolver->visaoParaTela($user, $scope),
         ]);
     }
 
@@ -238,11 +226,7 @@ class OrcamentoController extends Controller
         $user = $request->user();
         $role = $user->getRoleNames()->first();
 
-        $scope = $this->scopeResolver->resolve(
-            $user,
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($user, $request);
         $semFiltro = in_array($role, ['admin', 'diretor'], true) && $scope['codVendedores'] === null;
         $usuarioIds = $this->scopeResolver->usuarioIds($user, $scope);
 

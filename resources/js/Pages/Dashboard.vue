@@ -111,9 +111,9 @@ const mesAno = computed(() => {
 });
 
 const filtrosAtivos = computed(() => contarFiltrosAtivos({
-    visao_supervisor: props.visao?.visaoSupervisor || '',
+    visao_diretor: props.visao?.visaoDiretor || '', visao_supervisor: props.visao?.visaoSupervisor || '',
     visao_vendedor: props.visao?.visaoVendedor || '',
-}, ['visao_supervisor', 'visao_vendedor']));
+}, ['visao_diretor', 'visao_supervisor', 'visao_vendedor']));
 
 const podeVerEquipe = computed(() => {
     const papeis = page.props.auth?.roles ?? [];
@@ -242,6 +242,7 @@ const podeVerEquipe = computed(() => {
                     v-if="segmentosInativos"
                     :segmentos-inativos="segmentosInativos"
                     :especialistas="especialistasSegmento"
+                    :visao-diretor="visao.visaoDiretor"
                     :visao-supervisor="visao.visaoSupervisor"
                     :visao-vendedor="visao.visaoVendedor"
                 />
@@ -260,6 +261,7 @@ const podeVerEquipe = computed(() => {
                         :class="metaGauge ? '' : 'lg:col-span-2'"
                         :carteira-segmento="carteiraSegmento"
                         :segmentos="segmentosVendedor"
+                        :visao-diretor="visao.visaoDiretor"
                         :visao-supervisor="visao.visaoSupervisor"
                         :visao-vendedor="visao.visaoVendedor"
                     />
@@ -268,6 +270,7 @@ const podeVerEquipe = computed(() => {
                         :class="carteiraSegmento ? '' : 'lg:col-span-2'"
                         :meta-gauge="metaGauge"
                         :role="role"
+                        :visao-diretor="visao.visaoDiretor"
                         :visao-supervisor="visao.visaoSupervisor"
                         :visao-vendedor="visao.visaoVendedor"
                     />
@@ -285,18 +288,21 @@ const podeVerEquipe = computed(() => {
                         :ligacoes-stats="ligacoesStats"
                         :observacoes-stats="observacoesStats"
                         :role="role"
+                        :visao-diretor="visao.visaoDiretor"
                         :visao-supervisor="visao.visaoSupervisor"
                         :visao-vendedor="visao.visaoVendedor"
                     />
                     <OrcamentosStatsCard
                         v-if="orcamentosStats"
                         :orcamentos-stats="orcamentosStats"
+                        :visao-diretor="visao.visaoDiretor"
                         :visao-supervisor="visao.visaoSupervisor"
                         :visao-vendedor="visao.visaoVendedor"
                     />
                     <PedidosAtencaoCard
                         v-if="pedidosAtencao"
                         :pedidos-atencao="pedidosAtencao"
+                        :visao-diretor="visao.visaoDiretor"
                         :visao-supervisor="visao.visaoSupervisor"
                         :visao-vendedor="visao.visaoVendedor"
                     />

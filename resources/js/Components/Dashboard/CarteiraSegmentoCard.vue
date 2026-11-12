@@ -24,13 +24,14 @@ const props = defineProps({
      * "Segmento:" fica só na pill do topo da página, que é identidade.
      */
     segmentos: { type: Array, default: () => [] },
+    visaoDiretor: { type: String, default: null },
     visaoSupervisor: { type: String, default: null },
     visaoVendedor: { type: String, default: null },
 });
 
 function carteiraHref(params) {
     const query = {
-        visao_supervisor: props.visaoSupervisor || undefined,
+        visao_diretor: props.visaoDiretor || undefined, visao_supervisor: props.visaoSupervisor || undefined,
         visao_vendedor: props.visaoVendedor || undefined,
         ...props.baseFiltros,
         ...params,

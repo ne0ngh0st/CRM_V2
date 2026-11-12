@@ -4,6 +4,7 @@ import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
+import FiltrosDeVisao from '@/Components/FiltrosDeVisao.vue';
 import FilterField from '@/Components/FilterField.vue';
 import Pagination from '@/Components/Pagination.vue';
 import OrcamentosTabela from '@/Components/Orcamentos/OrcamentosTabela.vue';
@@ -43,7 +44,7 @@ const filtros = reactive({
     etapa: props.filtros.etapa || '',
     data_inicio: props.filtros.data_inicio || '',
     data_fim: props.filtros.data_fim || '',
-    visao_supervisor: props.visao.visaoSupervisor || '',
+    visao_diretor: props.visao.visaoDiretor || '', visao_supervisor: props.visao.visaoSupervisor || '',
     visao_vendedor: props.visao.visaoVendedor || '',
 });
 
@@ -66,7 +67,7 @@ function onBuscaInput() {
 function limparFiltros() {
     Object.assign(filtros, {
         busca: '', status: '', nivel: '', etapa: '', data_inicio: '', data_fim: '',
-        visao_supervisor: '', visao_vendedor: '',
+        visao_diretor: '', visao_supervisor: '', visao_vendedor: '',
     });
     aplicarFiltros();
 }
@@ -80,7 +81,7 @@ function limparFiltros() {
  */
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
     'status', 'nivel', 'etapa', 'data_inicio', 'data_fim',
-    'visao_supervisor', 'visao_vendedor',
+    'visao_diretor', 'visao_supervisor', 'visao_vendedor',
 ]));
 
 /*
@@ -128,7 +129,7 @@ function hrefOrcamentos(recorte) {
         busca: filtros.busca || undefined,
         data_inicio: filtros.data_inicio || undefined,
         data_fim: filtros.data_fim || undefined,
-        visao_supervisor: filtros.visao_supervisor || undefined,
+        visao_diretor: filtros.visao_diretor || undefined, visao_supervisor: filtros.visao_supervisor || undefined,
         visao_vendedor: filtros.visao_vendedor || undefined,
         ...recorte,
     });
@@ -251,7 +252,7 @@ async function aprovarTodos() {
         busca: filtros.busca,
         data_inicio: filtros.data_inicio,
         data_fim: filtros.data_fim,
-        visao_supervisor: filtros.visao_supervisor,
+        visao_diretor: filtros.visao_diretor, visao_supervisor: filtros.visao_supervisor,
         visao_vendedor: filtros.visao_vendedor,
         ate: props.filaLidaEm,
     }, { preserveScroll: true });
@@ -330,15 +331,7 @@ function enviarAoPortal(orcamento) {
                             />
                         </div>
 
-                        <FilterField v-if="visao.supervisores.length" label="Supervisão" :model-value="filtros.visao_supervisor" @update:model-value="(v) => { filtros.visao_supervisor = v; filtros.visao_vendedor = ''; aplicarFiltros(); }">
-                            <option value="">Todas as Equipes</option>
-                            <option v-for="s in visao.supervisores" :key="s.cod_vendedor" :value="s.cod_vendedor">{{ s.nome }}</option>
-                        </FilterField>
-
-                        <FilterField v-if="visao.mostrarSeletor" label="Vendedor" :model-value="filtros.visao_vendedor" @update:model-value="(v) => { filtros.visao_vendedor = v; aplicarFiltros(); }">
-                            <option value="">Todos os Vendedores</option>
-                            <option v-for="v in visao.vendedores" :key="v.cod_vendedor" :value="v.cod_vendedor">{{ v.nome }}</option>
-                        </FilterField>
+                        <FiltrosDeVisao :visao="visao" :filtros="filtros" @aplicar="aplicarFiltros" />
 
                         <button type="button" class="min-h-11 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:self-end" @click="limparFiltros">
                             Limpar filtros

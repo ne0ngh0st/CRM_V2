@@ -23,11 +23,7 @@ class ObservacaoController extends Controller
     {
         $user = $request->user();
 
-        $scope = $this->scopeResolver->resolve(
-            $user,
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($user, $request);
         $userIds = $this->scopeResolver->usuarioIds($user, $scope);
 
         return Observacao::query()

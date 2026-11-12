@@ -19,6 +19,10 @@ const props = defineProps({
         type: String,
         required: true,
     },
+    visaoDiretor: {
+        type: String,
+        default: null,
+    },
     visaoSupervisor: {
         type: String,
         default: null,
@@ -65,7 +69,7 @@ async function carregar() {
     carregando.value = true;
     const { data } = await axios.get(route('observacoes.index'), {
         params: {
-            visao_supervisor: props.visaoSupervisor,
+            visao_diretor: props.visaoDiretor, visao_supervisor: props.visaoSupervisor,
             visao_vendedor: props.visaoVendedor,
         },
     });
@@ -96,7 +100,7 @@ async function fixar(observacao) {
 }
 
 onMounted(carregar);
-watch(() => [props.visaoSupervisor, props.visaoVendedor], carregar);
+watch(() => [props.visaoDiretor, props.visaoSupervisor, props.visaoVendedor], carregar);
 </script>
 
 <template>

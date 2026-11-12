@@ -50,14 +50,14 @@ const filtros = reactive({
     modo: props.filtros.modo || 'mensal',
     busca: props.filtros.busca || '',
     faixa: props.filtros.faixa || '',
-    visao_supervisor: props.filtros.visao_supervisor || '',
+    visao_diretor: props.filtros.visao_diretor || '', visao_supervisor: props.filtros.visao_supervisor || '',
 });
 
 /*
  * ⚠️ Toda prop derivada de `ranking()` mora aqui. Esquecer uma (foi o risco com `grupos`)
  * faz a recarga parcial trazer linhas novas com subtotais velhos — sem erro nem aviso.
  */
-const PROPS_DO_RANKING = ['linhas', 'grupos', 'totais', 'kpis', 'periodo', 'filtros', 'podeEditar'];
+const PROPS_DO_RANKING = ['linhas', 'grupos', 'totais', 'kpis', 'periodo', 'filtros', 'opcoes', 'podeEditar'];
 
 /*
  * Aba da tabela. ⚠️ FATURAMENTO é o padrão aqui — o INVERSO do Painel (MetaGaugeCard abre
@@ -118,7 +118,7 @@ function setModo(modo) {
  * subtítulo; o modo já tem a pastilha no header.
  */
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
-    'faixa', 'visao_supervisor',
+    'faixa', 'visao_diretor', 'visao_supervisor',
 ]));
 
 const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
@@ -220,6 +220,17 @@ function salvarMeta() {
                     </FilterField>
                     <FilterField v-model="filtros.mes" label="Mês" @update:model-value="aplicarFiltros()">
                         <option v-for="m in MESES" :key="m.value" :value="String(m.value)">{{ m.label }}</option>
+                    </FilterField>
+                    <FilterField
+                        v-if="opcoes.diretores?.length"
+                        v-model="filtros.visao_diretor"
+                        label="Direção"
+                        @update:model-value="() => { filtros.visao_supervisor = ''; aplicarFiltros(); }"
+                    >
+                        <option value="">Todas as Diretorias</option>
+                        <option v-for="d in opcoes.diretores" :key="d.cod_vendedor" :value="d.cod_vendedor">
+                            {{ d.nome }}
+                        </option>
                     </FilterField>
                     <FilterField
                         v-if="opcoes.supervisores?.length"

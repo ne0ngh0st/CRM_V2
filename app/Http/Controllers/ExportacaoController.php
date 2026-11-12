@@ -118,6 +118,7 @@ class ExportacaoController extends Controller
             'categoria' => 'Categoria',
             'recurso' => 'Aba',
             'ordenar' => 'Ordenação',
+            'visao_diretor' => 'Diretoria',
             'visao_supervisor' => 'Supervisor',
             'visao_vendedor' => 'Vendedor',
             'cotacao' => 'Cotação nº',

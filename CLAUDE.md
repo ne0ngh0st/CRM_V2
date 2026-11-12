@@ -3321,6 +3321,47 @@ as rotas responderem 404. Para voltar: `true` no `.env`, `config:cache`, reload 
   especialista. Dados e agendamentos da seção continuam rodando.
 - O `phpunit.xml` liga o interruptor, para a suíte continuar cobrindo a seção.
 
+### Filtro de visão em três níveis e "Minha carteira" para admin/diretor — 2026-11-12
+
+A diretoria sentiu falta de nomes nos filtros (Paulo Borin, Roberto Baroli): o de Supervisão
+só listava perfil `supervisor` e o de Vendedor só `PERFIS_CARTEIRA`. A hierarquia já estava
+em `vendedor_perfis` (`cod_super` e `cod_gerente`), só não era usada pelos filtros.
+
+- **Direção → Supervisão → Vendedor**, parâmetros `visao_diretor`, `visao_supervisor`,
+  `visao_vendedor`. Só admin/diretor têm o primeiro; para os outros perfis ele é ignorado.
+- 🚨 **Direção é o GERENTE do TOTVS (`vendedor_perfis.cod_gerente`), não a cadeia de
+  `cod_super`** (decisão do Tony: "deve ser um reflexo da hierarquia do TOTVS"). Lista
+  admin/diretor cujo código é `cod_gerente` de alguém: Beto (76 pessoas), Daniel Dayan (35)
+  e Paulo (14). Escolher um traz o código dele + quem tem ele como gerente
+  (`DashboardScopeResolver::estruturaDoDiretor()`).
+  - ⚠️ As duas hierarquias NÃO coincidem: o Américo responde ao Paulo como supervisor e ao
+    Daniel como gerente. Supervisor pode estar numa diretoria com a equipe dele em outra.
+  - ⚠️ **As diretorias somadas não fecham com a empresa**: ~320 códigos do TOTVS sem
+    usuário no CRM (gente que saiu, ~25 mil clientes) não têm gerente e só entram em "Todas".
+  - ⚠️ `cod_gerente` só era escrito pelo `legado:import-usuarios` (parado) e **não é
+    editável na tela Equipe**: é retrato de quando o legado parou. Vendedor novo nasce sem
+    gerente, fora de toda diretoria, até alguém gravar o campo.
+- **Daniel Dayan (000054) não usa o CRM**: a migration `2026_11_12_100000` cria o usuário
+  dele INATIVO, com e-mail `.invalid`, só para dar nome ao código. Não roda na suíte.
+- **Supervisão** lista todo supervisor ativo com código (inclusive sem equipe: Roberto Jude)
+  mais os diretores que supervisionam alguém por `cod_super` (Paulo e Beto). Supervisor sem
+  equipe escolhido mostra a carteira dele, em vez de tela em branco.
+- **Vendedor** (admin/diretor) lista todo nome ATIVO com carteira ou equipe (vendedor,
+  representante, venda interna, supervisor) mais os diretores, recortado pelo nível de
+  cima. Quem saiu não vira nome, mas a carteira do código continua na equipe/diretoria.
+- Supervisor ou vendedor de OUTRA diretoria na URL é ignorado, não troca o escopo.
+- **Os nomes dos parâmetros moram em `resolveDaRequest()` e a prop `visao` em
+  `visaoParaTela()`** — eram 12 e 6 cópias nos controllers. No front, os três campos são
+  `Components/FiltrosDeVisao.vue` (Carteira, Leads, Orçamentos, Pedidos); o Painel usa
+  `Dashboard/VisaoSelector`, e Metas/Visão do Gestor têm Direção + Supervisor.
+- **Alternador para admin e diretor** (`User::PERFIS_COM_ALTERNADOR`): "Empresa / Minha
+  carteira". Em Minha carteira o escopo é o próprio código e os seletores somem. Admin sem
+  código recebe 422 ao alternar (o botão é decidido pelo papel, sem query).
+- ⚠️ **Abaixo de 1280px o alternador mora no menu do usuário**, não no cabeçalho: lá ele
+  passava por cima dos últimos itens do menu (valia também para o supervisor).
+- O aquecimento de cache inclui as diretorias (`perf.escopos_aquecidos.diretorias`).
+- Testes: `VisaoDirecaoTest` (16).
+
 ## Pendências
 - 🟡 **Assistente de IA pronto e desligado.** Para o beta, nesta ordem:
   1. `ANTHROPIC_API_KEY` (conta da empresa);

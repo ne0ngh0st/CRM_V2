@@ -53,6 +53,17 @@ class EscoposAquecidos
             }
         }
 
+        if (config('perf.escopos_aquecidos.diretorias', true)) {
+            // O admin com ?visao_diretor=X: dois ou três escopos, cada um com um terço da
+            // empresa. Vem do resolver para a lista de códigos ser a mesma da requisição.
+            foreach ($this->resolver->opcoesDiretores() as $diretor) {
+                $escopos[] = $this->montar(
+                    "diretoria {$diretor['cod_vendedor']}",
+                    $this->resolver->estruturaDoDiretor($diretor['cod_vendedor'])->all(),
+                );
+            }
+        }
+
         /*
          * ⚠️ Vendedores individuais NÃO entram, e isto é deliberado (config
          * `escopos_aquecidos.vendedores`, default false). São ~200 escopos que custam

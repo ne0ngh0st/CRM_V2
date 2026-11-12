@@ -206,11 +206,7 @@ class CarteiraController extends Controller
         $user = $request->user();
         $role = $user->getRoleNames()->first();
 
-        $scope = $this->scopeResolver->resolve(
-            $user,
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($user, $request);
         $codVendedores = $scope['codVendedores'];
 
         $busca = trim((string) $request->string('busca'));
@@ -395,15 +391,7 @@ class CarteiraController extends Controller
                 'mesorregiao' => $this->regiaoParaTela($request),
             ],
             'opcoes' => $this->opcoesDeFiltro($request, $codVendedores),
-            'visao' => [
-                'mostrarSeletor' => User::temSeletorDeVendedor($role),
-                'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => User::temSeletorDeVendedor($role)
-                    ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
-                    : [],
-                'visaoSupervisor' => $scope['visaoSupervisor'],
-                'visaoVendedor' => $scope['visaoVendedor'],
-            ],
+            'visao' => $this->scopeResolver->visaoParaTela($user, $scope),
         ]);
     }
 
@@ -428,11 +416,7 @@ class CarteiraController extends Controller
     /** Escopo (cod_vendedor) puro, sem filtros de busca/estado/segmento/status. */
     protected function scopeQuery(Request $request): Builder
     {
-        $scope = $this->scopeResolver->resolve(
-            $request->user(),
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($request->user(), $request);
 
         $query = Cliente::query();
         if ($scope['codVendedores'] !== null) {
@@ -961,11 +945,7 @@ class CarteiraController extends Controller
             return null;
         }
 
-        $scope = $this->scopeResolver->resolve(
-            $request->user(),
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($request->user(), $request);
 
         $chave = ChaveEscopo::deCodVendedores($scope['codVendedores'])
             ->paraDoDia('potencial-codigos', ['familia' => $familia]);

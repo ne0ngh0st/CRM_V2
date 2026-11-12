@@ -4,6 +4,7 @@ import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
+import FiltrosDeVisao from '@/Components/FiltrosDeVisao.vue';
 import FilterField from '@/Components/FilterField.vue';
 import KpiTile from '@/Components/KpiTile.vue';
 import Pagination from '@/Components/Pagination.vue';
@@ -42,7 +43,7 @@ const filtros = reactive({
     busca: props.filtros.busca || '',
     faturamento: props.filtros.faturamento || '',
     ordenar: props.filtros.ordenar || 'data_pedido_desc',
-    visao_supervisor: props.visao.visaoSupervisor || '',
+    visao_diretor: props.visao.visaoDiretor || '', visao_supervisor: props.visao.visaoSupervisor || '',
     visao_vendedor: props.visao.visaoVendedor || '',
 });
 
@@ -73,7 +74,7 @@ function limparFiltros() {
         busca: '',
         faturamento: '',
         ordenar: 'data_pedido_desc',
-        visao_supervisor: '',
+        visao_diretor: '', visao_supervisor: '',
         visao_vendedor: '',
     });
     aplicarFiltros();
@@ -85,7 +86,7 @@ function limparFiltros() {
  * filtros que eu não pedi". Quem declara o período é o subtítulo do PageHero.
  */
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
-    'faturamento', 'visao_supervisor', 'visao_vendedor',
+    'faturamento', 'visao_diretor', 'visao_supervisor', 'visao_vendedor',
 ]));
 
 const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
@@ -164,25 +165,7 @@ const periodoLabel = computed(() => {
                             <option v-for="m in MESES" :key="m.value" :value="String(m.value)">{{ m.label }}</option>
                         </FilterField>
 
-                        <FilterField
-                            v-if="visao.supervisores.length"
-                            label="Supervisão"
-                            :model-value="filtros.visao_supervisor"
-                            @update:model-value="(v) => { filtros.visao_supervisor = v; filtros.visao_vendedor = ''; aplicarFiltros(); }"
-                        >
-                            <option value="">Todas as Equipes</option>
-                            <option v-for="s in visao.supervisores" :key="s.cod_vendedor" :value="s.cod_vendedor">{{ s.nome }}</option>
-                        </FilterField>
-
-                        <FilterField
-                            v-if="visao.mostrarSeletor"
-                            label="Vendedor"
-                            :model-value="filtros.visao_vendedor"
-                            @update:model-value="(v) => { filtros.visao_vendedor = v; aplicarFiltros(); }"
-                        >
-                            <option value="">Todos os Vendedores</option>
-                            <option v-for="v in visao.vendedores" :key="v.cod_vendedor" :value="v.cod_vendedor">{{ v.nome }}</option>
-                        </FilterField>
+                        <FiltrosDeVisao :visao="visao" :filtros="filtros" @aplicar="aplicarFiltros" />
 
                         <button type="button" class="min-h-11 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:self-end" @click="limparFiltros">
                             Limpar filtros

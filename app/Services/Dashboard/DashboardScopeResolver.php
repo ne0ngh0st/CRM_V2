@@ -5,6 +5,7 @@ namespace App\Services\Dashboard;
 use App\Models\User;
 use App\Models\VendedorPerfil;
 use App\Services\Escopo\ModoVisao;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
 /**
@@ -28,19 +29,72 @@ class DashboardScopeResolver
      */
     private array $memo = [];
 
+    /** Perfis que, sem filtro, enxergam a empresa inteira. */
+    private const PERFIS_EMPRESA = ['admin', 'diretor'];
+
     public function __construct(private readonly ModoVisao $modo) {}
 
     /**
-     * @return array{codVendedores: array<string>|null, visaoSupervisor: ?string, visaoVendedor: ?string}
+     * Os três níveis do filtro de visão, na ordem da hierarquia: Direção → Supervisão →
+     * Vendedor. Só admin e diretor têm o primeiro; para os outros perfis ele é ignorado.
+     *
+     * @return array{codVendedores: array<string>|null, visaoDiretor: ?string, visaoSupervisor: ?string, visaoVendedor: ?string}
      */
-    public function resolve(User $user, ?string $visaoSupervisor, ?string $visaoVendedor): array
+    public function resolve(User $user, ?string $visaoSupervisor, ?string $visaoVendedor, ?string $visaoDiretor = null): array
     {
         // ⚠️ O modo entra na chave do memo: dentro de uma requisição ele não muda, mas
         // um teste que alterne o modo entre dois `resolve()` na mesma instância leria
         // escopo velho — e leria em silêncio, que é o pior jeito de errar escopo.
-        $chave = "resolve:{$user->id}:{$visaoSupervisor}:{$visaoVendedor}:{$this->modo->atual()}";
+        $chave = "resolve:{$user->id}:{$visaoDiretor}:{$visaoSupervisor}:{$visaoVendedor}:{$this->modo->atual()}";
 
-        return $this->memo[$chave] ??= $this->resolverEscopo($user, $visaoSupervisor, $visaoVendedor);
+        return $this->memo[$chave] ??= $this->resolverEscopo($user, $visaoSupervisor, $visaoVendedor, $visaoDiretor)
+            + ['visaoDiretor' => null];
+    }
+
+    /**
+     * O escopo pedido pelos filtros da tela (`visao_diretor`, `visao_supervisor`,
+     * `visao_vendedor`). Os nomes dos três parâmetros moram aqui, e não em cada
+     * controller: filtro novo que um deles esquecesse de ler seria uma tela ignorando o
+     * filtro em silêncio (Regra de ouro nº 8). Vale também para a Request sintética da
+     * exportação em fila, que carrega os mesmos filtros.
+     *
+     * @return array{codVendedores: array<string>|null, visaoDiretor: ?string, visaoSupervisor: ?string, visaoVendedor: ?string}
+     */
+    public function resolveDaRequest(User $user, Request $request, bool $comVendedor = true): array
+    {
+        return $this->resolve(
+            $user,
+            $request->string('visao_supervisor')->value() ?: null,
+            $comVendedor ? ($request->string('visao_vendedor')->value() ?: null) : null,
+            $request->string('visao_diretor')->value() ?: null,
+        );
+    }
+
+    /**
+     * A prop `visao` das telas: as opções dos três seletores e o que está selecionado.
+     *
+     * @param  array{codVendedores: array<string>|null, visaoDiretor: ?string, visaoSupervisor: ?string, visaoVendedor: ?string}  $scope
+     * @return array<string, mixed>
+     */
+    public function visaoParaTela(User $user, array $scope): array
+    {
+        $role = $this->roleDe($user);
+        $gestorDaEmpresa = in_array($role, self::PERFIS_EMPRESA, true);
+
+        // Admin/diretor em "Minha carteira" está olhando o próprio código: os seletores
+        // não teriam efeito nenhum, e seletor que não faz nada parece defeito.
+        $mostrar = User::temSeletorDeVendedor($role)
+            && ! ($gestorDaEmpresa && $this->modo->pessoal() && $user->vendedorPerfil?->cod_vendedor);
+
+        return [
+            'mostrarSeletor' => $mostrar,
+            'diretores' => $mostrar && $gestorDaEmpresa ? $this->opcoesDiretores() : [],
+            'supervisores' => $mostrar && $gestorDaEmpresa ? $this->opcoesSupervisores($scope['visaoDiretor']) : [],
+            'vendedores' => $mostrar ? $this->opcoesVendedores($user, $scope['visaoSupervisor'], $scope['visaoDiretor']) : [],
+            'visaoDiretor' => $scope['visaoDiretor'],
+            'visaoSupervisor' => $scope['visaoSupervisor'],
+            'visaoVendedor' => $scope['visaoVendedor'],
+        ];
     }
 
     /**
@@ -61,7 +115,7 @@ class DashboardScopeResolver
     /**
      * @return array{codVendedores: array<string>|null, visaoSupervisor: ?string, visaoVendedor: ?string}
      */
-    private function resolverEscopo(User $user, ?string $visaoSupervisor, ?string $visaoVendedor): array
+    private function resolverEscopo(User $user, ?string $visaoSupervisor, ?string $visaoVendedor, ?string $visaoDiretor): array
     {
         $role = $this->roleDe($user);
         $proprio = $user->vendedorPerfil?->cod_vendedor;
@@ -100,19 +154,46 @@ class DashboardScopeResolver
             return ['codVendedores' => $equipe->all(), 'visaoSupervisor' => null, 'visaoVendedor' => null];
         }
 
-        if (in_array($role, ['admin', 'diretor'], true)) {
-            if ($visaoSupervisor) {
-                $equipe = $this->equipeDoSupervisor($visaoSupervisor);
-
-                if ($visaoVendedor && $equipe->contains($visaoVendedor)) {
-                    return ['codVendedores' => [$visaoVendedor], 'visaoSupervisor' => $visaoSupervisor, 'visaoVendedor' => $visaoVendedor];
-                }
-
-                return ['codVendedores' => $equipe->all(), 'visaoSupervisor' => $visaoSupervisor, 'visaoVendedor' => null];
+        if (in_array($role, self::PERFIS_EMPRESA, true)) {
+            /*
+             * "Minha carteira" também para admin e diretor (2026-11-12): diretor na
+             * Autopel tem carteira no próprio código (Paulo Borin, Roberto Baroli), e sem
+             * o alternador ele só chegava nela escolhendo o próprio nome num filtro.
+             * No outro modo nada muda: empresa inteira, com os seletores.
+             */
+            if ($this->modo->pessoal() && $proprio) {
+                return ['codVendedores' => [$proprio], 'visaoSupervisor' => null, 'visaoVendedor' => null];
             }
 
-            if ($visaoVendedor) {
-                return ['codVendedores' => [$visaoVendedor], 'visaoSupervisor' => null, 'visaoVendedor' => $visaoVendedor];
+            // Diretor que não está na lista é ignorado (o parâmetro vem da URL).
+            $diretor = $this->diretorValido($visaoDiretor);
+            $estrutura = $diretor ? $this->estruturaDoDiretor($diretor) : null;
+            $dentro = fn (string $cod) => $estrutura === null || $estrutura->contains($cod);
+
+            if ($visaoSupervisor && $dentro($visaoSupervisor)) {
+                $equipe = $this->equipeDoSupervisor($visaoSupervisor);
+
+                // Supervisor sem equipe (Roberto Jude): a "equipe" dele é ele mesmo. Sem
+                // isto, escolher o nome no filtro daria tela em branco.
+                if ($equipe->isEmpty()) {
+                    return ['codVendedores' => [$visaoSupervisor], 'visaoDiretor' => $diretor, 'visaoSupervisor' => $visaoSupervisor, 'visaoVendedor' => null];
+                }
+
+                // O próprio supervisor é escolhível no seletor de vendedor: é como o
+                // gestor chega na carteira pessoal dele sem sair do filtro da equipe.
+                if ($visaoVendedor && ($equipe->contains($visaoVendedor) || $visaoVendedor === $visaoSupervisor)) {
+                    return ['codVendedores' => [$visaoVendedor], 'visaoDiretor' => $diretor, 'visaoSupervisor' => $visaoSupervisor, 'visaoVendedor' => $visaoVendedor];
+                }
+
+                return ['codVendedores' => $equipe->all(), 'visaoDiretor' => $diretor, 'visaoSupervisor' => $visaoSupervisor, 'visaoVendedor' => null];
+            }
+
+            if ($visaoVendedor && $dentro($visaoVendedor)) {
+                return ['codVendedores' => [$visaoVendedor], 'visaoDiretor' => $diretor, 'visaoSupervisor' => null, 'visaoVendedor' => $visaoVendedor];
+            }
+
+            if ($estrutura !== null) {
+                return ['codVendedores' => $estrutura->all(), 'visaoDiretor' => $diretor, 'visaoSupervisor' => null, 'visaoVendedor' => null];
             }
 
             // Sem seleção: agrega a empresa toda.
@@ -124,22 +205,66 @@ class DashboardScopeResolver
     }
 
     /**
-     * Supervisores que de fato têm equipe (pro dropdown de admin/diretor).
+     * O primeiro nível do filtro: quem é GERENTE de alguém no TOTVS (`cod_gerente`) —
+     * Roberto Baroli, Daniel Dayan, Paulo Borin. Ver `estruturaDoDiretor()`.
+     *
+     * Não filtra `is_active`: o Daniel não usa o CRM e o usuário dele existe só para dar
+     * nome ao código 000054 (migration `2026_11_12_100000`).
      *
      * @return Collection<int, array{cod_vendedor: string, nome: string}>
      */
-    public function opcoesSupervisores(): Collection
+    public function opcoesDiretores(): Collection
     {
-        return $this->memo['opcoesSupervisores'] ??= $this->calcularOpcoesSupervisores();
+        return $this->memo['opcoesDiretores'] ??= $this->gestoresComEquipe(self::PERFIS_EMPRESA, 'cod_gerente');
+    }
+
+    private function diretorValido(?string $visaoDiretor): ?string
+    {
+        return $visaoDiretor && $this->opcoesDiretores()->contains('cod_vendedor', $visaoDiretor) ? $visaoDiretor : null;
     }
 
     /**
+     * O seletor "Supervisão" de admin/diretor: todo supervisor com código, mais os
+     * diretores que têm gente respondendo direto a eles (Paulo e Beto também são
+     * supervisores de alguém). Com um diretor escolhido, só quem está na estrutura dele.
+     *
+     * Supervisor SEM equipe entra (Roberto Jude): escolhê-lo mostra a carteira dele — ver
+     * `resolverEscopo()`.
+     *
      * @return Collection<int, array{cod_vendedor: string, nome: string}>
      */
-    private function calcularOpcoesSupervisores(): Collection
+    public function opcoesSupervisores(?string $visaoDiretor = null): Collection
     {
-        return User::role('supervisor')
-            ->whereHas('vendedorPerfil', fn ($q) => $q->whereIn('cod_vendedor', VendedorPerfil::query()->whereNotNull('cod_super')->pluck('cod_super')))
+        $todos = $this->memo['opcoesSupervisores'] ??= User::comPerfil(['supervisor'])
+            ->where('is_active', true)
+            ->whereHas('vendedorPerfil')
+            ->with('vendedorPerfil')
+            ->get()
+            ->map(fn (User $u) => ['cod_vendedor' => $u->vendedorPerfil->cod_vendedor, 'nome' => $u->display_name ?: $u->name])
+            // Só os diretores que SUPERVISIONAM alguém (`cod_super`): Paulo e Beto.
+            ->concat($this->gestoresComEquipe(self::PERFIS_EMPRESA, 'cod_super'))
+            ->unique('cod_vendedor')
+            ->sortBy('nome')
+            ->values();
+        $diretor = $this->diretorValido($visaoDiretor);
+
+        if (! $diretor) {
+            return $todos;
+        }
+
+        $estrutura = $this->estruturaDoDiretor($diretor);
+
+        return $todos->filter(fn (array $s) => $estrutura->contains($s['cod_vendedor']))->values();
+    }
+
+    /**
+     * @param  list<string>  $perfis
+     * @return Collection<int, array{cod_vendedor: string, nome: string}>
+     */
+    private function gestoresComEquipe(array $perfis, string $coluna): Collection
+    {
+        return User::comPerfil($perfis)
+            ->whereHas('vendedorPerfil', fn ($q) => $q->whereIn('cod_vendedor', VendedorPerfil::query()->whereNotNull($coluna)->select($coluna)))
             ->with('vendedorPerfil')
             ->get()
             ->map(fn (User $u) => ['cod_vendedor' => $u->vendedorPerfil->cod_vendedor, 'nome' => $u->display_name ?: $u->name])
@@ -149,28 +274,72 @@ class DashboardScopeResolver
 
     /**
      * Vendedores/representantes disponíveis pro dropdown, dado quem está logado e
-     * (se aplicável) o supervisor já selecionado no outro dropdown.
+     * (se aplicável) o diretor e o supervisor já selecionados nos outros dropdowns.
      *
      * @return Collection<int, array{cod_vendedor: string, nome: string}>
      */
-    public function opcoesVendedores(User $user, ?string $visaoSupervisor): Collection
+    public function opcoesVendedores(User $user, ?string $visaoSupervisor, ?string $visaoDiretor = null): Collection
     {
-        return $this->memo["opcoesVendedores:{$user->id}:{$visaoSupervisor}"]
-            ??= $this->calcularOpcoesVendedores($user, $visaoSupervisor);
+        return $this->memo["opcoesVendedores:{$user->id}:{$visaoDiretor}:{$visaoSupervisor}"]
+            ??= in_array($this->roleDe($user), self::PERFIS_EMPRESA, true)
+                ? $this->opcoesDeNomesDoGestor($visaoSupervisor, $visaoDiretor)
+                : $this->calcularOpcoesVendedores($user);
     }
 
     /**
+     * O seletor "Vendedor" de admin/diretor: TODO nome que tem carteira ou equipe —
+     * vendedores, representantes, supervisores e os diretores com estrutura.
+     *
+     * Até 2026-11-12 só entrava quem tinha perfil de vendedor, e a diretoria sentiu falta
+     * dos próprios nomes: supervisor e diretor também vendem aqui (Paulo Borin tem 14 mil
+     * clientes no código dele) e não eram escolhíveis em filtro nenhum.
+     *
      * @return Collection<int, array{cod_vendedor: string, nome: string}>
      */
-    private function calcularOpcoesVendedores(User $user, ?string $visaoSupervisor): Collection
+    private function opcoesDeNomesDoGestor(?string $visaoSupervisor, ?string $visaoDiretor): Collection
     {
-        $role = $this->roleDe($user);
+        // Só usuário ativo: quem saiu não vira nome no seletor. A carteira que ficou no
+        // código dele continua dentro da equipe e da diretoria.
+        $pessoas = User::comPerfil([...User::PERFIS_CARTEIRA, 'supervisor'])
+            ->where('is_active', true)
+            ->with('vendedorPerfil')
+            ->get()
+            ->filter(fn (User $u) => $u->vendedorPerfil !== null)
+            ->map(fn (User $u) => [
+                'cod_vendedor' => $u->vendedorPerfil->cod_vendedor,
+                'nome' => $u->display_name ?: $u->name,
+                'cod_super' => $u->vendedorPerfil->cod_super,
+            ])
+            ->concat($this->opcoesDiretores()->map(fn (array $d) => $d + ['cod_super' => null]));
 
-        $codSuper = match (true) {
-            in_array($role, User::PERFIS_COM_EQUIPE, true) => $user->vendedorPerfil?->cod_vendedor,
-            in_array($role, ['admin', 'diretor'], true) && $visaoSupervisor => $visaoSupervisor,
-            default => null,
-        };
+        $diretor = $this->diretorValido($visaoDiretor);
+        $estrutura = $diretor ? $this->estruturaDoDiretor($diretor) : null;
+
+        // Mesmos recortes de `resolverEscopo()`: o que aparece na lista é o que o
+        // servidor aceita como seleção.
+        if ($visaoSupervisor && ($estrutura === null || $estrutura->contains($visaoSupervisor))) {
+            $pessoas = $pessoas->filter(fn (array $p) => $p['cod_super'] === $visaoSupervisor || $p['cod_vendedor'] === $visaoSupervisor);
+        } elseif ($estrutura !== null) {
+            $pessoas = $pessoas->filter(fn (array $p) => $estrutura->contains($p['cod_vendedor']));
+        }
+
+        return $pessoas
+            ->map(fn (array $p) => ['cod_vendedor' => $p['cod_vendedor'], 'nome' => $p['nome']])
+            ->unique(fn (array $p) => $p['cod_vendedor'].'|'.$p['nome'])
+            ->sortBy('nome')
+            ->values();
+    }
+
+    /**
+     * O seletor de quem olha a própria equipe (supervisor e o assistente que o espelha).
+     *
+     * @return Collection<int, array{cod_vendedor: string, nome: string}>
+     */
+    private function calcularOpcoesVendedores(User $user): Collection
+    {
+        $codSuper = in_array($this->roleDe($user), User::PERFIS_COM_EQUIPE, true)
+            ? $user->vendedorPerfil?->cod_vendedor
+            : null;
 
         $query = User::comPerfil(User::PERFIS_CARTEIRA)->with('vendedorPerfil');
 
@@ -263,6 +432,32 @@ class DashboardScopeResolver
             ->titulares()
             ->where('cod_super', $codSupervisor)
             ->pluck('cod_vendedor');
+    }
+
+    /**
+     * A diretoria como o TOTVS a descreve: o código do diretor e todo mundo que tem ele
+     * como GERENTE (`vendedor_perfis.cod_gerente`, o COD_GERENTE dos relatórios).
+     *
+     * ⚠️ É `cod_gerente`, e NÃO a cadeia de `cod_super` (decisão do Tony, 2026-11-12): o
+     * filtro tem que ser reflexo da hierarquia dos relatórios, e lá as duas não coincidem —
+     * o Américo responde ao Paulo como supervisor e ao Daniel Dayan como gerente. Por isso
+     * um supervisor pode estar numa diretoria com a equipe dele em outra.
+     *
+     * ⚠️ Só entra código que tem usuário no CRM (`titulares()`). Os ~320 códigos do TOTVS
+     * sem usuário (gente que saiu) não pertencem a diretoria nenhuma e só aparecem em
+     * "Todas as Diretorias" — logo, as diretorias somadas NÃO fecham com a empresa.
+     *
+     * @return Collection<int, string>
+     */
+    public function estruturaDoDiretor(string $codDiretor): Collection
+    {
+        return $this->memo["estrutura:{$codDiretor}"] ??= VendedorPerfil::query()
+            ->titulares()
+            ->where('cod_gerente', $codDiretor)
+            ->pluck('cod_vendedor')
+            ->prepend($codDiretor)
+            ->unique()
+            ->values();
     }
 
     /**

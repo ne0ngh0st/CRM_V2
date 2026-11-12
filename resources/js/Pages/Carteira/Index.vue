@@ -5,6 +5,7 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PageHero from '@/Components/PageHero.vue';
 import DarkCard from '@/Components/DarkCard.vue';
+import FiltrosDeVisao from '@/Components/FiltrosDeVisao.vue';
 import FilterField from '@/Components/FilterField.vue';
 import Pagination from '@/Components/Pagination.vue';
 import EscopoVazioAviso from '@/Components/EscopoVazioAviso.vue';
@@ -56,7 +57,7 @@ const page = usePage();
 
 const podeOperar = computed(
     () => PERFIS_ESCOPO_PROPRIO.includes(props.role)
-        || (props.role === 'supervisor' && page.props.modoVisao?.modo === 'pessoal'),
+        || (['supervisor', 'admin', 'diretor'].includes(props.role) && page.props.modoVisao?.modo === 'pessoal'),
 );
 
 const filtros = reactive({
@@ -87,7 +88,7 @@ const filtros = reactive({
      */
     // Vazio = padrão (agrupado). Só o modo por filial precisa ser dito na URL.
     agrupar: props.filtros.agrupado ? '' : '0',
-    visao_supervisor: props.visao.visaoSupervisor || '',
+    visao_diretor: props.visao.visaoDiretor || '', visao_supervisor: props.visao.visaoSupervisor || '',
     visao_vendedor: props.visao.visaoVendedor || '',
 });
 
@@ -243,7 +244,7 @@ function onBuscaInput() {
 function limparFiltros() {
     Object.assign(filtros, {
         busca: '', estado: '', segmento: '', status: '', aderencia: '', receita: '', mesorregiao: '',
-        ordenar: 'nome_asc', visao_supervisor: '', visao_vendedor: '',
+        ordenar: 'nome_asc', visao_diretor: '', visao_supervisor: '', visao_vendedor: '',
     });
     aplicarFiltros();
 }
@@ -286,7 +287,7 @@ function abrirCartaoCnpj(cliente) {
  */
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
     'estado', 'segmento', 'status', 'aderencia', 'receita', 'sem_familia', 'conta_alvo', 'rede_alvo', 'mesorregiao',
-    'visao_supervisor', 'visao_vendedor',
+    'visao_diretor', 'visao_supervisor', 'visao_vendedor',
 ]));
 
 const temFiltrosAtivos = computed(() => filtrosAtivos.value > 0 || filtros.busca !== '');
@@ -395,15 +396,7 @@ function limparRedeAlvo() {
                             <option v-for="(rotulo, valor) in FILTROS_RECEITA" :key="valor" :value="valor">{{ rotulo }}</option>
                         </FilterField>
 
-                        <FilterField v-if="visao.supervisores.length" label="Supervisão" :model-value="filtros.visao_supervisor" @update:model-value="(v) => { filtros.visao_supervisor = v; filtros.visao_vendedor = ''; aplicarFiltros(); }">
-                            <option value="">Todas as Equipes</option>
-                            <option v-for="s in visao.supervisores" :key="s.cod_vendedor" :value="s.cod_vendedor">{{ s.nome }}</option>
-                        </FilterField>
-
-                        <FilterField v-if="visao.mostrarSeletor" label="Vendedor" :model-value="filtros.visao_vendedor" @update:model-value="(v) => { filtros.visao_vendedor = v; aplicarFiltros(); }">
-                            <option value="">Todos os Vendedores</option>
-                            <option v-for="v in visao.vendedores" :key="v.cod_vendedor" :value="v.cod_vendedor">{{ v.nome }}</option>
-                        </FilterField>
+                        <FiltrosDeVisao :visao="visao" :filtros="filtros" @aplicar="aplicarFiltros" />
 
                         <button type="button" class="min-h-11 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 sm:min-h-0 sm:self-end" @click="limparFiltros">
                             Limpar filtros

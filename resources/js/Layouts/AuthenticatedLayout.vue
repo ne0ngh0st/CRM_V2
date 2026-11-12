@@ -142,7 +142,12 @@ const itensDoUsuario = computed(() => menuUsuario(perfil.value));
                         </div>
 
                         <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-1">
-                            <VisaoSupervisorToggle />
+                            <!--
+                                Abaixo de 1280px o alternador mora no menu do usuário (logo
+                                abaixo): aqui ele passava por cima dos últimos itens do menu.
+                                `hidden` vence o `flex` do componente; `xl:flex` devolve.
+                            -->
+                            <VisaoSupervisorToggle class="hidden xl:flex" />
                             <NotificationBell />
 
                             <div class="relative ms-2">
@@ -188,6 +193,16 @@ const itensDoUsuario = computed(() => menuUsuario(perfil.value));
                                     </template>
 
                                     <template #content>
+                                        <div
+                                            v-if="$page.props.modoVisao?.disponivel"
+                                            class="bg-corp-black px-3 py-2 xl:hidden"
+                                            @click.stop
+                                        >
+                                            <p class="mb-1 text-[0.65rem] font-semibold uppercase tracking-wide text-white/40">
+                                                Escopo das telas
+                                            </p>
+                                            <VisaoSupervisorToggle />
+                                        </div>
                                         <DropdownLink
                                             v-for="item in itensDoUsuario"
                                             :key="item.chave"

@@ -34,11 +34,7 @@ class DashboardController extends Controller
         $user = $request->user();
         $role = $user->getRoleNames()->first();
 
-        $scope = $this->scopeResolver->resolve(
-            $user,
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($user, $request);
 
         $codVendedores = $scope['codVendedores'];
         $usuarioIds = $this->scopeResolver->usuarioIds($user, $scope);
@@ -67,15 +63,7 @@ class DashboardController extends Controller
             // Presença: query barata (~200 users) e fora do cache de propósito — senão a
             // pill mentiria pelos 30 min de TTL, o mesmo defeito da badge "0 online".
             'totalOnline' => User::query()->onlineAgora()->count(),
-            'visao' => [
-                'mostrarSeletor' => User::temSeletorDeVendedor($role),
-                'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => User::temSeletorDeVendedor($role)
-                    ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
-                    : [],
-                'visaoSupervisor' => $scope['visaoSupervisor'],
-                'visaoVendedor' => $scope['visaoVendedor'],
-            ],
+            'visao' => $this->scopeResolver->visaoParaTela($user, $scope),
             'metaGauge' => $temEscopo && $mostraDesempenho
                 // `isRepresentante` fica fora do cache de propósito: depende de quem olha,
                 // não do escopo. Ver o docblock de DashboardBlocos::metaGauge().

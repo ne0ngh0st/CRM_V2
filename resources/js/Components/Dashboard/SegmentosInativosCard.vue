@@ -39,6 +39,7 @@ const props = defineProps({
      * aparecer aqui no próximo F5, e o bloco vive 30 min no Redis.
      */
     especialistas: { type: Object, default: () => ({}) },
+    visaoDiretor: { type: String, default: null },
     visaoSupervisor: { type: String, default: null },
     visaoVendedor: { type: String, default: null },
 });
@@ -63,7 +64,7 @@ function href(linha) {
     return route('carteira.index', {
         segmento: linha.codigo,
         status: 'inativo',
-        visao_supervisor: props.visaoSupervisor || undefined,
+        visao_diretor: props.visaoDiretor || undefined, visao_supervisor: props.visaoSupervisor || undefined,
         visao_vendedor: props.visaoVendedor || undefined,
     });
 }

@@ -38,9 +38,7 @@ class VisaoGestorController extends Controller
         $role = $user->getRoleNames()->first();
         $busca = trim((string) $request->string('busca'));
         $soAtencao = $request->boolean('so_atencao');
-        $visaoSupervisor = $request->string('visao_supervisor')->value() ?: null;
-
-        $scope = $this->scopeResolver->resolve($user, $visaoSupervisor, null);
+        $scope = $this->scopeResolver->resolveDaRequest($user, $request, comVendedor: false);
         $usuarios = $this->usuariosDoEscopo($scope['codVendedores']);
         if ($busca !== '') {
             $termo = mb_strtolower($busca);
@@ -121,6 +119,8 @@ class VisaoGestorController extends Controller
             })
             ->values();
 
+        $visao = $this->scopeResolver->visaoParaTela($user, $scope);
+
         return Inertia::render('VisaoGestor/Index', [
             'role' => $role,
             'linhas' => $linhas->all(),
@@ -128,12 +128,12 @@ class VisaoGestorController extends Controller
             'filtros' => [
                 'busca' => $busca,
                 'so_atencao' => $soAtencao,
+                'visao_diretor' => $scope['visaoDiretor'],
                 'visao_supervisor' => $scope['visaoSupervisor'],
             ],
             'opcoes' => [
-                'supervisores' => in_array($role, ['admin', 'diretor'], true)
-                    ? $this->scopeResolver->opcoesSupervisores()
-                    : [],
+                'diretores' => $visao['diretores'],
+                'supervisores' => $visao['supervisores'],
             ],
             'alertas' => [
                 'diasLigacao' => self::DIAS_ALERTA_LIGACAO,

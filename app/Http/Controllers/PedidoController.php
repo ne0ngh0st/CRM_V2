@@ -32,11 +32,7 @@ class PedidoController extends Controller
         $user = $request->user();
         $role = $user->getRoleNames()->first();
 
-        $scope = $this->scopeResolver->resolve(
-            $user,
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($user, $request);
 
         $hoje = now()->toDateString();
         $em7Dias = now()->addDays(7)->toDateString();
@@ -119,15 +115,7 @@ class PedidoController extends Controller
                     StatusPedidoResolver::statusEmAberto()
                 ),
             ],
-            'visao' => [
-                'mostrarSeletor' => User::temSeletorDeVendedor($role),
-                'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => User::temSeletorDeVendedor($role)
-                    ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
-                    : [],
-                'visaoSupervisor' => $scope['visaoSupervisor'],
-                'visaoVendedor' => $scope['visaoVendedor'],
-            ],
+            'visao' => $this->scopeResolver->visaoParaTela($user, $scope),
         ]);
     }
 
@@ -174,11 +162,7 @@ class PedidoController extends Controller
     /** Escopo (cod_vendedor) + busca/status/data. Pedidos em aberto que estão no último 200 (Pedido::naCarteiraAberta). Usado por index() (KPIs e lista) e exportarAbertos(). */
     protected function baseQueryAbertos(Request $request): Builder
     {
-        $scope = $this->scopeResolver->resolve(
-            $request->user(),
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($request->user(), $request);
 
         $busca = trim((string) $request->string('busca'));
         $status = (string) $request->string('status');
@@ -276,11 +260,7 @@ class PedidoController extends Controller
         $user = $request->user();
         $role = $user->getRoleNames()->first();
 
-        $scope = $this->scopeResolver->resolve(
-            $user,
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($user, $request);
         $codVendedores = $scope['codVendedores'];
 
         $ano = (int) ($request->integer('ano') ?: now()->year);
@@ -371,15 +351,7 @@ class PedidoController extends Controller
             'opcoes' => [
                 'anos' => range((int) now()->year, (int) now()->year - 2),
             ],
-            'visao' => [
-                'mostrarSeletor' => User::temSeletorDeVendedor($role),
-                'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => User::temSeletorDeVendedor($role)
-                    ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
-                    : [],
-                'visaoSupervisor' => $scope['visaoSupervisor'],
-                'visaoVendedor' => $scope['visaoVendedor'],
-            ],
+            'visao' => $this->scopeResolver->visaoParaTela($user, $scope),
         ]);
     }
 
@@ -391,11 +363,7 @@ class PedidoController extends Controller
     /** Escopo (cod_vendedor) + período (ano/mes) + busca/faturamento. Usado por emitidos() (lista) e exportarEmitidos(). */
     protected function baseQueryEmitidos(Request $request): Builder
     {
-        $scope = $this->scopeResolver->resolve(
-            $request->user(),
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($request->user(), $request);
 
         $ano = (int) ($request->integer('ano') ?: now()->year);
         $mes = max(1, min(12, (int) ($request->integer('mes') ?: now()->month)));

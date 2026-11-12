@@ -17,10 +17,14 @@ import { computed } from 'vue';
 const page = usePage();
 const visao = computed(() => page.props.modoVisao ?? { disponivel: false, modo: 'equipe' });
 
-const MODOS = [
-    { chave: 'equipe', rotulo: 'Equipe' },
-    { chave: 'pessoal', rotulo: 'Minha carteira' },
-];
+// Admin e diretor (2026-11-12) usam o mesmo alternador, mas o outro lado é a empresa
+// inteira com os filtros de direção/supervisão/vendedor, não uma equipe.
+const MODOS = computed(() => [
+    visao.value.empresa
+        ? { chave: 'equipe', rotulo: 'Empresa', dica: 'Ver a empresa inteira, com os filtros de direção, supervisão e vendedor' }
+        : { chave: 'equipe', rotulo: 'Equipe', dica: 'Ver os clientes da sua equipe' },
+    { chave: 'pessoal', rotulo: 'Minha carteira', dica: 'Ver só os seus clientes, como vendedor' },
+]);
 
 function alternar(modo) {
     if (modo === visao.value.modo) return;
@@ -32,14 +36,14 @@ function alternar(modo) {
 </script>
 
 <template>
-    <div v-if="visao.disponivel" class="flex overflow-hidden rounded border border-white/25">
+    <div v-if="visao.disponivel" class="flex shrink-0 overflow-hidden rounded border border-white/25">
         <button
             v-for="opcao in MODOS"
             :key="opcao.chave"
             type="button"
-            class="px-2 py-1 text-xs font-medium transition"
+            class="whitespace-nowrap px-2 py-1 text-xs font-medium transition"
             :class="visao.modo === opcao.chave ? 'bg-white/20 text-white' : 'text-white/70 hover:bg-white/10'"
-            :title="opcao.chave === 'pessoal' ? 'Ver só os seus clientes, como vendedor' : 'Ver os clientes da sua equipe'"
+            :title="opcao.dica"
             @click="alternar(opcao.chave)"
         >
             {{ opcao.rotulo }}

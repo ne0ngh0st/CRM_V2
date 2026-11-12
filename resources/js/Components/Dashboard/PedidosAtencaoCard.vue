@@ -9,13 +9,14 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    visaoDiretor: { type: String, default: null },
     visaoSupervisor: { type: String, default: null },
     visaoVendedor: { type: String, default: null },
 });
 
 function pedidosHref(params) {
     return route('pedidos.index', {
-        visao_supervisor: props.visaoSupervisor || undefined,
+        visao_diretor: props.visaoDiretor || undefined, visao_supervisor: props.visaoSupervisor || undefined,
         visao_vendedor: props.visaoVendedor || undefined,
         ...params,
     });

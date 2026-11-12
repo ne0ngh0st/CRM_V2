@@ -71,9 +71,7 @@ class LeadController extends Controller
         $user = $request->user();
         $role = $user->getRoleNames()->first();
 
-        $visaoSupervisor = $request->string('visao_supervisor')->value() ?: null;
-        $visaoVendedor = $request->string('visao_vendedor')->value() ?: null;
-        $scope = $this->scopeResolver->resolve($user, $visaoSupervisor, $visaoVendedor);
+        $scope = $this->scopeResolver->resolveDaRequest($user, $request);
         $codVendedores = $scope['codVendedores'];
 
         $busca = trim((string) $request->string('busca'));
@@ -172,15 +170,7 @@ class LeadController extends Controller
                 // o usuário filtra. Mesmo tratamento dado aos dropdowns da Carteira.
                 ...$this->opcoesDeFiltro($request, $scope['codVendedores']),
             ],
-            'visao' => [
-                'mostrarSeletor' => User::temSeletorDeVendedor($role),
-                'supervisores' => in_array($role, ['admin', 'diretor'], true) ? $this->scopeResolver->opcoesSupervisores() : [],
-                'vendedores' => User::temSeletorDeVendedor($role)
-                    ? $this->scopeResolver->opcoesVendedores($user, $scope['visaoSupervisor'])
-                    : [],
-                'visaoSupervisor' => $scope['visaoSupervisor'],
-                'visaoVendedor' => $scope['visaoVendedor'],
-            ],
+            'visao' => $this->scopeResolver->visaoParaTela($user, $scope),
             'wordpressCaptura' => $this->wpCaptura->resumir(
                 podeTestar: in_array($role, ['admin', 'diretor'], true),
             ),
@@ -409,11 +399,7 @@ class LeadController extends Controller
     {
         $query = Lead::query()->visivel();
 
-        $scope = $this->scopeResolver->resolve(
-            $request->user(),
-            $request->string('visao_supervisor')->value() ?: null,
-            $request->string('visao_vendedor')->value() ?: null,
-        );
+        $scope = $this->scopeResolver->resolveDaRequest($request->user(), $request);
 
         if ($scope['codVendedores'] !== null) {
             $query->whereIn('cod_vendedor', $scope['codVendedores']);

@@ -150,6 +150,8 @@ return [
     'escopos_aquecidos' => [
         'empresa' => true,
         'supervisores' => true,
+        // Admin com o filtro de Direção (2026-11-12): a estrutura inteira de cada diretor.
+        'diretorias' => true,
         'vendedores' => false,
     ],
 

@@ -41,19 +41,19 @@ function resumoCanais(porCanal) {
 const filtros = reactive({
     busca: props.filtros.busca || '',
     so_atencao: props.filtros.so_atencao ? '1' : '',
-    visao_supervisor: props.filtros.visao_supervisor || '',
+    visao_diretor: props.filtros.visao_diretor || '', visao_supervisor: props.filtros.visao_supervisor || '',
 });
 
 function aplicarFiltros() {
     router.get(route('visao-gestor.index'), {
         busca: filtros.busca || undefined,
         so_atencao: filtros.so_atencao ? 1 : undefined,
-        visao_supervisor: filtros.visao_supervisor || undefined,
+        visao_diretor: filtros.visao_diretor || undefined, visao_supervisor: filtros.visao_supervisor || undefined,
     }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['linhas', 'kpis', 'filtros'],
+        only: ['linhas', 'kpis', 'filtros', 'opcoes'],
     });
 }
 
@@ -64,7 +64,7 @@ function onBuscaInput() {
 }
 
 const filtrosAtivos = computed(() => contarFiltrosAtivos(filtros, [
-    'so_atencao', 'visao_supervisor',
+    'so_atencao', 'visao_diretor', 'visao_supervisor',
 ]));
 
 function formatData(iso) {
@@ -109,6 +109,17 @@ function formatData(iso) {
                     </div>
                 </template>
                 <template #filtros>
+                    <FilterField
+                        v-if="opcoes.diretores?.length"
+                        v-model="filtros.visao_diretor"
+                        label="Direção"
+                        @update:model-value="() => { filtros.visao_supervisor = ''; aplicarFiltros(); }"
+                    >
+                        <option value="">Todas as Diretorias</option>
+                        <option v-for="d in opcoes.diretores" :key="d.cod_vendedor" :value="d.cod_vendedor">
+                            {{ d.nome }}
+                        </option>
+                    </FilterField>
                     <FilterField
                         v-if="opcoes.supervisores?.length"
                         v-model="filtros.visao_supervisor"

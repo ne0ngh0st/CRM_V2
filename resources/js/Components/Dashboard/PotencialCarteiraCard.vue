@@ -28,12 +28,13 @@ import DarkCard from '@/Components/DarkCard.vue';
 
 const props = defineProps({
     potencialCarteira: { type: Object, required: true },
+    visaoDiretor: { type: String, default: null },
     visaoSupervisor: { type: String, default: null },
     visaoVendedor: { type: String, default: null },
 });
 
 const visao = computed(() => ({
-    visao_supervisor: props.visaoSupervisor || undefined,
+    visao_diretor: props.visaoDiretor || undefined, visao_supervisor: props.visaoSupervisor || undefined,
     visao_vendedor: props.visaoVendedor || undefined,
 }));
 

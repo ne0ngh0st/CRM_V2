@@ -25,9 +25,9 @@ class VisaoController extends Controller
     {
         $user = $request->user();
 
-        // Supervisor e o assistente que o espelha (User::PERFIS_COM_EQUIPE). Vendedor já é
-        // pessoal por definição; admin e diretor enxergam a empresa e têm os dropdowns.
-        abort_unless($user->hasAnyRole(\App\Models\User::PERFIS_COM_EQUIPE), 403);
+        // Supervisor, o assistente que o espelha e, desde 2026-11-12, admin e diretor
+        // (Empresa / Minha carteira). Vendedor já é pessoal por definição.
+        abort_unless($user->hasAnyRole(\App\Models\User::PERFIS_COM_ALTERNADOR), 403);
 
         // ⚠️ Sem código de vendedor não existe carteira pessoal — o modo pessoal
         // resolveria escopo vazio e a pessoa veria tela em branco achando que quebrou.

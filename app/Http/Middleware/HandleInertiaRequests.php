@@ -94,7 +94,9 @@ class HandleInertiaRequests extends Middleware
              * porque o escopo do servidor estava certo — quem sumia era o botão.
              */
             'modoVisao' => [
-                'disponivel' => in_array($request->user()?->getRoleNames()->first(), \App\Models\User::PERFIS_COM_EQUIPE, true),
+                'disponivel' => in_array($request->user()?->getRoleNames()->first(), \App\Models\User::PERFIS_COM_ALTERNADOR, true),
+                // Para admin e diretor o outro lado do alternador é a empresa, não uma equipe.
+                'empresa' => in_array($request->user()?->getRoleNames()->first(), ['admin', 'diretor'], true),
                 'modo' => $request->session()->get(ModoVisao::CHAVE_SESSAO, ModoVisao::EQUIPE),
             ],
         ];

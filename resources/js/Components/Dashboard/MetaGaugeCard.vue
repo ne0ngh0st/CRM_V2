@@ -40,6 +40,7 @@ const props = defineProps({
         required: true,
     },
     role: { type: String, default: null },
+    visaoDiretor: { type: String, default: null },
     visaoSupervisor: { type: String, default: null },
     visaoVendedor: { type: String, default: null },
 });
@@ -60,10 +61,10 @@ const termo = computed(() => (props.metaGauge.isRepresentante ? 'Objetivo' : 'Me
 
 const podeVerMetas = computed(() => ['admin', 'diretor', 'supervisor'].includes(props.role));
 const hrefMetaMes = computed(() => (podeVerMetas.value
-    ? route('metas.index', { visao_supervisor: props.visaoSupervisor || undefined, modo: 'mensal' })
+    ? route('metas.index', { visao_diretor: props.visaoDiretor || undefined, visao_supervisor: props.visaoSupervisor || undefined, modo: 'mensal' })
     : null));
 const hrefPedidosMes = computed(() => route('pedidos.emitidos', {
-    visao_supervisor: props.visaoSupervisor || undefined,
+    visao_diretor: props.visaoDiretor || undefined, visao_supervisor: props.visaoSupervisor || undefined,
     visao_vendedor: props.visaoVendedor || undefined,
 }));
 

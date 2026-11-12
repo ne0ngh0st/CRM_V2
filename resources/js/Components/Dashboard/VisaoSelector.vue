@@ -9,10 +9,12 @@ const props = defineProps({
     },
 });
 
-function atualizar({ supervisor, vendedor }) {
+// Trocar um nível limpa os de baixo: a seleção antiga pode não existir na lista nova.
+function atualizar({ diretor, supervisor, vendedor }) {
     router.get(
         route('dashboard'),
         {
+            visao_diretor: diretor !== undefined ? (diretor || null) : (props.visao.visaoDiretor || null),
             visao_supervisor: supervisor !== undefined ? (supervisor || null) : (props.visao.visaoSupervisor || null),
             visao_vendedor: vendedor !== undefined ? (vendedor || null) : (props.visao.visaoVendedor || null),
         },
@@ -22,6 +24,22 @@ function atualizar({ supervisor, vendedor }) {
 </script>
 
 <template>
+    <FilterField
+        v-if="visao.diretores?.length"
+        label="Direção"
+        :model-value="visao.visaoDiretor || ''"
+        @update:model-value="atualizar({ diretor: $event, supervisor: '', vendedor: '' })"
+    >
+        <option value="">Todas as Diretorias</option>
+        <option
+            v-for="d in visao.diretores"
+            :key="d.cod_vendedor"
+            :value="d.cod_vendedor"
+        >
+            {{ d.nome }}
+        </option>
+    </FilterField>
+
     <FilterField
         v-if="visao.supervisores.length"
         label="Supervisão"
@@ -46,7 +64,7 @@ function atualizar({ supervisor, vendedor }) {
         <option value="">Todos os Vendedores</option>
         <option
             v-for="v in visao.vendedores"
-            :key="v.cod_vendedor"
+            :key="v.cod_vendedor + v.nome"
             :value="v.cod_vendedor"
         >
             {{ v.nome }}

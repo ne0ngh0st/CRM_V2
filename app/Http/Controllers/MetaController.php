@@ -48,6 +48,8 @@ class MetaController extends Controller
         $agrupar = in_array($role, ['admin', 'diretor'], true) && $p['scope']['visaoSupervisor'] === null;
         $resultado = $this->rodarRanking($p, $agrupar);
 
+        $visao = $this->scopeResolver->visaoParaTela($user, $p['scope']);
+
         return Inertia::render('Metas/Index', [
             'role' => $role,
             'linhas' => $resultado['linhas'],
@@ -61,12 +63,12 @@ class MetaController extends Controller
                 'modo' => $p['modo'],
                 'busca' => $p['busca'],
                 'faixa' => $p['faixa'],
+                'visao_diretor' => $p['scope']['visaoDiretor'],
                 'visao_supervisor' => $p['scope']['visaoSupervisor'],
             ],
             'opcoes' => [
-                'supervisores' => in_array($role, ['admin', 'diretor'], true)
-                    ? $this->scopeResolver->opcoesSupervisores()
-                    : [],
+                'diretores' => $visao['diretores'],
+                'supervisores' => $visao['supervisores'],
                 'anos' => range((int) now()->year, (int) now()->year - 2),
             ],
             'podeEditar' => $p['modo'] === 'mensal',
@@ -145,9 +147,11 @@ class MetaController extends Controller
             $faixa = '';
         }
 
-        $visaoSupervisor = $request->string('visao_supervisor')->value() ?: null;
         // Ranking lista a equipe inteira (ou empresa); não filtra a um vendedor só.
-        $scope = $this->scopeResolver->resolve($user, $visaoSupervisor, null);
+        $scope = $this->scopeResolver->resolveDaRequest($user, $request, comVendedor: false);
+        // O supervisor ACEITO pelo resolver, não o da URL: com um diretor escolhido, um
+        // supervisor de outra diretoria é ignorado lá e tem que ser ignorado aqui também.
+        $visaoSupervisor = $scope['visaoSupervisor'];
 
         /*
          * ⚠️ Em /metas o supervisor entra na lista JUNTO da equipe — e esta é a única

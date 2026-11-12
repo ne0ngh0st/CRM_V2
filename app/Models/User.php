@@ -61,10 +61,17 @@ class User extends Authenticatable
      */
     public const PERFIS_COM_EQUIPE = ['supervisor', 'assistente'];
 
+    /**
+     * Quem tem o alternador de `ModoVisao` no cabeçalho. Admin e diretor entraram em
+     * 2026-11-12: alternam entre a Empresa (com os filtros de direção, supervisão e
+     * vendedor) e a carteira do próprio código.
+     */
+    public const PERFIS_COM_ALTERNADOR = [...self::PERFIS_COM_EQUIPE, 'admin', 'diretor'];
+
     /** Quem recebe o seletor de vendedor nas telas (Painel, Carteira, Leads, Pedidos, Orçamentos). */
     public static function temSeletorDeVendedor(?string $perfil): bool
     {
-        return in_array($perfil, [...self::PERFIS_COM_EQUIPE, 'admin', 'diretor'], true);
+        return in_array($perfil, self::PERFIS_COM_ALTERNADOR, true);
     }
 
     /**
